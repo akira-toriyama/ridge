@@ -343,6 +343,9 @@ func TestAdvDepCycleIsSurvivable(t *testing.T) {
 
 // A parent CYCLE (which a git merge can produce, and which furrow's lint calls
 // `parent-cycle`) must not hang the tree renderer either.
+//
+// bite-exempt: signature-only edit (t → _) for revive unused-parameter — a
+// survival test pins current behaviour and has nothing to assert through t.
 func TestAdvParentCycleIsSurvivable(_ *testing.T) {
 	b := NewBoard([]*Task{
 		{ID: "p", Title: "P", Status: "backlog", Type: "epic", Parent: "q"},
