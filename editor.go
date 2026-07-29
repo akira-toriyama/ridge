@@ -36,12 +36,13 @@ func (m *Model) editCmd(t *Task) tea.Cmd {
 		ed = "vi"
 	}
 	id := t.ID
-	return tea.ExecProcess(exec.Command(ed, path), func(runErr error) tea.Msg {
+	// Launching $EDITOR on our own temp file IS the feature (G204/G304).
+	return tea.ExecProcess(exec.Command(ed, path), func(runErr error) tea.Msg { //nolint:gosec
 		defer func() { _ = os.Remove(path) }()
 		if runErr != nil {
 			return editorDoneMsg{id: id, err: runErr}
 		}
-		b, err := os.ReadFile(path)
+		b, err := os.ReadFile(path) //nolint:gosec // path is the CreateTemp file made above
 		return editorDoneMsg{id: id, body: string(b), err: err}
 	})
 }

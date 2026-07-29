@@ -196,7 +196,7 @@ func (t *theme) chipFor(name string) lg.Style {
 		h ^= uint32(name[i])
 		h *= 16777619
 	}
-	return t.chipHues[int(h%uint32(len(t.chipHues)))]
+	return t.chipHues[int(h%uint32(len(t.chipHues)))] //nolint:gosec // a fixed palette: len is tiny and non-negative, nowhere near MaxUint32
 }
 
 // laneDot is the column's colour identity, falling back to the muted default

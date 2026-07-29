@@ -343,7 +343,7 @@ func TestAdvDepCycleIsSurvivable(t *testing.T) {
 
 // A parent CYCLE (which a git merge can produce, and which furrow's lint calls
 // `parent-cycle`) must not hang the tree renderer either.
-func TestAdvParentCycleIsSurvivable(t *testing.T) {
+func TestAdvParentCycleIsSurvivable(_ *testing.T) {
 	b := NewBoard([]*Task{
 		{ID: "p", Title: "P", Status: "backlog", Type: "epic", Parent: "q"},
 		{ID: "q", Title: "Q", Status: "backlog", Type: "epic", Parent: "p"},
