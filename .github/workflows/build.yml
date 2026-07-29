@@ -1,0 +1,39 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Least privilege: this workflow only reads the repo.
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Shared Go CI core (build / vet / race-test / module-hygiene / golangci-lint v2),
+  # SHA-pinned once in the hub. go.mod carries no `toolchain` line, so gotoolchain
+  # is `local`: setup-go installs what the `go` directive asks for and nothing
+  # reaches for the network mid-run.
+  ci:
+    uses: akira-toriyama/.github/.github/workflows/go-ci.yml@v2
+    with:
+      go-version-file: go.mod
+      gotoolchain: local
+
+  # Do the tests this pull request adds actually bite? The gate runs them against
+  # the source BEFORE the pull request and fails the ones that all still pass — a
+  # test that would have been green without its own fix is not evidence of that fix.
+  # Stands down on its own when there is nothing to prove.
+  # Rationale + the two opt-outs: akira-toriyama/.github/blob/main/docs/go-bite.md
+  bite:
+    uses: akira-toriyama/.github/.github/workflows/go-bite.yml@v2
+    with:
+      go-version-file: go.mod
+
+# No `extras` job: ridge is one package whose surface is a terminal UI, so there is
+# no shipped-binary smoke to run beyond what the core test job already covers. Add
+# one here if a CLI entry point ever grows.

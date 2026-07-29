@@ -100,12 +100,6 @@ func boardCols(w, lanes int) (n, cw int) {
 	return n, cw
 }
 
-// visibleCols is how many columns fit in w over a board of `lanes` lanes.
-func visibleCols(w, lanes int) int {
-	n, _ := boardCols(w, lanes)
-	return n
-}
-
 // Col looks a visible column up by lane name.
 func (l *layout) Col(name string) *laneCol {
 	if l == nil {

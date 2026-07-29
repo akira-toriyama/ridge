@@ -596,22 +596,18 @@ func (m *Model) moveCursor(dx, dy int) {
 		return
 	}
 	want := m.curPos()
-	for i := m.curLane + dx; i >= 0 && i < len(m.b.Lanes()); i += dx {
-		if len(m.cols[m.laneName(i)]) == 0 {
-			// Land on an empty lane anyway: you must be able to drop into one,
-			// and a lane you cannot focus is a lane you cannot drop into.
-			m.curLane = i
-			m.curIdx[m.laneName(i)] = 0
-			m.ensureVisible()
-			m.syncPeek()
-			return
-		}
-		m.curLane = i
-		m.curIdx[m.laneName(i)] = clamp(want, 0, len(m.cols[m.laneName(i)])-1)
-		m.ensureVisible()
-		m.syncPeek()
+	i := m.curLane + dx
+	if i < 0 || i >= len(m.b.Lanes()) {
 		return
 	}
+	// One lane per keypress, landing on an EMPTY lane too (clamp snaps the
+	// index to 0 there): you must be able to drop into one, and a lane you
+	// cannot focus is a lane you cannot drop into. An earlier skip-empty
+	// design scanned onward — that scan is deliberately gone.
+	m.curLane = i
+	m.curIdx[m.laneName(i)] = clamp(want, 0, len(m.cols[m.laneName(i)])-1)
+	m.ensureVisible()
+	m.syncPeek()
 }
 
 // selectID moves the cursor onto a task, pinning it past the filter when asked

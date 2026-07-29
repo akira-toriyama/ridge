@@ -107,7 +107,7 @@ func (m *Model) renderGraph() string {
 
 	var bands []string
 	for r, row := range l.Layers {
-		bands = append(bands, m.graphRowBand(l, row, titleLines))
+		bands = append(bands, m.graphRowBand(row, titleLines))
 		if r < len(routes) {
 			c := drawChannel(l.W, routes[r], channels[r])
 			for _, line := range c.rows() {
@@ -204,7 +204,7 @@ func (m *Model) graphHeader(l *egoLayout, clipped bool) string {
 // already exactly n.W display cells wide and exactly the same height, so the
 // concatenation is width-exact and the channel anchors below it line up to the
 // cell.
-func (m *Model) graphRowBand(l *egoLayout, row []*egoNode, titleLines int) string {
+func (m *Model) graphRowBand(row []*egoNode, titleLines int) string {
 	h := titleLines + 4
 	lines := make([]string, h)
 
