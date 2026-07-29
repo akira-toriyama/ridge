@@ -21,10 +21,15 @@ func (m *Model) editCmd(t *Task) tea.Cmd {
 	}
 	path := f.Name()
 	if _, err := f.WriteString(t.Body); err != nil {
-		f.Close()
+		_ = f.Close()
 		return func() tea.Msg { return editorDoneMsg{err: err} }
 	}
-	f.Close()
+	// A close failure here can mean an unflushed body — the editor would open
+	// a truncated file and a save would feed the truncation back, so it is an
+	// abort, not a shrug.
+	if err := f.Close(); err != nil {
+		return func() tea.Msg { return editorDoneMsg{err: err} }
+	}
 
 	ed := os.Getenv("EDITOR")
 	if ed == "" {
@@ -32,7 +37,7 @@ func (m *Model) editCmd(t *Task) tea.Cmd {
 	}
 	id := t.ID
 	return tea.ExecProcess(exec.Command(ed, path), func(runErr error) tea.Msg {
-		defer os.Remove(path)
+		defer func() { _ = os.Remove(path) }()
 		if runErr != nil {
 			return editorDoneMsg{id: id, err: runErr}
 		}
