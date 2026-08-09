@@ -7,9 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// ---------------------------------------------------------------------------
 // T. scroll offsets survive a filter that makes them meaningless
-// ---------------------------------------------------------------------------
 
 // m.scroll is never reset when the filter shrinks a column. buildLayout clamps
 // it to len(tasks)-1 per FRAME but the model keeps the stale value, so a column
@@ -58,9 +56,7 @@ func TestAdvWheelHidesCardsInAFittingColumnConstructed(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // U. dropping into an empty column
-// ---------------------------------------------------------------------------
 
 func TestAdvDragIntoAnEmptyColumn(t *testing.T) {
 	m := boardModel(t, 140, 40)
@@ -112,9 +108,7 @@ func TestAdvDragBelowTheLastCardAppends(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // V. the drag ghost when the source card is scrolled off
-// ---------------------------------------------------------------------------
 
 func TestAdvDragSurvivesTheSourceScrollingAway(t *testing.T) {
 	m := boardModel(t, 140, 40)
@@ -139,9 +133,7 @@ func TestAdvDragSurvivesTheSourceScrollingAway(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // W. filter-mode keys that leak
-// ---------------------------------------------------------------------------
 
 // While the filter input has the keyboard, a MOUSE CLICK is ignored
 // (onMouseDown returns early) but the WHEEL is not, so scrolling changes the
@@ -163,9 +155,7 @@ func TestAdvWheelWorksInFilterModeButClicksDoNot(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // X. `>` jump pins leak
-// ---------------------------------------------------------------------------
 
 // Every `<` (jump back) pins its target permanently, and pins are only cleared
 // by emptying the filter. Bouncing between two tasks inflates "+N pinned by
@@ -202,9 +192,7 @@ func pinIDs(p map[string]bool) []string {
 	return out
 }
 
-// ---------------------------------------------------------------------------
 // Y. renderTable panics on a negative width
-// ---------------------------------------------------------------------------
 
 func TestAdvTableViewPanicsOnNegativeWidth(t *testing.T) {
 	defer func() {
@@ -220,9 +208,7 @@ func TestAdvTableViewPanicsOnNegativeWidth(t *testing.T) {
 	_ = m.View().Content
 }
 
-// ---------------------------------------------------------------------------
 // Z. the bubbletea v2 key-string trap, for every binding that can fall into it
-// ---------------------------------------------------------------------------
 
 // key.Matches compares Key.String(), so a binding written with the wrong
 // spelling compiles, runs, and silently never fires — the failure mode that

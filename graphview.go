@@ -97,7 +97,6 @@ func (m *Model) graphBands(l *egoLayout) (channels []int, routes [][]routedEdge,
 	return channels, routes, titleLines
 }
 
-// renderGraph draws the whole graph view.
 func (m *Model) renderGraph() string {
 	l := m.buildGraph()
 	m.graphLay = l

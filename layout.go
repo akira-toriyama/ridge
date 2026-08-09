@@ -100,7 +100,6 @@ func boardCols(w, lanes int) (n, cw int) {
 	return n, cw
 }
 
-// Col looks a visible column up by lane name.
 func (l *layout) Col(name string) *laneCol {
 	if l == nil {
 		return nil
@@ -108,7 +107,6 @@ func (l *layout) Col(name string) *laneCol {
 	return l.byName[name]
 }
 
-// laneAtX maps a screen column to a lane name.
 func (l *layout) laneAtX(x int) (string, bool) {
 	for i := range l.Cols {
 		c := &l.Cols[i]
@@ -119,7 +117,6 @@ func (l *layout) laneAtX(x int) (string, bool) {
 	return "", false
 }
 
-// cardAt finds the card under a point.
 func (l *layout) cardAt(x, y int) (lane string, idx int, ok bool) {
 	name, ok := l.laneAtX(x)
 	if !ok {

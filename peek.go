@@ -247,7 +247,6 @@ func sectionRule(th *theme, label string, w int) string {
 	return head + th.rule.Render(strings.Repeat("─", n))
 }
 
-// wrapJoin joins with sep and soft-wraps the result to w.
 func wrapJoin(parts []string, sep string, w int) string {
 	var lines []string
 	cur := ""

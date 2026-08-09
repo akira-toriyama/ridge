@@ -12,9 +12,7 @@ import (
 // ADVERSARIAL BUG HUNT. Every test in this file is written to FAIL against the
 // current code and to name a concrete defect. Nothing here is a fix.
 
-// ---------------------------------------------------------------------------
 // A. tiny terminals: the frame must never exceed the terminal it was given.
-// ---------------------------------------------------------------------------
 
 func advFrameSize(t *testing.T, m *Model) (w, h int) {
 	t.Helper()
@@ -73,9 +71,7 @@ func TestAdvGhostOverflowsANarrowTerminal(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // B. an empty board / empty lanes
-// ---------------------------------------------------------------------------
 
 type emptyProvider struct{ b *Board }
 
@@ -135,9 +131,7 @@ func keyTextFor(s string) string {
 	return s
 }
 
-// ---------------------------------------------------------------------------
 // C. move mode
-// ---------------------------------------------------------------------------
 
 // The status line and doc.go both promise "esc restores". The BOARD is restored
 // (nothing was mutated), but the CURSOR is left wherever the arrows parked the
@@ -197,9 +191,7 @@ func TestAdvKeyboardMoveModeCanBeEnteredMidDrag(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // D. drag
-// ---------------------------------------------------------------------------
 
 // Dragging a card out of every column and releasing there still commits a move
 // into whichever lane the pointer last crossed, because dropLane is sticky and
@@ -278,9 +270,7 @@ func TestAdvDiagonalOneCellTwitchIsADrag(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // E. wheel
-// ---------------------------------------------------------------------------
 
 // The wheel clamps scroll to len(tasks)-1 with no regard for whether the column
 // already fits entirely on screen, so a 1-card column can be scrolled until the
@@ -303,9 +293,7 @@ func TestAdvWheelScrollsAFittingColumnIntoNothing(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // F. dep logic
-// ---------------------------------------------------------------------------
 
 func advCyclicBoard() *Board {
 	return NewBoard([]*Task{
@@ -394,9 +382,7 @@ func TestAdvJumpToBlockerReportsTheWrongCount(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // G. CJK / display width
-// ---------------------------------------------------------------------------
 
 // Every rendered frame line must measure <= the terminal width AND the board
 // must line up: with Japanese titles, one mis-measured cell shears a column.
@@ -442,9 +428,7 @@ func TestAdvTableRowsAreExactlyTerminalWidth(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // H. filter x reorder
-// ---------------------------------------------------------------------------
 
 // shift+J/K reorder inside a FILTERED column. The visible neighbour is not the
 // board neighbour, so "lower by one" must land immediately after the next
@@ -482,9 +466,7 @@ func TestAdvBlockedToggleCorruptsANegatedQuery(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // I. stale pointer after reload
-// ---------------------------------------------------------------------------
 
 // toggleCheck reads CheckProgress off the PRE-reload *Task. It only works
 // because mockProvider hands back the same pointer; a provider that re-reads

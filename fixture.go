@@ -16,7 +16,6 @@ func ts(s string) time.Time {
 	return t
 }
 
-// fixtureTasks is the mock board's contents.
 func fixtureTasks() []*Task {
 	return []*Task{
 		{

@@ -87,8 +87,6 @@ func laneOf(m *Model, id string) string {
 	return "<gone>"
 }
 
-// ---- keyboard ---------------------------------------------------------------
-
 func TestE2EKeyboardMoveModeCommits(t *testing.T) {
 	probe := geometry(t, 140, 40)
 	// The board opens on the first lane with work; its first card is the mover.
@@ -249,8 +247,6 @@ func TestE2EMouseToggleIsDeclarative(t *testing.T) {
 		t.Error("M must toggle back on")
 	}
 }
-
-// ---- mouse ------------------------------------------------------------------
 
 func TestE2EMouseDragAcrossColumns(t *testing.T) {
 	const w, h = 140, 40
