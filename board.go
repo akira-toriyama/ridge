@@ -120,7 +120,6 @@ type Board struct {
 	lanes []Lane
 }
 
-// NewBoard builds a board over the given tasks.
 func NewBoard(tasks []*Task) *Board {
 	return &Board{tasks: tasks, lanes: append([]Lane(nil), boardLanes...)}
 }
@@ -128,7 +127,6 @@ func NewBoard(tasks []*Task) *Board {
 // Lanes returns the lane vocabulary in board order.
 func (b *Board) Lanes() []Lane { return b.lanes }
 
-// Lane looks a lane up by name.
 func (b *Board) Lane(name string) *Lane {
 	for i := range b.lanes {
 		if b.lanes[i].Name == name {
@@ -148,7 +146,6 @@ func (b *Board) LaneIndex(name string) int {
 	return -1
 }
 
-// Tasks returns every task on the board.
 func (b *Board) Tasks() []*Task { return b.tasks }
 
 // Task looks a task up by id, nil when absent.
@@ -303,7 +300,6 @@ func (b *Board) isDoneLane(name string) bool {
 	return l != nil && l.Done
 }
 
-// DoneLane is the board's done lane name.
 func (b *Board) DoneLane() string {
 	for _, l := range b.lanes {
 		if l.Done {
@@ -326,7 +322,6 @@ func (b *Board) Close(id string) error {
 	return err
 }
 
-// ToggleCheck flips one checklist item.
 func (b *Board) ToggleCheck(id string, i int) error {
 	t := b.Task(id)
 	if t == nil {

@@ -35,7 +35,6 @@ type Provider interface {
 // mockProvider holds the fixture in memory. Nothing here touches a filesystem.
 type mockProvider struct{ b *Board }
 
-// newMockProvider builds a provider over the hardcoded fixture.
 func newMockProvider() *mockProvider { return &mockProvider{b: NewBoard(fixtureTasks())} }
 
 func (p *mockProvider) Board() *Board { return p.b }

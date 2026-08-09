@@ -91,7 +91,6 @@ type Model struct {
 	statusErr bool
 }
 
-// New builds the model over a provider.
 func New(p Provider) *Model {
 	ti := textinput.New()
 	ti.Prompt = "/ "
@@ -277,8 +276,6 @@ func (m *Model) relayout() {
 
 func (m *Model) note(f string, a ...any) { m.status, m.statusErr = fmt.Sprintf(f, a...), false }
 func (m *Model) fail(f string, a ...any) { m.status, m.statusErr = fmt.Sprintf(f, a...), true }
-
-// ---- keyboard ---------------------------------------------------------------
 
 func (m *Model) onKey(msg tea.KeyPressMsg) tea.Cmd {
 	// A modal text input owns Esc, full stop. Checking cancelDrag() first let a

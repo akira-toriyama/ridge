@@ -114,7 +114,6 @@ func (l *egoLayout) Real() []*egoNode {
 	return out
 }
 
-// Node looks a node up by key.
 func (l *egoLayout) Node(key string) *egoNode { return l.Nodes[key] }
 
 // Empty reports a focus with no dependency structure at all in either
@@ -479,8 +478,6 @@ func (l *egoLayout) rowEdges(r int) []egoEdge {
 	return out
 }
 
-// ---- edge canvas ------------------------------------------------------------
-
 // Direction bits. A cell records which of its four sides a line leaves by, and
 // the rune is then LOOKED UP from that mask. This is the whole junction-merge
 // table — the thing worth porting out of a charting library — expressed as the
@@ -604,8 +601,6 @@ func (c *edgeCanvas) rows() []string {
 	}
 	return out
 }
-
-// ---- channel routing --------------------------------------------------------
 
 // routedEdge is one edge with its assigned bus row inside a channel.
 type routedEdge struct {

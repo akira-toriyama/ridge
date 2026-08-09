@@ -86,9 +86,7 @@ func TestAdvCannotDropBelowTheFold(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // Esc routing while the filter input is modal
-// ---------------------------------------------------------------------------
 
 // onKey checks cancelDrag() BEFORE the mode switch, so an Esc meant to dismiss
 // the filter input is eaten by a still-armed drag instead.
@@ -112,9 +110,7 @@ func TestAdvEscInFilterModeIsEatenByAnArmedDrag(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // negative-Y chrome actually distorts the frame
-// ---------------------------------------------------------------------------
 
 func TestAdvNegativeYShiftsTheWholeFrame(t *testing.T) {
 	m := boardModel(t, 60, 1)
@@ -126,9 +122,7 @@ func TestAdvNegativeYShiftsTheWholeFrame(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // the status line lies about a clamped drop
-// ---------------------------------------------------------------------------
 
 func TestAdvStatusLineClaimsARepositionThatDidNotHappen(t *testing.T) {
 	m := advSmallModel(t, 140, 40)

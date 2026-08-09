@@ -10,10 +10,8 @@ import (
 	lg "charm.land/lipgloss/v2"
 )
 
-// ---------------------------------------------------------------------------
 // J. differential move arithmetic: every (fromLane,fromIdx) x (toLane,dropIdx)
 //    against a naive reference remove-then-insert.
-// ---------------------------------------------------------------------------
 
 func advIDs(ts []*Task) []string {
 	out := make([]string, len(ts))
@@ -125,9 +123,7 @@ func TestAdvNoOpDropStampsUpdated(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // K. wheel on a column that fits
-// ---------------------------------------------------------------------------
 
 func TestAdvWheelHidesCardsInAColumnThatFits(t *testing.T) {
 	m := boardModel(t, 140, 44)
@@ -152,9 +148,7 @@ func TestAdvWheelHidesCardsInAColumnThatFits(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // L. compositor / negative coordinates
-// ---------------------------------------------------------------------------
 
 // At h<2 the status and help bars are placed at NEGATIVE y.
 func TestAdvChromeIsPlacedAtNegativeY(t *testing.T) {
@@ -166,9 +160,7 @@ func TestAdvChromeIsPlacedAtNegativeY(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // M. peek geometry
-// ---------------------------------------------------------------------------
 
 // peekBox floors its height at 6 rows and anchors it at y=rowColHdr(2) without
 // consulting m.h, so on any terminal shorter than 8 rows the panel hangs off
@@ -185,9 +177,7 @@ func TestAdvPeekBoxExceedsTheTerminal(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // N. filter x cursor
-// ---------------------------------------------------------------------------
 
 // Typing a filter that hides the selected card silently leaves the cursor on a
 // DIFFERENT task, and every subsequent destructive key (d = done, x = check,
@@ -219,9 +209,7 @@ func TestAdvFilterCanSilentlyRepointTheCursor(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // O. is:<bogus> is called non-fatal but empties the board
-// ---------------------------------------------------------------------------
 
 func TestAdvUnknownIsValueEmptiesTheBoardWhileClaimingToBeNonFatal(t *testing.T) {
 	m := boardModel(t, 140, 40)
@@ -234,9 +222,7 @@ func TestAdvUnknownIsValueEmptiesTheBoardWhileClaimingToBeNonFatal(t *testing.T)
 	}
 }
 
-// ---------------------------------------------------------------------------
 // P. peek content width
-// ---------------------------------------------------------------------------
 
 func TestAdvPeekLinesFitTheirBox(t *testing.T) {
 	for _, size := range [][2]int{{140, 40}, {100, 30}, {80, 24}, {60, 20}} {
@@ -261,9 +247,7 @@ func TestAdvPeekLinesFitTheirBox(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // Q. move mode commit while the drop lane scrolled out of the visible strip
-// ---------------------------------------------------------------------------
 
 func TestAdvMoveModeAcrossTheWholeStrip(t *testing.T) {
 	m := boardModel(t, 90, 40) // only ~3 columns fit
@@ -285,9 +269,7 @@ func TestAdvMoveModeAcrossTheWholeStrip(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // R. status-line honesty on a failed / clamped move
-// ---------------------------------------------------------------------------
 
 func TestAdvMoveIntoAnEmptyFilteredLaneAppendsToTheRealEnd(t *testing.T) {
 	m := boardModel(t, 140, 40)
@@ -321,9 +303,7 @@ func indexOfStr(ss []string, s string) int {
 	return -1
 }
 
-// ---------------------------------------------------------------------------
 // S. -dump smoke across pathological sizes (panic hunt)
-// ---------------------------------------------------------------------------
 
 func TestAdvRenderDoesNotPanicAtPathologicalSizes(t *testing.T) {
 	sizes := [][2]int{{0, 0}, {1, 1}, {2, 2}, {-1, -1}, {1, 100}, {400, 1}, {3, 3}, {28, 6}}
