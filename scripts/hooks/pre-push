@@ -1,0 +1,15 @@
+#!/bin/sh
+# pre-push hook: run the local CI mirror before anything is published.
+#
+# Enable once per clone:  git config core.hooksPath scripts/hooks
+# Emergency bypass:       git push --no-verify
+#
+# Why this exists: two CI-only lint findings reached CI (PR #8, #10) because
+# a bare local `golangci-lint run` uses a smaller linter set than the hub
+# go-ci reusable. scripts/check.sh is the byte-identical mirror of the CI
+# invocation; this hook makes running it non-optional instead of a habit.
+#
+# Deliberately NOT skip-when-tools-absent: a silent skip recreates the exact
+# hole this hook closes. If go/golangci-lint are missing, check.sh fails
+# loudly and the push is refused — install the tools or bypass consciously.
+exec "$(git rev-parse --show-toplevel)/scripts/check.sh"
