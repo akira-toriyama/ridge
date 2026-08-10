@@ -85,11 +85,13 @@ func (p *Store) PersistBody(id, _ string) error {
 
 var _ board.Provider = (*Store)(nil)
 
-// Query approximates furrow's -q over the fixture (board.Provider) — see
-// query.go for exactly how approximate. All-or-nothing like furrow's exit 2:
-// a refused query returns an error and no ids.
+// Query stands in for furrow's -q over the fixture (board.Provider) — see
+// query.go for what it honours at furrow's semantics and what it refuses.
+// All-or-nothing like furrow's exit 2: a refused query returns an error and
+// no ids. The lane and repo vocabularies come from the board being served,
+// because furrow validates those two at parse time.
 func (p *Store) Query(q string) ([]string, error) {
-	parsed := parseQuery(q)
+	parsed := parseQuery(q, boardVocab(p.b))
 	if len(parsed.problems) > 0 {
 		return nil, fmt.Errorf("%s", strings.Join(parsed.problems, "; "))
 	}

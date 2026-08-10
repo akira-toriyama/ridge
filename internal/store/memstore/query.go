@@ -9,23 +9,73 @@ import (
 	"github.com/akira-toriyama/ridge/internal/board"
 )
 
-// The fixture's approximation of furrow's -q. The grammar's one definition
-// lives furrow-side (t-ehk7) and the real provider passes the string through;
-// this evaluator exists ONLY so -dump/-demo and the ui tests stay
-// deterministic without a furrow binary. It covers the subset the headless
-// frames use and REFUSES — like furrow's exit 2, all-or-nothing — rather
-// than mis-evaluating what it does not support (numeric/date comparisons,
-// depends-on:/blocks:, is:stale).
+// The fixture's stand-in for furrow's -q. The grammar's one definition lives
+// furrow-side (t-ehk7) and the real provider passes the string through; this
+// evaluator exists ONLY so -dump/-demo and the ui tests stay deterministic
+// without a furrow binary.
 //
-// Supported: field:value for lane|status|repo|label|id|epic, comma = OR,
-// leading - negates, no:/has:, is:actionable|blocked|open|closed|draft|
-// unfiled|overdue, bare words over title/id.
+// Every vocabulary below is a verbatim copy of what `furrow vocab` prints
+// (query-is, query-presence, query-qualifiers), and every matching rule was
+// measured against a real store — 2026-08-10, t-74y3. That measurement is the
+// point: an approximation nobody checks drifts into inventing fields
+// (`no:dep`, which furrow has never had) and into guessing (`label:u` as a
+// substring, `lane:nope` as a silent zero) — and then a headless frame shows a
+// board the real store would never show.
+//
+// Supported, at furrow's semantics:
+//
+//	lane:/status:  exact and case-SENSITIVE; an unknown lane REFUSES the whole
+//	               query, the way furrow exits 2 unknown-lane with candidates
+//	repo:          owner/repo or the short name after the slash, compared
+//	               case-insensitively; a SHORT name that resolves to no repo
+//	               on the board REFUSES (furrow: exit 2 repo-unknown), while
+//	               an unknown full owner/repo form is an honest 0 rows
+//	               (measured). NOT a substring
+//	label:/epic:   exact, case-sensitive; an unknown one is an honest 0 rows
+//	id:            case-sensitive PREFIX — id:t-jv finds t-jv3j
+//	title:         case-insensitive substring; QUOTED it means the whole title
+//	body:          case-insensitive substring
+//	is:            the whole query-is vocabulary, is:stale included
+//	no:/has:       the whole query-presence vocabulary
+//	bare words     case-insensitive substring; a leading - negates, and
+//	               quotes hold a phrase together
+//	quoting        a value list splits on commas OUTSIDE quotes — label:"a","b"
+//	               is two alternatives, label:"a,b" is one holding a literal
+//	               comma. A quote may only open a part and must close it
+//	               (label:a"b", label:"a"b, nee"dle" are furrow's exit 2
+//	               "mismatched quotes"); "" is "empty term"; label:"" and
+//	               label:, are "needs a value"; is:/no:/has: take their flags
+//	               unquoted or not at all. All measured.
+//
+// Two divergences that are DELIBERATE, stated here so a green frame is never
+// mistaken for proof of parity:
+//
+//   - a bare word searches title+ID where furrow searches title+body. The ID
+//     leg is ridge's own affordance — pasting an id into the filter bar.
+//   - is:stale and is:overdue read the wall clock. furrow reads the board's
+//     [revisit].stale_days; the fixture has no config, so furrow's default of
+//     30 days is hard-coded here.
+//
+// Everything else REFUSES — loudly and all-or-nothing, like furrow's exit 2 —
+// rather than mis-evaluating it: the ordinal/date comparisons (value:>=4,
+// updated:>=-2w) and the graph qualifiers (depends-on:, blocks:,
+// descendant-of:, ancestor-of:). Refusing is the contract, not a gap in it: a
+// fixture that guessed would let a frame lie about what the real store shows.
+
+// staleDays is furrow's [revisit].stale_days default — the window is:stale
+// measures against. The fixture reads no config, so the default is the value.
+const staleDays = 30
+
+// nowFn is indirected so the clock-dependent predicates (is:stale,
+// is:overdue) are testable, matching board's own test clock.
+var nowFn = time.Now
 
 // term is one parsed token.
 type term struct {
-	neg  bool
-	key  string // "" = bare word
-	vals []string
+	neg   bool
+	key   string // "" = bare word
+	vals  []string
+	exact bool // the value was quoted — title: then means the WHOLE title
 }
 
 type parsedQuery struct {
@@ -33,68 +83,353 @@ type parsedQuery struct {
 	problems []string // refusals; any entry makes the whole query invalid
 }
 
+// queryKeys is what this evaluator can honour. `is`, `no` and `has` are
+// qualifiers furrow accepts but leaves out of `furrow vocab
+// query-qualifiers`, which lists only the field-shaped ones.
 var queryKeys = map[string]bool{
 	"lane": true, "status": true, "repo": true, "label": true,
 	"is": true, "no": true, "has": true,
-	"id": true, "epic": true,
+	"id": true, "epic": true, "title": true, "body": true,
 }
 
+// realButUnsupported are real furrow qualifiers (`furrow vocab
+// query-qualifiers`) this evaluator cannot honour over the fixture. They earn
+// a refusal that says so, rather than the "unknown key" a typo gets — a user
+// who typed `value:>=4` spelled it right and deserves to be told which side
+// is missing it.
+var realButUnsupported = map[string]string{
+	"value": "ordinal comparison", "effort": "ordinal comparison",
+	"priority": "ordinal comparison", "roi": "ordinal comparison",
+	"created": "date comparison", "updated": "date comparison",
+	"closed": "date comparison", "reviewed": "date comparison",
+	"due": "date comparison", "depends-on": "graph traversal",
+	"blocks": "graph traversal", "descendant-of": "graph traversal",
+	"ancestor-of": "graph traversal",
+}
+
+// isValues is `furrow vocab query-is`, verbatim.
 var isValues = map[string]bool{
-	"actionable": true, "blocked": true, "open": true, "closed": true,
-	"draft": true, "unfiled": true, "overdue": true,
+	"actionable": true, "blocked": true, "stale": true, "open": true,
+	"closed": true, "draft": true, "unfiled": true, "overdue": true,
 }
 
-var noHasValues = map[string]bool{
-	"repo": true, "label": true, "dep": true, "epic": true,
-	"body": true, "checklist": true, "value": true, "effort": true,
+// presenceValues is `furrow vocab query-presence`, verbatim — the vocabulary
+// no:/has: take. Note the plurals: furrow has `deps` and `refs`, never `dep`.
+var presenceValues = map[string]bool{
+	"label": true, "repo": true, "epic": true, "value": true,
+	"effort": true, "deps": true, "refs": true, "checklist": true,
+	"closed": true, "reviewed": true, "body": true, "due": true,
 }
 
-func parseQuery(s string) parsedQuery {
+// queryVocab is the board-derived half of the grammar. furrow validates a
+// lane and a repo name at PARSE time and exits 2 on one it cannot resolve, so
+// the fixture needs the same two sets to refuse in the same places.
+type queryVocab struct {
+	lanes []string // in board order, as furrow lists its configured lanes
+	repos []string // the full owner/repo names the board carries, sorted
+}
+
+func boardVocab(b *board.Board) queryVocab {
+	var v queryVocab
+	for _, l := range b.Lanes() {
+		v.lanes = append(v.lanes, l.Name)
+	}
+	seen := map[string]bool{}
+	for _, t := range b.Tasks() {
+		for _, r := range t.Repos {
+			if !seen[r] {
+				seen[r] = true
+				v.repos = append(v.repos, r)
+			}
+		}
+	}
+	sort.Strings(v.repos)
+	return v
+}
+
+func (v queryVocab) knownLane(s string) bool {
+	for _, l := range v.lanes {
+		if l == s {
+			return true
+		}
+	}
+	return false
+}
+
+// resolveRepo maps a query value onto a repo the board actually carries.
+// Measured: the full owner/repo form that no task carries answers an honest
+// EMPTY set, while a SHORT name that resolves to nothing is exit 2
+// repo-unknown ("use the full owner/repo form") — so only the short form
+// can refuse here. The second return is the refusal text ("" = resolved).
+func (v queryVocab) resolveRepo(s string) (string, string) {
+	for _, r := range v.repos {
+		if strings.EqualFold(r, s) {
+			return r, ""
+		}
+	}
+	if strings.Contains(s, "/") {
+		return s, "" // unknown full form: matches nothing, refuses nothing
+	}
+	var hits []string
+	for _, r := range v.repos {
+		if strings.EqualFold(shortRepo(r), s) {
+			hits = append(hits, r)
+		}
+	}
+	switch len(hits) {
+	case 1:
+		return hits[0], ""
+	case 0:
+		return "", fmt.Sprintf("repo %q matches no known repo; use the full owner/repo form (known: %s)",
+			s, strings.Join(v.repos, ", "))
+	default:
+		return "", fmt.Sprintf("repo %q is ambiguous (%s)", s, strings.Join(hits, ", "))
+	}
+}
+
+func shortRepo(r string) string {
+	if i := strings.LastIndex(r, "/"); i >= 0 {
+		return r[i+1:]
+	}
+	return r
+}
+
+// tokenize splits on whitespace OUTSIDE quotes, KEEPING the quotes: the
+// parser needs their positions, because furrow refuses the misplaced shapes
+// (a quote opening mid-token, a closing quote with text after it) rather
+// than guessing. Both quote characters work, and an unterminated one is a
+// refusal (furrow: exit 2 query-parse). All measured 2026-08-10, t-74y3
+// review round.
+func tokenize(s string) ([]string, error) {
+	var (
+		toks  []string
+		cur   strings.Builder
+		quote byte
+	)
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case quote != 0:
+			if c == quote {
+				quote = 0
+			}
+			cur.WriteByte(c)
+		case c == '"' || c == '\'':
+			quote = c
+			cur.WriteByte(c)
+		case c == ' ' || c == '\t' || c == '\n' || c == '\r':
+			if cur.Len() > 0 {
+				toks = append(toks, cur.String())
+				cur.Reset()
+			}
+		default:
+			cur.WriteByte(c)
+		}
+	}
+	if quote != 0 {
+		return nil, fmt.Errorf("unterminated quote in %q", s)
+	}
+	if cur.Len() > 0 {
+		toks = append(toks, cur.String())
+	}
+	return toks, nil
+}
+
+// valuePart is one comma-separated alternative in a qualifier's value.
+type valuePart struct {
+	text   string
+	quoted bool
+}
+
+// splitParts cuts a qualifier's value on commas OUTSIDE quotes — measured:
+// `label:"a","b"` is two alternatives, `label:"a,b"` is ONE that holds a
+// literal comma (quoting suppresses the OR split) — and enforces furrow's
+// quote placement: a quote may only OPEN a part and its close must END the
+// part, anything else is exit 2 "mismatched quotes".
+func splitParts(tok, val string) ([]valuePart, error) {
+	var (
+		parts     []valuePart
+		cur       strings.Builder
+		quote     byte
+		quoted    bool
+		misplaced bool
+	)
+	flush := func() {
+		parts = append(parts, valuePart{text: cur.String(), quoted: quoted})
+		cur.Reset()
+		quoted = false
+	}
+	for i := 0; i < len(val); i++ {
+		c := val[i]
+		switch {
+		case quote != 0:
+			if c == quote {
+				quote = 0
+				if i+1 < len(val) && val[i+1] != ',' {
+					misplaced = true // `label:"a"b`
+				}
+				continue
+			}
+			cur.WriteByte(c)
+		case c == '"' || c == '\'':
+			if cur.Len() > 0 {
+				misplaced = true // `label:a"b"`
+			}
+			quote, quoted = c, true
+		case c == ',':
+			flush()
+		default:
+			cur.WriteByte(c)
+		}
+	}
+	flush()
+	if misplaced {
+		return nil, fmt.Errorf("mismatched quotes in %q", tok)
+	}
+	return parts, nil
+}
+
+// caseSensitiveKeys are the fields furrow compares byte-for-byte, so their
+// values must survive parsing with their case intact — `lane:INBOX` is an
+// unknown lane and `label:UI` is a different label from `label:ui`. Every
+// other value (is:/no:/has:, title:, body: and a bare word) is folded here
+// once, because its comparison folds anyway.
+var caseSensitiveKeys = map[string]bool{
+	"lane": true, "label": true, "epic": true, "id": true, "repo": true,
+}
+
+func parseQuery(s string, v queryVocab) parsedQuery {
 	var q parsedQuery
-	// This lexer splits on Fields and has no quote pairing, but the slice
-	// panel now ISSUES quoted values (`label:"needs review"`) that real
-	// furrow understands. Mis-lexing them here would silently blank -dump
-	// frames — the module contract is refuse, never mis-evaluate.
-	if strings.Contains(s, `"`) {
-		q.problems = append(q.problems, "quoted values are not supported by the fixture filter")
+	toks, err := tokenize(s)
+	if err != nil {
+		q.problems = append(q.problems, err.Error())
 		return q
 	}
-	for _, tok := range strings.Fields(s) {
+	for _, tok := range toks {
 		t := term{}
-		if strings.HasPrefix(tok, "-") && len(tok) > 1 {
+		text := tok
+		if strings.HasPrefix(text, "-") && len(text) > 1 {
 			t.neg = true
-			tok = tok[1:]
+			text = text[1:]
 		}
-		k, v, isPair := strings.Cut(tok, ":")
+		// A token that OPENS with a quote is free text — `"lane:inbox"` is a
+		// phrase, not a lane term (measured). Text after the closing quote is
+		// what furrow refuses: `"label":a` is the unknown qualifier
+		// `"label"`, and `"a"b` is mismatched quotes.
+		if len(text) > 0 && (text[0] == '"' || text[0] == '\'') {
+			closeIdx := strings.IndexByte(text[1:], text[0])
+			switch {
+			case closeIdx < 0:
+				// tokenize guarantees pairing, so this cannot happen — but a
+				// guessed phrase is exactly what this parser must never emit.
+				q.problems = append(q.problems, fmt.Sprintf("mismatched quotes in %q", tok))
+			case closeIdx+2 == len(text):
+				inner := text[1 : 1+closeIdx]
+				if inner == "" {
+					q.problems = append(q.problems, fmt.Sprintf("empty term (in %q)", tok))
+					continue
+				}
+				t.vals = []string{strings.ToLower(inner)}
+				q.terms = append(q.terms, t)
+			case text[closeIdx+2] == ':':
+				q.problems = append(q.problems, fmt.Sprintf(
+					"unknown key %q (%s)", text[:closeIdx+2], keyList(queryKeys)))
+			default:
+				q.problems = append(q.problems, fmt.Sprintf("mismatched quotes in %q", tok))
+			}
+			continue
+		}
+		k, val, isPair := strings.Cut(text, ":")
 		if !isPair {
-			t.vals = []string{strings.ToLower(tok)}
+			if strings.ContainsAny(text, `"'`) {
+				// nee"dle" — furrow: exit 2 mismatched quotes, never a
+				// needle with quotes in it.
+				q.problems = append(q.problems, fmt.Sprintf("mismatched quotes in %q", tok))
+				continue
+			}
+			t.vals = []string{strings.ToLower(text)}
 			q.terms = append(q.terms, t)
+			continue
+		}
+		if strings.ContainsAny(k, `"'`) {
+			q.problems = append(q.problems, fmt.Sprintf("mismatched quotes in %q", tok))
 			continue
 		}
 		k = strings.ToLower(k)
 		if !queryKeys[k] {
-			q.problems = append(q.problems, fmt.Sprintf("unknown key %q", k))
-			continue
-		}
-		if v == "" {
-			q.problems = append(q.problems, fmt.Sprintf("%s: needs a value", k))
+			if why, isReal := realButUnsupported[k]; isReal {
+				q.problems = append(q.problems, fmt.Sprintf(
+					"%s: %s is not supported by the fixture filter (real furrow qualifier)", k, why))
+			} else {
+				q.problems = append(q.problems, fmt.Sprintf("unknown key %q (%s)", k, keyList(queryKeys)))
+			}
 			continue
 		}
 		if k == "status" {
 			k = "lane"
 		}
 		t.key = k
-		for _, part := range strings.Split(v, ",") {
-			if part == "" {
+		parts, err := splitParts(tok, val)
+		if err != nil {
+			q.problems = append(q.problems, err.Error())
+			continue
+		}
+		anyQuoted := false
+		for _, p := range parts {
+			if p.text == "" {
+				// `label:a,` drops the empty alternative (measured); a value
+				// that is NOTHING BUT empties refuses below.
 				continue
 			}
-			t.vals = append(t.vals, strings.ToLower(part))
+			if p.quoted {
+				anyQuoted = true
+			}
+			pv := p.text
+			if !caseSensitiveKeys[k] {
+				pv = strings.ToLower(pv)
+			}
+			t.vals = append(t.vals, pv)
+		}
+		t.exact = anyQuoted
+		if len(t.vals) == 0 {
+			// `label:` and `label:,` and `label:""` alike (measured:
+			// "qualifier label: needs a value") — never a term that matches
+			// everything because it holds no alternatives.
+			q.problems = append(q.problems, fmt.Sprintf("%s: needs a value", k))
+			continue
+		}
+		if anyQuoted && (k == "is" || k == "no" || k == "has") {
+			// Measured: is:"open" is exit 2 query-unknown-flag — the flag
+			// vocabularies are read unquoted or not at all.
+			q.problems = append(q.problems, fmt.Sprintf(
+				"%s: takes its flags unquoted (furrow refuses %q)", k, tok))
+			continue
 		}
 		switch k {
 		case "is":
 			q.problems = refuseUnknown(t.vals, isValues, q.problems, "is")
 		case "no", "has":
-			q.problems = refuseUnknown(t.vals, noHasValues, q.problems, k)
+			q.problems = refuseUnknown(t.vals, presenceValues, q.problems, k)
+		case "lane":
+			for _, lv := range t.vals {
+				if !v.knownLane(lv) {
+					q.problems = append(q.problems, fmt.Sprintf(
+						"unknown lane %q (configured: %s)", lv, strings.Join(v.lanes, ", ")))
+				}
+			}
+		case "repo":
+			// Resolve each value to a repo the board carries, the way furrow
+			// resolves -r / repo: BEFORE it filters. An unresolvable one
+			// leaves its raw value in place, which never gets read: a problem
+			// refuses the whole query.
+			for i, rv := range t.vals {
+				canon, why := v.resolveRepo(rv)
+				if why != "" {
+					q.problems = append(q.problems, why)
+					continue
+				}
+				t.vals[i] = canon
+			}
 		}
 		if len(t.vals) > 0 {
 			q.terms = append(q.terms, t)
@@ -151,15 +486,23 @@ func (t term) matchOne(task *board.Task, g *board.Graph, v string) bool {
 		return strings.Contains(strings.ToLower(task.Title), v) ||
 			strings.Contains(strings.ToLower(task.ID), v)
 	case "lane":
-		return strings.ToLower(task.Status) == v
+		return task.Status == v
 	case "id":
-		return strings.ToLower(task.ID) == v
+		return strings.HasPrefix(task.ID, v)
 	case "epic":
-		return strings.ToLower(task.Epic) == v
+		return task.Epic == v
 	case "repo":
-		return containsFold(task.Repos, v)
+		return containsRepo(task.Repos, v)
 	case "label":
-		return containsFold(task.Labels, v)
+		return containsExact(task.Labels, v)
+	case "title":
+		lt := strings.ToLower(task.Title)
+		if t.exact {
+			return lt == v
+		}
+		return strings.Contains(lt, v)
+	case "body":
+		return strings.Contains(strings.ToLower(task.Body), v)
 	case "is":
 		return t.matchIs(task, g, v)
 	case "no":
@@ -185,7 +528,11 @@ func (t term) matchIs(task *board.Task, g *board.Graph, v string) bool {
 	case "unfiled":
 		return task.Epic == ""
 	case "overdue":
-		return !task.Due.IsZero() && task.Due.Before(time.Now()) && task.Closed.IsZero()
+		return !task.Due.IsZero() && task.Due.Before(nowFn()) && task.Closed.IsZero()
+	case "stale":
+		// Measured: furrow flags a DONE task too — is:stale is the update
+		// window alone, not "open and forgotten".
+		return !task.Updated.IsZero() && nowFn().Sub(task.Updated) > staleDays*24*time.Hour
 	}
 	return false
 }
@@ -196,8 +543,10 @@ func hasField(t *board.Task, field string) bool {
 		return len(t.Repos) > 0
 	case "label":
 		return len(t.Labels) > 0
-	case "dep":
+	case "deps":
 		return len(t.Deps) > 0
+	case "refs":
+		return len(t.Refs) > 0
 	case "epic":
 		return t.Epic != ""
 	case "body":
@@ -208,15 +557,34 @@ func hasField(t *board.Task, field string) bool {
 		return t.Value > 0
 	case "effort":
 		return t.Effort > 0
+	case "closed":
+		return !t.Closed.IsZero()
+	case "reviewed":
+		return !t.Reviewed.IsZero()
+	case "due":
+		return !t.Due.IsZero()
 	}
 	return false
 }
 
-// containsFold reports a case-insensitive substring hit in any element, so
-// "repo:vista" matches "akira-toriyama/vista" the way furrow's does.
-func containsFold(hay []string, needle string) bool {
+// containsExact reports an exact, case-SENSITIVE hit: furrow's label:/epic:
+// compare byte-for-byte, so `label:u` finds nothing and `label:UI` finds only
+// the tasks tagged with that exact capitalisation (measured 2026-08-10).
+func containsExact(hay []string, needle string) bool {
 	for _, h := range hay {
-		if strings.Contains(strings.ToLower(h), needle) {
+		if h == needle {
+			return true
+		}
+	}
+	return false
+}
+
+// containsRepo compares full repo names case-insensitively. The value has
+// already been RESOLVED to a repo the board carries at parse time, which is
+// where an unresolvable one was refused — so this never sees a short name.
+func containsRepo(hay []string, needle string) bool {
+	for _, h := range hay {
+		if strings.EqualFold(h, needle) {
 			return true
 		}
 	}
