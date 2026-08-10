@@ -44,7 +44,12 @@ func (p *scriptedProvider) Reload() error {
 func (p *scriptedProvider) Sync() error { return nil }
 
 func (p *scriptedProvider) Query(string) ([]string, error) { return nil, nil }
-func (p *scriptedProvider) Live() bool                     { return true }
+
+func (p *scriptedProvider) PersistFields(_ string, _ board.FieldPatch) error   { return nil }
+func (p *scriptedProvider) PersistCheckAdd(_, _ string) error                  { return nil }
+func (p *scriptedProvider) PersistCheckRm(_ string, _ int) error               { return nil }
+func (p *scriptedProvider) PersistCheckReword(_ string, _ int, _ string) error { return nil }
+func (p *scriptedProvider) Live() bool                                         { return true }
 
 func (p *scriptedProvider) PersistMove(id, lane, beforeID, afterID string) ([]string, error) {
 	p.mu.Lock()

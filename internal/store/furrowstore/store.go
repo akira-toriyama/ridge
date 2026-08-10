@@ -390,3 +390,84 @@ func (p *Store) Query(q string) ([]string, error) {
 	}
 	return ids, nil
 }
+
+// PersistFields records an already-applied metadata edit (board.Provider).
+// The set-shaped fields compose into ONE `furrow set` write; Title and repo
+// edits are their own commands, so a mixed patch costs up to three writes.
+func (p *Store) PersistFields(id string, patch board.FieldPatch) error {
+	args := []string{"set", id}
+	switch {
+	case patch.Value == nil:
+	case *patch.Value == 0:
+		args = append(args, "--clear-value")
+	default:
+		args = append(args, "--value", strconv.Itoa(*patch.Value))
+	}
+	switch {
+	case patch.Effort == nil:
+	case *patch.Effort == 0:
+		args = append(args, "--clear-effort")
+	default:
+		args = append(args, "--effort", strconv.Itoa(*patch.Effort))
+	}
+	for _, l := range patch.AddLabels {
+		args = append(args, "--add-label", l)
+	}
+	for _, l := range patch.RmLabels {
+		args = append(args, "--rm-label", l)
+	}
+	if patch.Epic != nil {
+		args = append(args, "-e", *patch.Epic)
+	}
+	switch {
+	case patch.Due == nil:
+	case *patch.Due == "":
+		args = append(args, "--clear-due")
+	default:
+		args = append(args, "--due", *patch.Due)
+	}
+	if len(args) > 2 {
+		if _, err := p.c.run("set-fields", args...); err != nil {
+			return err
+		}
+	}
+	if patch.Title != nil {
+		if _, err := p.c.run("retitle", "retitle", id, *patch.Title); err != nil {
+			return err
+		}
+	}
+	if len(patch.AddRepos) > 0 || len(patch.RmRepos) > 0 {
+		args := []string{"repo", id}
+		for _, r := range patch.AddRepos {
+			args = append(args, "--add", r)
+		}
+		for _, r := range patch.RmRepos {
+			args = append(args, "--rm", r)
+		}
+		if _, err := p.c.run("repo", args...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// PersistCheckAdd records an already-appended checklist item via `furrow
+// check --add` (board.Provider).
+func (p *Store) PersistCheckAdd(id, text string) error {
+	_, err := p.c.run("check-add", "check", id, "--add", text)
+	return err
+}
+
+// PersistCheckRm records an already-applied checklist deletion via `furrow
+// check <i> --rm` (board.Provider).
+func (p *Store) PersistCheckRm(id string, i int) error {
+	_, err := p.c.run("check-rm", "check", id, strconv.Itoa(i), "--rm")
+	return err
+}
+
+// PersistCheckReword records an already-applied checklist rewording via
+// `furrow check <i> --reword` (board.Provider).
+func (p *Store) PersistCheckReword(id string, i int, text string) error {
+	_, err := p.c.run("check-reword", "check", id, strconv.Itoa(i), "--reword", text)
+	return err
+}

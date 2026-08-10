@@ -418,3 +418,149 @@ func (b *Board) SetBody(id, body string) error {
 	t.Updated = nowFn().UTC().Truncate(time.Second)
 	return nil
 }
+
+// parseDue accepts the subset of furrow's due forms the TUI can validate
+// without the store: a day, a day+time, an RFC3339 instant, or the +<n>d/w
+// snooze. The optimistic value only has to hold until the post-persist
+// reconcile re-reads furrow's own truth.
+func parseDue(s string) (time.Time, error) {
+	if n := len(s); n > 2 && s[0] == '+' && (s[n-1] == 'd' || s[n-1] == 'w') {
+		var days int
+		if _, err := fmt.Sscanf(s[1:n-1], "%d", &days); err == nil && days > 0 {
+			if s[n-1] == 'w' {
+				days *= 7
+			}
+			return nowFn().UTC().AddDate(0, 0, days), nil
+		}
+	}
+	for _, layout := range []string{"2006-01-02", "2006-01-02T15:04", time.RFC3339} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("due %q: want 2026-08-04, 2026-08-04T10:30, RFC3339 or +1d", s)
+}
+
+// SetFields applies a metadata patch locally and stamps Updated — the
+// optimistic half of Provider.PersistFields. It validates BEFORE mutating,
+// so a refused gesture leaves the task untouched.
+func (b *Board) SetFields(id string, p FieldPatch) error {
+	t := b.Task(id)
+	if t == nil {
+		return fmt.Errorf("unknown task %q", id)
+	}
+	for _, v := range []*int{p.Value, p.Effort} {
+		if v != nil && (*v < 0 || *v > 5) {
+			return fmt.Errorf("estimate %d: want 1..5, or 0 to clear", *v)
+		}
+	}
+	if p.Title != nil && strings.TrimSpace(*p.Title) == "" {
+		return fmt.Errorf("a title cannot be empty")
+	}
+	var due time.Time
+	if p.Due != nil && *p.Due != "" {
+		d, err := parseDue(*p.Due)
+		if err != nil {
+			return err
+		}
+		due = d
+	}
+
+	if p.Value != nil {
+		t.Value = *p.Value
+	}
+	if p.Effort != nil {
+		t.Effort = *p.Effort
+	}
+	for _, l := range p.AddLabels {
+		if l != "" && !containsStr(t.Labels, l) {
+			t.Labels = append(t.Labels, l)
+		}
+	}
+	for _, l := range p.RmLabels {
+		t.Labels = removeStr(t.Labels, l)
+	}
+	if p.Epic != nil {
+		t.Epic = *p.Epic
+	}
+	if p.Due != nil {
+		t.Due = due
+	}
+	if p.Title != nil {
+		t.Title = strings.TrimSpace(*p.Title)
+	}
+	for _, r := range p.AddRepos {
+		if r != "" && !containsStr(t.Repos, r) {
+			t.Repos = append(t.Repos, r)
+		}
+	}
+	for _, r := range p.RmRepos {
+		t.Repos = removeStr(t.Repos, r)
+	}
+	t.Updated = nowFn().UTC().Truncate(time.Second)
+	return nil
+}
+
+// CheckAdd appends a checklist item and stamps Updated.
+func (b *Board) CheckAdd(id, text string) error {
+	t := b.Task(id)
+	if t == nil {
+		return fmt.Errorf("unknown task %q", id)
+	}
+	if strings.TrimSpace(text) == "" {
+		return fmt.Errorf("a checklist item cannot be empty")
+	}
+	t.Checklist = append(t.Checklist, ChecklistItem{Text: text})
+	t.Updated = nowFn().UTC().Truncate(time.Second)
+	return nil
+}
+
+// CheckRm deletes checklist item i and stamps Updated.
+func (b *Board) CheckRm(id string, i int) error {
+	t := b.Task(id)
+	if t == nil {
+		return fmt.Errorf("unknown task %q", id)
+	}
+	if i < 0 || i >= len(t.Checklist) {
+		return fmt.Errorf("task %s has no checklist item %d", id, i)
+	}
+	t.Checklist = append(t.Checklist[:i], t.Checklist[i+1:]...)
+	t.Updated = nowFn().UTC().Truncate(time.Second)
+	return nil
+}
+
+// CheckReword replaces checklist item i's text and stamps Updated.
+func (b *Board) CheckReword(id string, i int, text string) error {
+	t := b.Task(id)
+	if t == nil {
+		return fmt.Errorf("unknown task %q", id)
+	}
+	if i < 0 || i >= len(t.Checklist) {
+		return fmt.Errorf("task %s has no checklist item %d", id, i)
+	}
+	if strings.TrimSpace(text) == "" {
+		return fmt.Errorf("a checklist item cannot be empty")
+	}
+	t.Checklist[i].Text = text
+	t.Updated = nowFn().UTC().Truncate(time.Second)
+	return nil
+}
+
+func containsStr(hay []string, needle string) bool {
+	for _, h := range hay {
+		if h == needle {
+			return true
+		}
+	}
+	return false
+}
+
+func removeStr(hay []string, needle string) []string {
+	out := hay[:0]
+	for _, h := range hay {
+		if h != needle {
+			out = append(out, h)
+		}
+	}
+	return out
+}

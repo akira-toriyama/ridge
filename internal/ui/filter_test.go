@@ -37,10 +37,14 @@ func (p *liveQueryProvider) queryCalls() []string {
 	defer p.mu.Unlock()
 	return append([]string(nil), p.calls...)
 }
-func (p *liveQueryProvider) PersistMove(_, _, _, _ string) ([]string, error) { return nil, nil }
-func (p *liveQueryProvider) PersistDone(_ string) error                      { return nil }
-func (p *liveQueryProvider) PersistCheck(_ string, _ int, _ bool) error      { return nil }
-func (p *liveQueryProvider) PersistBody(_, _ string) error                   { return nil }
+func (p *liveQueryProvider) PersistMove(_, _, _, _ string) ([]string, error)    { return nil, nil }
+func (p *liveQueryProvider) PersistDone(_ string) error                         { return nil }
+func (p *liveQueryProvider) PersistCheck(_ string, _ int, _ bool) error         { return nil }
+func (p *liveQueryProvider) PersistBody(_, _ string) error                      { return nil }
+func (p *liveQueryProvider) PersistFields(_ string, _ board.FieldPatch) error   { return nil }
+func (p *liveQueryProvider) PersistCheckAdd(_, _ string) error                  { return nil }
+func (p *liveQueryProvider) PersistCheckRm(_ string, _ int) error               { return nil }
+func (p *liveQueryProvider) PersistCheckReword(_ string, _ int, _ string) error { return nil }
 
 func liveModel(t *testing.T) (*Model, *liveQueryProvider) {
 	t.Helper()

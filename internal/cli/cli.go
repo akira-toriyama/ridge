@@ -48,7 +48,7 @@ func Execute() Code {
 		table     = flag.Bool("table", false, "-dump the table view")
 		light     = flag.Bool("light", false, "light palette")
 		plain     = flag.Bool("plain", false, "-dump without ANSI styling (diffable)")
-		demo      = flag.String("demo", "", "-dump in a transient state: move|drag|graph|help (always the fixture)")
+		demo      = flag.String("demo", "", "-dump in a transient state: move|drag|edit|graph|help (always the fixture)")
 		mock      = flag.Bool("mock", false, "serve the built-in fixture instead of the real furrow store")
 		perflog   = flag.String("perflog", "", "append one 'op\\tms' line per furrow command to this file")
 		benchload = flag.Bool("benchload", false, "load the real board once, print the latency breakdown, exit (read-only)")

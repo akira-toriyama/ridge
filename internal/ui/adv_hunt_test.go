@@ -84,9 +84,13 @@ func (p *emptyProvider) Live() bool                     { return false }
 func (p *emptyProvider) PersistMove(_, _, _, _ string) ([]string, error) {
 	return nil, nil
 }
-func (p *emptyProvider) PersistDone(_ string) error                 { return nil }
-func (p *emptyProvider) PersistCheck(_ string, _ int, _ bool) error { return nil }
-func (p *emptyProvider) PersistBody(_, _ string) error              { return nil }
+func (p *emptyProvider) PersistDone(_ string) error                         { return nil }
+func (p *emptyProvider) PersistCheck(_ string, _ int, _ bool) error         { return nil }
+func (p *emptyProvider) PersistBody(_, _ string) error                      { return nil }
+func (p *emptyProvider) PersistFields(_ string, _ board.FieldPatch) error   { return nil }
+func (p *emptyProvider) PersistCheckAdd(_, _ string) error                  { return nil }
+func (p *emptyProvider) PersistCheckRm(_ string, _ int) error               { return nil }
+func (p *emptyProvider) PersistCheckReword(_ string, _ int, _ string) error { return nil }
 
 func TestAdvEmptyBoardSurvivesEveryGesture(t *testing.T) {
 	m := New(&emptyProvider{b: board.NewBoard(nil)}, Options{})

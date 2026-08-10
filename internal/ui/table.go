@@ -100,6 +100,11 @@ func (m *Model) renderTable() string {
 	if m.peekOpen {
 		layers = append(layers, m.peekLayer())
 	}
+	if m.mode == modeEdit {
+		if l := m.editLayer(); l != nil {
+			layers = append(layers, l)
+		}
+	}
 	if m.fullHelp {
 		layers = append(layers, m.helpLayer())
 	}

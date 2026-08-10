@@ -88,7 +88,7 @@ func defaultKeys() keyMap {
 
 		Done:       key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "done")),
 		Edit:       key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "$EDITOR")),
-		Check:      key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "toggle check")),
+		Check:      key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "toggle")),
 		Reload:     key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reload")),
 		Sync:       key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "sync (git)")),
 		Mouse:      key.NewBinding(key.WithKeys("M"), key.WithHelp("M", "mouse on/off")),
@@ -124,9 +124,15 @@ func (k keyMap) FullHelp() [][]key.Binding {
 		{k.MoveTop, k.MoveBottom, k.MoveFirst, k.MoveLast},
 		{k.Peek, k.Tree, k.PeekScroll, k.Filter, k.OnlyBlock, k.View},
 		{k.Graph, k.GraphRoot, k.GraphRadius},
-		{k.JumpBlock, k.JumpBack, k.Done, k.Check, k.Edit, k.Reload, k.Sync},
+		{k.JumpBlock, k.JumpBack, k.Done, k.Edit, k.Reload, k.Sync},
 		{k.Mouse, k.Help, k.Quit},
 	}
+}
+
+// editHelp is the footer while the field-edit overlay is up. The overlay
+// carries its own per-stage hints; the footer only shows the frame.
+func (k keyMap) editHelp() []key.Binding {
+	return []key.Binding{k.Up, k.Down, k.Commit, k.Check, k.Cancel}
 }
 
 // moveHelp is the footer while a card is lifted — a different mode gets a
