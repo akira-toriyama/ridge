@@ -132,7 +132,15 @@ go run ./cmd/ridge -demo edit -dump          # フィールド編集メニュー
 go run ./cmd/ridge -demo add -dump           # quick add（filter 文脈チップつき）
 go run ./cmd/ridge -demo slice -dump         # slice パネル（label:ui 選択済み）
 go run ./cmd/ridge -demo sort -dump          # Table を due ▲ でソートした状態
+go run ./cmd/ridge -demo filter -dump        # フィルタ入力がキーボードを持っている状態
+go run ./cmd/ridge -demo fail -dump          # 書き込みが拒否された ⚠ 行
+go run ./cmd/ridge -readonly -dump           # schema gate で read-only の盤面
 ```
+
+`-readonly` だけは model の状態ではなく **store の性質**なので `-demo` ではなく
+フラグにしてある。実物を出すには古い schema の board が要る = 手では作れないので、
+この経路が無いと read-only の1フレームは誰も目視できない（実際、その状態の警告を
+消す退行を1度通した）。`-mock -readonly` で TUI としても触れる。
 
 ## 既知の課題
 

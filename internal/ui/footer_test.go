@@ -209,3 +209,40 @@ func TestFrameStaysRectangularAfterTheFooterWent(t *testing.T) {
 		}
 	}
 }
+
+// The read-only warning survives to the frame at every width this board is
+// read at, and it is the ⚠ row rather than a quiet note. Reaching this state
+// for real needs a store on an older schema, so `-readonly` (memstore.NewGated)
+// is the only way a human ever sees it — this pins that the route works.
+func TestGatedBoardRendersItsWarningAtEveryWidth(t *testing.T) {
+	for _, w := range []int{240, 320, 400} {
+		gated := memstore.NewGated("board-behind")
+		m := New(gated, Options{})
+		out, err := m.Dump(w, 50, "", true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		lines := strings.Split(out, "\n")
+		last := strings.TrimSpace(lines[len(lines)-1])
+		if !strings.Contains(last, "read-only") || !strings.Contains(last, "board-behind") {
+			t.Errorf("w=%d last row = %q, want the read-only warning naming the schema state", w, last)
+		}
+		if !strings.HasPrefix(last, "⚠") {
+			t.Errorf("w=%d last row = %q, want the ⚠ error row", w, last)
+		}
+	}
+}
+
+// Every -demo name the usage string offers must actually render.
+func TestEveryAdvertisedDemoRenders(t *testing.T) {
+	for _, d := range []string{"move", "drag", "add", "edit", "graph", "help", "slice", "sort", "filter", "fail"} {
+		m := New(memstore.New(), Options{})
+		if _, err := m.Dump(240, 50, d, true); err != nil {
+			t.Errorf("-demo %s: %v", d, err)
+		}
+	}
+	m := New(memstore.New(), Options{})
+	if _, err := m.Dump(240, 50, "nope", true); err == nil {
+		t.Error("an unknown -demo must be an error, not a silent board")
+	}
+}

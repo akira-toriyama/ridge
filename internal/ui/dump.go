@@ -169,8 +169,23 @@ func (m *Model) demoState(kind string) error {
 		m.view = viewTable
 		m.setSort(sortDue, true)
 
+	case "filter":
+		// The modal filter input with text in it: the ⟨FILTER⟩ badge, the
+		// prompt holding the keyboard, and the board already narrowed behind
+		// it. Reachable only mid-keystroke otherwise.
+		m.mode = modeFilter
+		m.ti.SetValue("lane:backlog is:blocked")
+		m.ti.Focus()
+		_ = m.applyFilter(m.ti.Value())
+
+	case "fail":
+		// A refused write. The ⚠ styling has its own colour and its own row,
+		// and nothing else in the demo set renders an error at all.
+		m.fail("t-jv3j: the store refused the write — the board is rolling back")
+		m.rollingBack = true
+
 	default:
-		return fmt.Errorf("unknown -demo %q (want move|drag|add|edit|graph|help|slice|sort)", kind)
+		return fmt.Errorf("unknown -demo %q (want move|drag|add|edit|graph|help|slice|sort|filter|fail)", kind)
 	}
 	m.relayout()
 	return nil

@@ -31,6 +31,21 @@ func NewWith(b *board.Board) *Store {
 	return &Store{b: b, rebuild: func() *board.Board { return b }}
 }
 
+// NewGated serves the fixture as a board furrow would REFUSE to write to —
+// the schema gate that `furrow board --json` reports as writable:false.
+//
+// It exists because that state was unreachable by hand: producing it for real
+// needs a store on an older schema, so the one frame that carries the
+// read-only warning could not be looked at, only unit-tested. A regression
+// that deleted that warning therefore shipped to review unseen (t-04f8).
+func NewGated(schema string) *Store {
+	f := func() *board.Board {
+		b := board.NewBoard(fixtureTasks(), fixtureEpics()...)
+		return board.NewStoreBoard(b.Lanes(), b.Tasks(), b.Epics(), false, schema)
+	}
+	return &Store{b: f(), rebuild: f}
+}
+
 // Board returns the current snapshot (board.Provider).
 func (p *Store) Board() *board.Board { return p.b }
 
