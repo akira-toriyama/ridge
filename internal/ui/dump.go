@@ -90,6 +90,20 @@ func (m *Model) demoState(kind string) error {
 		m.Update(tea.MouseClickMsg{X: grab.X + 3, Y: grab.Y + 1, Button: tea.MouseLeft})
 		m.Update(tea.MouseMotionMsg{X: dst.X + 8, Y: dst.Top + 4, Button: tea.MouseLeft})
 
+	case "edit":
+		// Open the field-edit overlay on a task with a checklist AND labels,
+		// so the menu row values and the checklist cursor are all exercised.
+		if !m.selectID("t-9sa6", false) {
+			return fmt.Errorf("demo edit: t-9sa6 is not on the fixture board")
+		}
+		m.enterEdit()
+		if m.edit == nil {
+			return fmt.Errorf("demo edit: the edit menu did not open")
+		}
+		m.edit.menuIdx = int(fieldChecklist)
+		m.openField(fieldChecklist, m.b.Task("t-9sa6"))
+		m.edit.listIdx = 1
+
 	case "graph":
 		// Root the graph on a task that actually HAS both directions, so the
 		// frame proves the layout rather than a degenerate single node.
@@ -103,7 +117,7 @@ func (m *Model) demoState(kind string) error {
 		m.openGraph()
 
 	default:
-		return fmt.Errorf("unknown -demo %q (want move|drag|graph|help)", kind)
+		return fmt.Errorf("unknown -demo %q (want move|drag|edit|graph|help)", kind)
 	}
 	m.relayout()
 	return nil

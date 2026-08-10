@@ -78,13 +78,17 @@ POC が答えを出した3つの問い:
 
 `Space` で開く。解決済みの双方向依存リスト（`blocked by` / `blocks` を
 ID+タイトル+レーンまで解決）、チェックリスト、本文。`t` で推移的ツリー。
+`Enter` で**フィールド編集メニュー**: title / value / effort / labels / epic /
+due / repos / checklist（カーソルで項目選択・toggle/add/delete/reword）を
+`furrow set / retitle / repo / check` 相当の1書き込みで編集する（楽観的適用・
+失敗時は store 再読でロールバック）。
 
 ## キー
 
 | キー | 動作 |
 |---|---|
 | `←→↑↓` / `hjkl` | カーソル移動 |
-| `Enter` / `m` | move mode（`Enter` 確定・`Esc` 取消） |
+| `Enter` / `m` | move mode（`Enter` 確定・`Esc` 取消）。peek が開いている時と Table 行では `Enter` = **フィールド編集メニュー** |
 | `K` / `J` | レーン内で1つ上/下へ |
 | `[` / `]` | レーンを前/次へ |
 | `Space` | 詳細ペイン |
@@ -96,7 +100,6 @@ ID+タイトル+レーンまで解決）、チェックリスト、本文。`t` 
 | `v` | Board ⇄ Table |
 | `d` | done |
 | `e` | 本文を `$EDITOR` で編集 |
-| `x` | チェックリストをトグル |
 | `r` | store 再読 |
 | `R` | `furrow sync`（git）→ 再読 |
 | `M` | マウス追跡 ON/OFF |
@@ -131,6 +134,7 @@ go run ./cmd/ridge -dump -tree               # 依存ツリーを開いた状態
 go run ./cmd/ridge -demo graph -dump         # 依存グラフ
 go run ./cmd/ridge -demo move -dump          # move mode 中
 go run ./cmd/ridge -demo drag -dump          # ドラッグ中
+go run ./cmd/ridge -demo edit -dump          # フィールド編集メニュー
 ```
 
 ## 既知の課題

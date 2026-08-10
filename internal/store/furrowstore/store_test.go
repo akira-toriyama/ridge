@@ -1,6 +1,7 @@
 package furrowstore
 
 import (
+	"github.com/akira-toriyama/ridge/internal/board"
 	"github.com/akira-toriyama/ridge/internal/ui"
 
 	"bytes"
@@ -265,6 +266,15 @@ func TestContractErrorsCarryTheEnvelope(t *testing.T) {
 	}
 }
 
+func contains(hay []string, needle string) bool {
+	for _, h := range hay {
+		if h == needle {
+			return true
+		}
+	}
+	return false
+}
+
 func TestContractQueryPassesThroughAndRefuses(t *testing.T) {
 	p, dir := newLabProvider(t)
 	blocker := labAdd(t, dir, "先にやる方")
@@ -309,5 +319,98 @@ func TestContractQueryPassesThroughAndRefuses(t *testing.T) {
 	// the model shows it and keeps the last good verdict.
 	if _, err := p.Query("nope:x"); err == nil {
 		t.Error("a malformed query must refuse, not match nothing")
+	}
+}
+
+func TestContractPersistFieldsAndChecklistEdits(t *testing.T) {
+	p, dir := newLabProvider(t)
+	id := labAdd(t, dir, "編集される方")
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+
+	iv := func(n int) *int { return &n }
+	sv := func(s string) *string { return &s }
+
+	// The set-shaped fields compose into one write; read the store back and
+	// believe IT, not the patch.
+	if err := p.PersistFields(id, board.FieldPatch{
+		Value: iv(4), Effort: iv(2),
+		AddLabels: []string{"cli", "tui"},
+		Due:       sv("2026-09-01"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Title and repo edits are their own commands behind the same patch; a
+	// full owner/repo attaches (short names must already be known — furrow
+	// never invents a repo silently).
+	if err := p.PersistFields(id, board.FieldPatch{
+		Title:    sv("編集後のタイトル"),
+		AddRepos: []string{"lab/other"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	got := p.Board().Task(id)
+	if got.Value != 4 || got.Effort != 2 {
+		t.Errorf("estimates = %d/%d, want 4/2", got.Value, got.Effort)
+	}
+	if len(got.Labels) != 2 {
+		t.Errorf("labels = %v", got.Labels)
+	}
+	if got.Due.Format("2006-01-02") != "2026-09-01" {
+		t.Errorf("due = %v", got.Due)
+	}
+	if got.Title != "編集後のタイトル" {
+		t.Errorf("title = %q", got.Title)
+	}
+	if !contains(got.Repos, "lab/other") {
+		t.Errorf("repos = %v, want lab/other attached", got.Repos)
+	}
+
+	// Clears map to the --clear-* flags.
+	if err := p.PersistFields(id, board.FieldPatch{
+		Value: iv(0), Due: sv(""), RmLabels: []string{"cli"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	got = p.Board().Task(id)
+	if got.Value != 0 || !got.Due.IsZero() || len(got.Labels) != 1 {
+		t.Errorf("after clears: value=%d due=%v labels=%v", got.Value, got.Due, got.Labels)
+	}
+
+	// Checklist add / reword / toggle / rm, by index.
+	for _, text := range []string{"最初の項目", "二番目の項目"} {
+		if err := p.PersistCheckAdd(id, text); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := p.PersistCheckReword(id, 1, "書き直した項目"); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.PersistCheck(id, 0, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	cl := p.Board().Task(id).Checklist
+	if len(cl) != 2 || !cl[0].Done || cl[1].Text != "書き直した項目" {
+		t.Fatalf("checklist = %+v", cl)
+	}
+	if err := p.PersistCheckRm(id, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	cl = p.Board().Task(id).Checklist
+	if len(cl) != 1 || cl[0].Text != "書き直した項目" {
+		t.Fatalf("after rm: %+v", cl)
 	}
 }

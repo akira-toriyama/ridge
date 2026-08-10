@@ -22,6 +22,7 @@ const (
 	modeNormal mode = iota
 	modeMove        // a card is lifted; arrows place it
 	modeFilter      // the filter input has the keyboard
+	modeEdit        // the field-edit overlay has the keyboard (editmode.go)
 )
 
 type viewKind int
@@ -61,6 +62,8 @@ type Model struct {
 	qSeq     int             // debounce + staleness fence (filter.go)
 
 	startupFilter tea.Cmd // pending verdict for Options.Filter, fired by Init
+
+	edit *editState // non-nil exactly while mode == modeEdit
 
 	pinned map[string]bool // ids forced visible despite the filter (jump targets)
 	cols   map[string][]*board.Task
@@ -348,6 +351,11 @@ func (m *Model) onKey(msg tea.KeyPressMsg) tea.Cmd {
 	if m.mode == modeFilter {
 		return m.onFilterKey(msg)
 	}
+	// The edit overlay is modal the same way the filter input is: it owns the
+	// whole keyboard, Esc walks its stages back out.
+	if m.mode == modeEdit {
+		return m.onEditKey(msg)
+	}
 	// Esc while a mouse button is down cancels the drag before anything else
 	// gets to interpret it — and leaves the drag armed so the release that
 	// follows is swallowed rather than treated as a drop.
@@ -582,16 +590,20 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 			})
 		}
 
-	case key.Matches(msg, m.keys.Check):
-		return m.toggleCheck()
-
 	case key.Matches(msg, m.keys.Edit):
 		if t := m.curTask(); t != nil {
 			return m.editCmd(t)
 		}
 
 	case key.Matches(msg, m.keys.Move):
-		m.enterMove()
+		// GitHub's Enter is cell EDITING; move mode is the board-only lift.
+		// With the peek open (or on a table row) Enter edits the fields — the
+		// board without a peek keeps Enter as the move-mode muscle memory.
+		if m.view == viewTable || m.peekOpen {
+			m.enterEdit()
+		} else {
+			m.enterMove()
+		}
 
 	case key.Matches(msg, m.keys.QuickUp):
 		return m.quickReorder(-1)
@@ -744,41 +756,6 @@ func (m *Model) jumpBack() {
 	m.jumpStack = m.jumpStack[:len(m.jumpStack)-1]
 	m.selectID(id, true)
 	m.note("← %s (%d left on the stack)", id, len(m.jumpStack))
-}
-
-// toggleCheck flips the first unfinished checklist item, or the last finished
-// one when all are done — a POC shortcut until the peek grows a checklist
-// cursor (t-5zjj). Applied locally, then queued for the store.
-func (m *Model) toggleCheck() tea.Cmd {
-	t := m.curTask()
-	if t == nil {
-		return nil
-	}
-	if len(t.Checklist) == 0 {
-		m.note("%s has no checklist", t.ID)
-		return nil
-	}
-	idx := -1
-	for i, c := range t.Checklist {
-		if !c.Done {
-			idx = i
-			break
-		}
-	}
-	if idx < 0 {
-		idx = len(t.Checklist) - 1
-	}
-	if err := m.b.ToggleCheck(t.ID, idx); err != nil {
-		m.fail("%v", err)
-		return nil
-	}
-	m.recompute()
-	d, tot := t.CheckProgress()
-	m.note("%s checklist %d/%d", t.ID, d, tot)
-	id, on := t.ID, t.Checklist[idx].Done
-	return m.enqueuePersist(fmt.Sprintf("check %s", id), func() ([]string, error) {
-		return nil, m.prov.PersistCheck(id, idx, on)
-	})
 }
 
 // dropToken removes every occurrence of `tok` from a whitespace-separated query,

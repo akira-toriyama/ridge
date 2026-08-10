@@ -51,4 +51,35 @@ type Provider interface {
 
 	// PersistBody records id's already-applied body replacement.
 	PersistBody(id, body string) error
+
+	// PersistFields records id's already-applied metadata edit. Everything
+	// set-shaped in the patch lands in ONE `furrow set` write; Title and the
+	// repo edits are their own commands (retitle / repo), so a mixed patch
+	// may cost up to three writes — the UI edits one field per gesture, so
+	// in practice it is one.
+	PersistFields(id string, p FieldPatch) error
+
+	// PersistCheckAdd records an already-appended checklist item.
+	PersistCheckAdd(id, text string) error
+
+	// PersistCheckRm records checklist item i's already-applied deletion.
+	PersistCheckRm(id string, i int) error
+
+	// PersistCheckReword records checklist item i's already-applied rewording.
+	PersistCheckReword(id string, i int, text string) error
+}
+
+// FieldPatch is one already-applied metadata edit. nil means "untouched";
+// the zero value of a pointed-to field means "clear" (furrow --clear-value /
+// --clear-effort / --clear-due / -e "").
+type FieldPatch struct {
+	Value     *int // 1..5; 0 clears
+	Effort    *int // 1..5; 0 clears
+	AddLabels []string
+	RmLabels  []string
+	Epic      *string // e- id; "" unfiles
+	Due       *string // furrow date forms incl. the +1d snooze; "" clears
+	Title     *string
+	AddRepos  []string // full owner/repo
+	RmRepos   []string
 }

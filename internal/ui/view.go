@@ -19,6 +19,7 @@ const (
 	zCard   = 10
 	zDrop   = 50 // drop indicator — deliberately given NO id so Hit() skips it
 	zPeek   = 80
+	zEdit   = 85 // the field-edit overlay, above the peek, below `?`
 	zHelp   = 90
 	zGhost  = 99 // the dragged card, above everything
 )
@@ -86,6 +87,11 @@ func (m *Model) renderBoard() string {
 	if m.peekOpen {
 		layers = append(layers, m.peekLayer())
 	}
+	if m.mode == modeEdit {
+		if l := m.editLayer(); l != nil {
+			layers = append(layers, l)
+		}
+	}
 	if m.fullHelp {
 		layers = append(layers, m.helpLayer())
 	}
@@ -148,9 +154,12 @@ func (m *Model) chromeLayers() []*lg.Layer {
 
 	status := m.statusLine()
 	var helpBar string
-	if m.mode == modeMove {
+	switch m.mode {
+	case modeMove:
 		helpBar = m.help.ShortHelpView(m.keys.moveHelp())
-	} else {
+	case modeEdit:
+		helpBar = m.help.ShortHelpView(m.keys.editHelp())
+	default:
 		helpBar = m.help.ShortHelpView(m.keys.ShortHelp())
 	}
 

@@ -101,3 +101,37 @@ func (p *Store) Query(q string) ([]string, error) {
 	}
 	return ids, nil
 }
+
+// PersistFields validates the id and records nothing (board.Provider) — the
+// local apply already validated the patch against the same board.
+func (p *Store) PersistFields(id string, _ board.FieldPatch) error {
+	if p.b.Task(id) == nil {
+		return fmt.Errorf("unknown task %q", id)
+	}
+	return nil
+}
+
+// PersistCheckAdd validates the id and records nothing (board.Provider).
+func (p *Store) PersistCheckAdd(id, _ string) error {
+	if p.b.Task(id) == nil {
+		return fmt.Errorf("unknown task %q", id)
+	}
+	return nil
+}
+
+// PersistCheckRm validates the item and records nothing (board.Provider).
+func (p *Store) PersistCheckRm(id string, i int) error {
+	t := p.b.Task(id)
+	if t == nil {
+		return fmt.Errorf("unknown task %q", id)
+	}
+	if i < 0 || i >= len(t.Checklist) {
+		return fmt.Errorf("task %s has no checklist item %d", id, i)
+	}
+	return nil
+}
+
+// PersistCheckReword validates the item and records nothing (board.Provider).
+func (p *Store) PersistCheckReword(id string, i int, _ string) error {
+	return p.PersistCheckRm(id, i) // same bounds contract
+}
