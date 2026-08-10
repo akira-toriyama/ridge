@@ -294,14 +294,17 @@ func (m *Model) onMouseUp(msg tea.MouseReleaseMsg) tea.Cmd {
 }
 
 func (m *Model) onWheel(msg tea.MouseWheelMsg) {
-	if !m.mouseOn {
+	// fullHelp covers the whole screen (zHelp > zPeek) and the graph view
+	// never renders the peek — in both, `inPeek` would say yes to a panel
+	// that is not on screen.
+	if !m.mouseOn || m.fullHelp {
 		return
 	}
 	// The peek scrolls in EVERY mode it is visible in — the edit overlay
 	// deliberately opens it (enterEdit), and review confirmed the modality
 	// guard below made a long body unreadable while editing. Scrolling the
 	// peek commits nothing; it is not the board's hit surface.
-	if m.inPeek(msg.X, msg.Y) {
+	if m.view != viewGraph && m.inPeek(msg.X, msg.Y) {
 		switch msg.Button {
 		case tea.MouseWheelUp:
 			m.vp.ScrollUp(3)
@@ -316,7 +319,7 @@ func (m *Model) onWheel(msg tea.MouseWheelMsg) {
 	if m.mode != modeNormal && m.mode != modeMove {
 		return
 	}
-	if m.view != viewBoard || m.fullHelp || m.lay == nil {
+	if m.view != viewBoard || m.lay == nil {
 		// Table and graph have no board columns on screen to scroll.
 		return
 	}

@@ -115,14 +115,13 @@ func (m *Model) onPersistDone(msg persistDoneMsg) tea.Cmd {
 			}
 		}
 		if !needRollback {
+			// No re-read is coming, so a cursor jump parked by an earlier
+			// successful add would fire at some unrelated future reload.
+			m.selectAfterReload = ""
 			m.fail("%s: %v%s", msg.label, msg.err, loss)
 			return nil
 		}
-		if op.addedID != nil {
-			m.fail("%s: %v%s — rolling back", msg.label, msg.err, loss)
-		} else {
-			m.fail("%s: %v — rolling back%s", msg.label, msg.err, loss)
-		}
+		m.fail("%s: %v%s — rolling back", msg.label, msg.err, loss)
 		return m.rollbackReloadCmd()
 	}
 	if op.addedID != nil && *op.addedID != "" {
