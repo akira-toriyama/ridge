@@ -107,7 +107,7 @@ func (m *Model) renderBoard() string {
 	return m.fitFrame(lg.NewCompositor(layers...).Render())
 }
 
-// chromeLayers draws the title bar, filter bar, footer and help line.
+// chromeLayers draws the title bar, the filter bar and the status line.
 func (m *Model) chromeLayers() []*lg.Layer {
 	th := m.th
 	total := len(m.b.Tasks())
@@ -135,11 +135,11 @@ func (m *Model) chromeLayers() []*lg.Layer {
 	// the top rows carry standing state, the bottom row carries the one
 	// message that is about to be replaced. It is also the whole in-app
 	// pointer to the key surface now that the footers are gone.
-	tail := counts + "  ·  " + m.modeBadge() + th.dim.Render("  ·  ? help")
+	tail := counts
 	if m.lastPersist != "" {
-		tail = counts + "  ·  " + m.lastPersist + "  ·  " + m.modeBadge() +
-			th.dim.Render("  ·  ? help")
+		tail += "  ·  " + m.lastPersist
 	}
+	tail += "  ·  " + m.modeBadge() + th.dim.Render("  ·  ? help")
 	right := th.crumb.Render(tail)
 	title := joinEnds(left, right, m.w)
 

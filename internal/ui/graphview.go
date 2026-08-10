@@ -157,7 +157,20 @@ func (m *Model) renderGraph() string {
 	}
 	parts = append(parts, pad(m.statusLine(), m.w))
 
-	return m.fitFrame(strings.Join(parts, "\n"))
+	frame := m.fitFrame(strings.Join(parts, "\n"))
+	// The graph is composed as a string, not through the compositor, so `?`
+	// used to set fullHelp and change not one pixel here — the overlay was
+	// simply never drawn, and the next Esc went on clearing an invisible flag.
+	// Harmless while the graph had a footer of its own; a lie the moment this
+	// view started advertising `? help` in its title bar. It is also the only
+	// way to read the key surface from inside a full-screen mode.
+	if m.fullHelp {
+		frame = m.fitFrame(lg.NewCompositor(
+			lg.NewLayer(frame).X(0).Y(0).Z(zChrome),
+			m.helpLayer(),
+		).Render())
+	}
+	return frame
 }
 
 func (m *Model) graphTitleBar(l *egoLayout) string {
