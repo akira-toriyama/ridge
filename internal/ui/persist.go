@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -88,14 +89,39 @@ func (m *Model) onPersistDone(msg persistDoneMsg) tea.Cmd {
 		// and re-read: the reload IS the rollback. A quit waiting on the
 		// flush is cancelled — exiting on top of a failed write would make
 		// the loss silent.
+		flushed := m.pending
 		m.pending = nil
 		m.quitting = false
+
+		// The flushed tail is named, not just counted: a queued quick add
+		// has NO optimistic effect, so nothing on the board even hints that
+		// the typed title was thrown away — the message is its only trace.
+		loss := ""
+		if n := len(flushed); n > 0 {
+			labels := make([]string, n)
+			for i, f := range flushed {
+				labels[i] = f.label
+			}
+			loss = fmt.Sprintf(" · dropped %d queued: %s", n, strings.Join(labels, ", "))
+		}
+
+		// Roll back only what was optimistically applied. Adds apply
+		// nothing, so a failure chain of adds alone needs no re-read — and
+		// claiming "unsaved edit" over one would be a lie.
+		needRollback := op.addedID == nil
+		for _, f := range flushed {
+			if f.addedID == nil {
+				needRollback = true
+			}
+		}
+		if !needRollback {
+			m.fail("%s: %v%s", msg.label, msg.err, loss)
+			return nil
+		}
 		if op.addedID != nil {
-			// An add applies nothing optimistically — nothing to roll back,
-			// and saying so would read as "tasks were lost".
-			m.fail("%s: %v", msg.label, msg.err)
+			m.fail("%s: %v%s — rolling back", msg.label, msg.err, loss)
 		} else {
-			m.fail("%s: %v — rolling back", msg.label, msg.err)
+			m.fail("%s: %v — rolling back%s", msg.label, msg.err, loss)
 		}
 		return m.rollbackReloadCmd()
 	}

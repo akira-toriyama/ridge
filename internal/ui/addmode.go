@@ -117,7 +117,7 @@ func (m *Model) addLayer() *lg.Layer {
 		pad(th.peekHdr.Render("add item"), inner) + "\n\n" +
 			a.input.View() + "\n\n" +
 			th.accent.Render(pad("→ "+strings.Join(chips, " · "), inner)) + "\n" +
-			th.dim.Render(pad("⏎ create · esc cancel · details via the edit menu", inner)))
+			th.dim.Render(pad("⏎ create · esc cancel · ^c quit · details via the edit menu", inner)))
 	box = lg.NewStyle().MaxWidth(m.w).MaxHeight(m.h).Render(box)
 	x := maxInt(0, (m.w-lg.Width(box))/2)
 	y := maxInt(0, (m.h-lg.Height(box))/3)
