@@ -44,16 +44,17 @@ jobs:
   # the real CLI grammar never executed here. Measured (t-74y3): three semantic
   # mutations of store.go (--clear-value→--clear-effort, dropping Add's -l,
   # --before→--after) all rode a green CI. This job installs the pinned furrow
-  # release and runs the suite for real; the version moves with the fleet's
-  # sync-task-status pin.
+  # release and runs the suite for real; bump the pin alongside furrow
+  # releases (the fleet's own task-status pin lags a flag day behind).
   contract:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      # SHA-pinned to the same v7.0.0s the hub reusables pin (fleet hygiene).
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
       - name: Install furrow (pinned release binary)
@@ -67,6 +68,8 @@ jobs:
           tar -C /tmp -xzf /tmp/furrow.tgz furrow
           sudo install -m 0755 /tmp/furrow /usr/local/bin/furrow
       - name: Contract tests against the real CLI
+        env:
+          GOTOOLCHAIN: local
         run: |
           furrow --help >/dev/null
           go test ./internal/store/furrowstore/ -run TestContract -v
