@@ -3,10 +3,11 @@ package ui
 import (
 	"errors"
 	"fmt"
-	"github.com/akira-toriyama/ridge/internal/board"
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/akira-toriyama/ridge/internal/board"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -15,15 +16,15 @@ import (
 // it records every persist in call order and serves a rebuilt "store truth"
 // on Reload, so a rollback is observable as the board reverting.
 type scriptedProvider struct {
-	mu        sync.Mutex
-	truth     func() *board.Board
-	current   *board.Board
-	calls     []string
-	moves     []scriptedMove
-	moveErr   error
-	checkVals []string // "check <id> <i>=<done>" — the VALUE each toggle persisted
-	addCalls  []string
-	addErr    error
+	mu      sync.Mutex
+	truth   func() *board.Board
+	current *board.Board
+	calls   []string
+	moves   []scriptedMove
+	queries []string
+	qIDs    []string // Query's scripted verdict
+	moveErr error
+	addErr  error
 }
 
 type scriptedMove struct{ id, lane, before, after string }
@@ -47,23 +48,34 @@ func (p *scriptedProvider) Reload() error {
 
 func (p *scriptedProvider) Sync() error { return nil }
 
-func (p *scriptedProvider) Query(string) ([]string, error) { return nil, nil }
+func (p *scriptedProvider) Query(raw string) ([]string, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.queries = append(p.queries, raw)
+	return p.qIDs, nil
+}
 
 func (p *scriptedProvider) PersistFields(_ string, _ board.FieldPatch) error   { return nil }
 func (p *scriptedProvider) PersistCheckAdd(_, _ string) error                  { return nil }
-func (p *scriptedProvider) PersistCheckRm(_ string, _ int) error               { return nil }
 func (p *scriptedProvider) PersistCheckReword(_ string, _ int, _ string) error { return nil }
+func (p *scriptedProvider) Live() bool                                         { return true }
+
+func (p *scriptedProvider) PersistCheckRm(id string, i int) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.calls = append(p.calls, fmt.Sprintf("checkrm %s[%d]", id, i))
+	return nil
+}
+
 func (p *scriptedProvider) Add(title string, _ board.AddOptions) (string, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.calls = append(p.calls, "add "+title)
 	if p.addErr != nil {
 		return "", p.addErr
 	}
-	p.calls = append(p.calls, "add "+title)
-	p.addCalls = append(p.addCalls, "add "+title)
-	return "t-new1", nil
+	return "t-new", nil
 }
-func (p *scriptedProvider) Live() bool { return true }
 
 func (p *scriptedProvider) PersistMove(id, lane, beforeID, afterID string) ([]string, error) {
 	p.mu.Lock()
@@ -83,8 +95,7 @@ func (p *scriptedProvider) PersistDone(id string) error {
 func (p *scriptedProvider) PersistCheck(id string, i int, done bool) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.calls = append(p.calls, "check "+id)
-	p.checkVals = append(p.checkVals, fmt.Sprintf("check %s %d=%v", id, i, done))
+	p.calls = append(p.calls, fmt.Sprintf("check %s[%d]=%v", id, i, done))
 	return nil
 }
 
@@ -97,7 +108,9 @@ func (p *scriptedProvider) PersistBody(id, _ string) error {
 
 func scriptedBoard() *board.Board {
 	return board.NewBoard([]*board.Task{
-		{ID: "a", Title: "a", Status: "ready", Priority: 10},
+		{ID: "a", Title: "a", Status: "ready", Priority: 10, Checklist: []board.ChecklistItem{
+			{Text: "one"}, {Text: "two"}, {Text: "three", Done: true},
+		}},
 		{ID: "b", Title: "b", Status: "ready", Priority: 20},
 		{ID: "c", Title: "c", Status: "ready", Priority: 30},
 		{ID: "z", Title: "z", Status: "backlog", Priority: 10},
@@ -166,7 +179,10 @@ func TestPersistQueueSerializesInOrder(t *testing.T) {
 }
 
 // A failed persist means the optimistic board lied: everything queued behind
-// it is dropped and the store re-read IS the rollback.
+// it is dropped and the store re-read IS the rollback. The second queued
+// gesture is load-bearing: with only one write in the test, the flush line
+// (`m.pending = nil`) was never exercised, and review mutation M6 ("rollback
+// keeps the queued writes") survived the suite.
 func TestPersistFailureRollsBackFromTheStore(t *testing.T) {
 	m, p := scriptedModel(t)
 	p.moveErr = errors.New("schema gate says no")
@@ -178,6 +194,11 @@ func TestPersistFailureRollsBackFromTheStore(t *testing.T) {
 	if got := laneIDs(m.b, "ready"); got != "b,c,a" {
 		t.Fatalf("optimistic order = %s", got)
 	}
+	// A second gesture, queued behind the doomed one: its anchors descend
+	// from a board state the store will refuse, so it must be flushed.
+	if _, queued, err := m.commitMove("c", "ready", "ready", 1, 0); err != nil || queued != nil {
+		t.Fatalf("second move must queue silently: cmd=%v err=%v", queued, err)
+	}
 
 	rb := m.onPersistDone(cmd().(persistDoneMsg))
 	if rb == nil {
@@ -186,12 +207,18 @@ func TestPersistFailureRollsBackFromTheStore(t *testing.T) {
 	if !m.statusErr {
 		t.Error("a failed persist must surface as an error, not a shrug")
 	}
+	if len(m.pending) != 0 {
+		t.Fatalf("the queued tail must be flushed with the failure, pending=%d", len(m.pending))
+	}
 	m.onReloadDone(rb().(reloadDoneMsg))
 	if got := laneIDs(m.b, "ready"); got != "a,b,c" {
 		t.Errorf("after rollback ready = %s, want the store's a,b,c", got)
 	}
 	if len(m.pending) != 0 || m.inflight {
 		t.Error("the queue must be empty after a rollback")
+	}
+	if got := strings.Join(p.calls, ";"); got != "move a" {
+		t.Errorf("store saw %q — the flushed write must never reach it", got)
 	}
 }
 

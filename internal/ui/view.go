@@ -84,6 +84,9 @@ func (m *Model) renderBoard() string {
 	layers := []*lg.Layer{lg.NewLayer(blankCanvas(m.w, m.h)).X(0).Y(0).Z(zChrome - 1)}
 	layers = append(layers, m.chromeLayers()...)
 	layers = append(layers, m.columnLayers()...)
+	if m.sliceOpen {
+		layers = append(layers, m.sliceLayer())
+	}
 	if m.peekOpen {
 		layers = append(layers, m.peekLayer())
 	}
@@ -147,6 +150,12 @@ func (m *Model) chromeLayers() []*lg.Layer {
 		filter = th.dim.Render("/ Filter by keyword or by field")
 	default:
 		filter = th.dim.Render("/ ") + th.chipAlt.Render(m.qRaw)
+	}
+	// The slice is part of what the board is filtered by, so it shows here
+	// even while the panel is closed — state the panel set must never be
+	// invisible state.
+	if t := m.sliceTerm(); t != "" {
+		filter += th.dim.Render("  slice ") + th.accent.Render(t)
 	}
 	if m.qErr != "" {
 		filter = joinEnds(filter, th.errText.Render("⚠ "+m.qErr), m.w)

@@ -5,20 +5,20 @@ import (
 	"testing"
 )
 
-// commitAdd presses Enter in the modal and completes the async add the way
-// the program loop would: run the store call, deliver its result. (press
+// commitAdd presses Enter in the modal and completes the queued add the way
+// the program loop would: run the persist Cmd, deliver its result. (press
 // deliberately drops returned cmds — running them would also execute cursor
 // blink Ticks and sleep the suite.)
 func commitAdd(t *testing.T, m *Model) {
 	t.Helper()
 	_, cmd := m.Update(keyMsg("enter"))
 	if cmd == nil {
-		return // refused in-modal (empty title)
+		return // refused in-modal (empty title), or queued behind an in-flight write
 	}
 	msg := cmd()
-	res, ok := msg.(addDoneMsg)
+	res, ok := msg.(persistDoneMsg)
 	if !ok {
-		t.Fatalf("enter in the modal returned %T", msg)
+		t.Fatalf("enter in the modal returned %T, want the queued persist", msg)
 	}
 	m.Update(res)
 }

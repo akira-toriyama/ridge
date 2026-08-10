@@ -24,6 +24,7 @@ const (
 	modeFilter      // the filter input has the keyboard
 	modeEdit        // the field-edit overlay has the keyboard (editmode.go)
 	modeAdd         // the quick-add modal has the keyboard (addmode.go)
+	modeSlice       // the slice panel has the keyboard (slicemode.go)
 )
 
 type viewKind int
@@ -69,6 +70,12 @@ type Model struct {
 
 	selectAfterReload string // id to select once the next re-read lands
 
+	sliceOpen  bool       // the slice panel is visible (board inset left)
+	sliceField sliceField // the panel's axis
+	sliceVal   string     // selected value; "" = not slicing
+	sliceIdx   int        // the panel's cursor row
+	sliceOff   int        // the panel's scroll offset (sliceViewport)
+
 	pinned map[string]bool // ids forced visible despite the filter (jump targets)
 	cols   map[string][]*board.Task
 
@@ -103,16 +110,10 @@ type Model struct {
 	// A persist FAILED and the rollback re-read has not landed yet: the board
 	// is showing state the store refused. Index- and neighbour-addressed
 	// writes computed against it would hit the wrong rows in the store, so
-	// enqueuePersist refuses gestures until the re-read arrives (t-74y3: the
-	// wrong-checklist-item write, and the rollback that any keystroke could
-	// preempt).
+	// every write path refuses gestures until the re-read arrives (t-74y3:
+	// the wrong-checklist-item write, and the rollback that any keystroke
+	// could preempt).
 	rollingBack bool
-	// Quick add runs through the same single-writer discipline as the queue
-	// (t-74y3: two concurrent furrow writers lost 15/20 racing writes): an
-	// add in flight blocks the queue from firing, and adds committed while
-	// anything is busy wait here for the drain.
-	addInFlight  bool
-	deferredAdds []deferredAdd
 
 	// The dependency graph view. graphFocus is what the picture is rooted on,
 	// graphSel is the node the cursor is on (they start equal and diverge as
@@ -216,6 +217,10 @@ func (m *Model) recompute() {
 	}
 	m.curLane = clamp(m.curLane, 0, len(m.b.Lanes())-1)
 	m.tableIdx = clamp(m.tableIdx, 0, maxInt(0, len(m.tableRows())-1))
+	// The slice cursor rides the vocab, which a reload can shrink — an
+	// unclamped cursor pushes the panel window past the end and it renders
+	// zero rows under a "↑ N more" line.
+	m.sliceIdx = clamp(m.sliceIdx, 0, maxInt(0, len(m.sliceRows())-1))
 	m.ensureVisible()
 	m.syncPeek()
 }
@@ -283,6 +288,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.BackgroundColorMsg:
 		m.th = newTheme(msg.IsDark())
+		// The measurer caches card heights per theme; leaving it bound to the
+		// old theme splits render geometry from hit-test geometry.
+		m.ms.rebind(m.g, m.th)
 
 	case editorDoneMsg:
 		if msg.err != nil {
@@ -318,18 +326,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case filterResultMsg:
 		m.onFilterResult(msg)
 
-	case addDoneMsg:
-		if c := m.onAddDone(msg); c != nil {
-			cmds = append(cmds, c)
-		}
-
 	case tea.KeyPressMsg:
 		if c := m.onKey(msg); c != nil {
 			cmds = append(cmds, c)
 		}
 
 	case tea.MouseClickMsg:
-		m.onMouseDown(msg)
+		if c := m.onMouseDown(msg); c != nil {
+			cmds = append(cmds, c)
+		}
 	case tea.MouseMotionMsg:
 		if c := m.onMouseMove(msg); c != nil {
 			cmds = append(cmds, c)
@@ -359,7 +364,7 @@ func (m *Model) relayout() {
 	// line, a resize can report 0, and every downstream strings.Repeat would
 	// panic on a negative.
 	m.w, m.h = maxInt(m.w, 1), maxInt(m.h, 1)
-	m.lay = buildLayout(m.w, m.h, m.b.Lanes(), m.cols, m.laneOff, m.scroll, m.ms)
+	m.lay = buildLayout(m.w, m.h, m.sliceInset(), m.b.Lanes(), m.cols, m.laneOff, m.scroll, m.ms)
 	m.laneOff = m.lay.LaneOff
 }
 
@@ -380,6 +385,9 @@ func (m *Model) onKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 	if m.mode == modeAdd {
 		return m.onAddKey(msg)
+	}
+	if m.mode == modeSlice {
+		return m.onSliceKey(msg)
 	}
 	// Esc while a mouse button is down cancels the drag before anything else
 	// gets to interpret it — and leaves the drag armed so the release that
@@ -467,6 +475,10 @@ func (m *Model) onGraphKey(msg tea.KeyPressMsg) tea.Cmd {
 
 func (m *Model) onFilterKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
+	case key.Matches(msg, m.keys.ForceQuit):
+		// `q` types into the filter; ctrl+c stays a way out (raw mode hands
+		// it to us as an ordinary keystroke — nobody else will quit for us).
+		return m.quitOrFlush()
 	case key.Matches(msg, m.keys.Cancel):
 		m.mode = modeNormal
 		m.ti.Blur()
@@ -497,9 +509,15 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 		case m.peekOpen:
 			m.peekOpen = false
 		case m.qRaw != "":
-			m.applyFilter("")
+			cmd := m.applyFilter("")
 			m.ti.SetValue("")
 			m.note("filter cleared")
+			return cmd
+		case m.sliceVal != "":
+			// A slice-only filter must be escapable too — before this case,
+			// the only way out was reopening the panel and re-selecting the
+			// same row. Radio semantics: re-selecting clears.
+			return m.selectSlice(m.sliceField, m.sliceVal)
 		}
 
 	case key.Matches(msg, m.keys.Filter):
@@ -577,6 +595,13 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.jumpBack()
 
 	case key.Matches(msg, m.keys.Reload):
+		if m.inflight || len(m.pending) > 0 {
+			// The reload would race the queue's own furrow process, land
+			// behind the guard in onReloadDone and be dropped — leaving
+			// "reloading…" on screen forever. The drain reconciles anyway.
+			m.note("writes in flight — the board re-reads itself once they land")
+			return nil
+		}
 		label := "reloaded"
 		if !m.prov.Live() {
 			label = "reloaded from the fixture — session edits discarded"
@@ -598,6 +623,9 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	case key.Matches(msg, m.keys.Add):
 		return m.enterAdd()
+
+	case key.Matches(msg, m.keys.Slice):
+		m.toggleSlice()
 
 	case key.Matches(msg, m.keys.Done):
 		if t := m.curTask(); t != nil {

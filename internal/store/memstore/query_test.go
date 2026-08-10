@@ -211,3 +211,14 @@ func containsID(hay []string, needle string) bool {
 	}
 	return false
 }
+
+// The slice panel issues quoted values (`label:"needs review"`) that real
+// furrow understands; this lexer has no quote pairing, and mis-lexing the
+// term silently blanked -dump frames. The module contract is refuse, never
+// mis-evaluate.
+func TestQuotedValuesAreRefusedNotMisEvaluated(t *testing.T) {
+	s := New()
+	if _, err := s.Query(`label:"needs review"`); err == nil {
+		t.Fatal("a quoted value must be refused — this lexer cannot pair quotes")
+	}
+}
