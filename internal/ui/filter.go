@@ -62,8 +62,11 @@ func (m *Model) taskVisible(t *board.Task) bool {
 func (m *Model) applyFilter(s string) tea.Cmd {
 	prev := m.curTask()
 	m.qRaw = strings.TrimSpace(s)
-	if m.qRaw == "" {
-		m.pinned = map[string]bool{} // clearing the filter clears jump pins too
+	if m.effectiveQuery() == "" {
+		// Nothing is filtering any more (typed AND slice): jump pins have
+		// nothing to pin past. While a slice still narrows the board the
+		// pins stay — the slice paths clear their own (selectSlice).
+		m.pinned = map[string]bool{}
 	}
 	return m.refire(prev, true)
 }

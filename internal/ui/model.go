@@ -74,6 +74,7 @@ type Model struct {
 	sliceField sliceField // the panel's axis
 	sliceVal   string     // selected value; "" = not slicing
 	sliceIdx   int        // the panel's cursor row
+	sliceOff   int        // the panel's scroll offset (sliceViewport)
 
 	pinned map[string]bool // ids forced visible despite the filter (jump targets)
 	cols   map[string][]*board.Task
@@ -497,9 +498,15 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 		case m.peekOpen:
 			m.peekOpen = false
 		case m.qRaw != "":
-			m.applyFilter("")
+			cmd := m.applyFilter("")
 			m.ti.SetValue("")
 			m.note("filter cleared")
+			return cmd
+		case m.sliceVal != "":
+			// A slice-only filter must be escapable too — before this case,
+			// the only way out was reopening the panel and re-selecting the
+			// same row. Radio semantics: re-selecting clears.
+			return m.selectSlice(m.sliceField, m.sliceVal)
 		}
 
 	case key.Matches(msg, m.keys.Filter):

@@ -61,13 +61,30 @@ func (m *Model) sliceTerm() string {
 	if m.sliceVal == "" {
 		return ""
 	}
-	return m.sliceField.String() + ":" + m.sliceVal
+	return m.sliceField.String() + ":" + quoteQVal(m.sliceVal)
+}
+
+// quoteQVal wraps a -q value in double quotes when it contains whitespace.
+// furrow tokenises -q on spaces, so a bare `label:needs review` silently
+// becomes the two terms `label:needs` + `review` — exit 0, empty result, no
+// warning (verified against the real binary; the quoted form matches).
+// Values containing a double quote cannot be expressed at all and are
+// refused upstream in selectSlice.
+func quoteQVal(v string) string {
+	if strings.ContainsAny(v, " \t") {
+		return `"` + v + `"`
+	}
+	return v
 }
 
 // toggleSlice is the `s` key: closed → open with the keyboard; focused →
 // close (the SELECTION persists — GH's "No slicing" is an explicit act, not
 // a side-effect of hiding the panel); open-but-unfocused → focus.
 func (m *Model) toggleSlice() {
+	// Opening the panel re-insets every column; a drag surviving that shift
+	// would drop 27 cells away from the pointer (reviewed live: the release
+	// committed into a lane the pointer never visited).
+	m.cancelDrag()
 	switch {
 	case !m.sliceOpen:
 		m.sliceOpen = true
@@ -85,6 +102,10 @@ func (m *Model) toggleSlice() {
 func (m *Model) onSliceKey(msg tea.KeyPressMsg) tea.Cmd {
 	rows := m.sliceRows()
 	switch {
+	case key.Matches(msg, m.keys.ForceQuit):
+		// The panel owns the keyboard; ctrl+c must stay a way out.
+		return m.quitOrFlush()
+
 	case key.Matches(msg, m.keys.Cancel):
 		m.mode = modeNormal // the panel and the slice both stay
 
@@ -117,9 +138,10 @@ func (m *Model) onSliceKey(msg tea.KeyPressMsg) tea.Cmd {
 // cleared — a repo slice makes no claim about labels.
 func (m *Model) cycleSliceField(d int) tea.Cmd {
 	m.sliceField = sliceField((int(m.sliceField) + d + int(sliceFieldCount)) % int(sliceFieldCount))
-	m.sliceIdx = 0
+	m.sliceIdx, m.sliceOff = 0, 0
 	if m.sliceVal != "" {
 		m.sliceVal = ""
+		m.pinned = map[string]bool{} // see selectSlice
 		return m.refire(m.curTask(), false)
 	}
 	return nil
@@ -128,6 +150,12 @@ func (m *Model) cycleSliceField(d int) tea.Cmd {
 // selectSlice applies a row: selecting the active value again un-slices
 // (radio semantics — GH's panel shows one value at a time).
 func (m *Model) selectSlice(f sliceField, val string) tea.Cmd {
+	if strings.Contains(val, `"`) {
+		// furrow's -q quoting has no escape, so this value has no spelling.
+		// Refusing loudly beats issuing a query that means something else.
+		m.fail("cannot slice to %q — a double quote has no -q spelling", val)
+		return nil
+	}
 	if m.sliceField == f && m.sliceVal == val {
 		m.sliceVal = ""
 		m.note("slice cleared")
@@ -135,6 +163,9 @@ func (m *Model) selectSlice(f sliceField, val string) tea.Cmd {
 		m.sliceField, m.sliceVal = f, val
 		m.note("sliced to %s", m.sliceTerm())
 	}
+	// A slice change is a new view: pins were jump/add artifacts of the old
+	// one, and under a slice-only filter no other gesture can clear them.
+	m.pinned = map[string]bool{}
 	return m.refire(m.curTask(), false)
 }
 
@@ -179,15 +210,57 @@ func (m *Model) sliceRows() []sliceRow {
 	return out
 }
 
+// sliceViewport is THE shared measurement for the panel's value region: the
+// renderer, the cursor-follow and the click path all use it, so a click can
+// never land on a row the frame is not showing (the previous click path
+// validated against the FULL list and sliced the board from the "+N more"
+// line and even the status line). When the list overflows, one line at each
+// end of the region is reserved for the "↑/+N more" indicators, whether or
+// not both are needed — a fixed shape keeps the y→row mapping trivial.
+func (m *Model) sliceViewport(rowCount int) (off, window int, overflow bool) {
+	capacity := maxInt(1, m.h-footerH-sliceRowTop-1)
+	if rowCount <= capacity {
+		return 0, rowCount, false
+	}
+	window = maxInt(1, capacity-2)
+	off = clamp(m.sliceOff, 0, rowCount-window)
+	if m.sliceIdx < off {
+		off = m.sliceIdx
+	}
+	if m.sliceIdx >= off+window {
+		off = m.sliceIdx - window + 1
+	}
+	return off, window, true
+}
+
+// sliceRowAt maps a frame y to an index into sliceRows, -1 when the line is
+// not a value row (chrome, indicators, past the end). Inverse of sliceLayer's
+// row placement, built on the same sliceViewport numbers.
+func (m *Model) sliceRowAt(y int, rowCount int) int {
+	off, window, overflow := m.sliceViewport(rowCount)
+	top := sliceRowTop
+	if overflow {
+		top++ // the "↑ N more" indicator line
+	}
+	i := y - top
+	if i < 0 || i >= window {
+		return -1
+	}
+	if off+i >= rowCount {
+		return -1
+	}
+	return off + i
+}
+
 // sliceClick is a mouse press inside the panel: a value row selects, the
-// axis line cycles.
+// axis line cycles, everything else — indicators included — is inert.
 func (m *Model) sliceClick(_, y int) tea.Cmd {
 	if y == boardTop+1 { // the axis line
 		return m.cycleSliceField(+1)
 	}
 	rows := m.sliceRows()
-	i := y - sliceRowTop
-	if i < 0 || i >= len(rows) {
+	i := m.sliceRowAt(y, len(rows))
+	if i < 0 {
 		return nil
 	}
 	m.sliceIdx = i
@@ -202,6 +275,8 @@ func (m *Model) sliceLayer() *lg.Layer {
 	w := slicePanelW
 	bot := m.h - footerH
 	rows := m.sliceRows()
+	off, window, overflow := m.sliceViewport(len(rows))
+	m.sliceOff = off
 
 	line := func(s string) string { return pad(s, w) + th.rule.Render("│") }
 
@@ -219,12 +294,15 @@ func (m *Model) sliceLayer() *lg.Layer {
 	b = append(b, line(strings.Join(axes, th.dim.Render(" │ "))))
 	b = append(b, line(""))
 
-	visRows := maxInt(0, bot-sliceRowTop-1)
-	shown := rows
-	if len(shown) > visRows {
-		shown = shown[:visRows]
+	if overflow {
+		up := ""
+		if off > 0 {
+			up = fmt.Sprintf("  ↑ %d more", off)
+		}
+		b = append(b, line(th.dim.Render(up)))
 	}
-	for i, r := range shown {
+	for i := off; i < off+window && i < len(rows); i++ {
+		r := rows[i]
 		cursor, style := "  ", th.base
 		if m.mode == modeSlice && i == m.sliceIdx {
 			cursor, style = "▌ ", th.peekHdr
@@ -235,8 +313,12 @@ func (m *Model) sliceLayer() *lg.Layer {
 		}
 		b = append(b, line(cursor+mark+style.Render(ansi.Truncate(r.display, w-4, "…"))))
 	}
-	if n := len(rows) - len(shown); n > 0 {
-		b = append(b, line(th.dim.Render(fmt.Sprintf("  +%d more", n))))
+	if overflow {
+		down := ""
+		if n := len(rows) - (off + window); n > 0 {
+			down = fmt.Sprintf("  +%d more", n)
+		}
+		b = append(b, line(th.dim.Render(down)))
 	}
 	for len(b) < bot-boardTop {
 		b = append(b, line(""))

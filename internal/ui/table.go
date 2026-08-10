@@ -84,8 +84,11 @@ func (m *Model) renderTable() string {
 		lg.NewLayer(blankCanvas(m.w, m.h)).X(0).Y(0).Z(zChrome - 1),
 	}
 	layers = append(layers, m.chromeLayers()...)
+	// The slice panel insets the table the way it insets the board columns —
+	// rows shift right instead of hiding their id column under the panel.
+	inset := m.sliceInset()
 	layers = append(layers,
-		lg.NewLayer(th.colHdr.Render(pad(head, m.w))).X(0).Y(rowColHdr).Z(zChrome),
+		lg.NewLayer(th.colHdr.Render(pad(head, m.w))).X(inset).Y(rowColHdr).Z(zChrome),
 		// maxInt, not m.w: strings.Repeat panics on a negative count, and
 		// `-dump -w -1` reached it.
 		lg.NewLayer(th.rule.Render(strings.Repeat("─", maxInt(m.w, 1)))).X(0).Y(rowColSum).Z(zChrome),
@@ -95,10 +98,16 @@ func (m *Model) renderTable() string {
 	visRows := m.h - tableTop - footerH
 	top := clamp(m.tableIdx-visRows/2, 0, maxInt(0, len(body)-visRows))
 	for i := top; i < len(body) && tableTop+i-top < m.h-footerH; i++ {
-		layers = append(layers, lg.NewLayer(body[i]).X(0).Y(tableTop+i-top).Z(zCard))
+		layers = append(layers, lg.NewLayer(body[i]).X(inset).Y(tableTop+i-top).Z(zCard))
 	}
 	if m.peekOpen {
 		layers = append(layers, m.peekLayer())
+	}
+	if m.sliceOpen {
+		// The slice narrows the table rows exactly as it narrows the board
+		// columns, and `s` reaches this view too — an invisible panel that
+		// still owned the keyboard ate every arrow key (reviewed live).
+		layers = append(layers, m.sliceLayer())
 	}
 	if m.mode == modeEdit {
 		if l := m.editLayer(); l != nil {
