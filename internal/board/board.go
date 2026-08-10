@@ -564,3 +564,7 @@ func removeStr(hay []string, needle string) []string {
 	}
 	return out
 }
+
+// Append adds an externally-created task to the snapshot (the mock store's
+// add; the real store re-reads instead).
+func (b *Board) Append(t *Task) { b.tasks = append(b.tasks, t) }

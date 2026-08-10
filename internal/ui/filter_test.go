@@ -45,6 +45,7 @@ func (p *liveQueryProvider) PersistFields(_ string, _ board.FieldPatch) error   
 func (p *liveQueryProvider) PersistCheckAdd(_, _ string) error                  { return nil }
 func (p *liveQueryProvider) PersistCheckRm(_ string, _ int) error               { return nil }
 func (p *liveQueryProvider) PersistCheckReword(_ string, _ int, _ string) error { return nil }
+func (p *liveQueryProvider) Add(string, board.AddOptions) (string, error)       { return "", nil }
 
 func liveModel(t *testing.T) (*Model, *liveQueryProvider) {
 	t.Helper()

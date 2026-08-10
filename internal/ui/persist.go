@@ -157,6 +157,12 @@ func (m *Model) onReloadDone(msg reloadDoneMsg) tea.Cmd {
 	if msg.label != "" {
 		m.note("%s · %dms", msg.label, msg.ms)
 	}
+	if id := m.selectAfterReload; id != "" {
+		m.selectAfterReload = ""
+		// Pin past any active filter: a card you just created must be under
+		// the cursor even when the filter would hide it.
+		m.selectID(id, true)
+	}
 	// The board changed under the matched set: ask the store for a fresh
 	// verdict, no debounce — this is a reload, not a keystroke.
 	return m.requery()

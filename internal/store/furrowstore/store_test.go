@@ -414,3 +414,41 @@ func TestContractPersistFieldsAndChecklistEdits(t *testing.T) {
 		t.Fatalf("after rm: %+v", cl)
 	}
 }
+
+func TestContractAddMapsTheContext(t *testing.T) {
+	p, dir := newLabProvider(t)
+	labAdd(t, dir, "既存のタスク") // seeds lab/lab as a known repo
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	epicOut := lab(t, dir, "furrow", "epic", "add", "箱", "--json")
+	var epic struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(epicOut, &epic); err != nil || epic.ID == "" {
+		t.Fatalf("epic add: %v (%s)", err, epicOut)
+	}
+
+	id, err := p.Add("文脈つきで起票", board.AddOptions{
+		Lane: "backlog", Label: "tui", Epic: epic.ID, Repo: "lab/lab",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	got := p.Board().Task(id)
+	if got == nil {
+		t.Fatalf("added %s but the store does not serve it", id)
+	}
+	if got.Status != "backlog" || !contains(got.Labels, "tui") ||
+		got.Epic != epic.ID || !contains(got.Repos, "lab/lab") {
+		t.Errorf("context did not map: %+v", got)
+	}
+
+	// An empty title is furrow's refusal, not a silent draft.
+	if _, err := p.Add("", board.AddOptions{}); err == nil {
+		t.Error("an empty title must refuse")
+	}
+}
