@@ -24,12 +24,12 @@ import (
 type Code int
 
 const (
-	// CodeOK: clean exit.
+	// CodeOK is a clean exit.
 	CodeOK Code = 0
-	// CodeRun: a runtime failure — the store was unreachable or the program
+	// CodeRun is a runtime failure — the store was unreachable or the program
 	// died. The invocation was well-formed; fix the environment and retry.
 	CodeRun Code = 1
-	// CodeUsage: a malformed invocation — an unknown -demo, an unopenable
+	// CodeUsage is a malformed invocation — an unknown -demo, an unopenable
 	// -perflog. Fix the arguments; retrying verbatim cannot succeed.
 	// flag.ExitOnError exits with 2 on unparseable flags, matching this.
 	CodeUsage Code = 2

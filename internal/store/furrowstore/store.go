@@ -43,14 +43,18 @@ func New(perf func(op string, d time.Duration)) (*Store, error) {
 	return p, nil
 }
 
+// Board returns the current snapshot (board.Provider).
 func (p *Store) Board() *board.Board {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.b
 }
 
+// Live is true: persists land in an external store (board.Provider).
 func (p *Store) Live() bool { return true }
 
+// Reload re-reads the store into a fresh board and swaps it in
+// (board.Provider).
 func (p *Store) Reload() error {
 	b, err := p.load()
 	if err != nil {
@@ -298,6 +302,8 @@ type setEnvelope struct {
 	} `json:"renumbered"`
 }
 
+// PersistMove records an already-applied placement via `furrow set`
+// (board.Provider).
 func (p *Store) PersistMove(id, lane, beforeID, afterID string) ([]string, error) {
 	args := []string{"set", id, "-s", lane}
 	switch {
@@ -324,11 +330,15 @@ func (p *Store) PersistMove(id, lane, beforeID, afterID string) ([]string, error
 	return renumbered, nil
 }
 
+// PersistDone records an already-applied close via `furrow done`
+// (board.Provider).
 func (p *Store) PersistDone(id string) error {
 	_, err := p.c.run("done", "done", id)
 	return err
 }
 
+// PersistCheck records an already-applied checklist toggle via `furrow
+// check` (board.Provider).
 func (p *Store) PersistCheck(id string, i int, done bool) error {
 	args := []string{"check", id, strconv.Itoa(i)}
 	if !done {

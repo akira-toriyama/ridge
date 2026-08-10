@@ -129,6 +129,7 @@ type Board struct {
 	schema   string // furrow's schema_state; "" for the fixture
 }
 
+// NewBoard builds a fixture-lane board that is always writable.
 func NewBoard(tasks []*Task, epics ...EpicInfo) *Board {
 	b := &Board{tasks: tasks, lanes: append([]Lane(nil), boardLanes...),
 		epics: epics, writable: true}
@@ -194,6 +195,7 @@ func (b *Board) Neighbors(id string) (beforeID, afterID string) {
 // Lanes returns the lane vocabulary in board order.
 func (b *Board) Lanes() []Lane { return b.lanes }
 
+// Lane resolves a lane by its slug, nil when unknown.
 func (b *Board) Lane(name string) *Lane {
 	for i := range b.lanes {
 		if b.lanes[i].Name == name {
@@ -213,6 +215,7 @@ func (b *Board) LaneIndex(name string) int {
 	return -1
 }
 
+// Tasks returns every task on the board, unordered.
 func (b *Board) Tasks() []*Task { return b.tasks }
 
 // Task looks a task up by id, nil when absent.
@@ -367,6 +370,7 @@ func (b *Board) isDoneLane(name string) bool {
 	return l != nil && l.Done
 }
 
+// DoneLane names the done lane, "" when the board has none.
 func (b *Board) DoneLane() string {
 	for _, l := range b.lanes {
 		if l.Done {
@@ -389,6 +393,7 @@ func (b *Board) Close(id string) error {
 	return err
 }
 
+// ToggleCheck flips checklist item i and stamps Updated.
 func (b *Board) ToggleCheck(id string, i int) error {
 	t := b.Task(id)
 	if t == nil {

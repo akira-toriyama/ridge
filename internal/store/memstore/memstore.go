@@ -11,6 +11,7 @@ import (
 	"github.com/akira-toriyama/ridge/internal/board"
 )
 
+// Store is the fixture-backed board.Provider.
 type Store struct {
 	b       *board.Board
 	rebuild func() *board.Board
@@ -28,14 +29,20 @@ func NewWith(b *board.Board) *Store {
 	return &Store{b: b, rebuild: func() *board.Board { return b }}
 }
 
+// Board returns the current snapshot (board.Provider).
 func (p *Store) Board() *board.Board { return p.b }
 
+// Reload rebuilds the pristine board, discarding session edits
+// (board.Provider).
 func (p *Store) Reload() error { p.b = p.rebuild(); return nil }
 
+// Sync always fails: there is no store behind the fixture (board.Provider).
 func (p *Store) Sync() error { return fmt.Errorf("the fixture has no store to sync") }
 
+// Live is false: the board the model mutates IS the store (board.Provider).
 func (p *Store) Live() bool { return false }
 
+// PersistMove validates the ids and records nothing (board.Provider).
 func (p *Store) PersistMove(id, lane, _, _ string) ([]string, error) {
 	if p.b.Task(id) == nil {
 		return nil, fmt.Errorf("unknown task %q", id)
@@ -46,6 +53,7 @@ func (p *Store) PersistMove(id, lane, _, _ string) ([]string, error) {
 	return nil, nil
 }
 
+// PersistDone validates the id and records nothing (board.Provider).
 func (p *Store) PersistDone(id string) error {
 	if p.b.Task(id) == nil {
 		return fmt.Errorf("unknown task %q", id)
@@ -53,6 +61,7 @@ func (p *Store) PersistDone(id string) error {
 	return nil
 }
 
+// PersistCheck validates the item and records nothing (board.Provider).
 func (p *Store) PersistCheck(id string, i int, _ bool) error {
 	t := p.b.Task(id)
 	if t == nil {
@@ -64,6 +73,7 @@ func (p *Store) PersistCheck(id string, i int, _ bool) error {
 	return nil
 }
 
+// PersistBody validates the id and records nothing (board.Provider).
 func (p *Store) PersistBody(id, _ string) error {
 	if p.b.Task(id) == nil {
 		return fmt.Errorf("unknown task %q", id)
