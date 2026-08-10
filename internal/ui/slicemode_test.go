@@ -176,7 +176,7 @@ func TestSliceRefusesAValueWithADoubleQuote(t *testing.T) {
 // sliced the board to an invisible value. Renderer and click now share
 // sliceViewport, and the cursor scrolls the window instead of walking off it.
 func TestSlicePanelScrollsAndClicksAgree(t *testing.T) {
-	h := sliceRowTop + footerH + 4 // value-region capacity 3 → window 1 when overflowing
+	h := sliceRowTop + footerH + 3 // value-region capacity 3 → window 1 + indicators
 	m := boardModel(t, 240, h)
 	press(m, "s")
 	m.Update(keyMsg("tab")) // repo → label (labels: ci, cli, testing, ui)
@@ -184,9 +184,9 @@ func TestSlicePanelScrollsAndClicksAgree(t *testing.T) {
 	if len(rows) < 4 {
 		t.Fatalf("fixture drifted: want ≥4 label rows, got %d", len(rows))
 	}
-	_, window, overflow := m.sliceViewport(len(rows))
-	if !overflow || window != 1 {
-		t.Fatalf("viewport = window %d overflow %v, want the 1-row overflowing shape", window, overflow)
+	_, window, indicators := m.sliceViewport(len(rows))
+	if !indicators || window != 1 {
+		t.Fatalf("viewport = window %d indicators %v, want the 1-row indicator shape", window, indicators)
 	}
 
 	// Cursor past the window: the window follows, the frame shows the cursor.
@@ -199,21 +199,44 @@ func TestSlicePanelScrollsAndClicksAgree(t *testing.T) {
 		t.Errorf("the up indicator must count the rows above the window")
 	}
 
-	// The indicator lines are inert; the one value row selects what it shows.
-	if c := m.sliceClick(3, sliceRowTop); c != nil {
-		t.Error("a click on the ↑ indicator must be inert")
+	// The indicator/chrome lines are inert — asserted on STATE, not on the
+	// returned Cmd: on the fixture a real slice also returns nil, which made
+	// the Cmd-shaped assertion vacuous (round-2 review, finding 5).
+	for _, y := range []int{sliceRowTop, sliceRowTop + 2, m.h - footerH} {
+		before := m.sliceVal
+		if c := m.sliceClick(3, y); c != nil {
+			m.Update(c())
+		}
+		if m.sliceVal != before {
+			t.Errorf("click at y=%d changed the slice to %q — that line is not a value row", y, m.sliceVal)
+		}
 	}
-	if c := m.sliceClick(3, sliceRowTop+2); c != nil {
-		t.Error("a click on the +N more indicator must be inert")
-	}
-	if c := m.sliceClick(3, m.h-footerH); c != nil {
-		t.Error("a click on the status line must be inert")
-	}
+	// The one value row selects exactly what it shows (rows[3], scrolled to).
 	if c := m.sliceClick(3, sliceRowTop+1); c != nil {
 		m.Update(c())
 	}
 	if m.sliceVal != rows[3].value {
 		t.Errorf("clicked the visible row, got slice %q want %q", m.sliceVal, rows[3].value)
+	}
+}
+
+// Every height from cramped to comfortable: a click maps to a value row ONLY
+// inside the rendered value region. Round 2 found h≤11 mapping the status
+// and help lines to rows (the region math was one off and had no floor for
+// the indicator shape).
+func TestSliceClickNeverMapsOutsideTheRenderedRegion(t *testing.T) {
+	for h := 8; h <= 30; h++ {
+		m := boardModel(t, 240, h)
+		press(m, "s")
+		m.Update(keyMsg("tab"))
+		rows := len(m.sliceRows())
+		for y := 0; y < h; y++ {
+			if i := m.sliceRowAt(y, rows); i >= 0 {
+				if y < sliceRowTop || y >= m.h-footerH {
+					t.Errorf("h=%d: y=%d maps to row %d but is outside the panel's value region", h, y, i)
+				}
+			}
+		}
 	}
 }
 
@@ -309,11 +332,107 @@ func TestTogglingThePanelCancelsADragInFlight(t *testing.T) {
 	m.Update(tea.MouseClickMsg{X: card.X + 2, Y: card.Y + 1, Button: tea.MouseLeft})
 	m.Update(tea.MouseMotionMsg{X: card.X + 12, Y: card.Y + 6, Button: tea.MouseLeft})
 	press(m, "s")
+	// The CANCEL must happen at toggle time, not lean on the release being
+	// swallowed elsewhere — round 2 proved the old assertion could not tell
+	// the two apart.
+	if !m.drag.cancelled {
+		t.Error("toggling the panel must cancel the drag itself")
+	}
 	m.Update(tea.MouseReleaseMsg{X: card.X + 12, Y: card.Y + 6, Button: tea.MouseLeft})
 	if got := ids(m.b.LaneTasks("backlog")); !slices.Equal(got, before) {
 		t.Errorf("backlog = %v, want %v — the cut gesture must not move anything", got, before)
 	}
 	if m.inflight || len(m.pending) > 0 {
 		t.Error("the cut gesture must not persist anything")
+	}
+}
+
+// A panel click while a modal owns the keyboard must not switch the mode out
+// from under it (round 2: a click during modeAdd stranded a half-typed title
+// behind a broken "add non-nil exactly while modeAdd" invariant).
+func TestSliceClickIsRefusedUnderModals(t *testing.T) {
+	m := boardModel(t, 240, 50)
+	press(m, "s", "esc") // panel open, board focused
+	press(m, "a")
+	m.Update(tea.MouseClickMsg{X: 3, Y: sliceRowTop, Button: tea.MouseLeft})
+	if m.mode != modeAdd || m.add == nil {
+		t.Fatalf("a panel click must not steal the keyboard from the add modal (mode=%d)", m.mode)
+	}
+	if m.sliceVal != "" {
+		t.Error("nor may it slice the board")
+	}
+}
+
+// The panel's clicks work in the table view too — round 2 caught the round-1
+// merge making the render/keyboard live there while every click stayed dead.
+func TestSliceClickWorksInTheTableView(t *testing.T) {
+	m := boardModel(t, 240, 50)
+	press(m, "v", "s")
+	m.Update(keyMsg("tab"))
+	rows := m.sliceRows()
+	m.Update(tea.MouseClickMsg{X: 3, Y: sliceRowTop, Button: tea.MouseLeft})
+	if m.sliceVal != rows[0].value {
+		t.Errorf("slice = %q, want %q — table-view panel clicks were dead", m.sliceVal, rows[0].value)
+	}
+}
+
+// The wheel scrolls the panel window (cursor stays put, like a board column).
+func TestPanelWheelScrollsTheWindow(t *testing.T) {
+	h := sliceRowTop + footerH + 3
+	m := boardModel(t, 240, h)
+	press(m, "s")
+	m.Update(keyMsg("tab"))
+	m.Update(tea.MouseWheelMsg{X: 3, Y: sliceRowTop + 1, Button: tea.MouseWheelDown})
+	if m.sliceOff != 1 {
+		t.Errorf("sliceOff = %d, want 1 after wheel-down over the panel", m.sliceOff)
+	}
+	if m.sliceIdx != 0 {
+		t.Errorf("the wheel must not drag the cursor (sliceIdx = %d)", m.sliceIdx)
+	}
+}
+
+// The board columns keep scrolling while the panel holds the keyboard — the
+// panel sits beside them, not over them.
+func TestBoardWheelWorksWhileThePanelHoldsTheKeyboard(t *testing.T) {
+	m := boardModel(t, 140, 12)
+	press(m, "s")
+	var lane string
+	for _, l := range m.b.Lanes() {
+		if c := m.lay.Col(l.Name); c != nil && c.Hidden > 0 {
+			lane = l.Name
+			break
+		}
+	}
+	if lane == "" {
+		t.Skip("no overflowing column at this size")
+	}
+	c := m.lay.Col(lane)
+	before := c.Scroll
+	m.Update(tea.MouseWheelMsg{X: c.X + 2, Y: boardTop + 2, Button: tea.MouseWheelDown})
+	if m.scroll[lane] != before+1 {
+		t.Errorf("scroll = %d, want %d — modeSlice must not freeze the board wheel", m.scroll[lane], before+1)
+	}
+}
+
+// The inset must come out of the row budget, not push the rightmost columns
+// off the frame edge (round 2: repo/labels/deps were clipped by 27 cells).
+func TestTableRowsSurviveThePanelInset(t *testing.T) {
+	m := boardModel(t, 240, 50)
+	press(m, "v", "s")
+	if out := frame(m); !strings.Contains(out, "deps") {
+		t.Error("the table header's rightmost column must survive the panel inset")
+	}
+}
+
+// Commas OR-split in furrow's -q exactly as spaces term-split; both spellings
+// must be quoted away (verified against the real binary — `label:a,b` answers
+// a BROADER query with exit 0).
+func TestSliceTermQuotesCommas(t *testing.T) {
+	m, _ := scriptedModel(t)
+	if c := m.selectSlice(sliceLabel, "tui,cli"); c != nil {
+		m.Update(c())
+	}
+	if got := m.sliceTerm(); got != `label:"tui,cli"` {
+		t.Errorf("sliceTerm = %q, want the quoted form", got)
 	}
 }

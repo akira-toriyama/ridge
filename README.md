@@ -145,7 +145,7 @@ go run ./cmd/ridge -demo slice -dump         # slice パネル（label:ui 選択
 
 - 本文編集はファイル直書きなので shard の `updated` が進まない（furrow 側の
   置換コマンド要望 t-8q8c が着地したら乗り換える）。
-- swimlane（group by）未実装。slice パネル（repo/label で絞る左パネル）未実装。
+- swimlane（group by）未実装。
 - Table ビューに横スクロールが無い（`bubbles/v2` の table が非対応）。
 
 ## スタック

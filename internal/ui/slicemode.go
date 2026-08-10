@@ -64,14 +64,16 @@ func (m *Model) sliceTerm() string {
 	return m.sliceField.String() + ":" + quoteQVal(m.sliceVal)
 }
 
-// quoteQVal wraps a -q value in double quotes when it contains whitespace.
-// furrow tokenises -q on spaces, so a bare `label:needs review` silently
-// becomes the two terms `label:needs` + `review` — exit 0, empty result, no
-// warning (verified against the real binary; the quoted form matches).
-// Values containing a double quote cannot be expressed at all and are
-// refused upstream in selectSlice.
+// quoteQVal wraps a -q value in double quotes when it contains a character
+// furrow's lexer would reinterpret: ASCII whitespace splits terms (a bare
+// `label:needs review` becomes TWO terms — exit 0, empty result, no warning)
+// and a comma OR-splits (`label:a,b` answers a BROADER query). Both verified
+// against the real binary, including that quoting suppresses each, and that
+// U+3000/NBSP do NOT split (so they need no quoting). Values containing a
+// double quote cannot be expressed at all and are refused upstream in
+// selectSlice.
 func quoteQVal(v string) string {
-	if strings.ContainsAny(v, " \t") {
+	if strings.ContainsAny(v, " \t\r\n,") {
 		return `"` + v + `"`
 	}
 	return v
@@ -102,8 +104,9 @@ func (m *Model) toggleSlice() {
 func (m *Model) onSliceKey(msg tea.KeyPressMsg) tea.Cmd {
 	rows := m.sliceRows()
 	switch {
-	case key.Matches(msg, m.keys.ForceQuit):
-		// The panel owns the keyboard; ctrl+c must stay a way out.
+	case key.Matches(msg, m.keys.Quit):
+		// The panel is a picker, not a text input: q quits here exactly as
+		// the footer advertises (ctrl+c rides the same binding).
 		return m.quitOrFlush()
 
 	case key.Matches(msg, m.keys.Cancel):
@@ -115,10 +118,12 @@ func (m *Model) onSliceKey(msg tea.KeyPressMsg) tea.Cmd {
 	case key.Matches(msg, m.keys.Up):
 		if len(rows) > 0 {
 			m.sliceIdx = (m.sliceIdx + len(rows) - 1) % len(rows)
+			m.ensureSliceVisible()
 		}
 	case key.Matches(msg, m.keys.Down):
 		if len(rows) > 0 {
 			m.sliceIdx = (m.sliceIdx + 1) % len(rows)
+			m.ensureSliceVisible()
 		}
 
 	case key.Matches(msg, m.keys.NextCol), key.Matches(msg, m.keys.Right):
@@ -211,35 +216,62 @@ func (m *Model) sliceRows() []sliceRow {
 }
 
 // sliceViewport is THE shared measurement for the panel's value region: the
-// renderer, the cursor-follow and the click path all use it, so a click can
-// never land on a row the frame is not showing (the previous click path
-// validated against the FULL list and sliced the board from the "+N more"
-// line and even the status line). When the list overflows, one line at each
-// end of the region is reserved for the "↑/+N more" indicators, whether or
-// not both are needed — a fixed shape keeps the y→row mapping trivial.
-func (m *Model) sliceViewport(rowCount int) (off, window int, overflow bool) {
-	capacity := maxInt(1, m.h-footerH-sliceRowTop-1)
+// renderer, the wheel and the click path all use it, so a click can never
+// land on a row the frame is not showing (the previous click path validated
+// against the FULL list and sliced the board from the "+N more" line and
+// even the status line). The region is the lines between the 3 header rows
+// and the footer; when the list overflows AND there is room, one line at
+// each end is reserved for the "↑/+N more" indicators, whether or not both
+// are needed — a fixed shape keeps the y→row mapping trivial. On terminals
+// too short for indicators (capacity < 3) the region shows bare rows: still
+// scrollable by cursor and wheel, never mapped past what is rendered.
+//
+// off is a pure clamp of m.sliceOff — the cursor does NOT drag the window
+// here (a wheel-scrolled panel away from its cursor is a legitimate state);
+// ensureSliceVisible re-pulls it on cursor MOVEMENT only.
+func (m *Model) sliceViewport(rowCount int) (off, window int, indicators bool) {
+	capacity := m.h - footerH - sliceRowTop
+	if capacity <= 0 {
+		// The terminal is too short to render ANY value row — flooring the
+		// capacity at 1 here fabricated a clickable row on top of the
+		// footer (the invariant test caught it at h ≤ 10).
+		return 0, 0, false
+	}
 	if rowCount <= capacity {
 		return 0, rowCount, false
 	}
-	window = maxInt(1, capacity-2)
+	window = capacity
+	if capacity >= 3 {
+		indicators = true
+		window = capacity - 2
+	}
 	off = clamp(m.sliceOff, 0, rowCount-window)
-	if m.sliceIdx < off {
-		off = m.sliceIdx
+	return off, window, indicators
+}
+
+// ensureSliceVisible scrolls the panel window so the cursor row is shown.
+// Called from the paths that MOVE THE CURSOR, mirroring ensureVisible's
+// contract for board columns.
+func (m *Model) ensureSliceVisible() {
+	rows := len(m.sliceRows())
+	_, window, _ := m.sliceViewport(rows)
+	if m.sliceIdx < m.sliceOff {
+		m.sliceOff = m.sliceIdx
 	}
-	if m.sliceIdx >= off+window {
-		off = m.sliceIdx - window + 1
+	if m.sliceIdx >= m.sliceOff+window {
+		m.sliceOff = m.sliceIdx - window + 1
 	}
-	return off, window, true
+	off, _, _ := m.sliceViewport(rows)
+	m.sliceOff = off
 }
 
 // sliceRowAt maps a frame y to an index into sliceRows, -1 when the line is
 // not a value row (chrome, indicators, past the end). Inverse of sliceLayer's
 // row placement, built on the same sliceViewport numbers.
 func (m *Model) sliceRowAt(y int, rowCount int) int {
-	off, window, overflow := m.sliceViewport(rowCount)
+	off, window, indicators := m.sliceViewport(rowCount)
 	top := sliceRowTop
-	if overflow {
+	if indicators {
 		top++ // the "↑ N more" indicator line
 	}
 	i := y - top
@@ -275,7 +307,7 @@ func (m *Model) sliceLayer() *lg.Layer {
 	w := slicePanelW
 	bot := m.h - footerH
 	rows := m.sliceRows()
-	off, window, overflow := m.sliceViewport(len(rows))
+	off, window, indicators := m.sliceViewport(len(rows))
 	m.sliceOff = off
 
 	line := func(s string) string { return pad(s, w) + th.rule.Render("│") }
@@ -294,7 +326,7 @@ func (m *Model) sliceLayer() *lg.Layer {
 	b = append(b, line(strings.Join(axes, th.dim.Render(" │ "))))
 	b = append(b, line(""))
 
-	if overflow {
+	if indicators {
 		up := ""
 		if off > 0 {
 			up = fmt.Sprintf("  ↑ %d more", off)
@@ -313,7 +345,7 @@ func (m *Model) sliceLayer() *lg.Layer {
 		}
 		b = append(b, line(cursor+mark+style.Render(ansi.Truncate(r.display, w-4, "…"))))
 	}
-	if overflow {
+	if indicators {
 		down := ""
 		if n := len(rows) - (off + window); n > 0 {
 			down = fmt.Sprintf("  +%d more", n)

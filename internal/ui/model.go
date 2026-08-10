@@ -210,6 +210,10 @@ func (m *Model) recompute() {
 	}
 	m.curLane = clamp(m.curLane, 0, len(m.b.Lanes())-1)
 	m.tableIdx = clamp(m.tableIdx, 0, maxInt(0, len(m.tableRows())-1))
+	// The slice cursor rides the vocab, which a reload can shrink — an
+	// unclamped cursor pushes the panel window past the end and it renders
+	// zero rows under a "↑ N more" line.
+	m.sliceIdx = clamp(m.sliceIdx, 0, maxInt(0, len(m.sliceRows())-1))
 	m.ensureVisible()
 	m.syncPeek()
 }

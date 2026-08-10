@@ -26,9 +26,13 @@ func (m *Model) renderTable() string {
 	th := m.th
 	rows := m.tableRows()
 
+	// The slice panel insets the rows, so the row budget is what remains —
+	// padding to m.w and then shifting right pushed the rightmost 27 cells
+	// (repo/labels/deps) off the frame edge, where fitFrame truncated them.
+	avail := m.w - m.sliceInset()
 	wCur, wID, wLane, wFlag, wVE, wRepo, wLbl, wDep := 1, 8, 12, 4, 4, 10, 12, 5
 	fixed := wCur + wID + wLane + wFlag + wVE + wRepo + wLbl + wDep + 8
-	wTitle := maxInt(16, m.w-fixed-1)
+	wTitle := maxInt(16, avail-fixed-1)
 
 	head := strings.Join([]string{
 		pad("", wCur), pad("id", wID), pad("lane", wLane), pad("", wFlag), pad("v/e", wVE),
@@ -63,7 +67,7 @@ func (m *Model) renderTable() string {
 		var line string
 		if i == m.tableIdx {
 			// One inverse band rather than a patchwork of per-cell colours.
-			line = th.invert.Render(pad(strings.Join(plain, " "), m.w))
+			line = th.invert.Render(pad(strings.Join(plain, " "), avail))
 		} else {
 			line = strings.Join([]string{
 				plain[0],
@@ -77,7 +81,7 @@ func (m *Model) renderTable() string {
 				pad(deps, wDep),
 			}, " ")
 		}
-		body = append(body, pad(line, m.w))
+		body = append(body, pad(line, avail))
 	}
 
 	layers := []*lg.Layer{
@@ -88,7 +92,7 @@ func (m *Model) renderTable() string {
 	// rows shift right instead of hiding their id column under the panel.
 	inset := m.sliceInset()
 	layers = append(layers,
-		lg.NewLayer(th.colHdr.Render(pad(head, m.w))).X(inset).Y(rowColHdr).Z(zChrome),
+		lg.NewLayer(th.colHdr.Render(pad(head, avail))).X(inset).Y(rowColHdr).Z(zChrome),
 		// maxInt, not m.w: strings.Repeat panics on a negative count, and
 		// `-dump -w -1` reached it.
 		lg.NewLayer(th.rule.Render(strings.Repeat("─", maxInt(m.w, 1)))).X(0).Y(rowColSum).Z(zChrome),
