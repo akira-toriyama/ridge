@@ -6,7 +6,9 @@ package board
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -419,26 +421,45 @@ func (b *Board) SetBody(id, body string) error {
 	return nil
 }
 
-// parseDue accepts the subset of furrow's due forms the TUI can validate
-// without the store: a day, a day+time, an RFC3339 instant, or the +<n>d/w
-// snooze. The optimistic value only has to hold until the post-persist
-// reconcile re-reads furrow's own truth.
+// dueOffset is furrow's signed-offset form: a sign, a count, and a
+// minute/hour/day/week unit. The sign and a zero count are both legal
+// (`-1d` back-dates, `+0d` means "now").
+var dueOffset = regexp.MustCompile(`^[+-][0-9]+[mhdw]$`)
+
+// parseDue mirrors furrow's `--due` grammar so the TUI can validate a keystroke
+// without a round trip: a bare day (which furrow reads as the WHOLE day, i.e.
+// end of that day LOCAL), a day+time read as LOCAL, an RFC3339 instant, or a
+// signed offset from now. The grammar itself stays furrow's — ridge sends the
+// raw string on to `furrow set --due` and this value only has to hold until the
+// post-persist reconcile re-reads furrow's own truth. Keep it a mirror: a form
+// this refuses is a form the UI cannot reach at all.
 func parseDue(s string) (time.Time, error) {
-	if n := len(s); n > 2 && s[0] == '+' && (s[n-1] == 'd' || s[n-1] == 'w') {
-		var days int
-		if _, err := fmt.Sscanf(s[1:n-1], "%d", &days); err == nil && days > 0 {
-			if s[n-1] == 'w' {
-				days *= 7
-			}
-			return nowFn().UTC().AddDate(0, 0, days), nil
+	s = strings.TrimSpace(s)
+	if dueOffset.MatchString(s) {
+		n, err := strconv.Atoi(s[:len(s)-1]) // Atoi keeps the sign
+		if err == nil {
+			unit := map[byte]time.Duration{
+				'm': time.Minute,
+				'h': time.Hour,
+				'd': 24 * time.Hour,
+				'w': 7 * 24 * time.Hour,
+			}[s[len(s)-1]]
+			return nowFn().UTC().Add(time.Duration(n) * unit).Truncate(time.Second), nil
 		}
 	}
-	for _, layout := range []string{"2006-01-02", "2006-01-02T15:04", time.RFC3339} {
-		if t, err := time.Parse(layout, s); err == nil {
-			return t, nil
-		}
+	// A bare day is a promise for the whole day, so it lands at its last local
+	// second — not at midnight, which would flag the task overdue all day.
+	if t, err := time.ParseInLocation("2006-01-02", s, time.Local); err == nil {
+		return t.AddDate(0, 0, 1).Add(-time.Second).UTC(), nil
 	}
-	return time.Time{}, fmt.Errorf("due %q: want 2026-08-04, 2026-08-04T10:30, RFC3339 or +1d", s)
+	if t, err := time.ParseInLocation("2006-01-02T15:04", s, time.Local); err == nil {
+		return t.UTC(), nil
+	}
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t.UTC(), nil
+	}
+	return time.Time{}, fmt.Errorf("due %q is not a date: use YYYY-MM-DD (the whole day), "+
+		"YYYY-MM-DDTHH:MM, an RFC3339 instant, or a signed offset like +1d/+2h", s)
 }
 
 // SetFields applies a metadata patch locally and stamps Updated — the
