@@ -100,6 +100,19 @@ type Model struct {
 	inflight    bool
 	quitting    bool   // quit requested while writes were in flight; leave after the drain
 	lastPersist string // "move t-x 92ms" — the title bar's passive latency readout
+	// A persist FAILED and the rollback re-read has not landed yet: the board
+	// is showing state the store refused. Index- and neighbour-addressed
+	// writes computed against it would hit the wrong rows in the store, so
+	// enqueuePersist refuses gestures until the re-read arrives (t-74y3: the
+	// wrong-checklist-item write, and the rollback that any keystroke could
+	// preempt).
+	rollingBack bool
+	// Quick add runs through the same single-writer discipline as the queue
+	// (t-74y3: two concurrent furrow writers lost 15/20 racing writes): an
+	// add in flight blocks the queue from firing, and adds committed while
+	// anything is busy wait here for the drain.
+	addInFlight  bool
+	deferredAdds []deferredAdd
 
 	// The dependency graph view. graphFocus is what the picture is rooted on,
 	// graphSel is the node the cursor is on (they start equal and diverge as

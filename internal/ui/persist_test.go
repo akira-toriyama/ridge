@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"fmt"
 	"github.com/akira-toriyama/ridge/internal/board"
 	"strings"
 	"sync"
@@ -17,9 +18,12 @@ type scriptedProvider struct {
 	mu      sync.Mutex
 	truth   func() *board.Board
 	current *board.Board
-	calls   []string
-	moves   []scriptedMove
-	moveErr error
+	calls     []string
+	moves     []scriptedMove
+	moveErr   error
+	checkVals []string // "check <id> <i>=<done>" — the VALUE each toggle persisted
+	addCalls  []string
+	addErr    error
 }
 
 type scriptedMove struct{ id, lane, before, after string }
@@ -49,7 +53,16 @@ func (p *scriptedProvider) PersistFields(_ string, _ board.FieldPatch) error   {
 func (p *scriptedProvider) PersistCheckAdd(_, _ string) error                  { return nil }
 func (p *scriptedProvider) PersistCheckRm(_ string, _ int) error               { return nil }
 func (p *scriptedProvider) PersistCheckReword(_ string, _ int, _ string) error { return nil }
-func (p *scriptedProvider) Add(string, board.AddOptions) (string, error)       { return "", nil }
+func (p *scriptedProvider) Add(title string, _ board.AddOptions) (string, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.addErr != nil {
+		return "", p.addErr
+	}
+	p.calls = append(p.calls, "add "+title)
+	p.addCalls = append(p.addCalls, "add "+title)
+	return "t-new1", nil
+}
 func (p *scriptedProvider) Live() bool                                         { return true }
 
 func (p *scriptedProvider) PersistMove(id, lane, beforeID, afterID string) ([]string, error) {
@@ -67,10 +80,11 @@ func (p *scriptedProvider) PersistDone(id string) error {
 	return nil
 }
 
-func (p *scriptedProvider) PersistCheck(id string, _ int, _ bool) error {
+func (p *scriptedProvider) PersistCheck(id string, i int, done bool) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.calls = append(p.calls, "check "+id)
+	p.checkVals = append(p.checkVals, fmt.Sprintf("check %s %d=%v", id, i, done))
 	return nil
 }
 

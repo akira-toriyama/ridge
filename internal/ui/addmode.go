@@ -23,10 +23,23 @@ type addState struct {
 	opts  board.AddOptions
 }
 
-// addDoneMsg reports the store's answer: the new id, or the refusal.
+// A quick add committed while the store already had a writer (a queued
+// persist, another add, a rollback re-read): it waits for the drain instead
+// of racing — measured concurrently, furrow lost 15/20 racing writes and
+// shed store shards (t-74y3).
+type deferredAdd struct {
+	title string
+	opts  board.AddOptions
+}
+
+// addDoneMsg reports the store's answer: the new id, or the refusal — which
+// carries the submission so a refusal can reopen the modal instead of eating
+// the typed title.
 type addDoneMsg struct {
-	id  string
-	err error
+	id    string
+	err   error
+	title string
+	opts  board.AddOptions
 }
 
 // enterAdd opens the quick-add modal aimed at the focused lane (board) or
@@ -82,27 +95,66 @@ func (m *Model) onAddKey(msg tea.KeyPressMsg) tea.Cmd {
 			return nil
 		}
 		m.mode, m.add = modeNormal, nil
-		prov, opts := m.prov, a.opts
-		m.note("adding…")
-		return func() tea.Msg {
-			id, err := prov.Add(title, opts)
-			return addDoneMsg{id: id, err: err}
+		if m.inflight || len(m.pending) > 0 || m.addInFlight || m.rollingBack || len(m.deferredAdds) > 0 {
+			// One store writer at a time (persist.go's invariant — quick add
+			// used to bypass it and race the queue): wait for the drain.
+			m.deferredAdds = append(m.deferredAdds, deferredAdd{title: title, opts: a.opts})
+			m.note("adding… (queued)")
+			return nil
 		}
+		return m.runAdd(title, a.opts)
 	}
 	var c tea.Cmd
 	a.input, c = a.input.Update(msg)
 	return c
 }
 
+// runAdd fires one add against the store, marking it as the single writer.
+func (m *Model) runAdd(title string, opts board.AddOptions) tea.Cmd {
+	m.addInFlight = true
+	m.note("adding…")
+	prov := m.prov
+	return func() tea.Msg {
+		id, err := prov.Add(title, opts)
+		return addDoneMsg{id: id, err: err, title: title, opts: opts}
+	}
+}
+
+// fireAdd pops the oldest deferred add — called at the queue's drain points.
+func (m *Model) fireAdd() tea.Cmd {
+	d := m.deferredAdds[0]
+	m.deferredAdds = m.deferredAdds[1:]
+	return m.runAdd(d.title, d.opts)
+}
+
 // onAddDone lands the store's answer: remember the id so the cursor moves
-// onto the new card once the re-read delivers it.
+// onto the new card once the re-read delivers it. A refusal reopens the
+// modal with the typed title — the store saying no must not eat the text.
 func (m *Model) onAddDone(msg addDoneMsg) tea.Cmd {
+	m.addInFlight = false
 	if msg.err != nil {
+		m.quitting = false // never exit on top of a swallowed refusal
 		m.fail("add: %v", msg.err)
-		return nil
+		ti := textinput.New()
+		ti.Prompt = "+ "
+		ti.Placeholder = "task title"
+		ti.SetWidth(56)
+		ti.SetValue(msg.title)
+		m.add = &addState{input: ti, opts: msg.opts}
+		m.mode = modeAdd
+		return tea.Batch(m.add.input.Focus(), m.drainAfterAdd())
 	}
 	if m.prov.Live() {
 		m.selectAfterReload = msg.id
+		if next := m.drainAfterAdd(); next != nil {
+			// Writes queued up behind this add; the drain's own reconcile
+			// will deliver the new card and land the pending selection.
+			m.note("added %s", msg.id)
+			return next
+		}
+		if m.quitting {
+			return tea.Quit
+		}
 		return m.reloadCmd("added " + msg.id)
 	}
 	// The mock's board already holds the task: no store round-trip to wait
@@ -110,6 +162,18 @@ func (m *Model) onAddDone(msg addDoneMsg) tea.Cmd {
 	m.reload()
 	m.selectID(msg.id, true)
 	m.note("added %s", msg.id)
+	return m.drainAfterAdd()
+}
+
+// drainAfterAdd resumes whatever waited on the add: queued writes first,
+// then further deferred adds. Nil when nothing waited.
+func (m *Model) drainAfterAdd() tea.Cmd {
+	if len(m.pending) > 0 {
+		return m.firePersist()
+	}
+	if len(m.deferredAdds) > 0 {
+		return m.fireAdd()
+	}
 	return nil
 }
 

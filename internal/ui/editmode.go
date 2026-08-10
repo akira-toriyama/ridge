@@ -272,10 +272,17 @@ func (m *Model) editListSelect(t *board.Task) tea.Cmd {
 		return m.applyPatch("epic", board.FieldPatch{Epic: &id})
 	case fieldChecklist:
 		i := e.listIdx
+		if i < 0 || i >= len(t.Checklist) {
+			return nil
+		}
+		// Snapshot the value on the UI thread: the persist closure runs in a
+		// tea.Cmd goroutine at drain time, when the row may have been deleted
+		// or re-toggled — reading the live board there was a measured data
+		// race, and an index-out-of-range that shut the program down with
+		// every queued edit unpersisted (t-74y3).
+		done := !t.Checklist[i].Done
 		return m.applyCheck("check", func() error { return m.b.ToggleCheck(t.ID, i) },
-			func() error {
-				return m.prov.PersistCheck(t.ID, i, m.b.Task(t.ID).Checklist[i].Done)
-			})
+			func() error { return m.prov.PersistCheck(t.ID, i, done) })
 	}
 	return nil
 }
