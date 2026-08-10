@@ -42,7 +42,9 @@ func (p *scriptedProvider) Reload() error {
 }
 
 func (p *scriptedProvider) Sync() error { return nil }
-func (p *scriptedProvider) Live() bool  { return true }
+
+func (p *scriptedProvider) Query(string) ([]string, error) { return nil, nil }
+func (p *scriptedProvider) Live() bool                     { return true }
 
 func (p *scriptedProvider) PersistMove(id, lane, beforeID, afterID string) ([]string, error) {
 	p.mu.Lock()

@@ -7,6 +7,7 @@ package memstore
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/akira-toriyama/ridge/internal/board"
 )
@@ -82,3 +83,21 @@ func (p *Store) PersistBody(id, _ string) error {
 }
 
 var _ board.Provider = (*Store)(nil)
+
+// Query approximates furrow's -q over the fixture (board.Provider) — see
+// query.go for exactly how approximate. All-or-nothing like furrow's exit 2:
+// a refused query returns an error and no ids.
+func (p *Store) Query(q string) ([]string, error) {
+	parsed := parseQuery(q)
+	if len(parsed.problems) > 0 {
+		return nil, fmt.Errorf("%s", strings.Join(parsed.problems, "; "))
+	}
+	g := board.NewGraph(p.b)
+	var ids []string
+	for _, t := range p.b.Tasks() {
+		if parsed.match(t, g) {
+			ids = append(ids, t.ID)
+		}
+	}
+	return ids, nil
+}

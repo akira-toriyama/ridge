@@ -138,23 +138,26 @@ func (m *Model) syncCmd() tea.Cmd {
 	}
 }
 
-func (m *Model) onReloadDone(msg reloadDoneMsg) {
+func (m *Model) onReloadDone(msg reloadDoneMsg) tea.Cmd {
 	label := msg.label
 	if label == "" {
 		label = "reload"
 	}
 	if msg.err != nil {
 		m.fail("%s: %v", label, msg.err)
-		return
+		return nil
 	}
 	if m.inflight || len(m.pending) > 0 {
 		// A write landed behind this snapshot. Applying it now would yank the
 		// user's newer optimistic edits back; the queue's own reconcile will
 		// re-read once it drains.
-		return
+		return nil
 	}
 	m.reload()
 	if msg.label != "" {
 		m.note("%s · %dms", msg.label, msg.ms)
 	}
+	// The board changed under the matched set: ask the store for a fresh
+	// verdict, no debounce — this is a reload, not a keystroke.
+	return m.requery()
 }

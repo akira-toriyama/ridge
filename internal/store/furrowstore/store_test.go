@@ -264,3 +264,50 @@ func TestContractErrorsCarryTheEnvelope(t *testing.T) {
 		t.Error("an unknown lane must error")
 	}
 }
+
+func TestContractQueryPassesThroughAndRefuses(t *testing.T) {
+	p, dir := newLabProvider(t)
+	blocker := labAdd(t, dir, "先にやる方")
+	blocked := labAdd(t, dir, "待つ方")
+	lab(t, dir, "furrow", "dep", blocked, blocker)
+	free := labAdd(t, dir, "自由な方", "-l", "cli")
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+
+	// The grammar is furrow's: is:blocked, labels, CJK free text all resolve
+	// store-side and come back as ids ridge can intersect with its snapshot.
+	ids, err := p.Query("is:blocked")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 1 || ids[0] != blocked {
+		t.Errorf("is:blocked = %v, want [%s]", ids, blocked)
+	}
+	ids, err = p.Query("label:cli")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 1 || ids[0] != free {
+		t.Errorf("label:cli = %v, want [%s]", ids, free)
+	}
+	ids, err = p.Query("自由")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 1 || ids[0] != free {
+		t.Errorf("CJK free text = %v, want [%s]", ids, free)
+	}
+
+	// An empty result is exit 0 + [], never an error.
+	ids, err = p.Query("label:no-such-label")
+	if err != nil || len(ids) != 0 {
+		t.Errorf("empty result = (%v, %v), want ([], nil)", ids, err)
+	}
+
+	// A malformed query is furrow's refusal (exit 2), surfaced as an error —
+	// the model shows it and keeps the last good verdict.
+	if _, err := p.Query("nope:x"); err == nil {
+		t.Error("a malformed query must refuse, not match nothing")
+	}
+}

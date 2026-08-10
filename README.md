@@ -91,7 +91,7 @@ ID+タイトル+レーンまで解決）、チェックリスト、本文。`t` 
 | `t` | 依存ツリー（詳細ペイン内） |
 | `S` / `Shift+Space` | **依存グラフ** |
 | `>` / `<` | blocker へジャンプ / 戻る |
-| `/` | フィルタ（`lane:ready repo:vista is:blocked -lane:done`） |
+| `/` | フィルタ = furrow `-q` パススルー（`lane:ready repo:vista is:blocked value:>=4 updated:>=-2w`。文法の正本は `furrow ls --help` の -q 節） |
 | `b` | blocked のみ表示 |
 | `v` | Board ⇄ Table |
 | `d` | done |

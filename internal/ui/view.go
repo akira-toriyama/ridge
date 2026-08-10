@@ -130,17 +130,17 @@ func (m *Model) chromeLayers() []*lg.Layer {
 	switch {
 	case m.mode == modeFilter:
 		filter = m.ti.View()
-	case m.q.Empty():
+	case m.qRaw == "":
 		// GitHub's literal placeholder. The old text spelled out a full example
 		// query, which read as an ACTIVE filter — in every dump the bar said
 		// "lane:ready repo:vista is:blocked" while the header said "24 tasks"
 		// and every lane was full. The syntax belongs in the ? overlay.
 		filter = th.dim.Render("/ Filter by keyword or by field")
 	default:
-		filter = th.dim.Render("/ ") + th.chipAlt.Render(m.q.Raw)
+		filter = th.dim.Render("/ ") + th.chipAlt.Render(m.qRaw)
 	}
-	if len(m.q.Problems) > 0 {
-		filter = joinEnds(filter, th.errText.Render("⚠ "+strings.Join(m.q.Problems, "; ")), m.w)
+	if m.qErr != "" {
+		filter = joinEnds(filter, th.errText.Render("⚠ "+m.qErr), m.w)
 	}
 	if len(m.pinned) > 0 {
 		filter = joinEnds(filter, th.accent.Render(fmt.Sprintf("+%d pinned by jump", len(m.pinned))), m.w)
@@ -368,9 +368,10 @@ func (m *Model) helpLayer() *lg.Layer {
 	}
 	flush()
 
-	syntax := wrapJoin([]string{"filter syntax:",
-		"lane: repo: label: is: no: has: id: epic:",
-		"· comma = OR · leading - negates · bare word = title/id"}, " ", inner)
+	syntax := wrapJoin([]string{"filter syntax (furrow -q):",
+		"field:value · comma = OR · leading - negates · no:/has:",
+		"· is:actionable|blocked|stale|open|closed|draft|unfiled|overdue",
+		"· value:>=4 · updated:>=-2w · epic:/depends-on:/blocks: · free words over title+body"}, " ", inner)
 	note := wrapJoin([]string{"every mouse gesture above has a keyboard twin —",
 		"that is the rule, not a bonus"}, " ", inner)
 	box := m.th.peek.Render(m.th.peekHdr.Render("keys") + "\n\n" +

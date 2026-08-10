@@ -7,7 +7,6 @@ package ui
 import (
 	"fmt"
 	"github.com/akira-toriyama/ridge/internal/board"
-	"github.com/akira-toriyama/ridge/internal/query"
 	"strings"
 
 	"charm.land/bubbles/v2/help"
@@ -56,7 +55,13 @@ type Model struct {
 	treeOpen bool
 	mouseOn  bool
 
-	q      query.Query
+	qRaw     string          // the active -q expression ("" = no filter)
+	qMatched map[string]bool // the store's verdict; nil = no verdict yet
+	qErr     string          // furrow's refusal for the current text, "" when clean
+	qSeq     int             // debounce + staleness fence (filter.go)
+
+	startupFilter tea.Cmd // pending verdict for Options.Filter, fired by Init
+
 	pinned map[string]bool // ids forced visible despite the filter (jump targets)
 	cols   map[string][]*board.Task
 
@@ -145,7 +150,12 @@ func newModel(p board.Provider) *Model {
 
 // Init requests the terminal background so the palette can pick light or dark —
 // lipgloss v2 removed AdaptiveColor, so this is now the idiomatic route.
-func (m *Model) Init() tea.Cmd { return tea.RequestBackgroundColor }
+func (m *Model) Init() tea.Cmd {
+	if m.startupFilter != nil {
+		return tea.Batch(tea.RequestBackgroundColor, m.startupFilter)
+	}
+	return tea.RequestBackgroundColor
+}
 
 // reload swaps in the provider's current board, keeping the selection on the
 // same task when it still exists — an async reconcile must not teleport the
@@ -175,7 +185,7 @@ func (m *Model) recompute() {
 	for _, l := range m.b.Lanes() {
 		var keep []*board.Task
 		for _, t := range m.b.LaneTasks(l.Name) {
-			if m.q.Empty() || m.q.Match(t, m.g) || m.pinned[t.ID] {
+			if m.taskVisible(t) {
 				keep = append(keep, t)
 			}
 		}
@@ -276,7 +286,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case reloadDoneMsg:
-		m.onReloadDone(msg)
+		if c := m.onReloadDone(msg); c != nil {
+			cmds = append(cmds, c)
+		}
+
+	case filterTickMsg:
+		if c := m.onFilterTick(msg); c != nil {
+			cmds = append(cmds, c)
+		}
+
+	case filterResultMsg:
+		m.onFilterResult(msg)
 
 	case tea.KeyPressMsg:
 		if c := m.onKey(msg); c != nil {
@@ -417,30 +437,16 @@ func (m *Model) onFilterKey(msg tea.KeyPressMsg) tea.Cmd {
 	case key.Matches(msg, m.keys.Cancel):
 		m.mode = modeNormal
 		m.ti.Blur()
-		m.applyFilter(m.q.Raw) // discard the in-progress edit
+		m.ti.SetValue(m.qRaw) // discard the in-progress edit; the verdict is current
 		return nil
 	case key.Matches(msg, m.keys.Commit):
 		m.mode = modeNormal
 		m.ti.Blur()
-		m.applyFilter(m.ti.Value())
-		return nil
+		return m.applyFilter(m.ti.Value())
 	}
 	var c tea.Cmd
 	m.ti, c = m.ti.Update(msg)
-	m.applyFilter(m.ti.Value()) // live filtering as you type
-	return c
-}
-
-func (m *Model) applyFilter(s string) {
-	prev := m.curTask()
-	m.q = query.ParseQuery(s)
-	if strings.TrimSpace(s) == "" {
-		m.pinned = map[string]bool{} // clearing the filter clears jump pins too
-	}
-	m.recompute()
-	if prev != nil {
-		m.selectID(prev.ID, false)
-	}
+	return tea.Batch(c, m.applyFilter(m.ti.Value())) // live filtering as you type
 }
 
 func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
@@ -457,7 +463,7 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 			m.treeOpen = false
 		case m.peekOpen:
 			m.peekOpen = false
-		case !m.q.Empty():
+		case m.qRaw != "":
 			m.applyFilter("")
 			m.ti.SetValue("")
 			m.note("filter cleared")
@@ -468,7 +474,7 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 		// release would commit a move nobody is looking at any more.
 		m.cancelDrag()
 		m.mode = modeFilter
-		m.ti.SetValue(m.q.Raw)
+		m.ti.SetValue(m.qRaw)
 		return m.ti.Focus()
 
 	case key.Matches(msg, m.keys.View):
@@ -521,14 +527,16 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 		// TOKEN-wise, never a substring ReplaceAll: on "-is:blocked" that left a
 		// bare "-" behind, which parses as a bare-word term and quietly changed
 		// what the board showed while the status line said "off".
-		if q, had := dropToken(m.q.Raw, "is:blocked"); had {
-			m.applyFilter(q)
+		if q, had := dropToken(m.qRaw, "is:blocked"); had {
+			cmd := m.applyFilter(q)
 			m.note("blocked-only off")
-		} else {
-			m.applyFilter(strings.TrimSpace(m.q.Raw + " is:blocked"))
-			m.note("blocked-only on — %d tasks are waiting on something", m.countVisible())
+			m.ti.SetValue(m.qRaw)
+			return cmd
 		}
-		m.ti.SetValue(m.q.Raw)
+		cmd := m.applyFilter(strings.TrimSpace(m.qRaw + " is:blocked"))
+		m.note("blocked-only on")
+		m.ti.SetValue(m.qRaw)
+		return cmd
 
 	case key.Matches(msg, m.keys.JumpBlock):
 		m.jumpToBlocker()
