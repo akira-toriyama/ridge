@@ -181,7 +181,7 @@ func (m *Model) sliceRows() []sliceRow {
 
 // sliceClick is a mouse press inside the panel: a value row selects, the
 // axis line cycles.
-func (m *Model) sliceClick(x, y int) tea.Cmd {
+func (m *Model) sliceClick(_, y int) tea.Cmd {
 	if y == boardTop+1 { // the axis line
 		return m.cycleSliceField(+1)
 	}
