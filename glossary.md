@@ -12,8 +12,8 @@
 | **ridge** | furrow の TUI front-end。この repo。 |
 | **vista** | furrow の GUI front-end（Tauri v2 + React）。ridge の兄弟。 |
 | **front-end** | furrow を **CLI/JSON 経由で**駆動するもの。furrow の Go パッケージは import しない。 |
-| **Provider** | ridge がタスクを読み書きする唯一の口（interface）。実 furrow 実装（`furrow` を exec する `provider_furrow.go`）と fixture の mock の 2 つ。mutation は Persist 契約 — **Model がローカル適用済みの変更を store に記録するだけ**で、適用そのものはしない。 |
-| **persist キュー** | 楽観的書き込みの直列キュー（`persist.go`）。同時 in-flight は 1 本 — 並べ替えの anchor（`--before <id>`）が直前の書き込みの結果に依存するため。失敗したら残りを破棄して store 再読 = ロールバック。quit は排出を待つ。 |
+| **Provider** | ridge がタスクを読み書きする唯一の口（interface）。port は `internal/board` が宣言し、adapter は `internal/store/furrowstore`（`furrow` を exec する実装）と `internal/store/memstore`（fixture）の 2 つ。mutation は Persist 契約 — **Model がローカル適用済みの変更を store に記録するだけ**で、適用そのものはしない。 |
+| **persist キュー** | 楽観的書き込みの直列キュー（`internal/ui/persist.go`）。同時 in-flight は 1 本 — 並べ替えの anchor（`--before <id>`）が直前の書き込みの結果に依存するため。失敗したら残りを破棄して store 再読 = ロールバック。quit は排出を待つ。 |
 | **reconcile** | persist キュー排出後の無言の store 再読。respace された priority・closed 刻印など store 側の真実に盤面を収束させる。 |
 
 ## ビュー
@@ -45,7 +45,7 @@
 |---|---|
 | `▸` | **actionable** — next レーンにあり、すべての依存が完了済み（＝今すぐ着手できる）。 |
 | `x` / `x1` | **blocked** — 未完了の blocker がある（数字はその件数）。**隠さず印を付ける**（隠すのは `furrow next` の役目）。 |
-| `▤` | **epic**（container）。`6/18` のように子タスクの進捗を伴う。 |
+| `▤` | **epic チップ**。epic は lane を持たない別エンティティ（`EpicInfo`）で、カードには所属 epic のタイトルを解決して表示する。epic が stuck なら warn 色。peek には `(done/total)` と STUCK。 |
 | `v` | done。 |
 | `[0/7]` | チェックリストの進捗。 |
 | `v5 e4` | value / effort（各 1..5）。 |
