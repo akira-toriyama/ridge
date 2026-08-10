@@ -35,7 +35,12 @@ func fixtureTasks() []*board.Task {
 			Deps:     []string{"t-ehk7", "t-t38k"},
 			Created:  ts("2026-07-16T08:35:54Z"),
 			Updated:  ts("2026-07-16T15:47:40Z"),
-			Body:     "# vista: filter bar — typed query 構文（repo:/label:/lane:/自由語）\n\nGitHub Projects 式の単一フィルタバー。`repo:owner/name label:x lane:ready 自由語` を parse して furrow の `-r/-l/-s`/`search` に写像。全ビュー（Board/List/Graph）で共有。filter（絞る）と display options（見せ方）は概念分離（Linear）。\n\n2026-07-17 設計論点と提案（GH 機能インベントリ調査より）。ユーザーの質問「filter は furrow の機能？」への整理:\n- furrow CLI が持つのは **-r/-l/-s の等値フィルタ + search（全文）**のみ。GH 風の否定（-）・カンマ OR・no:/has:・範囲（value:>3）は furrow に無い。\n- vista は全 task を ls --json で Query cache に持つ（1 データセット + 保存ビュー模型）ので、**filter は UI 層で dataset に適用する提案**（= 見せ方の問題であり、正本ロジックの複製ではない。furrow に query 構文を足すのは CLI の flag 哲学に合わず、PR するほどの不足ではないという整理）。→ ユーザー確認待ち。\n- 構文は **GH 互換のサブセット**から始める: `repo:` `label:` `lane:`（status: を alias に）+ 自由語（単語先頭一致・GH 同）+ `-` 否定 + カンマ OR + `no:label` / `has:parent`。数値範囲・ワイルドカードは後続拡張（parser を GH 構文のサブセットとして設計しておく）。\n- filter（絞る）と display options（見せ方）の概念分離は維持（Linear）。保存ビュー（t-rmtc）の一部として view に保存される。\n- parser は fast-check の roundtrip プロパティ対象（t-v5xg）。GH filter 仕様全文: https://docs.github.com/en/issues/planning-and-tracking-with-projects/customizing-views-in-your-project/filtering-projects\n\n2026-07-17 決定: filter の正本は furrow 側に置く（新設 -q typed query、判断規範 =「TUI を作ったらロジック冗長になるか」）。**本タスクは再スコープ**: vista 側は ①filter bar UI（入力・ハイライト・サジェスト: board 語彙/label/repo 一覧から） ②query 文字列の pass-through（ls -q、debounce 100-150ms） ③エラー（exit 2 + 位置）のインライン表示。TS 側に query parser は持たない（サジェスト用の軽い token 分割まで）。UI 層適用案は破棄。",
+			// The three Due values in this fixture are NOT from the snapshot
+			// (the real board had none in 2026-07); they exist so the table's
+			// due column and `-demo sort` have dates to show. Each is furrow's
+			// bare-day form: the last second of that local (JST) day, in UTC.
+			Due:  ts("2026-07-31T14:59:59Z"),
+			Body: "# vista: filter bar — typed query 構文（repo:/label:/lane:/自由語）\n\nGitHub Projects 式の単一フィルタバー。`repo:owner/name label:x lane:ready 自由語` を parse して furrow の `-r/-l/-s`/`search` に写像。全ビュー（Board/List/Graph）で共有。filter（絞る）と display options（見せ方）は概念分離（Linear）。\n\n2026-07-17 設計論点と提案（GH 機能インベントリ調査より）。ユーザーの質問「filter は furrow の機能？」への整理:\n- furrow CLI が持つのは **-r/-l/-s の等値フィルタ + search（全文）**のみ。GH 風の否定（-）・カンマ OR・no:/has:・範囲（value:>3）は furrow に無い。\n- vista は全 task を ls --json で Query cache に持つ（1 データセット + 保存ビュー模型）ので、**filter は UI 層で dataset に適用する提案**（= 見せ方の問題であり、正本ロジックの複製ではない。furrow に query 構文を足すのは CLI の flag 哲学に合わず、PR するほどの不足ではないという整理）。→ ユーザー確認待ち。\n- 構文は **GH 互換のサブセット**から始める: `repo:` `label:` `lane:`（status: を alias に）+ 自由語（単語先頭一致・GH 同）+ `-` 否定 + カンマ OR + `no:label` / `has:parent`。数値範囲・ワイルドカードは後続拡張（parser を GH 構文のサブセットとして設計しておく）。\n- filter（絞る）と display options（見せ方）の概念分離は維持（Linear）。保存ビュー（t-rmtc）の一部として view に保存される。\n- parser は fast-check の roundtrip プロパティ対象（t-v5xg）。GH filter 仕様全文: https://docs.github.com/en/issues/planning-and-tracking-with-projects/customizing-views-in-your-project/filtering-projects\n\n2026-07-17 決定: filter の正本は furrow 側に置く（新設 -q typed query、判断規範 =「TUI を作ったらロジック冗長になるか」）。**本タスクは再スコープ**: vista 側は ①filter bar UI（入力・ハイライト・サジェスト: board 語彙/label/repo 一覧から） ②query 文字列の pass-through（ls -q、debounce 100-150ms） ③エラー（exit 2 + 位置）のインライン表示。TS 側に query parser は持たない（サジェスト用の軽い token 分割まで）。UI 層適用案は破棄。",
 		},
 		{
 			ID:       "t-2qyb",
@@ -83,6 +88,7 @@ func fixtureTasks() []*board.Task {
 			},
 			Created: ts("2026-07-16T15:27:16Z"),
 			Updated: ts("2026-07-16T15:27:16Z"),
+			Due:     ts("2026-09-30T14:59:59Z"), // see t-jv3j's Due note
 			Body:    "設計 doc の List view を GH Projects Table の視覚言語で実装（memex 実 CSS 由来の実値は t-n2fc body 参照）。\n- 行高 **40px 固定**・セル padding 12px・行 hover = bgColor-muted・選択 = accent-muted + box-shadow 縁\n- 列ヘッダ 12px semibold・列の表示/非表示・ドラッグ並べ替え・sort（primary+secondary の 2 段、GH 同）\n- group by（lane 等）時は sticky group header 行（色 chip + muted 集計）\n- インライン編集は GH のセル編集モデル（Enter でセル編集トグル）を参考に、v1 は single select 系（lane/value/effort）から\n- **@tanstack/react-virtual v3 を初版から**（数百〜数千行想定。後付けは行高/scroll/sticky 制約で高くつく）\n\n出典: GH docs Table layout / memex module.css（t-n2fc 参照）/ https://tanstack.com/virtual/latest",
 		},
 		{
@@ -124,6 +130,7 @@ func fixtureTasks() []*board.Task {
 			},
 			Created: ts("2026-07-16T15:47:39Z"),
 			Updated: ts("2026-07-16T15:47:39Z"),
+			Due:     ts("2026-08-20T14:59:59Z"), // see t-jv3j's Due note
 			Body:    "**vista filter bar (t-jv3j) の正本ロジック**。ユーザー決定 2026-07-17: 「迷ったら、仮に TUI を作るならロジックが冗長になるか」で判断 → 冗長になる → furrow 側に置く（この判断規範は今後の同種の迷いにも適用）。**PR は Claude が出し、merge まで OK**。速度でなく品質重視。\n\n## 仕様（GH Projects filter 構文の互換サブセット）\n\n`ls`（まず）/ `next` / `revisit` に `-q <query>` を追加。既存 `-r/-l/-s` との合成は AND（-q 内の同種 field とも AND）。\n\n- `field:value` — lane(status alias)/label/repo/type/parent/id + value/effort/priority\n- カンマ = OR（`label:ui,dx`）、同一 qualifier 繰返し = AND（GH 同）\n- `-` 前置 = 否定（`-lane:done,icebox`）\n- `no:<field>` / `has:<field>`（値が空/ある。label, parent, repo, value, effort…）\n- 数値: `value:>3` `effort:<=2` `priority:1600..1700`（比較 + `..` 範囲）\n- 自由語（qualifier なし）= title/body の単語先頭一致（GH 同・mid-word 不一致）。`\"...\"` で空白含む値\n- 将来拡張枠（初版外で可）: ワイルドカード `label:*ui*`、`is:actionable/blocked/stuck`（furrow 計算フラグ — これは GH に無い furrow ならでは）\n\n## 実装メモ\n\n- parser は internal/query パッケージに分離（lexer + 再帰下降で足りる規模）。エラーは exit 2 + 位置情報 + candidates（did-you-mean 流儀に合わせる）\n- table tests + go fuzz（parse が任意入力で panic しない）+ golden（--json 結果）\n- docs: help text + README の query 節\n- GH 構文全文: https://docs.github.com/en/issues/planning-and-tracking-with-projects/customizing-views-in-your-project/filtering-projects\n\nvista 側: t-jv3j が本タスクに依存（query pass-through + サジェスト UI に再スコープ済み）。",
 		},
 		{

@@ -99,6 +99,7 @@ due / repos / checklist（カーソルで項目選択・toggle/add/delete/reword
 | `b` | blocked のみ表示 |
 | `s` | **slice パネル**（repo / label / epic の値で絞る左パネル。選択は filter と AND 合成・`Esc` でパネルを残して盤面へ・再選択で解除） |
 | `v` | Board ⇄ Table |
+| `o` | Table のソート（canonical → updated → created → value → effort → due を循環・再押しで昇降反転・ヘッダに `▲▼`）。ソート可能なヘッダのクリックでも同じ・`lane` クリックで canonical へ |
 | `a` | quick add（フォーカス列へ起票。適用中 filter の label/epic/repo を継承 — チップで明示） |
 | `d` | done |
 | `e` | 本文を `$EDITOR` で編集 |
@@ -139,6 +140,7 @@ go run ./cmd/ridge -demo drag -dump          # ドラッグ中
 go run ./cmd/ridge -demo edit -dump          # フィールド編集メニュー
 go run ./cmd/ridge -demo add -dump           # quick add（filter 文脈チップつき）
 go run ./cmd/ridge -demo slice -dump         # slice パネル（label:ui 選択済み）
+go run ./cmd/ridge -demo sort -dump          # Table を due ▲ でソートした状態
 ```
 
 ## 既知の課題

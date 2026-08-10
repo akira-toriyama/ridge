@@ -176,8 +176,9 @@ func TestEditDueRefusesGarbageAndAcceptsForms(t *testing.T) {
 	}
 	m.edit.input.SetValue("someday")
 	press(m, "enter")
-	if !m.b.Task("t-9sa6").Due.IsZero() {
-		t.Error("garbage due must refuse, not guess")
+	// t-9sa6 carries a fixture due: the refusal must keep it, not clear it.
+	if before := memstore.New().Board().Task("t-9sa6").Due; !m.b.Task("t-9sa6").Due.Equal(before) {
+		t.Error("garbage due must refuse and keep the existing promise")
 	}
 	if !m.statusErr {
 		t.Error("the refusal must be surfaced in the status line")

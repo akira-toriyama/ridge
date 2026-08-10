@@ -33,6 +33,7 @@ type keyMap struct {
 	JumpBack   key.Binding
 	Add        key.Binding
 	Slice      key.Binding
+	Sort       key.Binding
 	Done       key.Binding
 	Edit       key.Binding
 	Reload     key.Binding
@@ -92,6 +93,10 @@ func defaultKeys() keyMap {
 		Tree:      key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "dep tree")),
 		View:      key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "board/table")),
 
+		// `o` (order), not the `s` t-qve3 sketched: `s` is the slice panel, and
+		// the panel deliberately reaches the table view too — two owners for
+		// one key, and the panel got there first.
+		Sort:       key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "sort (table)")),
 		Done:       key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "done")),
 		Edit:       key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "$EDITOR")),
 		Check:      key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "toggle")),
@@ -131,7 +136,7 @@ func (k keyMap) FullHelp() [][]key.Binding {
 		{k.Up, k.Down, k.Left, k.Right, k.NextCol, k.PrevCol, k.Top, k.Bottom},
 		{k.Move, k.Commit, k.Cancel, k.QuickUp, k.QuickDown, k.LaneBack, k.LaneFwd},
 		{k.MoveTop, k.MoveBottom, k.MoveFirst, k.MoveLast},
-		{k.Peek, k.Tree, k.PeekScroll, k.Filter, k.OnlyBlock, k.Slice, k.View},
+		{k.Peek, k.Tree, k.PeekScroll, k.Filter, k.OnlyBlock, k.Slice, k.View, k.Sort},
 		{k.Graph, k.GraphRoot, k.GraphRadius},
 		{k.JumpBlock, k.JumpBack, k.Add, k.Done, k.Edit, k.Reload, k.Sync},
 		{k.Mouse, k.Help, k.Quit},

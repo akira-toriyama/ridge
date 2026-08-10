@@ -147,8 +147,15 @@ func (m *Model) demoState(kind string) error {
 		}
 		m.openGraph()
 
+	case "sort":
+		// The table sorted by due ascending: the ▲ marker in the header, the
+		// dated fixture tasks on top, the undated majority below them — the
+		// three sort facts one frame can prove.
+		m.view = viewTable
+		m.setSort(sortDue, true)
+
 	default:
-		return fmt.Errorf("unknown -demo %q (want move|drag|add|edit|graph|help|slice)", kind)
+		return fmt.Errorf("unknown -demo %q (want move|drag|add|edit|graph|help|slice|sort)", kind)
 	}
 	m.relayout()
 	return nil
