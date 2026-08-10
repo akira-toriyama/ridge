@@ -50,7 +50,21 @@ func TestChecklistTogglePersistsTheValueItSaw(t *testing.T) {
 	press(m, "up")
 	press(m, "d") // delete item 0 (A) — queued behind the toggle
 
-	drainPersists(m, t) // pre-fix: index out of range inside the toggle closure
+	// Pre-fix the toggle closure indexes the mutated live board at drain
+	// time and panics; convert that to a clean failure so the go-bite trial
+	// of the OTHER tests still gets to run against the pre-change tree.
+	panicked := func() (panicked bool) {
+		defer func() {
+			if recover() != nil {
+				panicked = true
+			}
+		}()
+		drainPersists(m, t)
+		return false
+	}()
+	if panicked {
+		t.Fatal("the toggle closure read the live board at drain time and blew up")
+	}
 
 	if len(p.checkVals) != 1 || p.checkVals[0] != "check a 1=true" {
 		t.Errorf("persisted toggle = %v, want [check a 1=true] — the value the gesture saw", p.checkVals)
