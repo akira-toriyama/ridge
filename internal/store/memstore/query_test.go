@@ -555,3 +555,33 @@ func containsID(hay []string, needle string) bool {
 	}
 	return false
 }
+
+// The slice panel issues quoted values (`label:"needs review"`) that real
+// furrow understands. The pre-rewrite lexer had no quote pairing, so PR #12
+// taught it to REFUSE quoted values rather than mis-lex them into a silently
+// blank -dump frame. This lexer pairs quotes at furrow's measured semantics,
+// which supersedes that refusal: the same input now evaluates — exactly —
+// and the original contract ("refuse, never mis-evaluate") still holds.
+func TestQuotedValuesEvaluateInsteadOfRefusing(t *testing.T) {
+	s := New()
+	got, err := s.Query(`label:"needs review"`)
+	if err != nil {
+		t.Fatalf("a quoted label must evaluate now that quotes pair: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("no fixture task carries that label — want an honest 0 rows, got %v", got)
+	}
+	// Quoting must not change what an existing label matches: label: is
+	// exact either way.
+	quoted, err := s.Query(`label:"ui"`)
+	if err != nil {
+		t.Fatalf(`label:"ui": %v`, err)
+	}
+	bare, err := s.Query("label:ui")
+	if err != nil {
+		t.Fatalf("label:ui: %v", err)
+	}
+	if strings.Join(quoted, ",") != strings.Join(bare, ",") {
+		t.Errorf("quoted vs bare label diverged: %v vs %v", quoted, bare)
+	}
+}

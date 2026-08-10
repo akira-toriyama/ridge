@@ -24,12 +24,10 @@ func TestBlockedByCountsOnlyUnfinishedDeps(t *testing.T) {
 	if g.Actionable("a") {
 		t.Error("a is in a next lane but has an open dep — not actionable")
 	}
-	// c has no deps at all, so only its lane can disqualify it — and backlog
-	// is not a next lane. (This assertion used to read
-	// `!g.Actionable("c") == false && !g.Actionable("c")`, which is X && !X:
-	// unsatisfiable, guarding nothing but a t.Log.)
+	// c is in backlog, which is not a next lane. (The original condition here
+	// was `X && !X` — an assertion that asserted nothing, flagged by review.)
 	if g.Actionable("c") {
-		t.Error("c is in backlog, which is not a next lane — it cannot be actionable")
+		t.Error("c is in backlog, not a next lane — must not be actionable")
 	}
 }
 

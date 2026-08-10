@@ -66,7 +66,10 @@ func (m *Model) buildGraph() *egoLayout {
 	avail := maxInt(1, m.w-2)
 	cols := clamp(avail/graphNodeMinW, 1, graphHardCols)
 	hidden := func(id string) bool {
-		if m.qRaw == "" || m.pinned[id] || m.qMatched == nil {
+		// effectiveQuery, not qRaw: the slice term filters the graph exactly
+		// as it filters the board — taskVisible's contract, which this
+		// predicate mirrors for off-board ids.
+		if m.effectiveQuery() == "" || m.pinned[id] || m.qMatched == nil {
 			return false
 		}
 		t := m.b.Task(id)

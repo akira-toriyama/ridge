@@ -32,6 +32,7 @@ type keyMap struct {
 	JumpBlock  key.Binding
 	JumpBack   key.Binding
 	Add        key.Binding
+	Slice      key.Binding
 	Done       key.Binding
 	Edit       key.Binding
 	Reload     key.Binding
@@ -43,6 +44,10 @@ type keyMap struct {
 	OnlyBlock  key.Binding
 	Help       key.Binding
 	Quit       key.Binding
+	// ForceQuit is ctrl+c alone — the escape hatch inside modal text inputs,
+	// where `q` must type. bubbletea v2's raw mode delivers ctrl+c as a
+	// normal keystroke, so every modal key handler must match this itself.
+	ForceQuit  key.Binding
 	PeekScroll key.Binding
 
 	Graph       key.Binding
@@ -91,11 +96,13 @@ func defaultKeys() keyMap {
 		Edit:       key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "$EDITOR")),
 		Check:      key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "toggle")),
 		Add:        key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add item")),
+		Slice:      key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "slice panel")),
 		Reload:     key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reload")),
 		Sync:       key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "sync (git)")),
 		Mouse:      key.NewBinding(key.WithKeys("M"), key.WithHelp("M", "mouse on/off")),
 		Help:       key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
 		Quit:       key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
+		ForceQuit:  key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("^c", "quit")),
 		PeekScroll: key.NewBinding(key.WithKeys("ctrl+d", "ctrl+u"), key.WithHelp("^d/^u", "scroll peek")),
 
 		// Note WithKeys("shift+space"), not " " and not "shift+ ": key.Matches
@@ -124,7 +131,7 @@ func (k keyMap) FullHelp() [][]key.Binding {
 		{k.Up, k.Down, k.Left, k.Right, k.NextCol, k.PrevCol, k.Top, k.Bottom},
 		{k.Move, k.Commit, k.Cancel, k.QuickUp, k.QuickDown, k.LaneBack, k.LaneFwd},
 		{k.MoveTop, k.MoveBottom, k.MoveFirst, k.MoveLast},
-		{k.Peek, k.Tree, k.PeekScroll, k.Filter, k.OnlyBlock, k.View},
+		{k.Peek, k.Tree, k.PeekScroll, k.Filter, k.OnlyBlock, k.Slice, k.View},
 		{k.Graph, k.GraphRoot, k.GraphRadius},
 		{k.JumpBlock, k.JumpBack, k.Add, k.Done, k.Edit, k.Reload, k.Sync},
 		{k.Mouse, k.Help, k.Quit},
@@ -134,7 +141,7 @@ func (k keyMap) FullHelp() [][]key.Binding {
 // editHelp is the footer while the field-edit overlay is up. The overlay
 // carries its own per-stage hints; the footer only shows the frame.
 func (k keyMap) editHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Commit, k.Check, k.Cancel}
+	return []key.Binding{k.Up, k.Down, k.Commit, k.Check, k.Cancel, k.ForceQuit}
 }
 
 // moveHelp is the footer while a card is lifted — a different mode gets a
