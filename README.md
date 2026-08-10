@@ -99,7 +99,7 @@ due / repos / checklist（カーソルで項目選択・toggle/add/delete/reword
 | `b` | blocked のみ表示 |
 | `s` | **slice パネル**（repo / label / epic の値で絞る左パネル。選択は filter と AND 合成・`Esc` でパネルを残して盤面へ・再選択で解除） |
 | `v` | Board ⇄ Table |
-| `o` | Table のソート（canonical → updated → created → value → effort → due を循環・再押しで昇降反転・ヘッダに `▲▼`）。ソート可能なヘッダのクリックでも同じ・`lane` クリックで canonical へ |
+| `o` | Table のソート（canonical → updated → created → value → effort → due を循環・再押しで昇降反転）。対応列のヘッダに `▲▼`・現在のソートはフィルタバーに常時表示（created / effort は列が無いのでこちらだけ）。ソート可能なヘッダのクリックでも同じ・`lane` クリックで canonical へ |
 | `a` | quick add（フォーカス列へ起票。適用中 filter の label/epic/repo を継承 — チップで明示） |
 | `d` | done |
 | `e` | 本文を `$EDITOR` で編集 |
@@ -148,7 +148,9 @@ go run ./cmd/ridge -demo sort -dump          # Table を due ▲ でソートし
 - 本文編集はファイル直書きなので shard の `updated` が進まない（furrow 側の
   置換コマンド要望 t-8q8c が着地したら乗り換える）。
 - swimlane（group by）未実装。
-- Table ビューに横スクロールが無い（`bubbles/v2` の table が非対応）。
+- Table ビューに横スクロールが無い（ワイド前提の設計判断。要るなら既存依存の
+  bubbles viewport v2 の `SoftWrap=false` + `XOffset` を配線する — 新規実装不要と
+  確認済み。罠: `SetXOffset` は `SoftWrap=true` だと黙って no-op）。
 
 ## スタック
 

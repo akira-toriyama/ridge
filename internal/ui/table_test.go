@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	lg "charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func tableModel(t *testing.T, w, h int) *Model {
@@ -218,6 +219,11 @@ func TestSortedTableRefusesQuickReorder(t *testing.T) {
 }
 
 func TestTableRendersDueEpicUpdatedColumns(t *testing.T) {
+	// Pinned: the fixture's Updated stamps are fixed instants, so on a wall
+	// clock ago() would cross its 90-day line (2026-10-14) and stop saying
+	// "d ago" — a test that goes red by calendar (independent review,
+	// finding 2).
+	fixedNow(t, day("2026-08-10T00:00:00Z"))
 	m := tableModel(t, 240, 40)
 	out := frame(m)
 	head := ""
@@ -232,16 +238,43 @@ func TestTableRendersDueEpicUpdatedColumns(t *testing.T) {
 			t.Errorf("header lacks the %s column: %q", col, head)
 		}
 	}
-	// The fixture's dated tasks render their local day; epics render their
-	// TITLE (truncated), not the raw e- id; updated renders as an age.
-	if !strings.Contains(out, "2026-08-20") {
-		t.Error("t-ehk7's due day is not in the frame")
+	// The fixture's dated tasks render their LOCAL day — computed through the
+	// same conversion, so the test holds in every timezone (a hardcoded
+	// "2026-08-20" fails east of UTC+9, where that instant is the 21st).
+	if want := m.b.Task("t-ehk7").Due.Local().Format("2006-01-02"); !strings.Contains(out, want) {
+		t.Errorf("t-ehk7's due day %s is not in the frame", want)
 	}
 	if !strings.Contains(out, "vista: furrow") || strings.Contains(out, "e-fw2m") {
 		t.Error("the epic column must resolve the id to its title")
 	}
 	if !strings.Contains(out, "d ago") {
 		t.Error("the updated column must render ago() ages")
+	}
+}
+
+// Every sort state must stay READABLE somewhere persistent. Keys with a
+// column carry ▲▼ in the header; created and effort have no column, so the
+// filter bar names the sort — without it those four cycle stops rendered
+// identically to canonical (independent review, finding 1).
+func TestSortStateIsAlwaysVisible(t *testing.T) {
+	m := tableModel(t, 240, 40)
+	for i := 0; i < 10; i++ {
+		press(m, "o")
+		out := frame(m)
+		want := "sort " + m.tableSort.String() + " " + sortArrow(m.tableSortAsc)
+		if !strings.Contains(out, want) {
+			t.Errorf("press %d: %q is nowhere in the frame — invisible sort state", i+1, want)
+		}
+	}
+	press(m, "o") // back to canonical: no sort is active, so no indicator
+	if out := frame(m); strings.Contains(out, "sort canonical") {
+		t.Error("canonical is the absence of a sort and must not render an indicator")
+	}
+	// The indicator is table state; the board must not wear it.
+	m.tableSort, m.tableSortAsc = sortCreated, false
+	press(m, "v")
+	if out := frame(m); strings.Contains(out, "sort created") {
+		t.Error("the board view must not show the table's sort")
 	}
 }
 
@@ -266,36 +299,107 @@ func TestOverdueDueRendersDanger(t *testing.T) {
 	}
 }
 
-// The CJK rule: every column boundary must sit where the header says it does,
+// The CJK rule: every column boundary must sit where tableGeom says it does,
 // at every supported width — drift accumulates one double-width glyph at a
-// time and only shows at the far edge.
+// time and only shows at the far edge. Cells are CUT OUT of the frame by
+// display column (ansi.Cut is grapheme-aware), so the header row AND every
+// body row are checked against the same measurement the hit-test uses; a
+// weaker version only followed the due dates and skipped 20 of 23 rows
+// (independent review, finding 4).
 func TestTableColumnsAlignUnderCJKTitles(t *testing.T) {
-	for _, w := range []int{240, 320, 400} {
+	fixedNow(t, day("2026-08-10T00:00:00Z")) // ago() must never emit a date here
+	for _, w := range []int{240, 241, 259, 320, 399, 400} {
 		m := tableModel(t, w, 40)
-		g := m.tableGeom()
-		var dueX int
-		for _, c := range g {
-			if c.sort == sortDue {
-				dueX = c.x
-			}
-		}
+		m.setSort(sortDue, true) // the header arrow must not shift a boundary
 		out, err := m.Dump(w, 40, "", true)
 		if err != nil {
 			t.Fatal(err)
 		}
-		for i, line := range strings.Split(out, "\n") {
-			if lw := lg.Width(line); lw > w {
-				t.Errorf("w=%d line %d is %d cells wide", w, i, lw)
-			}
-			at := strings.Index(line, "2026-")
-			if at < 0 {
+		lines := strings.Split(out, "\n")
+		g := m.tableGeom()
+		cell := func(line string, c tableCol) string {
+			return strings.TrimRight(ansi.Cut(line, c.x, c.x+c.w), " ")
+		}
+
+		for _, c := range g {
+			if c.name == "" {
 				continue
 			}
-			if got := lg.Width(line[:at]); got != dueX {
-				t.Errorf("w=%d line %d: due starts at cell %d, header says %d\n%s",
-					w, i, got, dueX, line)
+			want := c.name
+			if c.sort == sortDue {
+				want += " " + glyphSortAsc
+			}
+			if got := cell(lines[rowColHdr], c); got != want {
+				t.Errorf("w=%d header cell %q reads %q at [%d,%d)", w, c.name, got, c.x, c.x+c.w)
 			}
 		}
+
+		var idCol, dueCol tableCol
+		for _, c := range g {
+			switch c.name {
+			case "id":
+				idCol = c
+			case "due":
+				dueCol = c
+			}
+		}
+		rows := m.tableRows()
+		for i, task := range rows {
+			y := rowRule + i // 23 fixture rows all fit in h=40, so top is 0
+			if y >= len(lines) || y >= 40-footerH {
+				t.Fatalf("w=%d: row %d fell off the frame — the test premise broke", w, i)
+			}
+			if got := cell(lines[y], idCol); got != task.ID {
+				t.Errorf("w=%d row %d: id cell reads %q, want %q", w, i, got, task.ID)
+			}
+			want := ""
+			if !task.Due.IsZero() {
+				want = task.Due.Local().Format("2006-01-02")
+			}
+			if got := cell(lines[y], dueCol); got != want {
+				t.Errorf("w=%d row %d (%s): due cell reads %q, want %q", w, i, task.ID, got, want)
+			}
+			if lw := lg.Width(lines[y]); lw > w {
+				t.Errorf("w=%d row %d is %d cells wide", w, i, lw)
+			}
+		}
+	}
+}
+
+// The header click, end to end: a REAL tea.Program fed the SGR bytes a
+// terminal sends, so the 1-based wire → 0-based Update decoding is on the
+// path (the model-level tests above construct MouseClickMsg directly and
+// bypass it).
+func TestHeaderClickSortsEndToEnd(t *testing.T) {
+	probe := tableModel(t, 240, 40)
+	var due tableCol
+	for _, c := range probe.tableGeom() {
+		if c.sort == sortDue {
+			due = c
+		}
+	}
+
+	m := run(t, 240, 40,
+		"v", // board → table
+		mousePress(due.x+1, rowColHdr), mouseRelease(due.x+1, rowColHdr),
+	)
+	if m.view != viewTable || m.tableSort != sortDue || !m.tableSortAsc {
+		t.Fatalf("e2e header click: view=%v sort=%s asc=%v, want table/due/asc",
+			m.view, m.tableSort, m.tableSortAsc)
+	}
+
+	// Re-click flips; a press that wanders before its release still sorted on
+	// the press and must not arm a drag in this view.
+	m = run(t, 240, 40,
+		"v",
+		mousePress(due.x+1, rowColHdr), mouseRelease(due.x+1, rowColHdr),
+		mousePress(due.x+1, rowColHdr), mouseMotion(due.x+40, rowColHdr+8), mouseRelease(due.x+40, rowColHdr+8),
+	)
+	if m.tableSort != sortDue || m.tableSortAsc {
+		t.Fatalf("second e2e click must flip to due ▼, got %s asc=%v", m.tableSort, m.tableSortAsc)
+	}
+	if m.drag.armed || m.drag.moved {
+		t.Fatal("a table-view press must never arm a drag")
 	}
 }
 

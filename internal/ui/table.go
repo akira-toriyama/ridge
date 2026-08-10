@@ -23,7 +23,11 @@ import (
 type sortKey int
 
 const (
-	sortNone sortKey = iota - 1 // a column you cannot sort by
+	// sortNone is deliberately the ZERO value: a column added to tableGeom
+	// without an explicit sort stays inert instead of silently becoming a
+	// clickable reset-to-canonical target (independent review, finding 7).
+	// The price is that Model must initialise tableSort to sortCanonical.
+	sortNone sortKey = iota
 
 	sortCanonical
 	sortUpdated
@@ -39,7 +43,7 @@ func (k sortKey) String() string {
 	if k <= sortNone || k >= sortKeyEnd {
 		return "?"
 	}
-	return [...]string{"canonical", "updated", "created", "value", "effort", "due"}[k]
+	return [...]string{"?", "canonical", "updated", "created", "value", "effort", "due"}[k]
 }
 
 // naturalAsc is the direction a key starts in: the order you actually want
@@ -98,7 +102,7 @@ func (m *Model) tableRows() []*board.Task {
 	for _, l := range m.b.Lanes() {
 		out = append(out, m.cols[l.Name]...)
 	}
-	if m.tableSort == sortCanonical {
+	if m.tableSort <= sortCanonical {
 		return out
 	}
 	k, asc := m.tableSort, m.tableSortAsc
@@ -143,7 +147,7 @@ func (m *Model) setSort(k sortKey, asc bool) {
 // mouse-less terminal loses nothing.
 func (m *Model) cycleSort() {
 	switch {
-	case m.tableSort == sortCanonical:
+	case m.tableSort <= sortCanonical:
 		m.setSort(sortUpdated, sortUpdated.naturalAsc())
 	case m.tableSortAsc == m.tableSort.naturalAsc():
 		m.setSort(m.tableSort, !m.tableSortAsc)
@@ -254,7 +258,10 @@ func (m *Model) renderTable() string {
 	headCells := make([]string, len(cols))
 	for i, c := range cols {
 		name := c.name
-		if c.sort != sortNone && c.sort == m.tableSort && m.tableSort != sortCanonical {
+		// The ▲▼ marks the sorted COLUMN, so only keys with a column get one
+		// (created and effort have none); the filter bar names the sort for
+		// all of them — see chromeLayers.
+		if c.sort == m.tableSort && m.tableSort > sortCanonical {
 			name += " " + sortArrow(m.tableSortAsc)
 		}
 		headCells[i] = pad(name, c.w)

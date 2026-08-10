@@ -161,6 +161,7 @@ func newModel(p board.Provider) *Model {
 		w:           240,
 		h:           60,
 		mouseOn:     true,
+		tableSort:   sortCanonical, // sortKey's zero value is sortNone (fail-safe)
 		pinned:      map[string]bool{},
 		curIdx:      map[string]int{},
 		scroll:      map[string]int{},
@@ -882,7 +883,7 @@ func (m *Model) quickReorder(d int) tea.Cmd {
 	if t == nil {
 		return nil
 	}
-	if m.view == viewTable && m.tableSort != sortCanonical {
+	if m.view == viewTable && m.tableSort > sortCanonical {
 		// GitHub's rule: a sorted table cannot be hand-reordered. The write
 		// would land fine, but the sorted view wouldn't move — a nudge that
 		// changes nothing on screen reads as a dead key.
