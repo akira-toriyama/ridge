@@ -15,9 +15,9 @@ import (
 // it records every persist in call order and serves a rebuilt "store truth"
 // on Reload, so a rollback is observable as the board reverting.
 type scriptedProvider struct {
-	mu      sync.Mutex
-	truth   func() *board.Board
-	current *board.Board
+	mu        sync.Mutex
+	truth     func() *board.Board
+	current   *board.Board
 	calls     []string
 	moves     []scriptedMove
 	moveErr   error
@@ -63,7 +63,7 @@ func (p *scriptedProvider) Add(title string, _ board.AddOptions) (string, error)
 	p.addCalls = append(p.addCalls, "add "+title)
 	return "t-new1", nil
 }
-func (p *scriptedProvider) Live() bool                                         { return true }
+func (p *scriptedProvider) Live() bool { return true }
 
 func (p *scriptedProvider) PersistMove(id, lane, beforeID, afterID string) ([]string, error) {
 	p.mu.Lock()

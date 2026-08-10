@@ -134,6 +134,15 @@ func (m *Model) onAddDone(msg addDoneMsg) tea.Cmd {
 	m.addInFlight = false
 	if msg.err != nil {
 		m.quitting = false // never exit on top of a swallowed refusal
+		if m.mode != modeNormal {
+			// The refusal lands ~100ms after the gesture; the user may
+			// already be typing a SECOND add, lifting a card, or filtering.
+			// Reopening the modal here would steal that mode and clobber
+			// the newer draft — keep the title recoverable in the note
+			// instead.
+			m.fail("add %q: %v", msg.title, msg.err)
+			return m.drainAfterAdd()
+		}
 		m.fail("add: %v", msg.err)
 		ti := textinput.New()
 		ti.Prompt = "+ "

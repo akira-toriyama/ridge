@@ -193,6 +193,65 @@ func TestFailedWriteRefusesGesturesUntilTheRollbackLands(t *testing.T) {
 	}
 }
 
+// A failed rollback re-read must still drain what waited on the window: a
+// deferred add stranded here had no remaining path to fire, and quitOrFlush
+// counts deferred adds — q and ctrl+c were wedged with no keyboard way out.
+func TestFailedRollbackReReadStillDrainsADeferredAdd(t *testing.T) {
+	m, p := scriptedModel(t)
+	p.moveErr = errors.New("schema gate says no")
+
+	_, cmd, _ := m.commitMove("a", "ready", "ready", 0, 3)
+	m.onPersistDone(cmd().(persistDoneMsg)) // rollingBack armed
+
+	press(m, "a")
+	m.add.input.SetValue("stranded?")
+	if _, c := m.Update(keyMsg("enter")); c != nil {
+		t.Fatal("the add must defer during the rollback window")
+	}
+
+	next := m.onReloadDone(reloadDoneMsg{err: errors.New("git lock")})
+	if next == nil {
+		t.Fatal("a failed rollback re-read must still drain the deferred add")
+	}
+	if _, ok := next().(addDoneMsg); !ok {
+		t.Fatal("the drained cmd must be the add")
+	}
+	if len(p.addCalls) != 1 {
+		t.Fatalf("add calls = %v", p.addCalls)
+	}
+	if q := m.quitOrFlush(); q == nil && !m.addInFlight && len(m.deferredAdds) == 0 {
+		t.Fatal("quit is wedged with nothing left to wait for")
+	}
+}
+
+// A refusal landing after the user moved on must not steal the newer mode —
+// reopening the modal ~100ms later clobbered a second half-typed draft.
+func TestRefusalDoesNotStealANewerMode(t *testing.T) {
+	m, p := scriptedModel(t)
+	p.addErr = errors.New("epic e-nope not found")
+
+	press(m, "a")
+	m.add.input.SetValue("first")
+	_, firstCmd := m.Update(keyMsg("enter"))
+	if firstCmd == nil {
+		t.Fatal("first add did not fire")
+	}
+
+	press(m, "a") // the user has moved on to a SECOND draft
+	m.add.input.SetValue("second draft")
+
+	m.Update(firstCmd()) // the first add's refusal lands now
+	if m.mode != modeAdd || m.add == nil {
+		t.Fatal("the newer modal must survive the older refusal")
+	}
+	if got := m.add.input.Value(); got != "second draft" {
+		t.Fatalf("the newer draft was clobbered: %q", got)
+	}
+	if !m.statusErr {
+		t.Error("the refusal must still surface as an error")
+	}
+}
+
 // A reload that does not yet contain the just-created card must not consume
 // the pending selection — the create's own snapshot is still on its way.
 func TestSelectAfterReloadWaitsForItsCard(t *testing.T) {

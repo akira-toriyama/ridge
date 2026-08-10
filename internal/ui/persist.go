@@ -161,10 +161,13 @@ func (m *Model) onReloadDone(msg reloadDoneMsg) tea.Cmd {
 		if m.rollingBack {
 			// The rollback re-read itself failed: the board still shows what
 			// the store refused. Say so loudly rather than gating writes
-			// forever behind a re-read that may never succeed.
+			// forever behind a re-read that may never succeed — and DRAIN
+			// whatever waited on the window: a deferred add left here had no
+			// remaining path to fire, which also wedged quitOrFlush (q and
+			// ctrl+c both count deferredAdds) with no keyboard way out.
 			m.rollingBack = false
 			m.fail("%s: %v — rollback re-read failed, the board may not match the store (press r)", label, msg.err)
-			return nil
+			return m.drainAfterAdd()
 		}
 		m.fail("%s: %v", label, msg.err)
 		return nil
