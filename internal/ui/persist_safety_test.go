@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/akira-toriyama/ridge/internal/board"
@@ -145,6 +146,89 @@ func TestRefusalDoesNotStealANewerMode(t *testing.T) {
 	}
 	if !m.statusErr {
 		t.Error("the refusal must still surface as an error")
+	}
+}
+
+// A gesture refused by the window must LEAVE the refusal on the status line:
+// the callers' own success notes run after commitMove returns, and papering
+// over the refusal tells the user the move worked right before the rollback
+// yanks it back (review F14-1). The gesture is refused before the optimistic
+// apply, so the board must not change either.
+func TestRefusedGestureKeepsTheRefusalOnTheStatusLine(t *testing.T) {
+	m, p := scriptedModel(t)
+	p.moveErr = errors.New("schema gate says no")
+
+	_, cmd, _ := m.commitMove("a", "ready", "ready", 0, 3)
+	m.onPersistDone(cmd().(persistDoneMsg)) // rollingBack armed
+	before := laneIDs(m.b, "ready")
+
+	m.selectID("a", false) // sits at the bottom after the refused move's optimistic apply
+	if c := m.quickReorder(-1); c != nil {
+		t.Fatal("a reorder inside the window must not fire")
+	}
+	if !m.statusErr || !strings.Contains(m.status, "dropped") {
+		t.Fatalf("status = %q — the refusal must survive the gesture's own note", m.status)
+	}
+	if got := laneIDs(m.b, "ready"); got != before {
+		t.Fatalf("a refused gesture must not touch the board: %s -> %s", before, got)
+	}
+}
+
+// A refusal landing while the user is in the graph view must not reopen the
+// modal: the graph shares modeNormal but never composites addLayer, so the
+// reopen would put the keyboard inside an invisible input (review F14-3).
+func TestRefusalDoesNotReopenInTheGraphView(t *testing.T) {
+	m, p := scriptedModel(t)
+	p.addErr = errors.New("epic e-nope not found")
+
+	press(m, "a")
+	m.add.input.SetValue("unseen")
+	_, addCmd := m.Update(keyMsg("enter"))
+	if addCmd == nil {
+		t.Fatal("add did not fire")
+	}
+	m.view = viewGraph // the user switched to the graph before the refusal lands
+	m.Update(addCmd())
+
+	if m.mode != modeNormal || m.add != nil {
+		t.Fatal("the refusal must not steal the keyboard into an invisible modal")
+	}
+	if !m.statusErr {
+		t.Error("the refusal must still surface as an error")
+	}
+}
+
+// A $EDITOR body landing inside the rollback window is the one write whose
+// payload cannot be re-typed from a note (the temp file is already deleted):
+// it must be HELD and replayed once the window closes, not refused
+// (review F14-2).
+func TestEditorBodyIsHeldThroughTheRollbackWindow(t *testing.T) {
+	m, p := scriptedModel(t)
+	p.moveErr = errors.New("schema gate says no")
+
+	_, cmd, _ := m.commitMove("a", "ready", "ready", 0, 3)
+	rb := m.onPersistDone(cmd().(persistDoneMsg)) // rollingBack armed
+
+	m.Update(editorDoneMsg{id: "b", body: "hand-typed prose"})
+	if m.heldBody == nil {
+		t.Fatal("the body must be held, not refused")
+	}
+	if got := m.b.Task("b").Body; got == "hand-typed prose" {
+		t.Fatal("the held body must not apply while the board shows refused state")
+	}
+	if q := m.quitOrFlush(); q != nil {
+		t.Fatal("quit must wait for the held body")
+	}
+
+	m.Update(rb()) // the rollback re-read lands: the window closes
+	if m.heldBody != nil {
+		t.Fatal("the hold must be consumed when the window closes")
+	}
+	if got := m.b.Task("b").Body; got != "hand-typed prose" {
+		t.Fatalf("the replay must apply the body, got %q", got)
+	}
+	if len(m.pending) == 0 && !m.inflight {
+		t.Fatal("the replay must queue the store write")
 	}
 }
 

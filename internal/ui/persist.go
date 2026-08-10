@@ -177,7 +177,7 @@ func (m *Model) onPersistDone(msg persistDoneMsg) tea.Cmd {
 // because with the store's 15s timeout in the worst case a silent wait reads
 // as a hang. Only a FAILED write cancels the quit.
 func (m *Model) quitOrFlush() tea.Cmd {
-	if m.inflight || len(m.pending) > 0 {
+	if m.inflight || len(m.pending) > 0 || m.heldBody != nil {
 		if !m.quitting {
 			m.quitting = true
 			// APPENDED to the gesture's own report, not replacing it — the
@@ -195,6 +195,13 @@ func (m *Model) quitOrFlush() tea.Cmd {
 // them it applies nothing optimistically — the store invents the id, so the
 // card appears at the reconcile that follows the drain.
 func (m *Model) enqueueAdd(title string, opts board.AddOptions) tea.Cmd {
+	if m.rollingBack {
+		// Backstop only — onAddKey refuses first and keeps the modal (and
+		// the typed title) open. A future caller must not be able to slip a
+		// write into the window just because it skipped the modal.
+		m.fail("add %q dropped — the store refused the last write, rolling back", title)
+		return nil
+	}
 	prov := m.prov
 	id := new(string)
 	m.pending = append(m.pending, persistOp{
@@ -271,8 +278,14 @@ func (m *Model) onReloadDone(msg reloadDoneMsg) tea.Cmd {
 			// a re-read that may never succeed trades a lying board for a
 			// dead one; the message hands the user the retry.
 			m.rollingBack = false
+			// The held $EDITOR body still applies: its payload is complete
+			// (id + full text, no indices), and dropping it here would lose
+			// hand-typed work to a reload that merely failed. Released
+			// BEFORE the failure message so press-r is what the user is
+			// left reading, not the replay's own note.
+			heldBody := m.releaseHeldBody()
 			m.fail("rollback re-read failed — the board may show an unsaved edit; press r to retry (%v)", msg.err)
-			return nil
+			return heldBody
 		}
 		m.fail("%s: %v", label, msg.err)
 		return nil
@@ -302,7 +315,21 @@ func (m *Model) onReloadDone(msg reloadDoneMsg) tea.Cmd {
 			m.selectAfterReload = ""
 		}
 	}
+	// A held $EDITOR body replays now that the window is closed — after the
+	// reload's own note, so "body updated" is what survives on the line.
+	heldBody := m.releaseHeldBody()
 	// The board changed under the matched set: ask the store for a fresh
 	// verdict, no debounce — this is a reload, not a keystroke.
-	return m.requery()
+	return tea.Batch(heldBody, m.requery())
+}
+
+// releaseHeldBody replays a $EDITOR result that waited out the rollback
+// window. Nil when nothing was held.
+func (m *Model) releaseHeldBody() tea.Cmd {
+	hb := m.heldBody
+	if hb == nil {
+		return nil
+	}
+	m.heldBody = nil
+	return m.applyEditorBody(*hb)
 }

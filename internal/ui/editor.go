@@ -14,6 +14,22 @@ type editorDoneMsg struct {
 	err  error
 }
 
+// applyEditorBody lands a $EDITOR result: the optimistic local apply plus
+// the queued store write. Split out so a body held through the rollback
+// window (model.go: heldBody) replays through the same path.
+func (m *Model) applyEditorBody(msg editorDoneMsg) tea.Cmd {
+	if err := m.b.SetBody(msg.id, msg.body); err != nil {
+		m.fail("%v", err)
+		return nil
+	}
+	m.recompute()
+	m.note("%s body updated", msg.id)
+	id, body := msg.id, msg.body
+	return m.enqueuePersist("body "+id, func() ([]string, error) {
+		return nil, m.prov.PersistBody(id, body)
+	})
+}
+
 // editCmd suspends the TUI for $EDITOR, the way furrow's `edit` does.
 func (m *Model) editCmd(t *board.Task) tea.Cmd {
 	f, err := os.CreateTemp("", "furrow-poc-"+t.ID+"-*.md")
