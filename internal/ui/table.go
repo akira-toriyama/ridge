@@ -105,6 +105,9 @@ func (m *Model) renderTable() string {
 			layers = append(layers, l)
 		}
 	}
+	if m.mode == modeAdd {
+		layers = append(layers, m.addLayer())
+	}
 	if m.fullHelp {
 		layers = append(layers, m.helpLayer())
 	}

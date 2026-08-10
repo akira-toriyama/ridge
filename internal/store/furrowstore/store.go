@@ -471,3 +471,36 @@ func (p *Store) PersistCheckReword(id string, i int, text string) error {
 	_, err := p.c.run("check-reword", "check", id, strconv.Itoa(i), "--reword", text)
 	return err
 }
+
+// addRow is the one field Add needs back from `furrow add --json` (a single
+// add answers with ONE object; only --stdin bulk answers with an array).
+type addRow struct {
+	ID string `json:"id"`
+}
+
+// Add creates a task via `furrow add` (board.Provider), mapping the
+// inherited context onto -s/-l/-e/-r.
+func (p *Store) Add(title string, o board.AddOptions) (string, error) {
+	args := []string{"add", title, "--json"}
+	if o.Lane != "" {
+		args = append(args, "-s", o.Lane)
+	}
+	if o.Label != "" {
+		args = append(args, "-l", o.Label)
+	}
+	if o.Epic != "" {
+		args = append(args, "-e", o.Epic)
+	}
+	if o.Repo != "" {
+		args = append(args, "-r", o.Repo)
+	}
+	out, err := p.c.run("add", args...)
+	if err != nil {
+		return "", err
+	}
+	var row addRow
+	if err := json.Unmarshal(out, &row); err != nil || row.ID == "" {
+		return "", fmt.Errorf("furrow add: undecodable reply: %v", err)
+	}
+	return row.ID, nil
+}

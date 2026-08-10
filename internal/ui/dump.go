@@ -90,6 +90,17 @@ func (m *Model) demoState(kind string) error {
 		m.Update(tea.MouseClickMsg{X: grab.X + 3, Y: grab.Y + 1, Button: tea.MouseLeft})
 		m.Update(tea.MouseMotionMsg{X: dst.X + 8, Y: dst.Top + 4, Button: tea.MouseLeft})
 
+	case "add":
+		// A filtered board, so the modal PROVES the context inheritance: the
+		// filter's label lands in the chips, not silently on the task.
+		m.ti.SetValue("label:ui")
+		m.applyFilter("label:ui")
+		m.relayout()
+		if c := m.enterAdd(); c != nil {
+			_ = c
+		}
+		m.add.input.SetValue("盤面から起票するタスク")
+
 	case "edit":
 		// Open the field-edit overlay on a task with a checklist AND labels,
 		// so the menu row values and the checklist cursor are all exercised.
@@ -117,7 +128,7 @@ func (m *Model) demoState(kind string) error {
 		m.openGraph()
 
 	default:
-		return fmt.Errorf("unknown -demo %q (want move|drag|edit|graph|help)", kind)
+		return fmt.Errorf("unknown -demo %q (want move|drag|add|edit|graph|help)", kind)
 	}
 	m.relayout()
 	return nil

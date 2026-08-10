@@ -49,6 +49,7 @@ func (p *scriptedProvider) PersistFields(_ string, _ board.FieldPatch) error   {
 func (p *scriptedProvider) PersistCheckAdd(_, _ string) error                  { return nil }
 func (p *scriptedProvider) PersistCheckRm(_ string, _ int) error               { return nil }
 func (p *scriptedProvider) PersistCheckReword(_ string, _ int, _ string) error { return nil }
+func (p *scriptedProvider) Add(string, board.AddOptions) (string, error)       { return "", nil }
 func (p *scriptedProvider) Live() bool                                         { return true }
 
 func (p *scriptedProvider) PersistMove(id, lane, beforeID, afterID string) ([]string, error) {

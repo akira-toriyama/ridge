@@ -9,21 +9,22 @@ import (
 
 func press(m *Model, keys ...string) {
 	for _, k := range keys {
-		var msg tea.KeyPressMsg
-		switch k {
-		case "enter":
-			msg = tea.KeyPressMsg{Code: tea.KeyEnter}
-		case "esc":
-			msg = tea.KeyPressMsg{Code: tea.KeyEscape}
-		case "up":
-			msg = tea.KeyPressMsg{Code: tea.KeyUp}
-		case "down":
-			msg = tea.KeyPressMsg{Code: tea.KeyDown}
-		default:
-			msg = tea.KeyPressMsg{Code: rune(k[0]), Text: k}
-		}
-		m.Update(msg)
+		m.Update(keyMsg(k))
 	}
+}
+
+func keyMsg(k string) tea.KeyPressMsg {
+	switch k {
+	case "enter":
+		return tea.KeyPressMsg{Code: tea.KeyEnter}
+	case "esc":
+		return tea.KeyPressMsg{Code: tea.KeyEscape}
+	case "up":
+		return tea.KeyPressMsg{Code: tea.KeyUp}
+	case "down":
+		return tea.KeyPressMsg{Code: tea.KeyDown}
+	}
+	return tea.KeyPressMsg{Code: rune(k[0]), Text: k}
 }
 
 // drainPersists runs every queued write to completion, the way the program

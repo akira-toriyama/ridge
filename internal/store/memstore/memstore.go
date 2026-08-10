@@ -16,6 +16,7 @@ import (
 type Store struct {
 	b       *board.Board
 	rebuild func() *board.Board
+	addSeq  int
 }
 
 // New serves the fixture snapshot.
@@ -134,4 +135,44 @@ func (p *Store) PersistCheckRm(id string, i int) error {
 // PersistCheckReword validates the item and records nothing (board.Provider).
 func (p *Store) PersistCheckReword(id string, i int, _ string) error {
 	return p.PersistCheckRm(id, i) // same bounds contract
+}
+
+// Add appends a task to the CURRENT board (board.Provider) — the fixture has
+// no external store, so the board the model mutates is also where an add
+// lands, and Reload keeps serving it (discarding it would make the mock lie
+// about the add having happened).
+func (p *Store) Add(title string, o board.AddOptions) (string, error) {
+	if strings.TrimSpace(title) == "" {
+		return "", fmt.Errorf("a title cannot be empty")
+	}
+	lane := o.Lane
+	if lane == "" {
+		lane = p.b.Lanes()[0].Name
+	}
+	if p.b.Lane(lane) == nil {
+		return "", fmt.Errorf("unknown lane %q", lane)
+	}
+	p.addSeq++
+	t := &board.Task{
+		ID:     fmt.Sprintf("t-new%d", p.addSeq),
+		Title:  title,
+		Status: lane,
+		Epic:   o.Epic,
+	}
+	if o.Label != "" {
+		t.Labels = []string{o.Label}
+	}
+	if o.Repo != "" {
+		t.Repos = []string{o.Repo}
+	}
+	last := p.b.LaneTasks(lane)
+	if len(last) > 0 {
+		t.Priority = last[len(last)-1].Priority + 10
+	} else {
+		t.Priority = 10
+	}
+	p.b.Append(t)
+	b := p.b
+	p.rebuild = func() *board.Board { return b }
+	return t.ID, nil
 }

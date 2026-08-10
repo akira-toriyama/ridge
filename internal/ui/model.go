@@ -23,6 +23,7 @@ const (
 	modeMove        // a card is lifted; arrows place it
 	modeFilter      // the filter input has the keyboard
 	modeEdit        // the field-edit overlay has the keyboard (editmode.go)
+	modeAdd         // the quick-add modal has the keyboard (addmode.go)
 )
 
 type viewKind int
@@ -64,6 +65,9 @@ type Model struct {
 	startupFilter tea.Cmd // pending verdict for Options.Filter, fired by Init
 
 	edit *editState // non-nil exactly while mode == modeEdit
+	add  *addState  // non-nil exactly while mode == modeAdd
+
+	selectAfterReload string // id to select once the next re-read lands
 
 	pinned map[string]bool // ids forced visible despite the filter (jump targets)
 	cols   map[string][]*board.Task
@@ -301,6 +305,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case filterResultMsg:
 		m.onFilterResult(msg)
 
+	case addDoneMsg:
+		if c := m.onAddDone(msg); c != nil {
+			cmds = append(cmds, c)
+		}
+
 	case tea.KeyPressMsg:
 		if c := m.onKey(msg); c != nil {
 			cmds = append(cmds, c)
@@ -355,6 +364,9 @@ func (m *Model) onKey(msg tea.KeyPressMsg) tea.Cmd {
 	// whole keyboard, Esc walks its stages back out.
 	if m.mode == modeEdit {
 		return m.onEditKey(msg)
+	}
+	if m.mode == modeAdd {
+		return m.onAddKey(msg)
 	}
 	// Esc while a mouse button is down cancels the drag before anything else
 	// gets to interpret it — and leaves the drag armed so the release that
@@ -570,6 +582,9 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		m.note("syncing…")
 		return m.syncCmd()
+
+	case key.Matches(msg, m.keys.Add):
+		return m.enterAdd()
 
 	case key.Matches(msg, m.keys.Done):
 		if t := m.curTask(); t != nil {

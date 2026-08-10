@@ -98,6 +98,7 @@ due / repos / checklist（カーソルで項目選択・toggle/add/delete/reword
 | `/` | フィルタ = furrow `-q` パススルー（`lane:ready repo:vista is:blocked value:>=4 updated:>=-2w`。文法の正本は `furrow ls --help` の -q 節） |
 | `b` | blocked のみ表示 |
 | `v` | Board ⇄ Table |
+| `a` | quick add（フォーカス列へ起票。適用中 filter の label/epic/repo を継承 — チップで明示） |
 | `d` | done |
 | `e` | 本文を `$EDITOR` で編集 |
 | `r` | store 再読 |
@@ -135,6 +136,7 @@ go run ./cmd/ridge -demo graph -dump         # 依存グラフ
 go run ./cmd/ridge -demo move -dump          # move mode 中
 go run ./cmd/ridge -demo drag -dump          # ドラッグ中
 go run ./cmd/ridge -demo edit -dump          # フィールド編集メニュー
+go run ./cmd/ridge -demo add -dump           # quick add（filter 文脈チップつき）
 ```
 
 ## 既知の課題

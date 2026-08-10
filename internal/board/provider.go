@@ -67,6 +67,21 @@ type Provider interface {
 
 	// PersistCheckReword records checklist item i's already-applied rewording.
 	PersistCheckReword(id string, i int, text string) error
+
+	// Add creates a task in the store and returns its id. Unlike the
+	// Persist* family this is NOT the record of an applied edit: the store
+	// owns id assignment, so the model waits for the id and re-reads instead
+	// of applying optimistically (a single add measures ~57ms).
+	Add(title string, o AddOptions) (id string, err error)
+}
+
+// AddOptions is quick add's inherited context — the GitHub Projects rule
+// that a filtered view's metadata applies to the item it creates.
+type AddOptions struct {
+	Lane  string // "" = the store's default lane
+	Label string // one inherited label
+	Epic  string // e- id
+	Repo  string // owner/repo or unique short name; "" = the board's auto-attach
 }
 
 // FieldPatch is one already-applied metadata edit. nil means "untouched";
