@@ -10,10 +10,10 @@ ridge はその端末版で、**両方とも furrow の Go パッケージを im
 に書かれた建て付け。
 
 ```sh
-go run .            # 起動（実 furrow の盤面。furrow が PATH に要る）
-go run . -mock      # 内蔵 fixture で起動（furrow 不要）
-go run . -dump      # TTY 無しで1フレーム出力（常に fixture）
-go run . -benchload # 実盤面の読み込みレイテンシを実測して終了（読み取りのみ）
+go run ./cmd/ridge            # 起動（実 furrow の盤面。furrow が PATH に要る）
+go run ./cmd/ridge -mock      # 内蔵 fixture で起動（furrow 不要）
+go run ./cmd/ridge -dump      # TTY 無しで1フレーム出力（常に fixture）
+go run ./cmd/ridge -benchload # 実盤面の読み込みレイテンシを実測して終了（読み取りのみ）
 ```
 
 ## 現在地 — POC から出発し、実 furrow に接続済み
@@ -24,7 +24,7 @@ go run . -benchload # 実盤面の読み込みレイテンシを実測して終�
 接続した: 読みは `board` / `ls -r ''` / `epic ls` の並列 3 exec + body ファイル
 （実測 63-77ms / 914 tasks・cold 181ms）、書きは**楽観的キュー** — 盤面へ先に適用し、
 `furrow set/done/check` を裏で直列に流し、失敗したら store 再読で巻き戻す
-（書き実測 85-115ms・respace 時 280ms が根拠。persist.go）。
+（書き実測 85-115ms・respace 時 280ms が根拠。`internal/ui/persist.go`）。
 
 POC が答えを出した3つの問い:
 
@@ -43,7 +43,7 @@ POC が答えを出した3つの問い:
 ### Board — カンバン
 
 レーンが列。ヘッダに件数・WIP・value/effort 合計。カードは日本語タイトルを
-折り返して表示し、`▸` actionable / `▤` epic（子進捗つき）/ `x1` blocked /
+折り返して表示し、`▸` actionable / `▤` epic チップ（所属 epic のタイトルを解決）/ `x1` blocked /
 `[0/7]` チェックリスト / ラベルチップ / repo を載せる。
 
 **move mode** が中心の操作。GitHub Projects の作法（`Enter` で持ち上げ → 矢印で
@@ -125,23 +125,20 @@ ID+タイトル+レーンまで解決）、チェックリスト、本文。`t` 
 
 ```sh
 go test ./...                      # 全テスト（furrow が PATH にあれば contract test も回る）
-go run . -dump -plain -w 240 -h 60 # 1フレームを平文で出力
-go run . -dump -peek               # 詳細ペインを開いた状態
-go run . -dump -tree               # 依存ツリーを開いた状態
-go run . -demo graph -dump         # 依存グラフ
-go run . -demo move -dump          # move mode 中
-go run . -demo drag -dump          # ドラッグ中
+go run ./cmd/ridge -dump -plain -w 240 -h 60 # 1フレームを平文で出力
+go run ./cmd/ridge -dump -peek               # 詳細ペインを開いた状態
+go run ./cmd/ridge -dump -tree               # 依存ツリーを開いた状態
+go run ./cmd/ridge -demo graph -dump         # 依存グラフ
+go run ./cmd/ridge -demo move -dump          # move mode 中
+go run ./cmd/ridge -demo drag -dump          # ドラッグ中
 ```
 
 ## 既知の課題
 
 - 本文編集はファイル直書きなので shard の `updated` が進まない（furrow 側の
   置換コマンド要望 t-8q8c が着地したら乗り換える）。
-- グラフの枠線が1桁ずれる行がある（構造は正しい、見た目のみ）。
 - swimlane（group by）未実装。slice パネル（repo/label で絞る左パネル）未実装。
 - Table ビューに横スクロールが無い（`bubbles/v2` の table が非対応）。
-- ディレクトリ構成が flat（`package main` に全部）。house style の
-  `internal/` + 薄い main へ寄せる必要がある。
 
 ## スタック
 

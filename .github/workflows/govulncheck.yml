@@ -4,7 +4,7 @@ name: govulncheck
 # (`./...`) and the compiled binary (`-mode binary`). Runs on push/PR AND a daily
 # cron so a vuln disclosed after merge — no code change — is caught within a day.
 # The scan logic and its action pins live once in the hub; this caller only wires
-# the trigger and the binary path. `main` is the repo root here, not ./cmd/…
+# the trigger and the binary path.
 
 on:
   push:
@@ -26,4 +26,4 @@ jobs:
     with:
       go-version-file: go.mod
       gotoolchain: local
-      binary-path: .
+      binary-path: ./cmd/ridge

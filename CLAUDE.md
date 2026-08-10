@@ -22,8 +22,10 @@
 - `go build ./...` / `go test ./...` が通ることを終了前に確認する。
   Go 1.25+ では `GOTOOLCHAIN=local`。
 - house style は [go-dev skill] に従う（薄い main + `internal/`、typed exit code、
-  stdlib のみのテスト）。**現状は POC 由来で flat な `package main`** なので、
-  移行タスクが立っている。新規コードは移行後の形を意識して書く。
+  stdlib のみのテスト）。構成: `cmd/ridge`（3行 main）/ `internal/cli`（flag・
+  exit code）/ `internal/board`（純粋 core + Provider port）/ `internal/query`
+  （filter 文法）/ `internal/store/{furrowstore,memstore}`（adapter）/
+  `internal/ui`（TUI 全部）。層契約は各 package 冒頭の doc comment が正本。
 - テストは stdlib のみ（testify を入れない）。
 
 ## bubbletea v2 の罠（既知・再発見しないこと）
@@ -66,7 +68,7 @@ v1 から大きく変わっている。以下は実際に踏んで確認済み:
 
 ## 描画とレイアウト
 
-- **レイアウトと当たり判定は同じ計測結果から作る**（`layout.go`）。
+- **レイアウトと当たり判定は同じ計測結果から作る**（`internal/ui/layout.go`）。
   「描画は正しいがクリック位置がずれる」を構造的に防ぐため、カード高さは
   実際にレンダリングして測る。
 - **カード高さのキャッシュはフレームを跨いで保持する**（`measurer`）。
