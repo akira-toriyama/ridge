@@ -101,6 +101,10 @@ type Model struct {
 
 	drag dragState
 
+	// A filter verdict that landed while a keyboard move was aiming: applied
+	// on the move's exit so the drop slot cannot be rewritten mid-gesture.
+	heldVerdict *filterResultMsg
+
 	// The persist queue (persist.go): optimistic edits already applied to m.b,
 	// waiting to be recorded in the store, strictly in order.
 	pending     []persistOp

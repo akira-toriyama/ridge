@@ -139,6 +139,18 @@ func (m *Model) onFilterResult(msg filterResultMsg) {
 		// the board. The post-drain reconcile requeries without a debounce.
 		return
 	}
+	if m.mode == modeMove {
+		// A verdict reshaping the columns mid-move silently rewrites where
+		// the aimed slot lands — the status line says one slot, the commit
+		// writes another (t-74y3). Hold it; the move's exit applies it.
+		m.heldVerdict = &msg
+		return
+	}
+	m.applyVerdict(msg)
+}
+
+// applyVerdict lands a seq-checked verdict on the board.
+func (m *Model) applyVerdict(msg filterResultMsg) {
 	if msg.err != nil {
 		// All-or-nothing refusal (furrow exit 2): keep the last good verdict
 		// on screen and say why. A half-typed `value:>` must not blank the
@@ -153,6 +165,21 @@ func (m *Model) onFilterResult(msg filterResultMsg) {
 	}
 	m.qMatched = set
 	m.refilter(m.curTask())
+}
+
+// releaseHeldVerdict applies a verdict that landed mid-move — called on every
+// move-mode exit, AFTER the commit consumed its drop slot. It re-enters
+// onFilterResult so the queued-writes guard still applies: a commit that just
+// queued a persist drops the hold and lets the post-drain reconcile requery.
+// A stale hold (a newer keystroke re-queried meanwhile) drops like any stale
+// verdict.
+func (m *Model) releaseHeldVerdict() {
+	v := m.heldVerdict
+	m.heldVerdict = nil
+	if v == nil || v.seq != m.qSeq {
+		return
+	}
+	m.onFilterResult(*v)
 }
 
 // refilter recomputes the visible board and keeps the selection where the
