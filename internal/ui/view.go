@@ -157,6 +157,14 @@ func (m *Model) chromeLayers() []*lg.Layer {
 	if t := m.sliceTerm(); t != "" {
 		filter += th.dim.Render("  slice ") + th.accent.Render(t)
 	}
+	// The table's sort, by the same rule. The header ▲▼ only exists for keys
+	// that HAVE a column — created and effort do not — and the status line is
+	// overwritten by the next keystroke, so this is the one place the sort
+	// stays readable in every state (independent review, finding 1).
+	if m.view == viewTable && m.tableSort > sortCanonical {
+		filter += th.dim.Render("  sort ") +
+			th.accent.Render(m.tableSort.String()+" "+sortArrow(m.tableSortAsc))
+	}
 	if m.qErr != "" {
 		filter = joinEnds(filter, th.errText.Render("⚠ "+m.qErr), m.w)
 	}

@@ -171,6 +171,13 @@ func TestQueryRefusesRatherThanGuessing(t *testing.T) {
 }
 
 func TestQueryMatchesFixture(t *testing.T) {
+	// The clock-dependent predicates (is:overdue here) are pinned to the day
+	// this file's expectations were measured — the fixture's dues are fixed
+	// instants, so a wall clock would walk tasks across the overdue line.
+	prev := nowFn
+	nowFn = func() time.Time { return time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC) }
+	t.Cleanup(func() { nowFn = prev })
+
 	tests := []struct {
 		q    string
 		want []string // exact set, or nil to use the min below
@@ -187,7 +194,9 @@ func TestQueryMatchesFixture(t *testing.T) {
 		{q: "label:ui", min: 9},
 		{q: "no:label", min: 1},
 		{q: "no:repo", want: []string{}}, // the fixture has no drafts
-		{q: "is:overdue", want: []string{}},
+		// Of the fixture's three dues, only t-jv3j (2026-07-31) is past the
+		// pinned clock and still open.
+		{q: "is:overdue", want: []string{"t-jv3j"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.q, func(t *testing.T) {
@@ -421,7 +430,7 @@ func TestQueryPresenceVocabularyIsFurrows(t *testing.T) {
 	}{
 		{"deps", 12, 11},
 		{"refs", 0, all},
-		{"due", 0, all},
+		{"due", 3, all - 3},
 		{"closed", 9, all - 9},
 		{"reviewed", 0, all},
 		{"label", 12, 11},

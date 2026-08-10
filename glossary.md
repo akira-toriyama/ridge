@@ -21,7 +21,7 @@
 | 用語 | 意味 |
 |---|---|
 | **Board** | カンバン。レーンが列、カードがタスク。既定のビュー。 |
-| **Table** | 平坦な表形式のビュー。`v` で Board と切り替え。 |
+| **Table** | 平坦な表形式のビュー。`v` で Board と切り替え。列は id/lane/印/v-e/title/repo/epic/labels/due/updated/deps。 |
 | **Graph** | **依存グラフ**。1タスクを起点に、上が blocker・下が「閉じると動き出すもの」の階層図。`S` / `Shift+Space`。 |
 | **peek**（詳細ペイン） | 選択中タスクの詳細を横に出すオーバーレイ。`Space`。 |
 | **依存マップ** | *(未実装)* 全依存クラスタを一画面で俯瞰するビュー。Graph が「1タスク起点」なのに対し、こちらは「全体」。 |
@@ -40,6 +40,8 @@
 | **filter（-q パススルー）** | filter bar は furrow `-q` への素通し。ridge は raw 文字列と store の返した id 集合（verdict）だけを持ち、文法は furrow 一本（t-ehk7）。タイプ中・拒否時は直前の verdict を保持して ⚠ を出す（盤面を空にしない）。memstore は -dump/テスト用の evaluator。語彙（`furrow vocab query-is`/`query-presence`）と一致規則は実 furrow で実測して合わせてあり、honour できない構文（ordinal/date 比較・graph qualifier）は furrow 同様に**拒否**する — 黙って 0 件を返さない。 |
 | **編集メニュー（edit overlay）** | peek/Table の `Enter` で開く field 編集 modal（`editmode.go`）。menu → sub-editor（1..5 picker / toggle list / text input / checklist カーソル）の2段。適用は楽観的 + persist キュー、`furrow set` 相当は 1 write に合成。 |
 | **slice パネル** | `s` で開く左パネル（`slicemode.go`）。軸は repo / label / epic（epic 行は store の progress/stuck つき）。選択 = -q term の発行で、typed filter と AND 合成（GH の slice 仕様）。radio 動作（再選択で解除・軸切替で解除）。パネルを閉じても選択は残り、filter bar に `slice <term>` として見える。 |
+| **sort（Table）** | `o` で canonical → updated → created → value → effort → due を循環（各キーは自然な向きで入り、再押しで昇降反転）。現在地は対応列ヘッダの `▲▼` + フィルタバーの `sort <key> ▲▼` 常時表示（created / effort は列が無いので後者のみ）。ソート可能なヘッダセルのクリックでも同じ（同一セル再クリックで反転・`lane` で canonical へ復帰）。並びは同一スナップショットへのローカル安定ソートで、未設定値（due 無し等）は**両方向とも末尾**。ソート中は `K`/`J` の並べ替えを拒否（GH 同）。task 起票時の指定は `s` だったが slice パネルと衝突するため `o`。 |
+| **canonical（順）** | Table の既定並び = 盤面そのもの（lane 順 → lane 内 priority 順）。field ソートの不在であり、方向を持たない。 |
 | **quick add** | `a` で開く起票 modal（`addmode.go`）。`furrow add -s <フォーカス列>` に写像し、適用中 filter の単一値 `label:`/`epic:`/`repo:` を継承（チップ表示 — 黙って付けない。GH の filtered-metadata 継承則）。確定後は再読 → 新カードを選択（filter が隠すなら pin）。 |
 | **pin** | フィルタで隠れている blocker へジャンプしたとき、そのカードだけ一時的に盤面へ差し込むこと。飛んだ先が空振りにならないようにする。 |
 
@@ -67,4 +69,4 @@
 | **re-root** | Graph 上のノードを新しい起点にすること（`Enter`）。「読む」ではなく「歩く」ための操作で、静止画にはできない。 |
 | **cluster** | 依存グラフの連結成分。実データでは未完了分で9個、中央値2ノード。 |
 | **`-dump`** | TTY 無しで1フレームを標準出力に書いて終了するフラグ。headless 検証の土台。 |
-| **`-demo`** | ジェスチャ途中の状態（`move` / `drag` / `add` / `edit` / `graph` / `help` / `slice`）を1フレームに固定して `-dump` する。 |
+| **`-demo`** | ジェスチャ途中の状態（`move` / `drag` / `add` / `edit` / `graph` / `help` / `slice` / `sort`）を1フレームに固定して `-dump` する。 |

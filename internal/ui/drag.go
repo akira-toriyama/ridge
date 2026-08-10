@@ -129,6 +129,12 @@ func (m *Model) onMouseDown(msg tea.MouseClickMsg) tea.Cmd {
 		// closed or unfocused.
 		return nil
 	}
+	if m.view == viewTable {
+		// The table's one mouse gesture: sorting by a header cell. Rows and
+		// everything else stay keyboard territory, so no drag is ever armed
+		// in this view.
+		return m.tableClick(msg.X, msg.Y)
+	}
 	if m.view != viewBoard {
 		return nil
 	}

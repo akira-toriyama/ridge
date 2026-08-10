@@ -85,6 +85,10 @@ type Model struct {
 	scroll    map[string]int
 	jumpStack []string
 	tableIdx  int
+	// The table's sort axis and direction (table.go). The zero value is
+	// sortCanonical — the board's own lane-then-priority order.
+	tableSort    sortKey
+	tableSortAsc bool
 
 	// keyboard move mode. dropIdx is measured against the destination column
 	// AS DISPLAYED, so it needs AdjustDropIndex on commit — same convention as
@@ -157,6 +161,7 @@ func newModel(p board.Provider) *Model {
 		w:           240,
 		h:           60,
 		mouseOn:     true,
+		tableSort:   sortCanonical, // sortKey's zero value is sortNone (fail-safe)
 		pinned:      map[string]bool{},
 		curIdx:      map[string]int{},
 		scroll:      map[string]int{},
@@ -551,6 +556,13 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 			m.note("board view")
 		}
 
+	case key.Matches(msg, m.keys.Sort):
+		if m.view != viewTable {
+			m.note("sort belongs to the table — v switches views")
+			return nil
+		}
+		m.cycleSort()
+
 	case key.Matches(msg, m.keys.Mouse):
 		m.mouseOn = !m.mouseOn
 		if m.mouseOn {
@@ -869,6 +881,13 @@ func (m *Model) cycleLane(d int) tea.Cmd {
 func (m *Model) quickReorder(d int) tea.Cmd {
 	t := m.curTask()
 	if t == nil {
+		return nil
+	}
+	if m.view == viewTable && m.tableSort > sortCanonical {
+		// GitHub's rule: a sorted table cannot be hand-reordered. The write
+		// would land fine, but the sorted view wouldn't move — a nudge that
+		// changes nothing on screen reads as a dead key.
+		m.note("sorted by %s — reordering needs canonical order (o cycles back, or click lane)", m.tableSort)
 		return nil
 	}
 	vis := m.cols[t.Status]

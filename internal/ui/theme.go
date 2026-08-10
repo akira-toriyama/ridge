@@ -24,6 +24,8 @@ const (
 	glyphDropR      = "◂"
 	glyphLift       = "↕"
 	glyphLaneDot    = "●"
+	glyphSortAsc    = "▲" // the table's active sort direction, in its header
+	glyphSortDesc   = "▼"
 
 	// glyphArrowDown terminates every graph edge. The graph draws upstream
 	// ABOVE and downstream BELOW, so every edge in the picture points the same
