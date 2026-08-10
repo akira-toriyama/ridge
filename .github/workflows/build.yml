@@ -37,3 +37,28 @@ jobs:
 # No `extras` job: ridge is one package whose surface is a terminal UI, so there is
 # no shipped-binary smoke to run beyond what the core test job already covers. Add
 # one here if a CLI entry point ever grows.
+
+  # The furrowstore contract suite self-skips when the furrow binary is absent
+  # (store_test.go: LookPath guard) — which is exactly what happened in the ci
+  # job above: the hub go-ci runner has no furrow, so the ONLY tests that pin
+  # the real CLI grammar never executed here. Measured (t-74y3): three semantic
+  # mutations of store.go (--clear-value→--clear-effort, dropping Add's -l,
+  # --before→--after) all rode a green CI. This job installs the pinned furrow
+  # release and runs the suite for real; the version moves with the fleet's
+  # sync-task-status pin.
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install furrow (pinned)
+        run: go install github.com/akira-toriyama/furrow/cmd/furrow@v4.0.0
+      - name: Contract tests against the real CLI
+        run: |
+          furrow --help >/dev/null
+          go test ./internal/store/furrowstore/ -run TestContract -v
