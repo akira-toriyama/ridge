@@ -67,7 +67,7 @@ func (m *Model) onMoveKey(msg tea.KeyPressMsg) tea.Cmd {
 	case key.Matches(msg, m.keys.Commit):
 		id, from, to, fi, di := m.moveID, m.moveFrom, m.dropLane, m.moveFromIdx, m.dropIdx
 		m.mode, m.moveID, m.moveCurIdx = modeNormal, "", nil
-		moved, err := m.commitMove(id, from, to, fi, di)
+		moved, cmd, err := m.commitMove(id, from, to, fi, di)
 		if err != nil {
 			m.fail("%v", err)
 			return nil
@@ -80,10 +80,10 @@ func (m *Model) onMoveKey(msg tea.KeyPressMsg) tea.Cmd {
 		default:
 			m.note("%s: %s → %s", id, from, to)
 		}
-		return nil
+		return cmd
 
 	case key.Matches(msg, m.keys.Quit):
-		return tea.Quit
+		return m.quitOrFlush()
 
 	// GitHub Projects' documented ctrl+arrow extremes: top / bottom of the
 	// column, leftmost / rightmost column.
@@ -136,15 +136,17 @@ func (m *Model) followDrop() {
 }
 
 // commitMove is the ONE mutation path for every reorder gesture — move mode,
-// shift+J/K, and mouse drop all land here. It reports whether the board
-// actually changed, so a clamped or no-op gesture can say so instead of
-// claiming a reposition that never happened.
+// shift+J/K, and mouse drop all land here. It applies the move to the board
+// (the optimistic half) and returns the tea.Cmd that records it in the store
+// (the persist half); it reports whether the board actually changed, so a
+// clamped or no-op gesture can say so instead of claiming a reposition that
+// never happened.
 //
 // dispIdx is an insertion index measured against the destination column AS
 // DISPLAYED: it still counts the moving card (nothing reflows under the cursor)
 // and it counts only tasks the filter lets through. Both facts have to be
 // undone before the board can be told anything.
-func (m *Model) commitMove(id, from, to string, fromIdx, dispIdx int) (moved bool, err error) {
+func (m *Model) commitMove(id, from, to string, fromIdx, dispIdx int) (moved bool, cmd tea.Cmd, err error) {
 	adj := AdjustDropIndex(from == to, fromIdx, dispIdx)
 
 	visNoSelf := withoutID(m.cols[to], id)
@@ -156,19 +158,19 @@ func (m *Model) commitMove(id, from, to string, fromIdx, dispIdx int) (moved boo
 	// `updated` — that field is the staleness signal `lint` reads.
 	if from == to && m.b.IndexIn(to, id) == boardIdx {
 		m.selectID(id, false)
-		return false, nil
+		return false, nil, nil
 	}
 
-	renumbered, err := m.prov.Move(id, to, boardIdx)
+	renumbered, err := m.b.MoveTo(id, to, boardIdx)
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
-	m.reload()
+	m.recompute()
 	m.selectID(id, false)
 	if len(renumbered) > 0 {
 		m.note("respaced %s (%d neighbours renumbered)", to, len(renumbered))
 	}
-	return true, nil
+	return true, m.persistPlacement(id, to), nil
 }
 
 func withoutID(ts []*Task, id string) []*Task {

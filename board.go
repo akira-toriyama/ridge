@@ -20,7 +20,13 @@ type ChecklistItem struct {
 	Done bool
 }
 
-// Task mirrors the fields of a furrow task shard that this POC renders.
+// Task mirrors the fields of a furrow task shard that ridge renders.
+//
+// Two epic-shaped fields coexist deliberately: Epic is the real store's
+// membership (an e- id — epics are separate entities without a lane), while
+// Parent/Type are the FIXTURE's older model, where an epic was itself a task
+// card in a lane. The real provider fills Epic and leaves Parent/Type empty;
+// the fixture does the reverse. Cleanup of the fixture model is t-ay6n.
 type Task struct {
 	ID        string
 	Title     string
@@ -32,6 +38,7 @@ type Task struct {
 	Labels    []string
 	Repos     []string
 	Parent    string
+	Epic      string // e- id of the box this task is filed under ("" = unfiled)
 	Deps      []string
 	Refs      []string
 	Checklist []ChecklistItem
@@ -39,6 +46,7 @@ type Task struct {
 	Updated   time.Time
 	Closed    time.Time
 	Reviewed  time.Time
+	Due       time.Time // zero = no promise
 	Body      string
 }
 
@@ -112,16 +120,82 @@ var boardLanes = []Lane{
 // containerTypes is furrow's `[types].containers`: a box, not work.
 var containerTypes = map[string]bool{"epic": true}
 
+// EpicInfo is one epic entity as `furrow epic ls --json` reports it. Epics
+// have no lane, so they are board-level metadata rather than tasks: cards
+// reference them by id (Task.Epic) and render the resolved title.
+type EpicInfo struct {
+	ID     string
+	Title  string
+	Goal   string
+	Done   int
+	Total  int
+	Stuck  bool
+	Active bool
+}
+
 // Board is the in-memory task set. Lane membership is Task.Status and lane
 // ORDER is Task.Priority — there is no separate ordering table to fall out of
 // sync with, exactly as in a real furrow store.
 type Board struct {
-	tasks []*Task
-	lanes []Lane
+	tasks    []*Task
+	lanes    []Lane
+	epics    []EpicInfo
+	epicByID map[string]*EpicInfo
+	writable bool
+	schema   string // furrow's schema_state; "" for the fixture
 }
 
 func NewBoard(tasks []*Task) *Board {
-	return &Board{tasks: tasks, lanes: append([]Lane(nil), boardLanes...)}
+	return &Board{tasks: tasks, lanes: append([]Lane(nil), boardLanes...), writable: true}
+}
+
+// newStoreBoard assembles a snapshot of a real furrow store: its own lane
+// vocabulary (not the fixture's), the epic entities, and the write pre-flight
+// from `furrow board`.
+func newStoreBoard(lanes []Lane, tasks []*Task, epics []EpicInfo, writable bool, schema string) *Board {
+	b := &Board{tasks: tasks, lanes: lanes, epics: epics, writable: writable, schema: schema}
+	b.epicByID = make(map[string]*EpicInfo, len(epics))
+	for i := range b.epics {
+		b.epicByID[b.epics[i].ID] = &b.epics[i]
+	}
+	return b
+}
+
+// Epic resolves an e- id to its entity, nil when unknown (a stale membership
+// renders as the raw id rather than vanishing).
+func (b *Board) Epic(id string) *EpicInfo { return b.epicByID[id] }
+
+// Writable reports the store's write pre-flight; a fixture board is always
+// writable. False means furrow will refuse ordinary writes (schema gate).
+func (b *Board) Writable() bool { return b.writable }
+
+// SchemaState is furrow's own wording for the version gate ("current",
+// "board-behind", ...), for the read-only warning.
+func (b *Board) SchemaState() string { return b.schema }
+
+// Neighbors reports the tasks around id in its own lane — the id AFTER it
+// (the `--before` anchor) and the id BEFORE it (the `--after` anchor) — so a
+// persist can reproduce an already-applied local placement in the store.
+// Computed against the FULL lane, never the filtered view.
+func (b *Board) Neighbors(id string) (beforeID, afterID string) {
+	t := b.Task(id)
+	if t == nil {
+		return "", ""
+	}
+	lane := b.LaneTasks(t.Status)
+	for i, x := range lane {
+		if x.ID != id {
+			continue
+		}
+		if i+1 < len(lane) {
+			beforeID = lane[i+1].ID
+		}
+		if i > 0 {
+			afterID = lane[i-1].ID
+		}
+		return beforeID, afterID
+	}
+	return "", ""
 }
 
 // Lanes returns the lane vocabulary in board order.

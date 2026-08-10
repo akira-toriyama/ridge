@@ -186,7 +186,7 @@ func TestWIPLimitIsShownButNotEnforced(t *testing.T) {
 		moved = append(moved, task.ID)
 	}
 	for _, id := range moved {
-		if _, err := m.prov.Move(id, "ready", 0); err != nil {
+		if _, err := m.b.MoveTo(id, "ready", 0); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -250,7 +250,7 @@ func TestEmptyLaneIsFocusableSoItCanReceiveADrop(t *testing.T) {
 	id := m.curTask().ID
 	m.enterMove()
 	m.shiftDropLane(-1)
-	if _, err := m.commitMove(id, "backlog", m.dropLane, m.moveFromIdx, m.dropIdx); err != nil {
+	if _, _, err := m.commitMove(id, "backlog", m.dropLane, m.moveFromIdx, m.dropIdx); err != nil {
 		t.Fatal(err)
 	}
 	if m.b.Task(id).Status != "inbox" {

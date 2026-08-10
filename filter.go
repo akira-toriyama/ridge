@@ -40,7 +40,7 @@ func (q Query) Empty() bool { return len(q.Terms) == 0 }
 var queryKeys = map[string]bool{
 	"lane": true, "status": true, "repo": true, "label": true,
 	"type": true, "is": true, "no": true, "has": true,
-	"id": true, "parent": true,
+	"id": true, "parent": true, "epic": true,
 }
 
 var isValues = map[string]bool{
@@ -169,6 +169,8 @@ func (t Term) matchOne(task *Task, g *Graph, v string) bool {
 		return strings.ToLower(task.ID) == v
 	case "parent":
 		return strings.ToLower(task.Parent) == v
+	case "epic":
+		return strings.ToLower(task.Epic) == v
 	case "type":
 		return strings.ToLower(task.EffectiveType()) == v
 	case "repo":

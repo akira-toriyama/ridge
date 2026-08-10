@@ -76,15 +76,15 @@ func TestAdvGhostOverflowsANarrowTerminal(t *testing.T) {
 type emptyProvider struct{ b *Board }
 
 func (p *emptyProvider) Board() *Board { return p.b }
-func (p *emptyProvider) Move(id, lane string, idx int) ([]string, error) {
-	return p.b.MoveTo(id, lane, idx)
+func (p *emptyProvider) Reload() error { p.b = NewBoard(nil); return nil }
+func (p *emptyProvider) Sync() error   { return fmt.Errorf("no store") }
+func (p *emptyProvider) Live() bool    { return false }
+func (p *emptyProvider) PersistMove(id, lane, beforeID, afterID string) ([]string, error) {
+	return nil, nil
 }
-func (p *emptyProvider) Done(id string) error { return p.b.Close(id) }
-func (p *emptyProvider) ToggleCheck(id string, i int) error {
-	return p.b.ToggleCheck(id, i)
-}
-func (p *emptyProvider) SetBody(id, body string) error { return p.b.SetBody(id, body) }
-func (p *emptyProvider) Reload() error                 { p.b = NewBoard(nil); return nil }
+func (p *emptyProvider) PersistDone(id string) error                    { return nil }
+func (p *emptyProvider) PersistCheck(id string, i int, done bool) error { return nil }
+func (p *emptyProvider) PersistBody(id, body string) error              { return nil }
 
 func TestAdvEmptyBoardSurvivesEveryGesture(t *testing.T) {
 	m := New(&emptyProvider{b: NewBoard(nil)})
@@ -467,51 +467,10 @@ func TestAdvBlockedToggleCorruptsANegatedQuery(t *testing.T) {
 }
 
 // I. stale pointer after reload
-
-// toggleCheck reads CheckProgress off the PRE-reload *Task. It only works
-// because mockProvider hands back the same pointer; a provider that re-reads
-// (which is the whole point of the Provider seam) would report stale counts.
-func TestAdvToggleCheckReadsAStaleTaskPointer(t *testing.T) {
-	m := boardModel(t, 140, 40)
-	var target *Task
-	for _, task := range m.b.Tasks() {
-		if len(task.Checklist) > 2 {
-			target = task
-			break
-		}
-	}
-	if target == nil {
-		t.Skip("no checklist in the fixture")
-	}
-	m.selectID(target.ID, false)
-	// swap in a provider that returns a DEEP COPY, as a real furrow --json
-	// client would.
-	m.prov = &copyingProvider{inner: m.prov}
-	m.toggleCheck()
-	live := m.b.Task(target.ID)
-	d, tot := live.CheckProgress()
-	want := fmt.Sprintf("%s checklist %d/%d", target.ID, d, tot)
-	if m.status != want {
-		t.Errorf("status says %q, the reloaded board says %q", m.status, want)
-	}
-}
-
-type copyingProvider struct{ inner Provider }
-
-func (p *copyingProvider) Board() *Board {
-	src := p.inner.Board()
-	out := make([]*Task, 0, len(src.Tasks()))
-	for _, t := range src.Tasks() {
-		c := *t
-		c.Checklist = append([]ChecklistItem(nil), t.Checklist...)
-		out = append(out, &c)
-	}
-	return NewBoard(out)
-}
-func (p *copyingProvider) Move(id, lane string, i int) ([]string, error) {
-	return p.inner.Move(id, lane, i)
-}
-func (p *copyingProvider) Done(id string) error               { return p.inner.Done(id) }
-func (p *copyingProvider) ToggleCheck(id string, i int) error { return p.inner.ToggleCheck(id, i) }
-func (p *copyingProvider) SetBody(id, b string) error         { return p.inner.SetBody(id, b) }
-func (p *copyingProvider) Reload() error                      { return p.inner.Reload() }
+//
+// The POC hazard this section used to prove — toggleCheck reading
+// CheckProgress off a pre-reload *Task — is structurally gone: mutations now
+// apply to the board FIRST and never reload inline, so a status note always
+// reads the exact board it just wrote. The equivalent hazards of the async
+// architecture (a stale reload snapshot yanking back optimistic edits, writes
+// landing out of order) are covered in persist_test.go.

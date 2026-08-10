@@ -12,7 +12,9 @@
 | **ridge** | furrow の TUI front-end。この repo。 |
 | **vista** | furrow の GUI front-end（Tauri v2 + React）。ridge の兄弟。 |
 | **front-end** | furrow を **CLI/JSON 経由で**駆動するもの。furrow の Go パッケージは import しない。 |
-| **Provider** | ridge がタスクを読み書きする唯一の口（interface）。現在は mock 実装のみ。実 furrow 実装がここに入る。 |
+| **Provider** | ridge がタスクを読み書きする唯一の口（interface）。実 furrow 実装（`furrow` を exec する `provider_furrow.go`）と fixture の mock の 2 つ。mutation は Persist 契約 — **Model がローカル適用済みの変更を store に記録するだけ**で、適用そのものはしない。 |
+| **persist キュー** | 楽観的書き込みの直列キュー（`persist.go`）。同時 in-flight は 1 本 — 並べ替えの anchor（`--before <id>`）が直前の書き込みの結果に依存するため。失敗したら残りを破棄して store 再読 = ロールバック。quit は排出を待つ。 |
+| **reconcile** | persist キュー排出後の無言の store 再読。respace された priority・closed 刻印など store 側の真実に盤面を収束させる。 |
 
 ## ビュー
 
@@ -34,6 +36,7 @@
 | **drop indicator** | ドロップ先を示す印。Layer だが **ID を持たない**ので `Compositor.Hit` に拾われない（＝クリックを吸わない）。 |
 | **drag threshold** | 「掴んだ」と判定するまでの最小移動距離。これが無いと1セルの震えが移動として確定してしまう（lazygit が実際に踏んだバグ）。 |
 | **jump-to-blocker** | `>` で最初の未完了 blocker へカーソルを飛ばし、`<` で戻る。スタックなので何段でも潜れる。 |
+| **sync（`R`）** | `furrow sync`（git の commit/pull/push）→ store 再読。自動では走らない — v1 の決定（t-s86r）。`r` は再読のみ。 |
 | **pin** | フィルタで隠れている blocker へジャンプしたとき、そのカードだけ一時的に盤面へ差し込むこと。飛んだ先が空振りにならないようにする。 |
 
 ## 表示要素

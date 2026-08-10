@@ -125,12 +125,23 @@ func cardLines(t *Task, g *Graph, th *theme, w int) []string {
 		out = append(out, pad(strings.Join(chips, " "), w))
 	}
 
-	// meta line: id + repo on the left, the numbers on the right. Repo lives
-	// here rather than on the chip line so a label-less task (most of them)
-	// costs one row less — at 6 rows a card the board only shows four.
+	// meta line: id + repo + epic on the left, the numbers on the right. Repo
+	// lives here rather than on the chip line so a label-less task (most of
+	// them) costs one row less — at 6 rows a card the board only shows four.
 	left := th.dim.Render(t.ID)
 	if r := t.ShortRepo(); r != "" {
 		left += " " + th.chipAlt.Render(r)
+	}
+	// The epic membership chip, resolved to its title. Real-store data only
+	// (the fixture models epics as in-lane cards instead); joinEnds truncates
+	// the left side on narrow columns, so wide boards get the context and
+	// narrow ones lose the chip before they lose the numbers.
+	if t.Epic != "" {
+		label := t.Epic
+		if e := g.Board().Epic(t.Epic); e != nil {
+			label = e.Title
+		}
+		left += " " + th.accent.Render(glyphEpic) + th.muted.Render(" "+ansi.Truncate(label, 14, "…"))
 	}
 	var bits []string
 	if t.Value > 0 || t.Effort > 0 {

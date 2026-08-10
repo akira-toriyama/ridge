@@ -227,19 +227,19 @@ func (m *Model) onDragScroll(msg dragScrollMsg) tea.Cmd {
 	return m.dragScrollTick()
 }
 
-func (m *Model) onMouseUp(msg tea.MouseReleaseMsg) {
+func (m *Model) onMouseUp(msg tea.MouseReleaseMsg) tea.Cmd {
 	if !m.drag.armed {
-		return
+		return nil
 	}
 	if m.drag.cancelled {
 		m.drag.reset()
-		return
+		return nil
 	}
 	if !m.drag.moved {
 		// A click, not a drag. Selection already happened on press.
 		m.note("selected %s — drag it, or press ⏎ for move mode", m.drag.id)
 		m.drag.reset()
-		return
+		return nil
 	}
 
 	id, from, fromIdx := m.drag.id, m.drag.from, m.drag.fromIdx
@@ -247,16 +247,16 @@ func (m *Model) onMouseUp(msg tea.MouseReleaseMsg) {
 	if !onBoard {
 		m.drag.reset()
 		m.note("released off the board — %s stayed in %s", id, from)
-		return
+		return nil
 	}
 	// The RELEASE decides where it lands, not the last lane the pointer brushed.
 	dropIdx := m.lay.idxAtY(to, msg.Y)
 	m.drag.reset()
 
-	moved, err := m.commitMove(id, from, to, fromIdx, dropIdx)
+	moved, cmd, err := m.commitMove(id, from, to, fromIdx, dropIdx)
 	if err != nil {
 		m.fail("%v", err)
-		return
+		return nil
 	}
 	switch {
 	case !moved:
@@ -266,6 +266,7 @@ func (m *Model) onMouseUp(msg tea.MouseReleaseMsg) {
 	default:
 		m.note("%s: %s → %s (dropped)", id, from, to)
 	}
+	return cmd
 }
 
 func (m *Model) onWheel(msg tea.MouseWheelMsg) {
