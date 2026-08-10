@@ -334,13 +334,15 @@ func TestTableColumnsAlignUnderCJKTitles(t *testing.T) {
 			}
 		}
 
-		var idCol, dueCol tableCol
+		var idCol, dueCol, updCol tableCol
 		for _, c := range g {
 			switch c.name {
 			case "id":
 				idCol = c
 			case "due":
 				dueCol = c
+			case "updated":
+				updCol = c
 			}
 		}
 		rows := m.tableRows()
@@ -358,6 +360,13 @@ func TestTableColumnsAlignUnderCJKTitles(t *testing.T) {
 			}
 			if got := cell(lines[y], dueCol); got != want {
 				t.Errorf("w=%d row %d (%s): due cell reads %q, want %q", w, i, task.ID, got, want)
+			}
+			// A cell AFTER due too: a body-side width divergence at due slides
+			// updated/deps right without moving due's own start (re-review
+			// mutation table — this cut is what catches it).
+			if got := cell(lines[y], updCol); got != ago(task.Updated) {
+				t.Errorf("w=%d row %d (%s): updated cell reads %q, want %q",
+					w, i, task.ID, got, ago(task.Updated))
 			}
 			if lw := lg.Width(lines[y]); lw > w {
 				t.Errorf("w=%d row %d is %d cells wide", w, i, lw)
