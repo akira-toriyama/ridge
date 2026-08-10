@@ -51,6 +51,14 @@ var noHasValues = map[string]bool{
 
 func parseQuery(s string) parsedQuery {
 	var q parsedQuery
+	// This lexer splits on Fields and has no quote pairing, but the slice
+	// panel now ISSUES quoted values (`label:"needs review"`) that real
+	// furrow understands. Mis-lexing them here would silently blank -dump
+	// frames — the module contract is refuse, never mis-evaluate.
+	if strings.Contains(s, `"`) {
+		q.problems = append(q.problems, "quoted values are not supported by the fixture filter")
+		return q
+	}
 	for _, tok := range strings.Fields(s) {
 		t := term{}
 		if strings.HasPrefix(tok, "-") && len(tok) > 1 {

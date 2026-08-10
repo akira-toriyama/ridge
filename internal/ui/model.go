@@ -24,6 +24,7 @@ const (
 	modeFilter      // the filter input has the keyboard
 	modeEdit        // the field-edit overlay has the keyboard (editmode.go)
 	modeAdd         // the quick-add modal has the keyboard (addmode.go)
+	modeSlice       // the slice panel has the keyboard (slicemode.go)
 )
 
 type viewKind int
@@ -68,6 +69,12 @@ type Model struct {
 	add  *addState  // non-nil exactly while mode == modeAdd
 
 	selectAfterReload string // id to select once the next re-read lands
+
+	sliceOpen  bool       // the slice panel is visible (board inset left)
+	sliceField sliceField // the panel's axis
+	sliceVal   string     // selected value; "" = not slicing
+	sliceIdx   int        // the panel's cursor row
+	sliceOff   int        // the panel's scroll offset (sliceViewport)
 
 	pinned map[string]bool // ids forced visible despite the filter (jump targets)
 	cols   map[string][]*board.Task
@@ -203,6 +210,10 @@ func (m *Model) recompute() {
 	}
 	m.curLane = clamp(m.curLane, 0, len(m.b.Lanes())-1)
 	m.tableIdx = clamp(m.tableIdx, 0, maxInt(0, len(m.tableRows())-1))
+	// The slice cursor rides the vocab, which a reload can shrink — an
+	// unclamped cursor pushes the panel window past the end and it renders
+	// zero rows under a "↑ N more" line.
+	m.sliceIdx = clamp(m.sliceIdx, 0, maxInt(0, len(m.sliceRows())-1))
 	m.ensureVisible()
 	m.syncPeek()
 }
@@ -314,7 +325,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.MouseClickMsg:
-		m.onMouseDown(msg)
+		if c := m.onMouseDown(msg); c != nil {
+			cmds = append(cmds, c)
+		}
 	case tea.MouseMotionMsg:
 		if c := m.onMouseMove(msg); c != nil {
 			cmds = append(cmds, c)
@@ -344,7 +357,7 @@ func (m *Model) relayout() {
 	// line, a resize can report 0, and every downstream strings.Repeat would
 	// panic on a negative.
 	m.w, m.h = maxInt(m.w, 1), maxInt(m.h, 1)
-	m.lay = buildLayout(m.w, m.h, m.b.Lanes(), m.cols, m.laneOff, m.scroll, m.ms)
+	m.lay = buildLayout(m.w, m.h, m.sliceInset(), m.b.Lanes(), m.cols, m.laneOff, m.scroll, m.ms)
 	m.laneOff = m.lay.LaneOff
 }
 
@@ -365,6 +378,9 @@ func (m *Model) onKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 	if m.mode == modeAdd {
 		return m.onAddKey(msg)
+	}
+	if m.mode == modeSlice {
+		return m.onSliceKey(msg)
 	}
 	// Esc while a mouse button is down cancels the drag before anything else
 	// gets to interpret it — and leaves the drag armed so the release that
@@ -486,9 +502,15 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 		case m.peekOpen:
 			m.peekOpen = false
 		case m.qRaw != "":
-			m.applyFilter("")
+			cmd := m.applyFilter("")
 			m.ti.SetValue("")
 			m.note("filter cleared")
+			return cmd
+		case m.sliceVal != "":
+			// A slice-only filter must be escapable too — before this case,
+			// the only way out was reopening the panel and re-selecting the
+			// same row. Radio semantics: re-selecting clears.
+			return m.selectSlice(m.sliceField, m.sliceVal)
 		}
 
 	case key.Matches(msg, m.keys.Filter):
@@ -594,6 +616,9 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	case key.Matches(msg, m.keys.Add):
 		return m.enterAdd()
+
+	case key.Matches(msg, m.keys.Slice):
+		m.toggleSlice()
 
 	case key.Matches(msg, m.keys.Done):
 		if t := m.curTask(); t != nil {

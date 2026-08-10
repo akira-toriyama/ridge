@@ -39,6 +39,7 @@
 | **sync（`R`）** | `furrow sync`（git の commit/pull/push）→ store 再読。自動では走らない — v1 の決定（t-s86r）。`r` は再読のみ。 |
 | **filter（-q パススルー）** | filter bar は furrow `-q` への素通し。ridge は raw 文字列と store の返した id 集合（verdict）だけを持ち、文法は furrow 一本（t-ehk7）。タイプ中・拒否時は直前の verdict を保持して ⚠ を出す（盤面を空にしない）。memstore は -dump/テスト用の近似 evaluator（非対応構文は furrow 同様に拒否）。 |
 | **編集メニュー（edit overlay）** | peek/Table の `Enter` で開く field 編集 modal（`editmode.go`）。menu → sub-editor（1..5 picker / toggle list / text input / checklist カーソル）の2段。適用は楽観的 + persist キュー、`furrow set` 相当は 1 write に合成。 |
+| **slice パネル** | `s` で開く左パネル（`slicemode.go`）。軸は repo / label / epic（epic 行は store の progress/stuck つき）。選択 = -q term の発行で、typed filter と AND 合成（GH の slice 仕様）。radio 動作（再選択で解除・軸切替で解除）。パネルを閉じても選択は残り、filter bar に `slice <term>` として見える。 |
 | **quick add** | `a` で開く起票 modal（`addmode.go`）。`furrow add -s <フォーカス列>` に写像し、適用中 filter の単一値 `label:`/`epic:`/`repo:` を継承（チップ表示 — 黙って付けない。GH の filtered-metadata 継承則）。確定後は再読 → 新カードを選択（filter が隠すなら pin）。 |
 | **pin** | フィルタで隠れている blocker へジャンプしたとき、そのカードだけ一時的に盤面へ差し込むこと。飛んだ先が空振りにならないようにする。 |
 
@@ -66,4 +67,4 @@
 | **re-root** | Graph 上のノードを新しい起点にすること（`Enter`）。「読む」ではなく「歩く」ための操作で、静止画にはできない。 |
 | **cluster** | 依存グラフの連結成分。実データでは未完了分で9個、中央値2ノード。 |
 | **`-dump`** | TTY 無しで1フレームを標準出力に書いて終了するフラグ。headless 検証の土台。 |
-| **`-demo`** | ジェスチャ途中の状態（`move` / `drag` / `graph` / `help`）を1フレームに固定して `-dump` する。 |
+| **`-demo`** | ジェスチャ途中の状態（`move` / `drag` / `add` / `edit` / `graph` / `help` / `slice`）を1フレームに固定して `-dump` する。 |

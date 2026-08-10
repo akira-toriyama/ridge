@@ -35,7 +35,10 @@ func (m *Model) enterAdd() tea.Cmd {
 	if m.view == viewBoard {
 		o.Lane = m.curLaneName()
 	}
-	o.Label, o.Epic, o.Repo = inheritContext(m.qRaw)
+	// effectiveQuery, not qRaw: the slice term IS part of the applied filter
+	// (glossary), so slicing to epic:e-x and adding must stamp e-x exactly as
+	// typing the same term would — the chips row shows whatever is stamped.
+	o.Label, o.Epic, o.Repo = inheritContext(m.effectiveQuery())
 	m.add = &addState{input: ti, opts: o}
 	m.mode = modeAdd
 	return m.add.input.Focus()
@@ -48,7 +51,11 @@ func (m *Model) enterAdd() tea.Cmd {
 func inheritContext(raw string) (label, epic, repo string) {
 	for _, tok := range strings.Fields(raw) {
 		k, v, ok := strings.Cut(tok, ":")
-		if !ok || v == "" || strings.HasPrefix(k, "-") || strings.Contains(v, ",") {
+		// Quoted values (label:"needs review") split across Fields tokens;
+		// like OR'd and negated tokens they inherit nothing rather than
+		// inheriting a mangled fragment.
+		if !ok || v == "" || strings.HasPrefix(k, "-") ||
+			strings.Contains(v, ",") || strings.Contains(v, `"`) {
 			continue
 		}
 		switch strings.ToLower(k) {
