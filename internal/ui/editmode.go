@@ -106,15 +106,19 @@ func (m *Model) editTask() *board.Task {
 }
 
 func (m *Model) onEditKey(msg tea.KeyPressMsg) tea.Cmd {
+	// ctrl+c quits from every stage — in the input stages `q` types, and
+	// bubbletea's raw mode delivers ctrl+c as an ordinary keystroke, so
+	// nothing else would ever let go of the keyboard. Checked BEFORE
+	// editTask: when a reconcile dropped the task, editTask closes the
+	// overlay and would swallow this very keystroke. (In stageMenu ctrl+c
+	// used to fall into keys.Quit and merely close the overlay; quitting the
+	// app is the deliberate new meaning.)
+	if key.Matches(msg, m.keys.ForceQuit) {
+		return m.quitOrFlush()
+	}
 	t := m.editTask()
 	if t == nil {
 		return nil
-	}
-	// ctrl+c quits from every stage — in the input stages `q` types, and
-	// bubbletea's raw mode delivers ctrl+c as an ordinary keystroke, so
-	// nothing else would ever let go of the keyboard.
-	if key.Matches(msg, m.keys.ForceQuit) {
-		return m.quitOrFlush()
 	}
 	e := m.edit
 	if e.stage == stageInput {
@@ -546,7 +550,7 @@ func (m *Model) renderEditMenu(t *board.Task, inner int) string {
 		}
 		b.WriteString(cursor + style.Render(pad(r.name, 10)) + th.muted.Render(pad(cur, maxInt(4, inner-13))) + "\n")
 	}
-	b.WriteString("\n" + th.dim.Render(pad("↑↓ field · ⏎ edit · esc close", inner)))
+	b.WriteString("\n" + th.dim.Render(pad("↑↓ field · ⏎ edit · esc close · ^c quit", inner)))
 	return b.String()
 }
 

@@ -141,7 +141,7 @@ func (k keyMap) FullHelp() [][]key.Binding {
 // editHelp is the footer while the field-edit overlay is up. The overlay
 // carries its own per-stage hints; the footer only shows the frame.
 func (k keyMap) editHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Commit, k.Check, k.Cancel}
+	return []key.Binding{k.Up, k.Down, k.Commit, k.Check, k.Cancel, k.ForceQuit}
 }
 
 // moveHelp is the footer while a card is lifted — a different mode gets a

@@ -301,19 +301,29 @@ func (m *Model) onMouseUp(msg tea.MouseReleaseMsg) tea.Cmd {
 }
 
 func (m *Model) onWheel(msg tea.MouseWheelMsg) {
-	if !m.mouseOn || m.mode != modeNormal || m.fullHelp {
-		// Symmetry with onMouseDown: while a modal overlay owns the keyboard
-		// it owns the mouse too. Scrolling the board under a modal is the
-		// kind of asymmetry that says the modality was not thought through.
+	// fullHelp covers the whole screen (zHelp > zPeek) and the graph view
+	// never renders the peek — in both, `inPeek` would say yes to a panel
+	// that is not on screen.
+	if !m.mouseOn || m.fullHelp {
 		return
 	}
-	if m.inPeek(msg.X, msg.Y) {
+	// The peek scrolls in EVERY mode it is visible in — the edit overlay
+	// deliberately opens it (enterEdit), and review confirmed the modality
+	// guard below made a long body unreadable while editing. Scrolling the
+	// peek commits nothing; it is not the board's hit surface.
+	if m.view != viewGraph && m.inPeek(msg.X, msg.Y) {
 		switch msg.Button {
 		case tea.MouseWheelUp:
 			m.vp.ScrollUp(3)
 		case tea.MouseWheelDown:
 			m.vp.ScrollDown(3)
 		}
+		return
+	}
+	// The BOARD wheel needs the board on screen and no modal overlay over
+	// it. modeMove stays scrollable — a lifted card is not an overlay, and
+	// wheeling to see the destination is part of the gesture.
+	if m.mode != modeNormal && m.mode != modeMove {
 		return
 	}
 	if m.view != viewBoard || m.lay == nil {

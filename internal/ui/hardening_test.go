@@ -293,3 +293,105 @@ func TestThemeSwapRebindsTheMeasurer(t *testing.T) {
 		t.Error("the measurer must be rebound to the theme the renderer uses")
 	}
 }
+
+// --- follow-up round: findings from the independent review OF the fixes ---
+
+// A queued quick add has no optimistic effect, so when an earlier write's
+// failure flushes the queue, the status message is the ONLY trace the typed
+// title ever existed.
+func TestFlushedQueueTailIsNamedInTheFailure(t *testing.T) {
+	m, p := scriptedModel(t)
+	p.moveErr = errors.New("no")
+
+	_, cmd, err := m.commitMove("a", "ready", "ready", 0, 3)
+	if err != nil || cmd == nil {
+		t.Fatal(err)
+	}
+	press(m, "a")
+	m.add.input.SetValue("消えては困る一枚")
+	if _, c := m.Update(keyMsg("enter")); c != nil {
+		t.Fatal("the add must queue behind the in-flight move")
+	}
+
+	rb := m.onPersistDone(cmd().(persistDoneMsg))
+	if !strings.Contains(m.status, "dropped 1 queued") || !strings.Contains(m.status, "消えては困る一枚") {
+		t.Errorf("status = %q — the flushed add must be named, it has no other trace", m.status)
+	}
+	if rb == nil {
+		t.Error("the failed move still needs its rollback re-read")
+	}
+}
+
+// An add that itself fails (with nothing optimistic flushed) must not fire a
+// rollback re-read — there is nothing to roll back, and the re-read's own
+// failure message would claim an unsaved edit that does not exist.
+func TestFailedAddAloneSkipsTheRollbackReread(t *testing.T) {
+	m, p := scriptedModel(t)
+	p.addErr = errors.New("refused")
+	press(m, "a")
+	m.add.input.SetValue("だめな一枚")
+	_, cmd := m.Update(keyMsg("enter"))
+	if cmd == nil {
+		t.Fatal("an idle queue must fire the add")
+	}
+	if rb := m.onPersistDone(cmd().(persistDoneMsg)); rb != nil {
+		t.Error("a failed add with an empty tail must not schedule a rollback re-read")
+	}
+	if !m.statusErr || strings.Contains(m.status, "rolling back") {
+		t.Errorf("status = %q — fail loudly, but do not claim a rollback", m.status)
+	}
+}
+
+// The edit overlay deliberately opens the peek; the wheel must keep
+// scrolling it there (the modality guard used to sit above the inPeek
+// branch, making a long body unreadable while editing).
+func TestPeekWheelScrollsUnderTheEditOverlay(t *testing.T) {
+	m, _ := scriptedModel(t)
+	m.selectID("a", false)
+	m.enterEdit()
+	m.vp.SetContent(strings.Repeat("行\n", 200))
+	px, py, _, _ := m.peekBox()
+	m.Update(tea.MouseWheelMsg{X: px + 2, Y: py + 2, Button: tea.MouseWheelDown})
+	if m.vp.YOffset() == 0 {
+		t.Error("the wheel must scroll the peek while the edit overlay is up")
+	}
+}
+
+// A lifted card is not a modal overlay: the wheel keeps scrolling columns in
+// move mode so the destination can be found.
+func TestBoardWheelStillWorksInMoveMode(t *testing.T) {
+	m := boardModel(t, 140, 12) // short enough that a column overflows
+	var lane string
+	for _, l := range m.b.Lanes() {
+		if c := m.lay.Col(l.Name); c != nil && c.Hidden > 0 {
+			lane = l.Name
+			break
+		}
+	}
+	if lane == "" {
+		t.Skip("no overflowing column at this size")
+	}
+	m.enterMove()
+	c := m.lay.Col(lane)
+	before := c.Scroll
+	m.Update(tea.MouseWheelMsg{X: c.X + 2, Y: boardTop + 2, Button: tea.MouseWheelDown})
+	if m.scroll[lane] != before+1 {
+		t.Errorf("scroll = %d, want %d — move mode must not freeze the wheel", m.scroll[lane], before+1)
+	}
+}
+
+// ctrl+c must work even on the keystroke where a reconcile has just dropped
+// the edited task (editTask closes the overlay and used to swallow it).
+func TestCtrlCQuitsWhenTheEditedTaskVanished(t *testing.T) {
+	m, _ := scriptedModel(t)
+	m.selectID("a", false)
+	m.enterEdit()
+	m.b.Task("a").ID = "zz" // simulate the reconcile losing the id
+	c := m.onKey(ctrlC())
+	if c == nil {
+		t.Fatal("ctrl+c after the task vanished produced no Cmd")
+	}
+	if _, ok := c().(tea.QuitMsg); !ok {
+		t.Fatalf("got %T, want quit", c())
+	}
+}
