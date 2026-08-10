@@ -104,9 +104,13 @@ func (m *Model) renderGraph() string {
 
 	channels, routes, titleLines := m.graphBands(l)
 
+	// bands is strictly one screen line per element. graphRowBand returns a
+	// multi-line block, so it is split here — appending it whole would make the
+	// scroll math count a 7-line row as 1, and the per-line " "+pad below would
+	// indent only the row's top border (the 1-cell shear this comment replaces).
 	var bands []string
 	for r, row := range l.Layers {
-		bands = append(bands, m.graphRowBand(row, titleLines))
+		bands = append(bands, strings.Split(m.graphRowBand(row, titleLines), "\n")...)
 		if r < len(routes) {
 			c := drawChannel(l.W, routes[r], channels[r])
 			for _, line := range c.rows() {

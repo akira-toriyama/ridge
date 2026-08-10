@@ -3,6 +3,8 @@ package main
 import (
 	"strings"
 	"testing"
+
+	lg "charm.land/lipgloss/v2"
 )
 
 func frame(m *Model) string { return ansiStrip(m.View().Content) }
@@ -228,6 +230,56 @@ func TestTableViewListsEveryVisibleTask(t *testing.T) {
 	// The cursor is a glyph, not only colour, so -plain can see it.
 	if !strings.Contains(out, "▌ "+rows[0].ID) {
 		t.Error("the table cursor must be visible without colour")
+	}
+}
+
+// Regression: the graph canvas is padded and indented LINE BY LINE, so a
+// multi-line node band appended as one element got the leading space on its top
+// border only — every roof sat one cell right of its walls — and the
+// undercounted height overflowed the frame until fitFrame clipped the strip and
+// footer off. The focus box is the only heavy-bordered one, so its corners are
+// unambiguous (edge routing uses light glyphs only).
+func TestGraphBoxBordersAlignAndFrameKeepsItsFooter(t *testing.T) {
+	m := boardModel(t, 240, 40)
+	if err := m.demoState("graph"); err != nil {
+		t.Fatal(err)
+	}
+	out := frame(m)
+	lines := strings.Split(out, "\n")
+
+	cell := func(line, sub string) int {
+		i := strings.Index(line, sub)
+		if i < 0 {
+			return -1
+		}
+		return lg.Width(line[:i])
+	}
+	top, bottom := -1, -1
+	for i, ln := range lines {
+		if strings.Contains(ln, "┏") {
+			top = i
+		}
+		if strings.Contains(ln, "┗") {
+			bottom = i
+		}
+	}
+	if top < 0 || bottom <= top {
+		t.Fatal("no focus box in the frame")
+	}
+	left := cell(lines[top], "┏")
+	if got := cell(lines[bottom], "┗"); got != left {
+		t.Errorf("focus box shears: top-left at cell %d, bottom-left at %d", left, got)
+	}
+	if want, got := cell(lines[top], "┓"), cell(lines[bottom], "┛"); got != want {
+		t.Errorf("focus box shears: top-right at cell %d, bottom-right at %d", want, got)
+	}
+	for i := top + 1; i < bottom; i++ {
+		if got := cell(lines[i], "┃"); got != left {
+			t.Errorf("line %d: wall at cell %d, roof corner at %d", i, got, left)
+		}
+	}
+	if !strings.Contains(out, "graph rooted on") {
+		t.Error("the status line was clipped off the graph frame")
 	}
 }
 
