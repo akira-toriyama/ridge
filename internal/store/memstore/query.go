@@ -27,16 +27,25 @@ import (
 //	lane:/status:  exact and case-SENSITIVE; an unknown lane REFUSES the whole
 //	               query, the way furrow exits 2 unknown-lane with candidates
 //	repo:          owner/repo or the short name after the slash, compared
-//	               case-insensitively; one that resolves to no repo on the
-//	               board REFUSES (furrow: exit 2 repo-unknown). NOT a substring
+//	               case-insensitively; a SHORT name that resolves to no repo
+//	               on the board REFUSES (furrow: exit 2 repo-unknown), while
+//	               an unknown full owner/repo form is an honest 0 rows
+//	               (measured). NOT a substring
 //	label:/epic:   exact, case-sensitive; an unknown one is an honest 0 rows
 //	id:            case-sensitive PREFIX — id:t-jv finds t-jv3j
 //	title:         case-insensitive substring; QUOTED it means the whole title
 //	body:          case-insensitive substring
 //	is:            the whole query-is vocabulary, is:stale included
 //	no:/has:       the whole query-presence vocabulary
-//	bare words     case-insensitive substring; comma ORs inside a token, a
-//	               leading - negates, and quotes hold a phrase together
+//	bare words     case-insensitive substring; a leading - negates, and
+//	               quotes hold a phrase together
+//	quoting        a value list splits on commas OUTSIDE quotes — label:"a","b"
+//	               is two alternatives, label:"a,b" is one holding a literal
+//	               comma. A quote may only open a part and must close it
+//	               (label:a"b", label:"a"b, nee"dle" are furrow's exit 2
+//	               "mismatched quotes"); "" is "empty term"; label:"" and
+//	               label:, are "needs a value"; is:/no:/has: take their flags
+//	               unquoted or not at all. All measured.
 //
 // Two divergences that are DELIBERATE, stated here so a green frame is never
 // mistaken for proof of parity:
@@ -148,13 +157,18 @@ func (v queryVocab) knownLane(s string) bool {
 }
 
 // resolveRepo maps a query value onto a repo the board actually carries.
-// furrow takes owner/repo or a UNIQUE short name and refuses anything else
-// with candidates, so the second return is the refusal text ("" = resolved).
+// Measured: the full owner/repo form that no task carries answers an honest
+// EMPTY set, while a SHORT name that resolves to nothing is exit 2
+// repo-unknown ("use the full owner/repo form") — so only the short form
+// can refuse here. The second return is the refusal text ("" = resolved).
 func (v queryVocab) resolveRepo(s string) (string, string) {
 	for _, r := range v.repos {
 		if strings.EqualFold(r, s) {
 			return r, ""
 		}
+	}
+	if strings.Contains(s, "/") {
+		return s, "" // unknown full form: matches nothing, refuses nothing
 	}
 	var hits []string
 	for _, r := range v.repos {
@@ -180,71 +194,99 @@ func shortRepo(r string) string {
 	return r
 }
 
-// rawToken is one whitespace-separated token with its quotes stripped, plus
-// what the quoting MEANT. furrow reads a token that OPENS with a quote as
-// free text — `"lane:inbox"` searches for that literal string and is not a
-// lane term — and a quote after the colon as "match the whole field".
-type rawToken struct {
-	text    string
-	literal bool // opened quoted: free text even when it holds a colon
-	exact   bool // quoted after the colon
-}
-
-// tokenize splits on whitespace OUTSIDE quotes. Both quote characters work,
-// and an unterminated one is a refusal (furrow: exit 2 query-parse).
-func tokenize(s string) ([]rawToken, error) {
+// tokenize splits on whitespace OUTSIDE quotes, KEEPING the quotes: the
+// parser needs their positions, because furrow refuses the misplaced shapes
+// (a quote opening mid-token, a closing quote with text after it) rather
+// than guessing. Both quote characters work, and an unterminated one is a
+// refusal (furrow: exit 2 query-parse). All measured 2026-08-10, t-74y3
+// review round.
+func tokenize(s string) ([]string, error) {
 	var (
-		toks  []rawToken
+		toks  []string
 		cur   strings.Builder
-		tok   rawToken
-		open  bool
 		quote byte
 	)
-	colon := -1
-	flush := func() {
-		if !open {
-			return
-		}
-		tok.text = cur.String()
-		if tok.text != "" {
-			toks = append(toks, tok)
-		}
-		cur.Reset()
-		tok, open, colon = rawToken{}, false, -1
-	}
 	for i := 0; i < len(s); i++ {
 		c := s[i]
-		if quote != 0 {
+		switch {
+		case quote != 0:
 			if c == quote {
 				quote = 0
-				continue
 			}
 			cur.WriteByte(c)
-			continue
-		}
-		switch c {
-		case '"', '\'':
-			quote, open = c, true
-			if colon < 0 {
-				tok.literal = true
-			} else {
-				tok.exact = true
+		case c == '"' || c == '\'':
+			quote = c
+			cur.WriteByte(c)
+		case c == ' ' || c == '\t' || c == '\n' || c == '\r':
+			if cur.Len() > 0 {
+				toks = append(toks, cur.String())
+				cur.Reset()
 			}
-		case ' ', '\t', '\n', '\r':
-			flush()
 		default:
-			if c == ':' && colon < 0 {
-				colon = cur.Len()
-			}
 			cur.WriteByte(c)
-			open = true
 		}
 	}
 	if quote != 0 {
 		return nil, fmt.Errorf("unterminated quote in %q", s)
 	}
-	flush()
+	if cur.Len() > 0 {
+		toks = append(toks, cur.String())
+	}
 	return toks, nil
+}
+
+// valuePart is one comma-separated alternative in a qualifier's value.
+type valuePart struct {
+	text   string
+	quoted bool
+}
+
+// splitParts cuts a qualifier's value on commas OUTSIDE quotes — measured:
+// `label:"a","b"` is two alternatives, `label:"a,b"` is ONE that holds a
+// literal comma (quoting suppresses the OR split) — and enforces furrow's
+// quote placement: a quote may only OPEN a part and its close must END the
+// part, anything else is exit 2 "mismatched quotes".
+func splitParts(tok, val string) ([]valuePart, error) {
+	var (
+		parts     []valuePart
+		cur       strings.Builder
+		quote     byte
+		quoted    bool
+		misplaced bool
+	)
+	flush := func() {
+		parts = append(parts, valuePart{text: cur.String(), quoted: quoted})
+		cur.Reset()
+		quoted = false
+	}
+	for i := 0; i < len(val); i++ {
+		c := val[i]
+		switch {
+		case quote != 0:
+			if c == quote {
+				quote = 0
+				if i+1 < len(val) && val[i+1] != ',' {
+					misplaced = true // `label:"a"b`
+				}
+				continue
+			}
+			cur.WriteByte(c)
+		case c == '"' || c == '\'':
+			if cur.Len() > 0 {
+				misplaced = true // `label:a"b"`
+			}
+			quote, quoted = c, true
+		case c == ',':
+			flush()
+		default:
+			cur.WriteByte(c)
+		}
+	}
+	flush()
+	if misplaced {
+		return nil, fmt.Errorf("mismatched quotes in %q", tok)
+	}
+	return parts, nil
 }
 
 // caseSensitiveKeys are the fields furrow compares byte-for-byte, so their
@@ -263,17 +305,54 @@ func parseQuery(s string, v queryVocab) parsedQuery {
 		q.problems = append(q.problems, err.Error())
 		return q
 	}
-	for _, rt := range toks {
-		t := term{exact: rt.exact}
-		text := rt.text
+	for _, tok := range toks {
+		t := term{}
+		text := tok
 		if strings.HasPrefix(text, "-") && len(text) > 1 {
 			t.neg = true
 			text = text[1:]
 		}
+		// A token that OPENS with a quote is free text — `"lane:inbox"` is a
+		// phrase, not a lane term (measured). Text after the closing quote is
+		// what furrow refuses: `"label":a` is the unknown qualifier
+		// `"label"`, and `"a"b` is mismatched quotes.
+		if len(text) > 0 && (text[0] == '"' || text[0] == '\'') {
+			closeIdx := strings.IndexByte(text[1:], text[0])
+			switch {
+			case closeIdx < 0:
+				// tokenize guarantees pairing, so this cannot happen — but a
+				// guessed phrase is exactly what this parser must never emit.
+				q.problems = append(q.problems, fmt.Sprintf("mismatched quotes in %q", tok))
+			case closeIdx+2 == len(text):
+				inner := text[1 : 1+closeIdx]
+				if inner == "" {
+					q.problems = append(q.problems, fmt.Sprintf("empty term (in %q)", tok))
+					continue
+				}
+				t.vals = []string{strings.ToLower(inner)}
+				q.terms = append(q.terms, t)
+			case text[closeIdx+2] == ':':
+				q.problems = append(q.problems, fmt.Sprintf(
+					"unknown key %q (%s)", text[:closeIdx+2], keyList(queryKeys)))
+			default:
+				q.problems = append(q.problems, fmt.Sprintf("mismatched quotes in %q", tok))
+			}
+			continue
+		}
 		k, val, isPair := strings.Cut(text, ":")
-		if rt.literal || !isPair {
+		if !isPair {
+			if strings.ContainsAny(text, `"'`) {
+				// nee"dle" — furrow: exit 2 mismatched quotes, never a
+				// needle with quotes in it.
+				q.problems = append(q.problems, fmt.Sprintf("mismatched quotes in %q", tok))
+				continue
+			}
 			t.vals = []string{strings.ToLower(text)}
 			q.terms = append(q.terms, t)
+			continue
+		}
+		if strings.ContainsAny(k, `"'`) {
+			q.problems = append(q.problems, fmt.Sprintf("mismatched quotes in %q", tok))
 			continue
 		}
 		k = strings.ToLower(k)
@@ -286,22 +365,45 @@ func parseQuery(s string, v queryVocab) parsedQuery {
 			}
 			continue
 		}
-		if val == "" {
-			q.problems = append(q.problems, fmt.Sprintf("%s: needs a value", k))
-			continue
-		}
 		if k == "status" {
 			k = "lane"
 		}
 		t.key = k
-		for _, part := range strings.Split(val, ",") {
-			if part == "" {
+		parts, err := splitParts(tok, val)
+		if err != nil {
+			q.problems = append(q.problems, err.Error())
+			continue
+		}
+		anyQuoted := false
+		for _, p := range parts {
+			if p.text == "" {
+				// `label:a,` drops the empty alternative (measured); a value
+				// that is NOTHING BUT empties refuses below.
 				continue
 			}
-			if !caseSensitiveKeys[k] {
-				part = strings.ToLower(part)
+			if p.quoted {
+				anyQuoted = true
 			}
-			t.vals = append(t.vals, part)
+			pv := p.text
+			if !caseSensitiveKeys[k] {
+				pv = strings.ToLower(pv)
+			}
+			t.vals = append(t.vals, pv)
+		}
+		t.exact = anyQuoted
+		if len(t.vals) == 0 {
+			// `label:` and `label:,` and `label:""` alike (measured:
+			// "qualifier label: needs a value") — never a term that matches
+			// everything because it holds no alternatives.
+			q.problems = append(q.problems, fmt.Sprintf("%s: needs a value", k))
+			continue
+		}
+		if anyQuoted && (k == "is" || k == "no" || k == "has") {
+			// Measured: is:"open" is exit 2 query-unknown-flag — the flag
+			// vocabularies are read unquoted or not at all.
+			q.problems = append(q.problems, fmt.Sprintf(
+				"%s: takes its flags unquoted (furrow refuses %q)", k, tok))
+			continue
 		}
 		switch k {
 		case "is":

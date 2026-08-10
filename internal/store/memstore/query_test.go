@@ -585,3 +585,66 @@ func TestQuotedValuesEvaluateInsteadOfRefusing(t *testing.T) {
 		t.Errorf("quoted vs bare label diverged: %v vs %v", quoted, bare)
 	}
 }
+
+// The comma/quote interactions, each measured against the real binary
+// (2026-08-10, t-74y3 review round): quoting suppresses the OR split, the
+// split happens OUTSIDE quotes, and the misplaced-quote and empty-value
+// shapes refuse the way furrow exits 2 — never a term that silently matches
+// everything or nothing.
+func TestQuoteCommaInteractionsMatchFurrow(t *testing.T) {
+	s := New()
+	all := len(mustQuery(t, s, ""))
+
+	// label:"a,b" is ONE alternative holding a literal comma — no fixture
+	// label carries a comma, so an honest 0 rows; label:ui,cli is an OR.
+	if got := mustQuery(t, s, `label:"ui,cli"`); len(got) != 0 {
+		t.Errorf(`label:"ui,cli" must be one comma-holding label, got %v`, got)
+	}
+	orSet := mustQuery(t, s, "label:ui,cli")
+	if len(orSet) == 0 {
+		t.Fatal("setup: label:ui,cli must match")
+	}
+	// The split runs outside quotes: label:"ui","cli" is the same OR.
+	if got := mustQuery(t, s, `label:"ui","cli"`); strings.Join(got, ",") != strings.Join(orSet, ",") {
+		t.Errorf(`label:"ui","cli" = %v, want the label:ui,cli set %v`, got, orSet)
+	}
+	// A quoted comma matches nothing but refuses nothing.
+	if got := mustQuery(t, s, `label:","`); len(got) != 0 {
+		t.Errorf(`label:"," = %v, want honest 0 rows`, got)
+	}
+	// A trailing empty alternative drops; the value must not become
+	// match-everything.
+	if got := mustQuery(t, s, "label:ui,"); len(got) == 0 || len(got) == all {
+		t.Errorf("label:ui, = %d rows, want the ui set (all=%d)", len(got), all)
+	}
+
+	// The refusal shapes, each exit 2 in furrow.
+	for _, q := range []string{
+		`""`, `''`, // empty term
+		"label:,", `label:""`, // needs a value
+		`label:a"b"`, `label:"a"b`, `nee"dle"`, `"label":a`, // mismatched / unknown key
+		`is:"open"`, `no:"deps"`, // flags are unquoted
+	} {
+		if _, err := s.Query(q); err == nil {
+			t.Errorf("%s must refuse (furrow: exit 2), and it evaluated", q)
+		}
+	}
+
+	// An unknown FULL owner/repo form is an honest empty set (measured),
+	// unlike the short form, which refuses.
+	if got := mustQuery(t, s, "repo:no/such"); len(got) != 0 {
+		t.Errorf("repo:no/such = %v, want honest 0 rows", got)
+	}
+	if _, err := s.Query("repo:nosuch"); err == nil {
+		t.Error("a short repo name resolving to nothing must refuse")
+	}
+}
+
+func mustQuery(t *testing.T, s *Store, q string) []string {
+	t.Helper()
+	got, err := s.Query(q)
+	if err != nil {
+		t.Fatalf("Query(%q): %v", q, err)
+	}
+	return got
+}

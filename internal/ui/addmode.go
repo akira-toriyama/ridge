@@ -51,11 +51,11 @@ func (m *Model) enterAdd() tea.Cmd {
 func inheritContext(raw string) (label, epic, repo string) {
 	for _, tok := range strings.Fields(raw) {
 		k, v, ok := strings.Cut(tok, ":")
-		// Quoted values (label:"needs review") split across Fields tokens;
-		// like OR'd and negated tokens they inherit nothing rather than
-		// inheriting a mangled fragment.
+		// Quoted values (label:"needs review", either quote character) split
+		// across Fields tokens; like OR'd and negated tokens they inherit
+		// nothing rather than inheriting a mangled fragment.
 		if !ok || v == "" || strings.HasPrefix(k, "-") ||
-			strings.Contains(v, ",") || strings.Contains(v, `"`) {
+			strings.Contains(v, ",") || strings.ContainsAny(v, `"'`) {
 			continue
 		}
 		switch strings.ToLower(k) {
