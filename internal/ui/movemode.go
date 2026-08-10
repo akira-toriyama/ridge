@@ -57,6 +57,7 @@ func (m *Model) cancelMove() {
 	m.moveID, m.moveCurIdx = "", nil
 	m.ensureVisible()
 	m.syncPeek()
+	m.releaseHeldVerdict()
 }
 
 func (m *Model) onMoveKey(msg tea.KeyPressMsg) tea.Cmd {
@@ -69,6 +70,7 @@ func (m *Model) onMoveKey(msg tea.KeyPressMsg) tea.Cmd {
 		id, from, to, fi, di := m.moveID, m.moveFrom, m.dropLane, m.moveFromIdx, m.dropIdx
 		m.mode, m.moveID, m.moveCurIdx = modeNormal, "", nil
 		moved, cmd, err := m.commitMove(id, from, to, fi, di)
+		m.releaseHeldVerdict() // only after the commit consumed its slot
 		if err != nil {
 			m.fail("%v", err)
 			return nil

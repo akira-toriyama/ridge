@@ -27,7 +27,10 @@ func New(p board.Provider, o Options) *Model {
 	}
 	if o.Filter != "" {
 		m.ti.SetValue(o.Filter)
-		m.applyFilter(o.Filter)
+		// KEEP the returned Cmd: on a live provider applyFilter's work is the
+		// async query this arms, and dropping it left the bar showing a
+		// query the board never ran (t-74y3 — every task stayed visible).
+		m.startupFilter = m.applyFilter(o.Filter)
 	}
 	if o.Table {
 		m.view = viewTable
