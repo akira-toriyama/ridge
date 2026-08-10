@@ -56,8 +56,16 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Install furrow (pinned)
-        run: go install github.com/akira-toriyama/furrow/cmd/furrow@v4.0.0
+      - name: Install furrow (pinned release binary)
+        # NOT `go install`: furrow's module path carries no /vN suffix, so Go
+        # refuses source installs of every v2+ tag ("module path must match
+        # major version"). The release tarball is how the fleet's own
+        # sync-task-status gate installs it — checksum-pinned here.
+        run: |
+          curl -fsSL -o /tmp/furrow.tgz             https://github.com/akira-toriyama/furrow/releases/download/v4.0.0/furrow_4.0.0_linux_amd64.tar.gz
+          echo "32a19beea1871d6ca8df359d92e857e1a4642f57d7267b25c95c422d3abb9e10  /tmp/furrow.tgz" | sha256sum -c -
+          tar -C /tmp -xzf /tmp/furrow.tgz furrow
+          sudo install -m 0755 /tmp/furrow /usr/local/bin/furrow
       - name: Contract tests against the real CLI
         run: |
           furrow --help >/dev/null
