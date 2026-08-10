@@ -23,12 +23,6 @@ type addState struct {
 	opts  board.AddOptions
 }
 
-// addDoneMsg reports the store's answer: the new id, or the refusal.
-type addDoneMsg struct {
-	id  string
-	err error
-}
-
 // enterAdd opens the quick-add modal aimed at the focused lane (board) or
 // the store's default lane (table — GH's bottom-of-table add).
 func (m *Model) enterAdd() tea.Cmd {
@@ -72,6 +66,10 @@ func inheritContext(raw string) (label, epic, repo string) {
 func (m *Model) onAddKey(msg tea.KeyPressMsg) tea.Cmd {
 	a := m.add
 	switch {
+	case key.Matches(msg, m.keys.ForceQuit):
+		// The modal owns the keyboard, so `q` types — but ctrl+c must always
+		// be a way out (bubbletea raw mode delivers it as a plain keystroke).
+		return m.quitOrFlush()
 	case key.Matches(msg, m.keys.Cancel):
 		m.mode, m.add = modeNormal, nil
 		return nil
@@ -82,35 +80,12 @@ func (m *Model) onAddKey(msg tea.KeyPressMsg) tea.Cmd {
 			return nil
 		}
 		m.mode, m.add = modeNormal, nil
-		prov, opts := m.prov, a.opts
 		m.note("adding…")
-		return func() tea.Msg {
-			id, err := prov.Add(title, opts)
-			return addDoneMsg{id: id, err: err}
-		}
+		return m.enqueueAdd(title, a.opts)
 	}
 	var c tea.Cmd
 	a.input, c = a.input.Update(msg)
 	return c
-}
-
-// onAddDone lands the store's answer: remember the id so the cursor moves
-// onto the new card once the re-read delivers it.
-func (m *Model) onAddDone(msg addDoneMsg) tea.Cmd {
-	if msg.err != nil {
-		m.fail("add: %v", msg.err)
-		return nil
-	}
-	if m.prov.Live() {
-		m.selectAfterReload = msg.id
-		return m.reloadCmd("added " + msg.id)
-	}
-	// The mock's board already holds the task: no store round-trip to wait
-	// for.
-	m.reload()
-	m.selectID(msg.id, true)
-	m.note("added %s", msg.id)
-	return nil
 }
 
 // addLayer draws the quick-add modal: the input plus the inherited-context
@@ -142,7 +117,7 @@ func (m *Model) addLayer() *lg.Layer {
 		pad(th.peekHdr.Render("add item"), inner) + "\n\n" +
 			a.input.View() + "\n\n" +
 			th.accent.Render(pad("→ "+strings.Join(chips, " · "), inner)) + "\n" +
-			th.dim.Render(pad("⏎ create · esc cancel · details via the edit menu", inner)))
+			th.dim.Render(pad("⏎ create · esc cancel · ^c quit · details via the edit menu", inner)))
 	box = lg.NewStyle().MaxWidth(m.w).MaxHeight(m.h).Render(box)
 	x := maxInt(0, (m.w-lg.Width(box))/2)
 	y := maxInt(0, (m.h-lg.Height(box))/3)

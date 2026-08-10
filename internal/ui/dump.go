@@ -27,7 +27,12 @@ func New(p board.Provider, o Options) *Model {
 	}
 	if o.Filter != "" {
 		m.ti.SetValue(o.Filter)
-		m.applyFilter(o.Filter)
+		// On a live store applyFilter returns the debounce tick that will
+		// eventually fetch the verdict; a constructor has no runtime to hand
+		// it to, so Init carries it. Dropping it here made -filter a silent
+		// no-op against the real store (the fixture answers synchronously,
+		// which is why every headless frame hid the bug).
+		m.startupFilter = m.applyFilter(o.Filter)
 	}
 	if o.Table {
 		m.view = viewTable

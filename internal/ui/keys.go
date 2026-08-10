@@ -43,6 +43,10 @@ type keyMap struct {
 	OnlyBlock  key.Binding
 	Help       key.Binding
 	Quit       key.Binding
+	// ForceQuit is ctrl+c alone — the escape hatch inside modal text inputs,
+	// where `q` must type. bubbletea v2's raw mode delivers ctrl+c as a
+	// normal keystroke, so every modal key handler must match this itself.
+	ForceQuit  key.Binding
 	PeekScroll key.Binding
 
 	Graph       key.Binding
@@ -96,6 +100,7 @@ func defaultKeys() keyMap {
 		Mouse:      key.NewBinding(key.WithKeys("M"), key.WithHelp("M", "mouse on/off")),
 		Help:       key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
 		Quit:       key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
+		ForceQuit:  key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("^c", "quit")),
 		PeekScroll: key.NewBinding(key.WithKeys("ctrl+d", "ctrl+u"), key.WithHelp("^d/^u", "scroll peek")),
 
 		// Note WithKeys("shift+space"), not " " and not "shift+ ": key.Matches
@@ -134,7 +139,7 @@ func (k keyMap) FullHelp() [][]key.Binding {
 // editHelp is the footer while the field-edit overlay is up. The overlay
 // carries its own per-stage hints; the footer only shows the frame.
 func (k keyMap) editHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Commit, k.Check, k.Cancel}
+	return []key.Binding{k.Up, k.Down, k.Commit, k.Check, k.Cancel, k.ForceQuit}
 }
 
 // moveHelp is the footer while a card is lifted — a different mode gets a
