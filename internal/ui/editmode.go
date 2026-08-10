@@ -544,7 +544,7 @@ func (m *Model) renderEditList(t *board.Task, inner int) string {
 	rows := m.editListRows(t)
 
 	hdr, foot := "", ""
-	mark := func(i int, row string) string { return row }
+	mark := func(_ int, row string) string { return row }
 	switch e.field {
 	case fieldLabels:
 		hdr, foot = "labels", "⏎/x toggle · a new label · esc back"
