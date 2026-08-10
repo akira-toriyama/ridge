@@ -177,8 +177,31 @@ func (m *Model) openField(f editField, t *board.Task) tea.Cmd {
 		return m.startInput(inputDue, cur, "2026-08-04 · +1d · empty clears")
 	case fieldLabels, fieldEpic, fieldRepos, fieldChecklist:
 		e.stage = stageList
+		if f == fieldEpic {
+			// Epic is the one list whose row 0 DESTROYS a field: selecting
+			// "(unfiled)" persists `furrow set -e ""`. Every other stage's row 0
+			// is a reversible toggle, so opening on it is harmless there and is
+			// a trap here — open on the task's current epic instead, and only
+			// fall back to row 0 when the task really is unfiled.
+			e.listIdx = epicRow(m.b.Epics(), t.Epic)
+		}
 	}
 	return nil
+}
+
+// epicRow is the list-stage row index of an epic membership. Row 0 is
+// "(unfiled)", so a filed task sits at its position in Epics() plus one; an id
+// the board cannot resolve (a stale membership) falls back to row 0.
+func epicRow(epics []board.EpicInfo, id string) int {
+	if id == "" {
+		return 0
+	}
+	for i, e := range epics {
+		if e.ID == id {
+			return i + 1
+		}
+	}
+	return 0
 }
 
 func (m *Model) startInput(kind inputKind, value, placeholder string) tea.Cmd {
@@ -477,7 +500,7 @@ func (m *Model) editLayer() *lg.Layer {
 		body = th.peekHdr.Render("set "+name) + "\n\n" +
 			pad("press 1-5 · 0 clears · esc back", inner)
 	case stageList:
-		body = m.renderEditList(t, inner)
+		body = m.renderEditList(t, inner, maxInt(1, m.h-editListChrome))
 	case stageInput:
 		body = th.peekHdr.Render(inputTitleFor(m.edit.inputFor)) + "\n\n" +
 			m.edit.input.View() + "\n" + th.dim.Render(pad("⏎ apply · esc back", inner))
@@ -554,7 +577,48 @@ func (m *Model) renderEditMenu(t *board.Task, inner int) string {
 	return b.String()
 }
 
-func (m *Model) renderEditList(t *board.Task, inner int) string {
+// editListChrome is every line of the list stage that is NOT a row: the peek
+// box's border (2), the "edit <id>" header and its blank line (2), the stage
+// header and its blank line (2), and the blank line plus the key hints at the
+// foot (2). The rows get whatever is left, so the hints are never the thing
+// that falls off the bottom of the terminal.
+const editListChrome = 8
+
+// editListWindow picks the slice of rows to draw so the cursor stays on screen
+// with context around it. budget is the whole allowance in LINES, hints
+// included: a clipped head or tail spends one of them on its "N above" /
+// "+N below" line, the same way a clipped column announces itself. marks is
+// false when the rows are not clipped at all, and also when the budget is too
+// small to afford a hint — the rows take every line rather than the footer
+// losing its own.
+//
+// The window is derived from idx on every frame instead of being stored, so
+// the frame stays a pure function of the state -dump already prints.
+func editListWindow(n, idx, budget int) (start, end int, marks bool) {
+	if budget < 1 {
+		budget = 1
+	}
+	if n <= budget {
+		return 0, n, false
+	}
+	if budget < 3 {
+		start = clamp(idx-budget/2, 0, n-budget)
+		return start, start + budget, false
+	}
+	// Worst case both hints show; the one that turns out unnecessary hands its
+	// line back to the rows.
+	w := budget - 2
+	start = clamp(idx-w/2, 0, n-w)
+	switch {
+	case start == 0:
+		return 0, budget - 1, true
+	case start+w >= n:
+		return n - (budget - 1), n, true
+	}
+	return start, start + w, true
+}
+
+func (m *Model) renderEditList(t *board.Task, inner, budget int) string {
 	th := m.th
 	e := m.edit
 	rows := m.editListRows(t)
@@ -606,12 +670,22 @@ func (m *Model) renderEditList(t *board.Task, inner int) string {
 	if len(rows) == 0 {
 		b.WriteString(th.dim.Render(pad("(empty)", inner)) + "\n")
 	}
-	for i, row := range rows {
+	// Only the RENDER is windowed: listIdx still walks — and wraps over — the
+	// whole row list, and i below stays the ABSOLUTE index, which is the index
+	// mark() and editListSelect agree on.
+	start, end, marks := editListWindow(len(rows), e.listIdx, budget)
+	if marks && start > 0 {
+		b.WriteString(th.dim.Render(pad(fmt.Sprintf("%d above", start), inner)) + "\n")
+	}
+	for i := start; i < end; i++ {
 		cursor, style := "  ", th.base
 		if i == e.listIdx {
 			cursor, style = "▌ ", th.peekHdr
 		}
-		b.WriteString(cursor + style.Render(pad(ansi.Truncate(mark(i, row), inner-2, "…"), inner-2)) + "\n")
+		b.WriteString(cursor + style.Render(pad(ansi.Truncate(mark(i, rows[i]), inner-2, "…"), inner-2)) + "\n")
+	}
+	if marks && end < len(rows) {
+		b.WriteString(th.dim.Render(pad(fmt.Sprintf("+%d below", len(rows)-end), inner)) + "\n")
 	}
 	b.WriteString("\n" + th.dim.Render(pad(foot, inner)))
 	return b.String()
