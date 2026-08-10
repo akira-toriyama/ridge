@@ -10,16 +10,21 @@ ridge はその端末版で、**両方とも furrow の Go パッケージを im
 に書かれた建て付け。
 
 ```sh
-go run .            # 起動（今は mock データ）
-go run . -dump      # TTY 無しで1フレーム出力
+go run .            # 起動（実 furrow の盤面。furrow が PATH に要る）
+go run . -mock      # 内蔵 fixture で起動（furrow 不要）
+go run . -dump      # TTY 無しで1フレーム出力（常に fixture）
+go run . -benchload # 実盤面の読み込みレイテンシを実測して終了（読み取りのみ）
 ```
 
-## 現在地 — POC から出発した
+## 現在地 — POC から出発し、実 furrow に接続済み
 
 このリポジトリは、2026-07-20〜21 に furrow の
 [`poc/tui-bubbletea-v2`](https://github.com/akira-toriyama/furrow/tree/poc/tui-bubbletea-v2)
-ブランチで行った実現可能性検証のコードを出発点にしている。**動くが、データは
-まだ mock。** 実 furrow に繋ぐのが最初の仕事。
+ブランチで行った実現可能性検証のコードを出発点にしている。t-s86r で実 furrow に
+接続した: 読みは `board` / `ls -r ''` / `epic ls` の並列 3 exec + body ファイル
+（実測 63-77ms / 914 tasks・cold 181ms）、書きは**楽観的キュー** — 盤面へ先に適用し、
+`furrow set/done/check` を裏で直列に流し、失敗したら store 再読で巻き戻す
+（書き実測 85-115ms・respace 時 280ms が根拠。persist.go）。
 
 POC が答えを出した3つの問い:
 
@@ -91,6 +96,9 @@ ID+タイトル+レーンまで解決）、チェックリスト、本文。`t` 
 | `v` | Board ⇄ Table |
 | `d` | done |
 | `e` | 本文を `$EDITOR` で編集 |
+| `x` | チェックリストをトグル |
+| `r` | store 再読 |
+| `R` | `furrow sync`（git）→ 再読 |
 | `M` | マウス追跡 ON/OFF |
 | `?` | ヘルプ |
 | `q` | 終了 |
@@ -105,7 +113,9 @@ ID+タイトル+レーンまで解決）、チェックリスト、本文。`t` 
 - **キーボード優先**: マウスでできることには必ずキーボードの等価物がある。
   マウス追跡中は端末のテキスト選択が効かなくなるため（回避キーは端末依存:
   xterm/Ghostty/tmux=`Shift`、iTerm2=`Option`）、`M` で切れる。
-- **楽観的 TUI**: 書き込みの完了を待たず先に画面を更新する。
+- **楽観的 TUI**: 書き込みの完了を待たず先に画面を更新する。store への記録は
+  直列キュー（同時 1 本 — 並べ替えの anchor が前の書き込みの結果に依存するため）。
+  quit は未完了の書き込みを flush してから終了する。
 - **ロジックは furrow 側に置く**: 「仮に TUI を作るならロジックが冗長になるか」で
   迷ったら furrow へ。ridge と vista で同じものを二重に持たない。
 
@@ -114,7 +124,7 @@ ID+タイトル+レーンまで解決）、チェックリスト、本文。`t` 
 すべて headless で確認できる（GUI や端末を人が見る必要がない）:
 
 ```sh
-go test ./...                      # 全テスト
+go test ./...                      # 全テスト（furrow が PATH にあれば contract test も回る）
 go run . -dump -plain -w 240 -h 60 # 1フレームを平文で出力
 go run . -dump -peek               # 詳細ペインを開いた状態
 go run . -dump -tree               # 依存ツリーを開いた状態
@@ -125,7 +135,8 @@ go run . -demo drag -dump          # ドラッグ中
 
 ## 既知の課題
 
-- **データが mock**（`fixture.go`）。実 furrow に未接続 — 最優先タスク。
+- 本文編集はファイル直書きなので shard の `updated` が進まない（furrow 側の
+  置換コマンド要望 t-8q8c が着地したら乗り換える）。
 - グラフの枠線が1桁ずれる行がある（構造は正しい、見た目のみ）。
 - swimlane（group by）未実装。slice パネル（repo/label で絞る左パネル）未実装。
 - Table ビューに横スクロールが無い（`bubbles/v2` の table が非対応）。

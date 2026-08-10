@@ -117,7 +117,13 @@ func (m *Model) chromeLayers() []*lg.Layer {
 	if shown == total {
 		counts = fmt.Sprintf("%d tasks", total)
 	}
-	right := th.crumb.Render(counts + "  ·  " + m.modeBadge())
+	// The passive latency readout: the last persist and how long the store
+	// took. Empty until the first real write, so fixture frames are unchanged.
+	tail := counts + "  ·  " + m.modeBadge()
+	if m.lastPersist != "" {
+		tail = counts + "  ·  " + m.lastPersist + "  ·  " + m.modeBadge()
+	}
+	right := th.crumb.Render(tail)
 	title := joinEnds(left, right, m.w)
 
 	var filter string
@@ -363,7 +369,7 @@ func (m *Model) helpLayer() *lg.Layer {
 	flush()
 
 	syntax := wrapJoin([]string{"filter syntax:",
-		"lane: repo: label: type: is: no: has: id: parent:",
+		"lane: repo: label: type: is: no: has: id: parent: epic:",
 		"· comma = OR · leading - negates · bare word = title/id"}, " ", inner)
 	note := wrapJoin([]string{"every mouse gesture above has a keyboard twin —",
 		"that is the rule, not a bonus"}, " ", inner)

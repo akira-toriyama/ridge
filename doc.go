@@ -9,23 +9,19 @@
 // — including a real layered graph, which no Go library draws to text, so both
 // the layout and the renderer here are ours.
 //
-// The POC's shortcut is still in place and is the first thing to fix: the
-// Provider is backed by fixture.go, not by furrow. Nothing here reads or writes
-// a real .furrow store yet.
+// # Data
 //
-// What it FAKES
+// The default provider is the real furrow store: reads are three concurrent
+// `furrow ... --json` execs plus the body files (furrow's JSON carries body
+// PATHS, not content), writes are optimistic — applied to the in-memory board
+// on the UI thread first, then recorded through a strictly-serial persist
+// queue (persist.go) with a store re-read as the rollback. ridge never imports
+// furrow's Go packages; the CLI/JSON contract is the whole boundary (furrow's
+// non-goals doc).
 //
-//   - The data is a hardcoded in-memory copy of 24 real tasks (fixture.go).
-//     The Provider interface is the seam where a real `furrow --json` client
-//     would drop in; the mock never shells out and never touches a real
-//     .furrow store. Mutations live and die with the process.
-//   - `e` (edit body) launches $EDITOR on a temp file via tea.ExecProcess and
-//     writes the result back into the in-memory board only.
-//
-// # What it is NOT
-//
-// This is a POC on a throwaway branch. furrow itself stays CLI-only and
-// charm-free: this is a separate Go module precisely so that no charm
-// dependency can reach furrow's core. Any real TUI would be an out-of-repo
-// front-end (ridge) speaking furrow's CLI/JSON contract.
+// The fixture provider (-mock) serves a hardcoded in-memory copy of 24 real
+// tasks (fixture.go). Tests, -dump and -demo always use it: their frames are
+// deterministic and diffable, which is the house verification style. The
+// contract tests (provider_furrow_test.go) cover the real client against a
+// throwaway store, and skip where no furrow binary is on PATH.
 package main

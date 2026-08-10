@@ -92,12 +92,28 @@ func (m *Model) peekContent(w int) string {
 	if t.Parent != "" {
 		meta2 = append(meta2, "parent "+t.Parent+" "+m.titleOf(t.Parent, 24))
 	}
+	if t.Epic != "" {
+		label := t.Epic
+		if e := m.b.Epic(t.Epic); e != nil {
+			label = fmt.Sprintf("%s %s (%d/%d)", t.Epic, e.Title, e.Done, e.Total)
+		}
+		meta2 = append(meta2, "epic "+label)
+	}
 	if len(t.Labels) > 0 {
 		meta2 = append(meta2, "labels "+strings.Join(t.Labels, ","))
 	}
 	b.WriteString(th.muted.Render(wrapJoin(meta2, " · ", w)) + "\n")
-	b.WriteString(th.dim.Render(fmt.Sprintf("updated %s · created %s",
-		ago(t.Updated), t.Created.Format("2006-01-02"))) + "\n")
+	stamps := fmt.Sprintf("updated %s · created %s", ago(t.Updated), t.Created.Format("2006-01-02"))
+	if !t.Due.IsZero() {
+		due := "due " + t.Due.Format("2006-01-02")
+		if t.Due.Before(nowFn()) && t.Closed.IsZero() {
+			due = th.danger.Render(due + " · OVERDUE")
+		} else {
+			due = th.warn.Render(due)
+		}
+		b.WriteString(due + "\n")
+	}
+	b.WriteString(th.dim.Render(stamps) + "\n")
 
 	// --- dependencies: resolved, bidirectional, never raw ids ---------------
 	b.WriteString("\n" + sectionRule(th, "dependencies", w) + "\n")

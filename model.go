@@ -76,6 +76,13 @@ type Model struct {
 
 	drag dragState
 
+	// The persist queue (persist.go): optimistic edits already applied to m.b,
+	// waiting to be recorded in the store, strictly in order.
+	pending     []persistOp
+	inflight    bool
+	quitting    bool   // quit requested while writes were in flight; leave after the drain
+	lastPersist string // "move t-x 92ms" — the title bar's passive latency readout
+
 	// The dependency graph view. graphFocus is what the picture is rooted on,
 	// graphSel is the node the cursor is on (they start equal and diverge as
 	// you walk), and graphStack retraces the re-roots.
@@ -124,6 +131,9 @@ func New(p Provider) *Model {
 		}
 	}
 	m.recompute()
+	if !m.b.Writable() {
+		m.fail("board is read-only (%s) — writes will fail until `furrow upgrade`", m.b.SchemaState())
+	}
 	return m
 }
 
@@ -131,10 +141,22 @@ func New(p Provider) *Model {
 // lipgloss v2 removed AdaptiveColor, so this is now the idiomatic route.
 func (m *Model) Init() tea.Cmd { return tea.RequestBackgroundColor }
 
+// reload swaps in the provider's current board, keeping the selection on the
+// same task when it still exists — an async reconcile must not teleport the
+// cursor.
 func (m *Model) reload() {
+	var cur string
+	if m.b != nil {
+		if t := m.curTask(); t != nil {
+			cur = t.ID
+		}
+	}
 	m.b = m.prov.Board()
 	m.g = NewGraph(m.b)
 	m.recompute()
+	if cur != "" {
+		m.selectID(cur, false)
+	}
 }
 
 // recompute rebuilds the derived graph and the filtered columns, then clamps
@@ -229,12 +251,26 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case editorDoneMsg:
 		if msg.err != nil {
 			m.fail("editor: %v", msg.err)
-		} else if err := m.prov.SetBody(msg.id, msg.body); err != nil {
+		} else if err := m.b.SetBody(msg.id, msg.body); err != nil {
 			m.fail("%v", err)
 		} else {
-			m.note("%s body updated (in memory only)", msg.id)
+			m.recompute()
+			m.note("%s body updated", msg.id)
+			id, body := msg.id, msg.body
+			if c := m.enqueuePersist("body "+id, func() ([]string, error) {
+				return nil, m.prov.PersistBody(id, body)
+			}); c != nil {
+				cmds = append(cmds, c)
+			}
 		}
-		m.reload()
+
+	case persistDoneMsg:
+		if c := m.onPersistDone(msg); c != nil {
+			cmds = append(cmds, c)
+		}
+
+	case reloadDoneMsg:
+		m.onReloadDone(msg)
 
 	case tea.KeyPressMsg:
 		if c := m.onKey(msg); c != nil {
@@ -248,7 +284,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, c)
 		}
 	case tea.MouseReleaseMsg:
-		m.onMouseUp(msg)
+		if c := m.onMouseUp(msg); c != nil {
+			cmds = append(cmds, c)
+		}
 	case tea.MouseWheelMsg:
 		m.onWheel(msg)
 
@@ -309,7 +347,7 @@ func (m *Model) onKey(msg tea.KeyPressMsg) tea.Cmd {
 func (m *Model) onGraphKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
 	case key.Matches(msg, m.keys.Quit):
-		return tea.Quit
+		return m.quitOrFlush()
 
 	case key.Matches(msg, m.keys.Help):
 		m.fullHelp = !m.fullHelp
@@ -402,7 +440,7 @@ func (m *Model) applyFilter(s string) {
 func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
 	case key.Matches(msg, m.keys.Quit):
-		return tea.Quit
+		return m.quitOrFlush()
 
 	case key.Matches(msg, m.keys.Help):
 		m.fullHelp = !m.fullHelp
@@ -492,29 +530,46 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.jumpBack()
 
 	case key.Matches(msg, m.keys.Reload):
-		if err := m.prov.Reload(); err != nil {
-			m.fail("reload: %v", err)
-		} else {
-			m.reload()
-			m.note("reloaded from the fixture — session edits discarded")
+		label := "reloaded"
+		if !m.prov.Live() {
+			label = "reloaded from the fixture — session edits discarded"
 		}
+		m.note("reloading…")
+		return m.reloadCmd(label)
+
+	case key.Matches(msg, m.keys.Sync):
+		if !m.prov.Live() {
+			m.note("the fixture has no store to sync")
+			return nil
+		}
+		if m.inflight || len(m.pending) > 0 {
+			m.note("writes in flight — sync once they land")
+			return nil
+		}
+		m.note("syncing…")
+		return m.syncCmd()
 
 	case key.Matches(msg, m.keys.Done):
 		if t := m.curTask(); t != nil {
-			if err := m.prov.Done(t.ID); err != nil {
+			id := t.ID
+			unblocked := len(m.g.OpenBlocks(id))
+			if err := m.b.Close(id); err != nil {
 				m.fail("%v", err)
-			} else {
-				m.reload()
-				if n := len(m.g.OpenBlocks(t.ID)); n > 0 {
-					m.note("closed %s — unblocked %d task(s)", t.ID, n)
-				} else {
-					m.note("closed %s", t.ID)
-				}
+				return nil
 			}
+			m.recompute()
+			if unblocked > 0 {
+				m.note("closed %s — unblocked %d task(s)", id, unblocked)
+			} else {
+				m.note("closed %s", id)
+			}
+			return m.enqueuePersist("done "+id, func() ([]string, error) {
+				return nil, m.prov.PersistDone(id)
+			})
 		}
 
 	case key.Matches(msg, m.keys.Check):
-		m.toggleCheck()
+		return m.toggleCheck()
 
 	case key.Matches(msg, m.keys.Edit):
 		if t := m.curTask(); t != nil {
@@ -525,14 +580,14 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.enterMove()
 
 	case key.Matches(msg, m.keys.QuickUp):
-		m.quickReorder(-1)
+		return m.quickReorder(-1)
 	case key.Matches(msg, m.keys.QuickDown):
-		m.quickReorder(+1)
+		return m.quickReorder(+1)
 
 	case key.Matches(msg, m.keys.LaneBack):
-		m.cycleLane(-1)
+		return m.cycleLane(-1)
 	case key.Matches(msg, m.keys.LaneFwd):
-		m.cycleLane(+1)
+		return m.cycleLane(+1)
 
 	case key.Matches(msg, m.keys.Top):
 		m.setPos(0)
@@ -678,16 +733,16 @@ func (m *Model) jumpBack() {
 }
 
 // toggleCheck flips the first unfinished checklist item, or the last finished
-// one when all are done. A POC shortcut: a real client would put a cursor in
-// the checklist.
-func (m *Model) toggleCheck() {
+// one when all are done — a POC shortcut until the peek grows a checklist
+// cursor (t-5zjj). Applied locally, then queued for the store.
+func (m *Model) toggleCheck() tea.Cmd {
 	t := m.curTask()
 	if t == nil {
-		return
+		return nil
 	}
 	if len(t.Checklist) == 0 {
 		m.note("%s has no checklist", t.ID)
-		return
+		return nil
 	}
 	idx := -1
 	for i, c := range t.Checklist {
@@ -699,22 +754,17 @@ func (m *Model) toggleCheck() {
 	if idx < 0 {
 		idx = len(t.Checklist) - 1
 	}
-	if err := m.prov.ToggleCheck(t.ID, idx); err != nil {
+	if err := m.b.ToggleCheck(t.ID, idx); err != nil {
 		m.fail("%v", err)
-		return
+		return nil
 	}
-	m.reload()
-	// Re-read from the RELOADED board. Reading CheckProgress off the pre-reload
-	// pointer only worked because mockProvider hands back the same *Task; a
-	// provider that returns copies — the whole point of the Provider seam — would
-	// report the count from before the toggle.
-	live := m.b.Task(t.ID)
-	if live == nil {
-		m.note("%s toggled", t.ID)
-		return
-	}
-	d, tot := live.CheckProgress()
+	m.recompute()
+	d, tot := t.CheckProgress()
 	m.note("%s checklist %d/%d", t.ID, d, tot)
+	id, on := t.ID, t.Checklist[idx].Done
+	return m.enqueuePersist(fmt.Sprintf("check %s", id), func() ([]string, error) {
+		return nil, m.prov.PersistCheck(id, idx, on)
+	})
 }
 
 // dropToken removes every occurrence of `tok` from a whitespace-separated query,
@@ -734,32 +784,34 @@ func dropToken(raw, tok string) (string, bool) {
 
 // cycleLane moves a task one lane over without entering move mode, appending it
 // at the end of the destination.
-func (m *Model) cycleLane(d int) {
+func (m *Model) cycleLane(d int) tea.Cmd {
 	t := m.curTask()
 	if t == nil {
-		return
+		return nil
 	}
 	i := m.b.LaneIndex(t.Status) + d
 	if i < 0 || i >= len(m.b.Lanes()) {
 		m.note("no lane that way")
-		return
+		return nil
 	}
 	dest := m.laneName(i)
-	if _, err := m.prov.Move(t.ID, dest, len(m.b.LaneTasks(dest))); err != nil {
+	id := t.ID
+	if _, err := m.b.MoveTo(id, dest, len(m.b.LaneTasks(dest))); err != nil {
 		m.fail("%v", err)
-		return
+		return nil
 	}
-	m.reload()
-	m.selectID(t.ID, false)
-	m.note("%s → %s", t.ID, dest)
+	m.recompute()
+	m.selectID(id, false)
+	m.note("%s → %s", id, dest)
+	return m.persistPlacement(id, dest)
 }
 
 // quickReorder is shift+K / shift+J: nudge within the lane without the ceremony
 // of move mode.
-func (m *Model) quickReorder(d int) {
+func (m *Model) quickReorder(d int) tea.Cmd {
 	t := m.curTask()
 	if t == nil {
-		return
+		return nil
 	}
 	vis := m.cols[t.Status]
 	from := -1
@@ -769,23 +821,24 @@ func (m *Model) quickReorder(d int) {
 		}
 	}
 	if from < 0 {
-		return
+		return nil
 	}
 	to := from + d
 	if to < 0 || to >= len(vis) {
 		m.note("%s is already at the %s of %s", t.ID, endName(d), t.Status)
-		return
+		return nil
 	}
-	moved, err := m.commitMove(t.ID, t.Status, t.Status, from, to+boolToInt(d > 0))
+	moved, cmd, err := m.commitMove(t.ID, t.Status, t.Status, from, to+boolToInt(d > 0))
 	if err != nil {
 		m.fail("%v", err)
-		return
+		return nil
 	}
 	if !moved {
 		m.note("%s did not move", t.ID)
-		return
+		return nil
 	}
 	m.note("%s %s in %s", t.ID, map[bool]string{true: "lowered", false: "raised"}[d > 0], t.Status)
+	return cmd
 }
 
 func endName(d int) string {

@@ -32,6 +32,7 @@ type keyMap struct {
 	Done       key.Binding
 	Edit       key.Binding
 	Reload     key.Binding
+	Sync       key.Binding
 	Tree       key.Binding
 	View       key.Binding
 	Mouse      key.Binding
@@ -87,6 +88,7 @@ func defaultKeys() keyMap {
 		Edit:       key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "$EDITOR")),
 		Check:      key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "toggle check")),
 		Reload:     key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reload")),
+		Sync:       key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "sync (git)")),
 		Mouse:      key.NewBinding(key.WithKeys("M"), key.WithHelp("M", "mouse on/off")),
 		Help:       key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
 		Quit:       key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
@@ -120,7 +122,7 @@ func (k keyMap) FullHelp() [][]key.Binding {
 		{k.MoveTop, k.MoveBottom, k.MoveFirst, k.MoveLast},
 		{k.Peek, k.Tree, k.PeekScroll, k.Filter, k.OnlyBlock, k.View},
 		{k.Graph, k.GraphRoot, k.GraphRadius},
-		{k.JumpBlock, k.JumpBack, k.Done, k.Check, k.Edit, k.Reload},
+		{k.JumpBlock, k.JumpBack, k.Done, k.Check, k.Edit, k.Reload, k.Sync},
 		{k.Mouse, k.Help, k.Quit},
 	}
 }
