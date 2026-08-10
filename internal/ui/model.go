@@ -520,6 +520,13 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	case key.Matches(msg, m.keys.Cancel):
 		switch {
+		// The help overlay sits at zHelp, above every other layer, so it is
+		// what Esc must take off first. Without this case Esc reached past the
+		// overlay the user was looking at and closed the peek UNDER it — the
+		// board looked frozen and lost state at the same time. The graph's
+		// Cancel has always had this branch; only the board's was missing.
+		case m.fullHelp:
+			m.fullHelp = false
 		case m.treeOpen:
 			m.treeOpen = false
 		case m.peekOpen:
