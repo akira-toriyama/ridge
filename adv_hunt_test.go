@@ -79,12 +79,12 @@ func (p *emptyProvider) Board() *Board { return p.b }
 func (p *emptyProvider) Reload() error { p.b = NewBoard(nil); return nil }
 func (p *emptyProvider) Sync() error   { return fmt.Errorf("no store") }
 func (p *emptyProvider) Live() bool    { return false }
-func (p *emptyProvider) PersistMove(id, lane, beforeID, afterID string) ([]string, error) {
+func (p *emptyProvider) PersistMove(_, _, _, _ string) ([]string, error) {
 	return nil, nil
 }
-func (p *emptyProvider) PersistDone(id string) error                    { return nil }
-func (p *emptyProvider) PersistCheck(id string, i int, done bool) error { return nil }
-func (p *emptyProvider) PersistBody(id, body string) error              { return nil }
+func (p *emptyProvider) PersistDone(_ string) error                 { return nil }
+func (p *emptyProvider) PersistCheck(_ string, _ int, _ bool) error { return nil }
+func (p *emptyProvider) PersistBody(_, _ string) error              { return nil }
 
 func TestAdvEmptyBoardSurvivesEveryGesture(t *testing.T) {
 	m := New(&emptyProvider{b: NewBoard(nil)})

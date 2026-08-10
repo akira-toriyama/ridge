@@ -58,14 +58,14 @@ func (p *scriptedProvider) PersistDone(id string) error {
 	return nil
 }
 
-func (p *scriptedProvider) PersistCheck(id string, i int, done bool) error {
+func (p *scriptedProvider) PersistCheck(id string, _ int, _ bool) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.calls = append(p.calls, "check "+id)
 	return nil
 }
 
-func (p *scriptedProvider) PersistBody(id, body string) error {
+func (p *scriptedProvider) PersistBody(id, _ string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.calls = append(p.calls, "body "+id)

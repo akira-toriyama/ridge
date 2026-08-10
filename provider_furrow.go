@@ -348,7 +348,8 @@ func (p *furrowProvider) PersistBody(id, body string) error {
 	if err := json.Unmarshal(out, &resp); err != nil || resp.Path == "" {
 		return fmt.Errorf("furrow edit: no body path in %q", string(out))
 	}
-	return os.WriteFile(resp.Path, []byte(body), 0o644)
+	// 0600 matches the mode furrow itself creates body files with.
+	return os.WriteFile(resp.Path, []byte(body), 0o600)
 }
 
 var _ Provider = (*furrowProvider)(nil)

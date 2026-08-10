@@ -143,7 +143,8 @@ func perfHook(path string) func(op string, d time.Duration) {
 	if path == "" {
 		return nil
 	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	// The path is the -perflog flag: the user chose where their own log goes (G304).
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644) //nolint:gosec
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error: -perflog:", err)
 		os.Exit(2)

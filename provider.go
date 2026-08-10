@@ -61,7 +61,7 @@ func (p *mockProvider) Sync() error { return fmt.Errorf("the fixture has no stor
 
 func (p *mockProvider) Live() bool { return false }
 
-func (p *mockProvider) PersistMove(id, lane, beforeID, afterID string) ([]string, error) {
+func (p *mockProvider) PersistMove(id, lane, _, _ string) ([]string, error) {
 	if p.b.Task(id) == nil {
 		return nil, fmt.Errorf("unknown task %q", id)
 	}
@@ -78,7 +78,7 @@ func (p *mockProvider) PersistDone(id string) error {
 	return nil
 }
 
-func (p *mockProvider) PersistCheck(id string, i int, done bool) error {
+func (p *mockProvider) PersistCheck(id string, i int, _ bool) error {
 	t := p.b.Task(id)
 	if t == nil {
 		return fmt.Errorf("unknown task %q", id)
@@ -89,7 +89,7 @@ func (p *mockProvider) PersistCheck(id string, i int, done bool) error {
 	return nil
 }
 
-func (p *mockProvider) PersistBody(id, body string) error {
+func (p *mockProvider) PersistBody(id, _ string) error {
 	if p.b.Task(id) == nil {
 		return fmt.Errorf("unknown task %q", id)
 	}

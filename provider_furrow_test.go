@@ -39,7 +39,7 @@ func newLabProvider(t *testing.T) (*furrowProvider, string) {
 // non-zero exit — a broken seed makes every later assertion a lie.
 func lab(t *testing.T, dir string, name string, args ...string) []byte {
 	t.Helper()
-	cmd := exec.Command(name, args...)
+	cmd := exec.Command(name, args...) //nolint:gosec // seeding the throwaway store IS the test
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -197,7 +197,7 @@ func TestContractPersistDoneCheckBody(t *testing.T) {
 		t.Errorf("body did not persist: %q", x.Body)
 	}
 	// The replaced body lives where furrow says bodies live.
-	raw, err := os.ReadFile(filepath.Join(dir, ".furrow", "bodies", id+".md"))
+	raw, err := os.ReadFile(filepath.Join(dir, ".furrow", "bodies", id+".md")) //nolint:gosec // the test's own tempdir
 	if err != nil || !strings.Contains(string(raw), "置換された本文") {
 		t.Errorf("body file wrong: %v %q", err, raw)
 	}
