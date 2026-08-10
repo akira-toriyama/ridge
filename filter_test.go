@@ -8,7 +8,7 @@ import (
 
 func fixtureGraph(t *testing.T) (*Board, *Graph) {
 	t.Helper()
-	b := NewBoard(fixtureTasks())
+	b := NewBoard(fixtureTasks(), fixtureEpics()...)
 	return b, NewGraph(b)
 }
 
@@ -105,13 +105,12 @@ func TestQueryMatchesFixture(t *testing.T) {
 		min  int
 	}{
 		{q: "lane:ready", want: []string{"t-n2fc"}},
-		{q: "lane:in-progress", want: []string{"t-fw2m"}},
-		{q: "type:epic", want: []string{"t-fw2m"}},
+		{q: "lane:in-progress", want: []string{}}, // the epic is an entity, not a card in a lane
 		{q: "is:actionable", want: []string{"t-n2fc"}},
-		{q: "is:epic", want: []string{"t-fw2m"}},
 		{q: "id:t-jv3j", want: []string{"t-jv3j"}},
-		{q: "parent:t-fw2m", min: 18},
-		{q: "repo:vista", min: 22},
+		{q: "epic:e-fw2m", min: 18},
+		{q: "has:epic", min: 18},
+		{q: "repo:vista", min: 21},
 		{q: "label:ui", min: 9},
 		{q: "no:label", min: 1},
 		{q: "no:repo", want: []string{}}, // the fixture has no drafts
@@ -134,7 +133,7 @@ func TestQueryMatchesFixture(t *testing.T) {
 	// is:blocked must agree with the graph, exactly — one definition, shared.
 	blocked := matched(t, "is:blocked")
 	var fromGraph []string
-	b := NewBoard(fixtureTasks())
+	b := NewBoard(fixtureTasks(), fixtureEpics()...)
 	for _, task := range b.Tasks() {
 		if len(g.BlockedBy(task.ID)) > 0 {
 			fromGraph = append(fromGraph, task.ID)
@@ -185,7 +184,7 @@ func TestQueryBareWordIsCaseInsensitiveSubstring(t *testing.T) {
 		t.Fatal("CJK bare word matched nothing")
 	}
 	for _, id := range got {
-		b := NewBoard(fixtureTasks())
+		b := NewBoard(fixtureTasks(), fixtureEpics()...)
 		if !strings.Contains(b.Task(id).Title, "依存") {
 			t.Errorf("%s does not contain the needle", id)
 		}

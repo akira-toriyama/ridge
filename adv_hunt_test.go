@@ -301,8 +301,6 @@ func advCyclicBoard() *Board {
 		{ID: "b", Title: "B", Status: "ready", Priority: 20, Deps: []string{"c"}},
 		{ID: "c", Title: "C", Status: "ready", Priority: 30, Deps: []string{"a"}},
 		{ID: "s", Title: "S", Status: "ready", Priority: 40, Deps: []string{"s"}},
-		{ID: "e", Title: "E", Status: "backlog", Priority: 10, Type: "epic"},
-		{ID: "k", Title: "K", Status: "backlog", Priority: 20, Parent: "e"},
 	})
 }
 
@@ -320,29 +318,11 @@ func TestAdvDepCycleIsSurvivable(t *testing.T) {
 		for _, id := range []string{"a", "b", "c", "s"} {
 			_ = g.Actionable(id)
 			_ = g.BlockedBy(id)
-			_ = g.Stuck(id)
-			_, _ = g.Progress(id, true)
 			_ = g.TreeOf(id, dirBlockedBy, 4)
 			_ = g.TreeOf(id, dirBlocks, 4)
 		}
 	}()
 	<-done
-}
-
-// A parent CYCLE (which a git merge can produce, and which furrow's lint calls
-// `parent-cycle`) must not hang the tree renderer either.
-//
-// bite-exempt: signature-only edit (t → _) for revive unused-parameter — a
-// survival test pins current behaviour and has nothing to assert through t.
-func TestAdvParentCycleIsSurvivable(_ *testing.T) {
-	b := NewBoard([]*Task{
-		{ID: "p", Title: "P", Status: "backlog", Type: "epic", Parent: "q"},
-		{ID: "q", Title: "Q", Status: "backlog", Type: "epic", Parent: "p"},
-	})
-	g := NewGraph(b)
-	_ = g.Stuck("p")
-	_, _ = g.Progress("p", true)
-	_ = g.Children("p")
 }
 
 // A self-dep must block: `s` depends on `s`, which is not done, so `s` can

@@ -20,24 +20,18 @@ type ChecklistItem struct {
 	Done bool
 }
 
-// Task mirrors the fields of a furrow task shard that ridge renders.
-//
-// Two epic-shaped fields coexist deliberately: Epic is the real store's
-// membership (an e- id — epics are separate entities without a lane), while
-// Parent/Type are the FIXTURE's older model, where an epic was itself a task
-// card in a lane. The real provider fills Epic and leaves Parent/Type empty;
-// the fixture does the reverse. Cleanup of the fixture model is t-ay6n.
+// Task mirrors the fields of a furrow task shard that ridge renders. Epics are
+// NOT tasks: they are separate entities without a lane (EpicInfo), and a task
+// carries only its membership id in Epic.
 type Task struct {
 	ID        string
 	Title     string
 	Status    string // the lane
 	Priority  int    // sparse, 10-step; order WITHIN the lane
-	Type      string // "" means the board's default type ("task")
 	Value     int    // 1..5
 	Effort    int    // 1..5
 	Labels    []string
 	Repos     []string
-	Parent    string
 	Epic      string // e- id of the box this task is filed under ("" = unfiled)
 	Deps      []string
 	Refs      []string
@@ -48,15 +42,6 @@ type Task struct {
 	Reviewed  time.Time
 	Due       time.Time // zero = no promise
 	Body      string
-}
-
-// EffectiveType resolves a type-less task to the board default, the way
-// furrow's `ls --type task` includes the type-less majority.
-func (t *Task) EffectiveType() string {
-	if t.Type == "" {
-		return defaultType
-	}
-	return t.Type
 }
 
 // ShortRepo renders "akira-toriyama/vista" as "vista" for a narrow card.
@@ -105,8 +90,6 @@ func (l Lane) DisplayName() string {
 	return strings.ToUpper(string(r[0])) + string(r[1:])
 }
 
-const defaultType = "task"
-
 // boardLanes is the lane vocabulary, in board order.
 var boardLanes = []Lane{
 	{Name: "inbox"},
@@ -116,9 +99,6 @@ var boardLanes = []Lane{
 	{Name: "done", Done: true, Term: true},
 	{Name: "icebox", Term: true},
 }
-
-// containerTypes is furrow's `[types].containers`: a box, not work.
-var containerTypes = map[string]bool{"epic": true}
 
 // EpicInfo is one epic entity as `furrow epic ls --json` reports it. Epics
 // have no lane, so they are board-level metadata rather than tasks: cards
@@ -145,9 +125,18 @@ type Board struct {
 	schema   string // furrow's schema_state; "" for the fixture
 }
 
-func NewBoard(tasks []*Task) *Board {
-	return &Board{tasks: tasks, lanes: append([]Lane(nil), boardLanes...), writable: true}
+func NewBoard(tasks []*Task, epics ...EpicInfo) *Board {
+	b := &Board{tasks: tasks, lanes: append([]Lane(nil), boardLanes...),
+		epics: epics, writable: true}
+	b.epicByID = make(map[string]*EpicInfo, len(epics))
+	for i := range b.epics {
+		b.epicByID[b.epics[i].ID] = &b.epics[i]
+	}
+	return b
 }
+
+// Epics returns the board's epic entities.
+func (b *Board) Epics() []EpicInfo { return b.epics }
 
 // newStoreBoard assembles a snapshot of a real furrow store: its own lane
 // vocabulary (not the fixture's), the epic entities, and the write pre-flight

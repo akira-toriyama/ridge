@@ -13,7 +13,6 @@ const (
 	glyphActionable = "▸" // furrow next would hand you this one
 	glyphBlocked    = "x" // unsatisfied deps
 	glyphEpic       = "▤" // a container: a box, not work
-	glyphStuck      = "!" // container with open work but nothing actionable
 	glyphDone       = "v"
 	glyphOpen       = "o"
 	glyphUnknown    = "?" // a dep pointing at an id not on the board

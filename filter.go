@@ -12,7 +12,7 @@ import (
 //
 //	token       := ["-"] (key ":" values | word)
 //	values      := value ["," value]...
-//	key         := lane|status|repo|label|type|is|no|has|id|parent
+//	key         := lane|status|repo|label|is|no|has|id|epic
 //
 // Comma inside ONE token is OR; separate tokens AND; a leading "-" negates the
 // whole token; a bare word is a case-insensitive substring of the title or id.
@@ -39,17 +39,17 @@ func (q Query) Empty() bool { return len(q.Terms) == 0 }
 
 var queryKeys = map[string]bool{
 	"lane": true, "status": true, "repo": true, "label": true,
-	"type": true, "is": true, "no": true, "has": true,
-	"id": true, "parent": true, "epic": true,
+	"is": true, "no": true, "has": true,
+	"id": true, "epic": true,
 }
 
 var isValues = map[string]bool{
 	"blocked": true, "actionable": true, "done": true, "open": true,
-	"epic": true, "container": true, "stuck": true, "draft": true,
+	"draft": true,
 }
 
 var noHasValues = map[string]bool{
-	"repo": true, "label": true, "dep": true, "parent": true,
+	"repo": true, "label": true, "dep": true, "epic": true,
 	"body": true, "checklist": true, "value": true, "effort": true,
 }
 
@@ -167,12 +167,8 @@ func (t Term) matchOne(task *Task, g *Graph, v string) bool {
 		return strings.ToLower(task.Status) == v
 	case "id":
 		return strings.ToLower(task.ID) == v
-	case "parent":
-		return strings.ToLower(task.Parent) == v
 	case "epic":
 		return strings.ToLower(task.Epic) == v
-	case "type":
-		return strings.ToLower(task.EffectiveType()) == v
 	case "repo":
 		return containsFold(task.Repos, v)
 	case "label":
@@ -197,10 +193,6 @@ func (t Term) matchIs(task *Task, g *Graph, v string) bool {
 		return g.IsDone(task.ID)
 	case "open":
 		return !g.IsDone(task.ID)
-	case "epic", "container":
-		return g.IsContainer(task.ID)
-	case "stuck":
-		return g.Stuck(task.ID)
 	case "draft":
 		return len(task.Repos) == 0
 	}
@@ -215,8 +207,8 @@ func hasField(t *Task, field string) bool {
 		return len(t.Labels) > 0
 	case "dep":
 		return len(t.Deps) > 0
-	case "parent":
-		return t.Parent != ""
+	case "epic":
+		return t.Epic != ""
 	case "body":
 		return strings.TrimSpace(t.Body) != ""
 	case "checklist":

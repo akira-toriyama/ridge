@@ -369,7 +369,7 @@ func (m *Model) helpLayer() *lg.Layer {
 	flush()
 
 	syntax := wrapJoin([]string{"filter syntax:",
-		"lane: repo: label: type: is: no: has: id: parent: epic:",
+		"lane: repo: label: is: no: has: id: epic:",
 		"· comma = OR · leading - negates · bare word = title/id"}, " ", inner)
 	note := wrapJoin([]string{"every mouse gesture above has a keyboard twin —",
 		"that is the rule, not a bonus"}, " ", inner)

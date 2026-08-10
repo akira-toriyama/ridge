@@ -20,8 +20,7 @@ func scaledTasks(n int) []*Task {
 			c := *t
 			if i > 0 {
 				c.ID = fmt.Sprintf("%s-%d", t.ID, i)
-				c.Parent = "" // clones must not re-point at the original epic
-				c.Deps = nil  // nor duplicate its dep edges
+				c.Deps = nil // clones must not duplicate the original's dep edges
 				c.Priority = t.Priority + i*1000
 			}
 			out = append(out, &c)

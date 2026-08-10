@@ -149,33 +149,27 @@ func TestBlockedCardsAreMarkedNotHidden(t *testing.T) {
 	}
 }
 
-func TestActionableAndEpicGlyphs(t *testing.T) {
+func TestActionableAndEpicChips(t *testing.T) {
 	m := boardModel(t, 140, 40)
 	out := frame(m)
 
-	// t-n2fc is the one actionable task; t-fw2m is the epic.
-	for id, want := range map[string]string{"t-n2fc": glyphActionable, "t-fw2m": glyphEpic} {
-		found := false
-		for _, line := range strings.Split(out, "\n") {
-			if strings.Contains(line, id) {
-				found = true
-			}
-		}
-		if !found {
-			t.Errorf("%s is not on the board", id)
-			continue
-		}
-		if !strings.Contains(out, want) {
-			t.Errorf("the %s glyph (%q) is missing from the frame", id, want)
-		}
+	// t-n2fc is the one actionable task.
+	if !strings.Contains(out, "t-n2fc") {
+		t.Fatal("t-n2fc is not on the board")
 	}
-	// The epic shows rolled-up child progress, not its own (absent) checklist.
-	d, tot := m.g.Progress("t-fw2m", false)
-	if tot != 18 {
-		t.Fatalf("epic has %d children", tot)
+	if !strings.Contains(out, glyphActionable) {
+		t.Errorf("the actionable glyph (%q) is missing from the frame", glyphActionable)
 	}
-	if !strings.Contains(out, "6/18") && !strings.Contains(out, "0/18") {
-		t.Errorf("the epic card should show %d/%d child progress", d, tot)
+	// An epic is an ENTITY, never a card: no lane holds e-fw2m, and member
+	// cards carry a chip with the epic's RESOLVED title, not its raw id.
+	if strings.Contains(out, "e-fw2m") {
+		t.Error("the epic id leaked into the frame — members must show the resolved title chip")
+	}
+	if !strings.Contains(out, glyphEpic) {
+		t.Errorf("the epic chip glyph (%q) is missing from the frame", glyphEpic)
+	}
+	if !strings.Contains(out, "vista: f") {
+		t.Error("the epic chip must carry the epic's resolved title")
 	}
 }
 
@@ -224,8 +218,8 @@ func TestTableViewListsEveryVisibleTask(t *testing.T) {
 	m.view = viewTable
 	out := frame(m)
 	rows := m.tableRows()
-	if len(rows) != 24 {
-		t.Fatalf("expected all 24 tasks, got %d", len(rows))
+	if len(rows) != 23 {
+		t.Fatalf("expected all 23 tasks, got %d", len(rows))
 	}
 	// The cursor is a glyph, not only colour, so -plain can see it.
 	if !strings.Contains(out, "▌ "+rows[0].ID) {

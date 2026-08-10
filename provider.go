@@ -51,11 +51,13 @@ type Provider interface {
 // and -dump deterministic.
 type mockProvider struct{ b *Board }
 
-func newMockProvider() *mockProvider { return &mockProvider{b: NewBoard(fixtureTasks())} }
+func newMockProvider() *mockProvider {
+	return &mockProvider{b: NewBoard(fixtureTasks(), fixtureEpics()...)}
+}
 
 func (p *mockProvider) Board() *Board { return p.b }
 
-func (p *mockProvider) Reload() error { p.b = NewBoard(fixtureTasks()); return nil }
+func (p *mockProvider) Reload() error { p.b = NewBoard(fixtureTasks(), fixtureEpics()...); return nil }
 
 func (p *mockProvider) Sync() error { return fmt.Errorf("the fixture has no store to sync") }
 

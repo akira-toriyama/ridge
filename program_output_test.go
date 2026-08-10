@@ -101,7 +101,7 @@ func TestProgramActuallyRendersTheBoardToItsOutput(t *testing.T) {
 	for _, want := range []string{
 		"furrow board",   // the title bar
 		"Board", "Table", // the view tab strip
-		"24 tasks", // the counter
+		"23 tasks", // the counter
 		// The lane headers, in their DISPLAY form. The model keeps the furrow
 		// slug (`in-progress`) — that is what the filter grammar and
 		// `furrow set --status` take — and only the header renders it the way a
@@ -117,7 +117,7 @@ func TestProgramActuallyRendersTheBoardToItsOutput(t *testing.T) {
 	// Lane headers alone are not a board. Require real cards: a chrome-only
 	// frame (every card layer dropped) still contains all of the above.
 	var seen int
-	for _, id := range []string{"t-ehk7", "t-n2fc", "t-jv3j", "t-r7wr", "t-9m2q", "t-fw2m"} {
+	for _, id := range []string{"t-ehk7", "t-n2fc", "t-jv3j", "t-r7wr", "t-9m2q", "t-t38k"} {
 		if strings.Contains(out, id) {
 			seen++
 		}

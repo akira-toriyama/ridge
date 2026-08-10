@@ -65,93 +65,31 @@ func TestReverseDeps(t *testing.T) {
 	}
 }
 
-func TestContainerIsDeclaredNotInferred(t *testing.T) {
-	b := NewBoard([]*Task{
-		{ID: "epic", Status: "in-progress", Type: "epic"},
-		{ID: "plain", Status: "ready", Type: ""},
-		{ID: "kid", Status: "ready", Parent: "plain"},
-		{ID: "empty-epic", Status: "backlog", Type: "epic"},
-	})
-	g := NewGraph(b)
-
-	if !g.IsContainer("epic") {
-		t.Error("a declared epic is a container")
-	}
-	if g.IsContainer("plain") {
-		t.Error("a plain task with children is NOT a container — type is declared, not inferred")
-	}
-	if !g.IsContainer("empty-epic") {
-		t.Error("an empty epic is still a legitimate declaration")
-	}
-	// A container is a box, not work: furrow next skips it.
-	if g.Actionable("epic") {
-		t.Error("a container must never be actionable")
-	}
-	if !g.Actionable("plain") {
-		t.Error("a type-less task in a next lane with no deps is actionable")
-	}
-	// An empty container never nags.
-	if g.ChildrenDone("empty-epic") {
-		t.Error("an empty epic must not report children_done")
-	}
-	if g.Stuck("empty-epic") {
-		t.Error("an empty epic has no open work, so it is not stuck")
-	}
-}
-
-func TestStuckWalksTheSubtree(t *testing.T) {
-	// epic -> sub-epic -> blocked leaf. Nothing actionable anywhere below.
-	b := NewBoard([]*Task{
-		{ID: "e", Status: "in-progress", Type: "epic"},
-		{ID: "se", Status: "backlog", Type: "epic", Parent: "e"},
-		{ID: "leaf", Status: "ready", Parent: "se", Deps: []string{"wall"}},
-		{ID: "wall", Status: "backlog"},
-	})
-	g := NewGraph(b)
-	if !g.Stuck("e") {
-		t.Error("e has open work below it but nothing actionable — stuck")
-	}
-
-	// Unblock the leaf and the stuck flag must clear, through the sub-epic.
-	b2 := NewBoard([]*Task{
-		{ID: "e", Status: "in-progress", Type: "epic"},
-		{ID: "se", Status: "backlog", Type: "epic", Parent: "e"},
-		{ID: "leaf", Status: "ready", Parent: "se"},
-	})
-	if NewGraph(b2).Stuck("e") {
-		t.Error("an actionable descendant clears stuck, however deep")
-	}
-}
-
-func TestProgressRollsUp(t *testing.T) {
-	b := NewBoard([]*Task{
-		{ID: "e", Status: "in-progress", Type: "epic"},
-		{ID: "a", Status: "done", Parent: "e"},
-		{ID: "bq", Status: "backlog", Parent: "e"},
-		{ID: "se", Status: "backlog", Type: "epic", Parent: "e"},
-		{ID: "deep", Status: "done", Parent: "se"},
-	})
-	g := NewGraph(b)
-	if d, tot := g.Progress("e", false); d != 1 || tot != 3 {
-		t.Errorf("direct progress = %d/%d, want 1/3", d, tot)
-	}
-	if d, tot := g.Progress("e", true); d != 2 || tot != 4 {
-		t.Errorf("recursive progress = %d/%d, want 2/4", d, tot)
-	}
-}
-
 func TestGraphAgreesWithFixtureFacts(t *testing.T) {
 	b, g := fixtureGraph(t)
 
-	// t-fw2m is the epic, in a next lane, with 18 children.
-	if !g.IsContainer("t-fw2m") {
-		t.Error("t-fw2m is the fixture's epic")
+	// e-fw2m is the fixture's one epic ENTITY — no lane, no card — and the 18
+	// member tasks point at it. Done/Total mirror `furrow epic ls`, so they
+	// must agree with the member lanes the fixture actually holds.
+	e := b.Epic("e-fw2m")
+	if e == nil {
+		t.Fatal("e-fw2m is the fixture's epic entity")
 	}
-	if n := len(g.Children("t-fw2m")); n != 18 {
-		t.Errorf("t-fw2m has %d children, want 18", n)
+	var members, membersDone int
+	for _, task := range b.Tasks() {
+		if task.Epic != e.ID {
+			continue
+		}
+		members++
+		if g.IsDone(task.ID) {
+			membersDone++
+		}
 	}
-	if g.Actionable("t-fw2m") {
-		t.Error("the epic sits in in-progress but must be skipped by next")
+	if members != e.Total || membersDone != e.Done {
+		t.Errorf("epic reports %d/%d, members measure %d/%d", e.Done, e.Total, membersDone, members)
+	}
+	if e.Total != 18 {
+		t.Errorf("e-fw2m has %d members, want 18", e.Total)
 	}
 
 	// t-jv3j depends on t-ehk7 (open) and t-t38k (done).

@@ -2,45 +2,28 @@ package main
 
 import "sort"
 
-// Graph is the ONE place "blocked", "actionable", "reverse deps", "container",
-// "stuck" and "progress" are defined. The card glyph, the filter, the detail
-// pane and the dep-tree overlay all read it, so they cannot drift apart.
+// Graph is the ONE place "blocked", "actionable" and "reverse deps" are
+// defined. The card glyph, the filter, the detail pane and the dep-tree
+// overlay all read it, so they cannot drift apart.
 //
 // It is rebuilt after every mutation — with 24 tasks (and 658 on the real
 // board, 102 edges) that is free, and it removes a whole class of stale-cache
 // bugs.
 type Graph struct {
-	b    *Board
-	rev  map[string][]string // id -> ids that depend on it
-	kids map[string][]string // parent id -> child ids, in lane/priority order
+	b   *Board
+	rev map[string][]string // id -> ids that depend on it
 }
 
-// NewGraph indexes the reverse dep and parent edges of a board.
+// NewGraph indexes the reverse dep edges of a board.
 func NewGraph(b *Board) *Graph {
-	g := &Graph{b: b, rev: map[string][]string{}, kids: map[string][]string{}}
+	g := &Graph{b: b, rev: map[string][]string{}}
 	for _, t := range b.Tasks() {
 		for _, d := range t.Deps {
 			g.rev[d] = append(g.rev[d], t.ID)
 		}
-		if t.Parent != "" {
-			g.kids[t.Parent] = append(g.kids[t.Parent], t.ID)
-		}
 	}
 	for k := range g.rev {
 		sort.Strings(g.rev[k])
-	}
-	for k := range g.kids {
-		ids := g.kids[k]
-		sort.SliceStable(ids, func(i, j int) bool {
-			a, bb := b.Task(ids[i]), b.Task(ids[j])
-			if a == nil || bb == nil {
-				return ids[i] < ids[j]
-			}
-			if la, lb := b.LaneIndex(a.Status), b.LaneIndex(bb.Status); la != lb {
-				return la < lb
-			}
-			return a.Priority < bb.Priority
-		})
 	}
 	return g
 }
@@ -56,14 +39,6 @@ func (g *Graph) Known(id string) bool { return g.b.Task(id) != nil }
 func (g *Graph) IsDone(id string) bool {
 	t := g.b.Task(id)
 	return t != nil && g.b.isDoneLane(t.Status)
-}
-
-// IsContainer reports whether the task's effective type is a container type —
-// a box, not work. Declared, never inferred from structure: an empty epic is
-// still a container and a plain task with children is not.
-func (g *Graph) IsContainer(id string) bool {
-	t := g.b.Task(id)
-	return t != nil && containerTypes[t.EffectiveType()]
 }
 
 // BlockedBy lists the task's deps that are NOT done, in dep order. An unknown
@@ -98,8 +73,8 @@ func (g *Graph) OpenBlocks(id string) []string {
 	return out
 }
 
-// Actionable is exactly what `furrow next` would hand you: in a next lane,
-// every dep done, and not a container (a box is not work).
+// Actionable is exactly what `furrow next` would hand you: in a next lane and
+// every dep done.
 func (g *Graph) Actionable(id string) bool {
 	t := g.b.Task(id)
 	if t == nil {
@@ -109,76 +84,7 @@ func (g *Graph) Actionable(id string) bool {
 	if l == nil || !l.Next {
 		return false
 	}
-	if g.IsContainer(id) {
-		return false
-	}
 	return len(g.BlockedBy(id)) == 0
-}
-
-// Children lists a container's direct children.
-func (g *Graph) Children(id string) []string { return g.kids[id] }
-
-// Progress rolls up child completion for a container. recursive walks the whole
-// subtree (furrow's --progress-recursive); otherwise direct children only.
-func (g *Graph) Progress(id string, recursive bool) (done, total int) {
-	seen := map[string]bool{id: true}
-	var walk func(string)
-	walk = func(p string) {
-		for _, c := range g.kids[p] {
-			if seen[c] {
-				continue
-			}
-			seen[c] = true
-			total++
-			if g.IsDone(c) {
-				done++
-			}
-			if recursive {
-				walk(c)
-			}
-		}
-	}
-	walk(id)
-	return done, total
-}
-
-// Stuck is org-mode's stuck project: a container with open work under it but no
-// actionable descendant anywhere in its subtree. It always walks the subtree,
-// through sub-epics.
-func (g *Graph) Stuck(id string) bool {
-	if !g.IsContainer(id) {
-		return false
-	}
-	var open, act int
-	seen := map[string]bool{id: true}
-	var walk func(string)
-	walk = func(p string) {
-		for _, c := range g.kids[p] {
-			if seen[c] {
-				continue
-			}
-			seen[c] = true
-			if !g.IsDone(c) {
-				open++
-				if g.Actionable(c) {
-					act++
-				}
-			}
-			walk(c)
-		}
-	}
-	walk(id)
-	return open > 0 && act == 0
-}
-
-// ChildrenDone reports a container whose children are all closed — consider
-// closing the box.
-func (g *Graph) ChildrenDone(id string) bool {
-	if !g.IsContainer(id) {
-		return false
-	}
-	done, total := g.Progress(id, false)
-	return total > 0 && done == total
 }
 
 // depDir selects which way TreeOf walks.

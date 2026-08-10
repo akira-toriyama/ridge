@@ -318,10 +318,6 @@ func (m *Model) renderGraphNode(n *egoNode, titleLines int) string {
 	if m.g.Actionable(t.ID) {
 		bits = append(bits, th.ok.Render(glyphActionable+" actionable"))
 	}
-	if m.g.IsContainer(t.ID) {
-		d, tot := m.g.Progress(t.ID, false)
-		bits = append(bits, th.accent.Render(fmt.Sprintf("%s %d/%d", glyphEpic, d, tot)))
-	}
 	if d, tot := t.CheckProgress(); tot > 0 {
 		bits = append(bits, th.muted.Render(fmt.Sprintf("[%d/%d]", d, tot)))
 	}
@@ -404,7 +400,7 @@ func (m *Model) graphStrip(l *egoLayout, h int) string {
 	for _, line := range wrapLines(t.Title, leftW) {
 		left = append(left, th.base.Render(line))
 	}
-	meta := []string{"type " + t.EffectiveType()}
+	var meta []string
 	if t.Value > 0 || t.Effort > 0 {
 		meta = append(meta, fmt.Sprintf("value %d", t.Value), fmt.Sprintf("effort %d", t.Effort))
 	}
@@ -416,8 +412,8 @@ func (m *Model) graphStrip(l *egoLayout, h int) string {
 	if len(t.Labels) > 0 {
 		meta = append(meta, "labels "+strings.Join(t.Labels, ","))
 	}
-	if t.Parent != "" {
-		meta = append(meta, "parent "+t.Parent)
+	if t.Epic != "" {
+		meta = append(meta, "epic "+t.Epic)
 	}
 	if d, tot := t.CheckProgress(); tot > 0 {
 		meta = append(meta, fmt.Sprintf("checklist %d/%d", d, tot))

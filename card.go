@@ -43,18 +43,13 @@ func (t *theme) cardStyle(st cardState, done bool) lg.Style {
 }
 
 // cardMarker is the leading glyph: the single most important fact about a task.
-// Priority order is deliberate — blocked beats actionable beats box.
+// Priority order is deliberate — blocked beats actionable.
 func cardMarker(t *Task, g *Graph) (glyph string, style func(*theme) lg.Style) {
 	switch {
 	case len(g.BlockedBy(t.ID)) > 0:
 		return glyphBlocked, func(th *theme) lg.Style { return th.danger }
 	case g.Actionable(t.ID):
 		return glyphActionable, func(th *theme) lg.Style { return th.ok }
-	case g.IsContainer(t.ID):
-		if g.Stuck(t.ID) {
-			return glyphStuck, func(th *theme) lg.Style { return th.warn }
-		}
-		return glyphEpic, func(th *theme) lg.Style { return th.accent }
 	case g.IsDone(t.ID):
 		return glyphDone, func(th *theme) lg.Style { return th.dim }
 	}
@@ -132,16 +127,19 @@ func cardLines(t *Task, g *Graph, th *theme, w int) []string {
 	if r := t.ShortRepo(); r != "" {
 		left += " " + th.chipAlt.Render(r)
 	}
-	// The epic membership chip, resolved to its title. Real-store data only
-	// (the fixture models epics as in-lane cards instead); joinEnds truncates
+	// The epic membership chip, resolved to its title; a stuck epic's glyph
+	// turns warn (EpicInfo.Stuck is furrow's own verdict). joinEnds truncates
 	// the left side on narrow columns, so wide boards get the context and
 	// narrow ones lose the chip before they lose the numbers.
 	if t.Epic != "" {
-		label := t.Epic
+		label, chip := t.Epic, th.accent
 		if e := g.Board().Epic(t.Epic); e != nil {
 			label = e.Title
+			if e.Stuck {
+				chip = th.warn
+			}
 		}
-		left += " " + th.accent.Render(glyphEpic) + th.muted.Render(" "+ansi.Truncate(label, 14, "…"))
+		left += " " + chip.Render(glyphEpic) + th.muted.Render(" "+ansi.Truncate(label, 14, "…"))
 	}
 	var bits []string
 	if t.Value > 0 || t.Effort > 0 {
@@ -149,10 +147,6 @@ func cardLines(t *Task, g *Graph, th *theme, w int) []string {
 	}
 	if n := len(g.BlockedBy(t.ID)); n > 0 {
 		bits = append(bits, th.danger.Render(fmt.Sprintf("%s%d", glyphBlocked, n)))
-	}
-	if g.IsContainer(t.ID) {
-		d, tot := g.Progress(t.ID, false)
-		bits = append(bits, th.accent.Render(fmt.Sprintf("%d/%d", d, tot)))
 	}
 	if n, tot := t.CheckProgress(); tot > 0 {
 		bits = append(bits, th.muted.Render(fmt.Sprintf("[%d/%d]", n, tot)))

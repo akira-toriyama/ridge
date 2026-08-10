@@ -132,7 +132,7 @@ func runBenchload() {
 		fmt.Printf("%-8s %4dms (concurrent)\n", s.op, s.ms)
 	}
 	fmt.Printf("%-8s %4dms  %d tasks · %d epics · %d bodies read\n",
-		"total", total, len(b.Tasks()), len(b.epics), bodies)
+		"total", total, len(b.Tasks()), len(b.Epics()), bodies)
 }
 
 // perfHook returns the furrow-latency recorder: nil when unwanted, else an

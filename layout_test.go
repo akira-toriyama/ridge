@@ -14,7 +14,7 @@ import (
 func TestGlyphsAreSingleWidth(t *testing.T) {
 	glyphs := map[string]string{
 		"actionable": glyphActionable, "blocked": glyphBlocked, "epic": glyphEpic,
-		"stuck": glyphStuck, "done": glyphDone, "open": glyphOpen,
+		"done": glyphDone, "open": glyphOpen,
 		"unknown": glyphUnknown, "wipOver": glyphWIPOver, "drop": glyphDrop,
 		"lift": glyphLift,
 	}

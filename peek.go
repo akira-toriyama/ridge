@@ -7,6 +7,7 @@ import (
 
 	lg "charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/tree"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // The detail side-peek. It is drawn as a lipgloss Layer at zPeek over the
@@ -63,7 +64,7 @@ func (m *Model) peekContent(w int) string {
 	}
 	b.WriteString("\n")
 
-	meta := []string{"type " + t.EffectiveType()}
+	var meta []string
 	if t.Value > 0 || t.Effort > 0 {
 		meta = append(meta, fmt.Sprintf("value %d", t.Value), fmt.Sprintf("effort %d", t.Effort))
 	}
@@ -73,15 +74,9 @@ func (m *Model) peekContent(w int) string {
 	case len(m.g.BlockedBy(t.ID)) > 0:
 		meta = append(meta, th.danger.Render(fmt.Sprintf("%s blocked", glyphBlocked)))
 	}
-	if m.g.IsContainer(t.ID) {
-		d, tot := m.g.Progress(t.ID, true)
-		lbl := fmt.Sprintf("%s container %d/%d", glyphEpic, d, tot)
-		if m.g.Stuck(t.ID) {
-			lbl += " " + th.warn.Render("STUCK")
-		}
-		meta = append(meta, th.accent.Render(lbl))
+	if len(meta) > 0 {
+		b.WriteString(th.muted.Render(wrapJoin(meta, " · ", w)) + "\n")
 	}
-	b.WriteString(th.muted.Render(wrapJoin(meta, " · ", w)) + "\n")
 
 	var meta2 []string
 	if len(t.Repos) > 0 {
@@ -89,13 +84,13 @@ func (m *Model) peekContent(w int) string {
 	} else {
 		meta2 = append(meta2, th.dim.Render("draft (no repo)"))
 	}
-	if t.Parent != "" {
-		meta2 = append(meta2, "parent "+t.Parent+" "+m.titleOf(t.Parent, 24))
-	}
 	if t.Epic != "" {
 		label := t.Epic
 		if e := m.b.Epic(t.Epic); e != nil {
 			label = fmt.Sprintf("%s %s (%d/%d)", t.Epic, e.Title, e.Done, e.Total)
+			if e.Stuck {
+				label += " " + th.warn.Render("STUCK")
+			}
 		}
 		meta2 = append(meta2, "epic "+label)
 	}
@@ -118,14 +113,6 @@ func (m *Model) peekContent(w int) string {
 	// --- dependencies: resolved, bidirectional, never raw ids ---------------
 	b.WriteString("\n" + sectionRule(th, "dependencies", w) + "\n")
 	b.WriteString(m.depSection(t, w))
-
-	if kids := m.g.Children(t.ID); len(kids) > 0 {
-		d, tot := m.g.Progress(t.ID, false)
-		b.WriteString("\n" + sectionRule(th, fmt.Sprintf("children %d/%d", d, tot), w) + "\n")
-		for _, id := range kids {
-			b.WriteString("  " + m.depLine(id, w-2) + "\n")
-		}
-	}
 
 	if len(t.Checklist) > 0 {
 		d, tot := t.CheckProgress()
@@ -267,6 +254,11 @@ func wrapJoin(parts []string, sep string, w int) string {
 	var lines []string
 	cur := ""
 	for _, p := range parts {
+		// Wrapping happens at part boundaries only, so one over-wide part (a
+		// resolved epic title) would push the whole block past the box border.
+		if lg.Width(p) > w {
+			p = ansi.Truncate(p, w, "…")
+		}
 		cand := p
 		if cur != "" {
 			cand = cur + sep + p

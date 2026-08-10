@@ -1,8 +1,9 @@
-// Code generated from the real furrow board — DO NOT EDIT BY HAND.
-// Source: 24 tasks from akira-toriyama/projects (the "vista" epic t-fw2m, its
-// children, and their dependency targets). Bodies are the real body files,
-// truncated. This is a static in-memory copy: the POC never reads or writes a
-// real .furrow store.
+// Snapshotted from the real furrow board (2026-07), then converted to the
+// real store's epic model for t-ay6n: 23 tasks from akira-toriyama/projects
+// (the "vista" epic's members and their dependency targets) plus the epic as
+// an EpicInfo entity — epics are not tasks and hold no lane. Bodies are the
+// real body files, truncated. This is a static in-memory copy; the mock
+// provider never reads or writes a real .furrow store.
 
 package main
 
@@ -26,7 +27,7 @@ func fixtureTasks() []*Task {
 			Value:    3,
 			Effort:   2,
 			Repos:    []string{"akira-toriyama/vista"},
-			Parent:   "t-fw2m",
+			Epic:     "e-fw2m",
 			Deps:     []string{"t-ehk7", "t-t38k"},
 			Created:  ts("2026-07-16T08:35:54Z"),
 			Updated:  ts("2026-07-16T15:47:40Z"),
@@ -52,7 +53,7 @@ func fixtureTasks() []*Task {
 			Value:    3,
 			Effort:   2,
 			Repos:    []string{"akira-toriyama/vista"},
-			Parent:   "t-fw2m",
+			Epic:     "e-fw2m",
 			Created:  ts("2026-07-16T08:35:53Z"),
 			Updated:  ts("2026-07-16T09:26:59Z"),
 			Closed:   ts("2026-07-16T09:26:59Z"),
@@ -67,7 +68,7 @@ func fixtureTasks() []*Task {
 			Effort:   4,
 			Labels:   []string{"ui"},
 			Repos:    []string{"akira-toriyama/vista"},
-			Parent:   "t-fw2m",
+			Epic:     "e-fw2m",
 			Checklist: []ChecklistItem{
 				{Text: "列定義 + 表示/非表示 + 並べ替え", Done: false},
 				{Text: "40px 行 + hover/選択の Primer 色", Done: false},
@@ -89,7 +90,7 @@ func fixtureTasks() []*Task {
 			Effort:   2,
 			Labels:   []string{"ui"},
 			Repos:    []string{"akira-toriyama/vista"},
-			Parent:   "t-fw2m",
+			Epic:     "e-fw2m",
 			Checklist: []ChecklistItem{
 				{Text: "列 count 常時表示", Done: false},
 				{Text: "value/effort sum の display option", Done: false},
@@ -122,19 +123,6 @@ func fixtureTasks() []*Task {
 			Body:    "**vista filter bar (t-jv3j) の正本ロジック**。ユーザー決定 2026-07-17: 「迷ったら、仮に TUI を作るならロジックが冗長になるか」で判断 → 冗長になる → furrow 側に置く（この判断規範は今後の同種の迷いにも適用）。**PR は Claude が出し、merge まで OK**。速度でなく品質重視。\n\n## 仕様（GH Projects filter 構文の互換サブセット）\n\n`ls`（まず）/ `next` / `revisit` に `-q <query>` を追加。既存 `-r/-l/-s` との合成は AND（-q 内の同種 field とも AND）。\n\n- `field:value` — lane(status alias)/label/repo/type/parent/id + value/effort/priority\n- カンマ = OR（`label:ui,dx`）、同一 qualifier 繰返し = AND（GH 同）\n- `-` 前置 = 否定（`-lane:done,icebox`）\n- `no:<field>` / `has:<field>`（値が空/ある。label, parent, repo, value, effort…）\n- 数値: `value:>3` `effort:<=2` `priority:1600..1700`（比較 + `..` 範囲）\n- 自由語（qualifier なし）= title/body の単語先頭一致（GH 同・mid-word 不一致）。`\"...\"` で空白含む値\n- 将来拡張枠（初版外で可）: ワイルドカード `label:*ui*`、`is:actionable/blocked/stuck`（furrow 計算フラグ — これは GH に無い furrow ならでは）\n\n## 実装メモ\n\n- parser は internal/query パッケージに分離（lexer + 再帰下降で足りる規模）。エラーは exit 2 + 位置情報 + candidates（did-you-mean 流儀に合わせる）\n- table tests + go fuzz（parse が任意入力で panic しない）+ golden（--json 結果）\n- docs: help text + README の query 節\n- GH 構文全文: https://docs.github.com/en/issues/planning-and-tracking-with-projects/customizing-views-in-your-project/filtering-projects\n\nvista 側: t-jv3j が本タスクに依存（query pass-through + サジェスト UI に再スコープ済み）。",
 		},
 		{
-			ID:       "t-fw2m",
-			Title:    "vista: furrow GUI v1 — Tauri v2 + React（kanban／依存グラフ／CRUD）",
-			Status:   "in-progress",
-			Priority: 470,
-			Type:     "epic",
-			Value:    4,
-			Effort:   5,
-			Repos:    []string{"akira-toriyama/vista"},
-			Created:  ts("2026-07-16T08:35:53Z"),
-			Updated:  ts("2026-07-17T05:13:04Z"),
-			Body:     "# vista: furrow GUI v1 — Tauri v2 + React（kanban／依存グラフ／CRUD）\n\n**GUI epic（[[t-0007]] の後継・実装編）**。方式選定は 2026-07-16 に **Tauri v2** で決着\n（Obsidian は task/project 管理機能の不足で棄却 → [[t-0053]]）。\n\n設計の正本: vista repo `docs/superpowers/specs/2026-07-16-vista-gui-v1-design.md`\n（branch docs/gui-v1-design、レビュー後 main へ）。\n\n## 骨子\n\n- 殻 = Tauri v2。**furrow は同梱せずホストの furrow（PATH の source wrapper）を呼ぶ**。\n- ロジック正本は furrow 一本（vista は shard を直接読み書きしない・CLI の --json のみ）。\n  **不足は furrow へ PR**（GUI 側で回避実装しない）。\n- TS 4層（domain / application / infrastructure / ui）。read-write・task CRUD。中央ボード固定。\n- 差別化の本丸 = **依存グラフを一級ビューに**（主要 PM ツールに真の graph view は不在、調査済み）。\n\n## 実装順（子 task）\n\nscaffold → Rust core → adapter+Query → Board DnD（furrow ギャップ2件が先行）→ filter bar\n→ detail → Graph view → palette/keyboard → add UI+sync 統合。\n- 🚧 `vista#1` opened\n\n**2026-07-16: 設計承認・設計セッション完了。** 設計 doc は vista PR #1（https://github.com/akira-toriyama/vista/pull/1）でレビュー待ち → merge 後は `docs/superpowers/specs/2026-07-16-vista-gui-v1-design.md` が正本。会話での追加決定: CLI=Go／UI=TS の A 構成を維持し、型共有は `furrow schema` → TS codegen で吸収（[[t-g8bn]] に反映済み）。**次セッション希望: PR #1 を merge のうえ、[[t-2tbn]]（scaffold）から着手**（furrow 側の gate 2 件 [[t-phgp]]/[[t-ecfm]] を先にやるのも可・並行可能）。\n- 🔗 `vista#1` merged\n\n2026-07-16 ユーザー決定: **UI の北極星 = GitHub Projects**（https://github.com/users/akira-toriyama/projects/5 ）。視覚言語・密度・保存ビュー=タブの操作感をこれに寄せる（実装 task: [[t-n2fc]]）。\n\n… (truncated in the POC fixture)",
-		},
-		{
 			ID:       "t-9m2q",
 			Title:    "vista: Dialog テストの必須 assertion をルール化（accessible name + close 経路）",
 			Status:   "backlog",
@@ -143,7 +131,7 @@ func fixtureTasks() []*Task {
 			Effort:   3,
 			Labels:   []string{"ui"},
 			Repos:    []string{"akira-toriyama/vista"},
-			Parent:   "t-fw2m",
+			Epic:     "e-fw2m",
 			Deps:     []string{"t-614w"},
 			Created:  ts("2026-07-17T06:58:54Z"),
 			Updated:  ts("2026-07-17T15:04:56Z"),
@@ -171,7 +159,7 @@ func fixtureTasks() []*Task {
 			Effort:   3,
 			Labels:   []string{"ui"},
 			Repos:    []string{"akira-toriyama/vista"},
-			Parent:   "t-fw2m",
+			Epic:     "e-fw2m",
 			Deps:     []string{"t-jv3j"},
 			Created:  ts("2026-07-16T15:27:16Z"),
 			Updated:  ts("2026-07-16T15:27:16Z"),
@@ -185,7 +173,7 @@ func fixtureTasks() []*Task {
 			Value:    4,
 			Effort:   3,
 			Repos:    []string{"akira-toriyama/vista"},
-			Parent:   "t-fw2m",
+			Epic:     "e-fw2m",
 			Deps:     []string{"t-6etg"},
 			Checklist: []ChecklistItem{
 				{Text: "domain の Task 型は手書きせず furrow schema の JSON Schema から TS 型を codegen（furrow と機械的に同期）", Done: true},
@@ -217,7 +205,7 @@ func fixtureTasks() []*Task {
 			Effort:   4,
 			Labels:   []string{"ui"},
 			Repos:    []string{"akira-toriyama/vista"},
-			Parent:   "t-fw2m",
+			Epic:     "e-fw2m",
 			Deps:     []string{"t-jv3j"},
 			Checklist: []ChecklistItem{
 				{Text: "plugin-store adapter（infrastructure 層・FurrowPort と同様に port 化）", Done: false},
@@ -238,7 +226,7 @@ func fixtureTasks() []*Task {
 			Effort:   2,
 			Labels:   []string{"ui"},
 			Repos:    []string{"akira-toriyama/vista"},
-			Parent:   "t-fw2m",
+			Epic:     "e-fw2m",
 			Deps:     []string{"t-2qyb", "t-wf4p"},
 			Created:  ts("2026-07-17T06:58:54Z"),
 			Updated:  ts("2026-07-17T14:06:15Z"),
@@ -253,7 +241,7 @@ func fixtureTasks() []*Task {
 			Value:    3,
 			Effort:   3,
 			Repos:    []string{"akira-toriyama/vista"},
-			Parent:   "t-fw2m",
+			Epic:     "e-fw2m",
 			Deps:     []string{"t-r7wr"},
 			Created:  ts("2026-07-16T08:35:54Z"),
 			Updated:  ts("2026-07-16T15:28:28Z"),
@@ -267,7 +255,7 @@ func fixtureTasks() []*Task {
 			Value:    5,
 			Effort:   4,
 			Repos:    []string{"akira-toriyama/vista"},
-			Parent:   "t-fw2m",
+			Epic:     "e-fw2m",
 			Deps:     []string{"t-fn4k", "t-t38k"},
 			Created:  ts("2026-07-16T08:35:54Z"),
 			Updated:  ts("2026-07-16T15:26:21Z"),
@@ -281,7 +269,7 @@ func fixtureTasks() []*Task {
 			Value:    4,
 			Effort:   3,
 			Repos:    []string{"akira-toriyama/vista"},
-			Parent:   "t-fw2m",
+			Epic:     "e-fw2m",
 			Deps:     []string{"t-2tbn"},
 			Created:  ts("2026-07-16T08:35:53Z"),
 			Updated:  ts("2026-07-16T10:27:36Z"),
@@ -293,12 +281,11 @@ func fixtureTasks() []*Task {
 			Title:    "vista: UI を GitHub Projects の look & feel に寄せる",
 			Status:   "ready",
 			Priority: 560,
-			Type:     "task",
 			Value:    4,
 			Effort:   3,
 			Labels:   []string{"ui"},
 			Repos:    []string{"akira-toriyama/vista"},
-			Parent:   "t-fw2m",
+			Epic:     "e-fw2m",
 			Created:  ts("2026-07-16T14:17:29Z"),
 			Updated:  ts("2026-07-17T15:04:56Z"),
 			Body:     "ユーザー指示（2026-07-16）: **UI の最終目標（北極星）= GitHub Projects**。参照: https://github.com/users/akira-toriyama/projects/5\n\n- Board / Table(List) / タブ型の保存ビューなど、視覚言語・密度・操作感を GitHub Projects に寄せる。\n- 設計 doc の「1 データセット + 保存ビュー = タブ（GitHub Projects モデル）」を UI 面でも徹底する。\n- 対象: 配色・カード密度・列ヘッダ・フィルタバー・+ Add ボタン等の見た目、キーボード操作の作法。\n- vista 差別化要素（Graph view / blocked 旗 / wikilink peek）は保ちつつ、基本語彙を GitHub Projects に合わせる。\n\n## 調査結果（2026-07-17・Primer/memex 実値）と再スコープ\n\nこのタスク = **視覚言語基盤（design tokens）+ Board view の GH 化**に絞る。Table/tabs/WIP limit 等は分割済み（t-9sa6/t-rmtc/t-7wdg/t-pk4f/t-7mcc）。\n\n**ソース**: @primer/primitives v11.9.0 の dist/css 実値 + memex（Projects V2 本体）の production CSS（https://github.githubassets.com/assets/memex.604e4a36b4ee437c.module.css ）から抽出。詳細は調査レポート全文をこのタスクの実装セッションで参照（下の要約で大半は足りる）。\n\n**コア tokens（light / dark）**: bg default #ffffff/#0d1117・muted #f6f8fa/#151b23・inset #f6f8fa/#010409 ／ fg default #1f2328/#f0f6fc・muted #59636e/#9198a1 ／ border default #d1d9e0/#3d444d ／ accent fg #0969da/#4493f8・accent muted bg #ddf4ff/#388bfd1a ／ 行 hover=bgColor-muted・選択=selection #0969da33/#1f6febb3。danger #d1242f/#f85149、success #1a7f37/#3fb950、attention #9a6700/#d29922、done #8250df/#ab7df8。\n\n**密度/形状**: 基本 14px（small 12px）・radius 6px 既定・control 高 32px・spacing 4/8/12/16・focus ring 2px accent。**dark は影でなく枠**（全 shadow に 0 0 0 1px #3d444d）。\n\n**Board 実値**: 列 width 350px 固定・radius 6px・border 1px・**bg = inset**（dark では canvas より暗い #010409）。列 header: 色付き丸 16px(border 2px の輪郭円) + 名前 semibold + count（CounterLabel 12px semibold・radius 20px・bg neutral-muted）。card: radius 6px・border 1px・bg default・**shadow なし**（drag 中のみ resting-medium + opacity .5）・padding 8px 0 12px（内容左右 12px）・タイトル 14px。card 構成: ①12px muted のメタ行 ②タイトル ③labels/assignee 行（margin-top 8px, gap 4px）。DnD sash = 4px 厚 accent-emphasis。選択 = bg accent-muted + border accent + box-shadow 1px。\n\n**lane 色対応**（single select 8 色 display scale より。light: bg/fg、dark: bg/fg）: inbox=GRAY #e8ecf2/#5c6570・#1c1c1c/#92a1b5 ／ backlog=BLUE #d1f0ff/#005fcc・#001a47/#4da0ff ／ ready=GREEN #caf7ca/#2b6e3f・#122117/#41b445 ／ in-progress=YELLOW #ffec9e/#805900・#2e1a00/#d3910d ／ done=PURPLE #f1e5ff/#783ae4・#211047/#b687f7 ／ icebox=GRAY。= ユーザーの Project #5 の Status 色と同一対応。\n\n**実装方針**: Primer の CSS 変数名（--bgColor-* / --fgColor-* / --borderColor-* / --display-*）をそのまま :root/.dark に定義し、Tailwind v4 @theme から var() 参照で張るのが最短（shadcn の既存変数と併存させ、段階的に置換）。font は Geist 継続で可（Mona Sans に寄せるかは実装時判断・優先度低）。\n\n**進め方**: ①tokens 基盤（CSS 変数 + Tailwind 統合 + light/dark） ②Board を実値へ（列 350px/inset bg/header 色丸+count/card 構成） ③filter bar 帯・+ Add item 行の見た目は各 task で。",
@@ -312,7 +299,7 @@ func fixtureTasks() []*Task {
 			Effort:   4,
 			Labels:   []string{"ui"},
 			Repos:    []string{"akira-toriyama/vista"},
-			Parent:   "t-fw2m",
+			Epic:     "e-fw2m",
 			Created:  ts("2026-07-16T15:27:16Z"),
 			Updated:  ts("2026-07-16T15:27:16Z"),
 			Body:     "GH Projects は Board でも group by = swimlane（横帯）。候補 field: repo / parent(epic) / type。設計 doc では v1 外（Vikunja の card ネストは最多苦情 → swimlane が正解筋）。GH の一貫規則を踏襲: グループへの drop でそのグループの値を適用・グループ内での新規追加は値を自動セット。sort 適用中は列内手動並べ替え不可（GH の排他ルール）も合わせて実装時に考慮。\n\n出典: GH docs Board layout（grouping）",
@@ -346,7 +333,7 @@ func fixtureTasks() []*Task {
 			Value:    4,
 			Effort:   4,
 			Repos:    []string{"akira-toriyama/vista"},
-			Parent:   "t-fw2m",
+			Epic:     "e-fw2m",
 			Deps:     []string{"t-t38k", "t-wf4p"},
 			Created:  ts("2026-07-16T08:35:54Z"),
 			Updated:  ts("2026-07-16T15:47:40Z"),
@@ -360,7 +347,7 @@ func fixtureTasks() []*Task {
 			Value:    3,
 			Effort:   2,
 			Repos:    []string{"akira-toriyama/vista"},
-			Parent:   "t-fw2m",
+			Epic:     "e-fw2m",
 			Deps:     []string{"t-t38k"},
 			Created:  ts("2026-07-16T08:35:54Z"),
 			Updated:  ts("2026-07-16T15:28:28Z"),
@@ -375,7 +362,7 @@ func fixtureTasks() []*Task {
 			Effort:   3,
 			Labels:   []string{"ui"},
 			Repos:    []string{"akira-toriyama/vista"},
-			Parent:   "t-fw2m",
+			Epic:     "e-fw2m",
 			Checklist: []ChecklistItem{
 				{Text: "候補 4+1 を clone・実装を読む（escape hatch とバグ対応履歴を重点）", Done: true},
 				{Text: "dialog/popover/menu を各候補で仮組み・WKWebView で挙動確認", Done: true},
@@ -395,7 +382,7 @@ func fixtureTasks() []*Task {
 			Value:    5,
 			Effort:   4,
 			Repos:    []string{"akira-toriyama/vista"},
-			Parent:   "t-fw2m",
+			Epic:     "e-fw2m",
 			Deps:     []string{"t-ecfm", "t-g8bn", "t-phgp"},
 			Created:  ts("2026-07-16T08:35:54Z"),
 			Updated:  ts("2026-07-16T14:48:11Z"),
@@ -403,4 +390,17 @@ func fixtureTasks() []*Task {
 			Body:     "# vista: Board view — kanban DnD（pragmatic-drag-and-drop）+ blocked 旗\n\n- 列 = lane（`furrow board` の語彙、ハードコードしない）。\n- cross-column drag = lane 変更、within-column drag = priority 書き換え（Linear の「手動順序は1つの正準順序」= furrow の sparse int priority そのもの）。**furrow 側の相対 reorder／set --priority（dep 参照）で 1 write に**。\n- card = title + id + value/effort pips + label dots + repo 略記。display options で toggle。\n- **blocked card に旗 + dim**（最安・最高価値の依存可視化）。parent は card ネストにしない。\n- optimistic update・スピナー無し（local data）。DnD は `@atlaskit/pragmatic-drag-and-drop` v2（dnd-kit classic は凍結済み、調査 2026-07）。\n\n2026-07-16: furrow 側の依存 2/3 が done — t-phgp（furrow#142 reorder --before/--after）と t-ecfm（furrow#143 set -s --before/--after）。DnD 用 CLI write プリミティブは main に揃ったが未リリース（最新 release は v0.10.0）— vista から使うには次の furrow release か source build が必要。残る依存は t-g8bn（FurrowPort/adapter）。\n\n2026-07-16 追記: v0.11.0 release 済み — DnD write プリミティブ（reorder/set の相対指定）と boards が released binary で使える。furrow 側の前提は全部出荷済み。残依存は t-g8bn (FurrowPort/adapter) のみ。\n\nReconciled 2026-07-16: dep t-g8bn (FurrowPort/adapter + TanStack Query) done — vista#5 merged。t-g8bn の引き継ぎメモどおり本 task が次着手候補。ただし furrow 側ギャップ t-phgp (reorder --before/--after)・t-ecfm が先行との記載あり — 着手時に要確認。\n- 🚧 `vista#6` opened\n\n2026-07-16 セッション進捗（PR: https://github.com/akira-toriyama/vista/pull/6 ）\n\n- [x] FurrowPort: reorderTask + SetTaskPatch.placement（reorder/set --before/--after への写像）+ MutationReport.renumbered\n- [x] contract test: 実 furrow で reorder 相対配置・atomic respace（renumbered）・set の lane+位置 1 write・lane 跨ぎ reorder=validation\n- [x] domain/kanban: columnize / planDrop（drop 1回=1 write、位置不変=no write）/ optimisticPriority — 全て純関数・TDD\n- [x] application: useDropTask（楽観更新・error rollback・settle refetch）\n- [x] ui/views/board: BoardView/BoardColumn/TaskCard（pragmatic-drag-and-drop v2 + closest-edge、blocked 旗+dim、表示オプション ID/Pips/Labels/Repo、writable=false で read-only）\n- [x] lint/typecheck/99 unit + 24 contract/build 全 green\n- [x] GUI 描画は scratch board（XDG_CONFIG_HOME 差し替え）で実機確認 ✓\n- [ ] native drag の e2e 検証 → [[t-q6rc]]（Tart VM。ホストの mouse 自動操作は禁止＝ユーザー指示）\n\n\n… (truncated in the POC fixture)",
 		},
 	}
+}
+
+// fixtureEpics mirrors `furrow epic ls --json` for the snapshot: the one box
+// the 18 member tasks point at. Done/Total agree with the member lanes above.
+func fixtureEpics() []EpicInfo {
+	return []EpicInfo{{
+		ID:     "e-fw2m",
+		Title:  "vista: furrow GUI v1 — Tauri v2 + React（kanban／依存グラフ／CRUD）",
+		Goal:   "furrow GUI v1 — kanban／依存グラフ／CRUD を Tauri v2 + React で",
+		Done:   6,
+		Total:  18,
+		Active: true,
+	}}
 }
