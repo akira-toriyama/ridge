@@ -165,8 +165,8 @@ func TestE2EKeyboardNavigationAndPeekAndFilter(t *testing.T) {
 	if !m.peekOpen {
 		t.Error("space must open the detail peek")
 	}
-	if m.q.Raw != "lane:ready" {
-		t.Errorf("filter = %q", m.q.Raw)
+	if m.qRaw != "lane:ready" {
+		t.Errorf("filter = %q", m.qRaw)
 	}
 	if n := m.countVisible(); n != 1 {
 		t.Errorf("lane:ready matched %d tasks, want 1", n)
@@ -200,7 +200,7 @@ func TestE2EJumpToBlockerAndBack(t *testing.T) {
 		t.Errorf("jumped to %s, which does not block %s (%v)", cur.ID, origin, m.g.BlockedBy(origin))
 	}
 	// A blocker hidden by the filter has to be pinned into view, never dropped.
-	if !m.q.Match(cur, m.g) && !m.pinned[cur.ID] {
+	if !m.qMatched[cur.ID] && !m.pinned[cur.ID] {
 		t.Error("a blocker hidden by the filter must be pinned, not lost")
 	}
 

@@ -37,6 +37,7 @@
 | **drag threshold** | 「掴んだ」と判定するまでの最小移動距離。これが無いと1セルの震えが移動として確定してしまう（lazygit が実際に踏んだバグ）。 |
 | **jump-to-blocker** | `>` で最初の未完了 blocker へカーソルを飛ばし、`<` で戻る。スタックなので何段でも潜れる。 |
 | **sync（`R`）** | `furrow sync`（git の commit/pull/push）→ store 再読。自動では走らない — v1 の決定（t-s86r）。`r` は再読のみ。 |
+| **filter（-q パススルー）** | filter bar は furrow `-q` への素通し。ridge は raw 文字列と store の返した id 集合（verdict）だけを持ち、文法は furrow 一本（t-ehk7）。タイプ中・拒否時は直前の verdict を保持して ⚠ を出す（盤面を空にしない）。memstore は -dump/テスト用の近似 evaluator（非対応構文は furrow 同様に拒否）。 |
 | **pin** | フィルタで隠れている blocker へジャンプしたとき、そのカードだけ一時的に盤面へ差し込むこと。飛んだ先が空振りにならないようにする。 |
 
 ## 表示要素

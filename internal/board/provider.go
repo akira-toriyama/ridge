@@ -23,6 +23,13 @@ type Provider interface {
 	// provider without a store returns an error.
 	Sync() error
 
+	// Query evaluates a furrow -q expression against the store and returns
+	// the matching task ids ("" matches everything). The grammar's one
+	// definition lives furrow-side (t-ehk7); ridge passes the string through
+	// and intersects the ids with its own Board() snapshot. All-or-nothing:
+	// a query furrow refuses returns an error and NO ids.
+	Query(q string) ([]string, error)
+
 	// Live reports whether persists land in an external store whose truth
 	// can drift from the in-memory board. The model reconciles (re-reads)
 	// after its persist queue drains only when this is true — reconciling the

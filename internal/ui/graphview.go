@@ -66,11 +66,11 @@ func (m *Model) buildGraph() *egoLayout {
 	avail := maxInt(1, m.w-2)
 	cols := clamp(avail/graphNodeMinW, 1, graphHardCols)
 	hidden := func(id string) bool {
-		if m.q.Empty() || m.pinned[id] {
+		if m.qRaw == "" || m.pinned[id] || m.qMatched == nil {
 			return false
 		}
 		t := m.b.Task(id)
-		return t != nil && !m.q.Match(t, m.g)
+		return t != nil && !m.qMatched[id]
 	}
 	l := buildEgo(m.g, m.graphFocus, m.graphRadius, cols, hidden)
 	l.place(avail)

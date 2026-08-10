@@ -369,3 +369,24 @@ func (p *Store) PersistBody(id, body string) error {
 }
 
 var _ board.Provider = (*Store)(nil)
+
+// Query evaluates q via `furrow ls -q` (board.Provider). The whole grammar
+// lives furrow-side; ridge passes the string through untouched, so the filter
+// bar and `furrow ls` can never disagree about what a query means.
+func (p *Store) Query(q string) ([]string, error) {
+	out, err := p.c.run("ls-q", "ls", "-r", "", "-q", q, "--json")
+	if err != nil {
+		return nil, err
+	}
+	var rows []struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(out, &rows); err != nil {
+		return nil, fmt.Errorf("furrow ls -q: undecodable rows: %v", err)
+	}
+	ids := make([]string, 0, len(rows))
+	for _, r := range rows {
+		ids = append(ids, r.ID)
+	}
+	return ids, nil
+}

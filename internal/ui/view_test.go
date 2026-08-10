@@ -200,18 +200,24 @@ func TestWIPLimitIsShownButNotEnforced(t *testing.T) {
 	}
 }
 
-func TestFilterProblemsAreSurfacedWithoutDiscardingTheQuery(t *testing.T) {
+// -q is all-or-nothing (furrow exit 2): a refused query keeps the LAST GOOD
+// verdict on screen and surfaces the refusal, because typing one more
+// character must never blank the board.
+func TestFilterRefusalKeepsTheLastGoodVerdict(t *testing.T) {
 	m := boardModel(t, 140, 30)
-	m.applyFilter("nope:x lane:ready")
+	m.applyFilter("lane:ready")
+	if n := m.countVisible(); n != 1 {
+		t.Fatalf("lane:ready matched %d, want 1", n)
+	}
+	m.applyFilter("lane:ready nope:x")
 	m.relayout()
 	out := frame(m)
 
 	if !strings.Contains(out, "unknown key") {
-		t.Error("a bad token must be reported in the filter bar")
+		t.Error("the refusal must be reported in the filter bar")
 	}
-	// The valid half still applies.
 	if n := m.countVisible(); n != 1 {
-		t.Errorf("the good half of the query must still filter: %d visible", n)
+		t.Errorf("a refused query must keep the last good verdict: %d visible", n)
 	}
 }
 

@@ -217,10 +217,14 @@ func TestAdvUnknownIsValueEmptiesTheBoardWhileClaimingToBeNonFatal(t *testing.T)
 	m := boardModel(t, 140, 40)
 	total := m.countVisible()
 	m.applyFilter("is:bogus")
-	if m.countVisible() == 0 && len(m.q.Problems) > 0 {
-		t.Errorf("ParseQuery documents an unrecognised token as \"reported but not fatal\", "+
-			"yet is:bogus keeps the term and drops all %d tasks (problems=%v)",
-			total, m.q.Problems)
+	// -q semantics: the store REFUSES the query; the last good verdict (all
+	// tasks) stays on screen and the refusal is surfaced.
+	if m.countVisible() != total {
+		t.Errorf("a refused query must keep the last good verdict: %d -> %d visible",
+			total, m.countVisible())
+	}
+	if m.qErr == "" {
+		t.Error("the refusal must be surfaced in qErr")
 	}
 }
 

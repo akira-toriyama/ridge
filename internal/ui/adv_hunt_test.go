@@ -76,10 +76,11 @@ func TestAdvGhostOverflowsANarrowTerminal(t *testing.T) {
 
 type emptyProvider struct{ b *board.Board }
 
-func (p *emptyProvider) Board() *board.Board { return p.b }
-func (p *emptyProvider) Reload() error       { p.b = board.NewBoard(nil); return nil }
-func (p *emptyProvider) Sync() error         { return fmt.Errorf("no store") }
-func (p *emptyProvider) Live() bool          { return false }
+func (p *emptyProvider) Board() *board.Board            { return p.b }
+func (p *emptyProvider) Reload() error                  { p.b = board.NewBoard(nil); return nil }
+func (p *emptyProvider) Sync() error                    { return fmt.Errorf("no store") }
+func (p *emptyProvider) Query(string) ([]string, error) { return nil, nil }
+func (p *emptyProvider) Live() bool                     { return false }
 func (p *emptyProvider) PersistMove(_, _, _, _ string) ([]string, error) {
 	return nil, nil
 }
@@ -441,9 +442,9 @@ func TestAdvBlockedToggleCorruptsANegatedQuery(t *testing.T) {
 	m.ti.SetValue("-is:blocked")
 	before := m.countVisible()
 	m.Update(tea.KeyPressMsg{Code: 'b', Text: "b"})
-	if m.q.Raw == "-" {
+	if m.qRaw == "-" {
 		t.Errorf("pressing b on %q left the query %q (a bare '-' bare-word term); "+
-			"visible went %d -> %d", "-is:blocked", m.q.Raw, before, m.countVisible())
+			"visible went %d -> %d", "-is:blocked", m.qRaw, before, m.countVisible())
 	}
 }
 
