@@ -278,7 +278,7 @@ func parseQuery(s string, v queryVocab) parsedQuery {
 		}
 		k = strings.ToLower(k)
 		if !queryKeys[k] {
-			if why, real := realButUnsupported[k]; real {
+			if why, isReal := realButUnsupported[k]; isReal {
 				q.problems = append(q.problems, fmt.Sprintf(
 					"%s: %s is not supported by the fixture filter (real furrow qualifier)", k, why))
 			} else {
