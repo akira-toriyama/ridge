@@ -101,7 +101,9 @@ func (m *Model) peekContent(w int) string {
 	b.WriteString(th.muted.Render(wrapJoin(meta2, " · ", w)) + "\n")
 	stamps := fmt.Sprintf("updated %s · created %s", ago(t.Updated), t.Created.Format("2006-01-02"))
 	if !t.Due.IsZero() {
-		due := "due " + t.Due.Format("2006-01-02")
+		// Local: the instant furrow stores is UTC, and an evening-local due
+		// renders one day early if it is formatted in that zone.
+		due := "due " + t.Due.Local().Format("2006-01-02")
 		if t.Due.Before(nowFn()) && t.Closed.IsZero() {
 			due = th.danger.Render(due + " · OVERDUE")
 		} else {
