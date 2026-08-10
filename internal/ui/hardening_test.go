@@ -334,8 +334,12 @@ func TestFailedAddAloneSkipsTheRollbackReread(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("an idle queue must fire the add")
 	}
-	if rb := m.onPersistDone(cmd().(persistDoneMsg)); rb != nil {
-		t.Error("a failed add with an empty tail must not schedule a rollback re-read")
+	m.onPersistDone(cmd().(persistDoneMsg))
+	if m.rollingBack {
+		t.Error("a failed add with an empty tail must not arm the rollback window — nothing was optimistically applied")
+	}
+	if m.mode != modeAdd || m.add == nil || m.add.input.Value() != "だめな一枚" {
+		t.Error("the refusal must hand the typed title back by reopening the modal")
 	}
 	if !m.statusErr || strings.Contains(m.status, "rolling back") {
 		t.Errorf("status = %q — fail loudly, but do not claim a rollback", m.status)

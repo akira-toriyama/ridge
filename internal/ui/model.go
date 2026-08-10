@@ -111,6 +111,18 @@ type Model struct {
 	inflight    bool
 	quitting    bool   // quit requested while writes were in flight; leave after the drain
 	lastPersist string // "move t-x 92ms" — the title bar's passive latency readout
+	// A persist FAILED and the rollback re-read has not landed yet: the board
+	// is showing state the store refused. Index- and neighbour-addressed
+	// writes computed against it would hit the wrong rows in the store, so
+	// every write path refuses gestures until the re-read arrives (t-74y3:
+	// the wrong-checklist-item write, and the rollback that any keystroke
+	// could preempt).
+	rollingBack bool
+	// A $EDITOR result that arrived inside the rollback window. Every other
+	// refused write is a gesture the user can repeat; this one's payload is
+	// hand-typed text whose temp file is already deleted, so it is held and
+	// applied when the window closes (t-74y3).
+	heldBody *editorDoneMsg
 
 	// The dependency graph view. graphFocus is what the picture is rooted on,
 	// graphSel is the node the cursor is on (they start equal and diverge as
@@ -290,17 +302,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ms.rebind(m.g, m.th)
 
 	case editorDoneMsg:
-		if msg.err != nil {
+		switch {
+		case msg.err != nil:
 			m.fail("editor: %v", msg.err)
-		} else if err := m.b.SetBody(msg.id, msg.body); err != nil {
-			m.fail("%v", err)
-		} else {
-			m.recompute()
-			m.note("%s body updated", msg.id)
-			id, body := msg.id, msg.body
-			if c := m.enqueuePersist("body "+id, func() ([]string, error) {
-				return nil, m.prov.PersistBody(id, body)
-			}); c != nil {
+		case m.rollingBack:
+			// The one write whose payload is hand-typed and already gone
+			// from disk (the temp file is removed on editor exit): refusing
+			// it would destroy the text, so it waits for the window to
+			// close instead (t-74y3).
+			held := msg
+			m.heldBody = &held
+			m.note("%s body held — the store refused the last write; it applies after the rollback", msg.id)
+		default:
+			if c := m.applyEditorBody(msg); c != nil {
 				cmds = append(cmds, c)
 			}
 		}

@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"fmt"
+
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"github.com/akira-toriyama/ridge/internal/board"
@@ -150,6 +152,14 @@ func (m *Model) followDrop() {
 // and it counts only tasks the filter lets through. Both facts have to be
 // undone before the board can be told anything.
 func (m *Model) commitMove(id, from, to string, fromIdx, dispIdx int) (moved bool, cmd tea.Cmd, err error) {
+	if m.rollingBack {
+		// Refuse the GESTURE, not just its enqueue: every caller follows a
+		// successful commit with its own note(), which would overwrite
+		// enqueuePersist's refusal and tell the user the move worked right
+		// before the rollback re-read yanks it back (t-74y3). The error
+		// path is one every caller already handles first.
+		return false, nil, fmt.Errorf("move %s dropped — the store refused the last write, rolling back", id)
+	}
 	adj := board.AdjustDropIndex(from == to, fromIdx, dispIdx)
 
 	visNoSelf := withoutID(m.cols[to], id)

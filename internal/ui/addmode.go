@@ -86,6 +86,13 @@ func (m *Model) onAddKey(msg tea.KeyPressMsg) tea.Cmd {
 			m.fail("a title cannot be empty")
 			return nil
 		}
+		if m.rollingBack {
+			// The store refused the last write and the board is rolling
+			// back; every write path waits for the re-read. Keep the modal
+			// open — the typed title must survive the refusal.
+			m.fail("the store refused the last write — rolling back; press ⏎ again in a moment")
+			return nil
+		}
 		m.mode, m.add = modeNormal, nil
 		m.note("adding…")
 		return m.enqueueAdd(title, a.opts)
@@ -93,6 +100,29 @@ func (m *Model) onAddKey(msg tea.KeyPressMsg) tea.Cmd {
 	var c tea.Cmd
 	a.input, c = a.input.Update(msg)
 	return c
+}
+
+// reopenRefusedAdd hands a refused add's typed title back by reopening the
+// modal — but only from modeNormal. The refusal lands ~100ms after the
+// gesture, and the user may already be typing a SECOND draft, lifting a
+// card, or filtering; stealing that mode would clobber the newer work, so
+// anywhere else the title survives only in the failure note (whose label
+// names it).
+func (m *Model) reopenRefusedAdd(op persistOp) tea.Cmd {
+	if m.mode != modeNormal || m.view == viewGraph {
+		// The graph shares modeNormal but never composites addLayer — a
+		// reopen there would put the keyboard inside an invisible modal
+		// (t-74y3). The failure note still names the title.
+		return nil
+	}
+	ti := textinput.New()
+	ti.Prompt = "+ "
+	ti.Placeholder = "task title"
+	ti.SetWidth(56)
+	ti.SetValue(op.addTitle)
+	m.add = &addState{input: ti, opts: op.addOpts}
+	m.mode = modeAdd
+	return m.add.input.Focus()
 }
 
 // addLayer draws the quick-add modal: the input plus the inherited-context
