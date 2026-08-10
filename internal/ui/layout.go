@@ -255,11 +255,12 @@ func layCards(tasks []*board.Task, scroll, x, top, bot, colW int, ms *measurer) 
 
 // buildLayout measures one frame: which lanes are visible, which cards fit in
 // each, and where every card sits.
-func buildLayout(w, h int, lanes []board.Lane, cols map[string][]*board.Task, laneOff int,
+func buildLayout(w, h, x0 int, lanes []board.Lane, cols map[string][]*board.Task, laneOff int,
 	scroll map[string]int, ms *measurer) *layout {
 
 	w, h = maxInt(w, 1), maxInt(h, 1)
-	vis, colW := boardCols(w, len(lanes))
+	x0 = clamp(x0, 0, w-1)
+	vis, colW := boardCols(w-x0, len(lanes))
 	if laneOff > len(lanes)-vis {
 		laneOff = len(lanes) - vis
 	}
@@ -277,7 +278,7 @@ func buildLayout(w, h int, lanes []board.Lane, cols map[string][]*board.Task, la
 		lane := lanes[laneOff+i]
 		c := laneCol{
 			Lane:  lane,
-			X:     i * (colW + colGap),
+			X:     x0 + i*(colW+colGap),
 			W:     colW,
 			Top:   boardTop,
 			Bot:   bot,

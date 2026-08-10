@@ -28,9 +28,16 @@ func keyMsg(k string) tea.KeyPressMsg {
 }
 
 // drainPersists runs every queued write to completion, the way the program
-// loop would, so a test can assert on the store-visible outcome.
+// loop would, so a test can assert on the store-visible outcome. An EMPTY
+// queue fails the test: every caller just performed an edit that must reach
+// the store, and a silent no-op here once hid the entire edit-overlay persist
+// path being deleted (independent-review mutation M4/M5 — both survived the
+// old helper).
 func drainPersists(m *Model, t *testing.T) {
 	t.Helper()
+	if !m.inflight && len(m.pending) == 0 {
+		t.Fatal("nothing was queued — the edit never reached the store-write path")
+	}
 	for i := 0; i < 32 && (m.inflight || len(m.pending) > 0); i++ {
 		cmd := m.firePersist()
 		if cmd == nil {

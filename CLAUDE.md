@@ -83,12 +83,26 @@ v1 から大きく変わっている。以下は実際に踏んで確認済み:
 
 - `-dump` で TTY 無しに1フレーム出せる。`-plain` は ANSI 無しなので diff 可能。
 - **ジェスチャ中の状態は `-demo` で1フレームに落とす**（`move` / `drag` /
-  `add` / `edit` / `graph` / `help`）。「ドロップ位置の印は出ているか」を人間の目に頼らない。
+  `add` / `edit` / `graph` / `help` / `slice`）。「ドロップ位置の印は出ているか」を人間の目に頼らない。
 - **マウスは合成 SGR バイトを `tea.WithInput` に流して駆動できる**
   （`\x1b[<0;X;YM` 押下 / `\x1b[<32;X;Ym` 移動 / `\x1b[<0;X;Ym` 離す）。
   実 Program を回す e2e はこの方式。
 - 新しい UI を足したら **`-dump` を複数幅で回してフレームを目で確認**する
   （前項の CJK 桁揃えのため）。
+
+## Merge 前ゲート（2026-08-10 セッション劣化の再発防止 — t-xmry）
+
+- **lint/test は `scripts/check.sh` で回す** — CI（hub go-ci reusable）と
+  byte 同一の local mirror。素の `golangci-lint run` は default set しか回らず、
+  CI-only の revive 指摘を同一クラスで 2 回通した（PR #8, #10）。
+  linter list を変えるときは CI ログと突き合わせて byte 同一を保つ。
+- **pre-push hook が check.sh を強制する。** clone ごとに 1 回:
+  `git config core.hooksPath scripts/hooks`（緊急時のみ `git push --no-verify`）。
+- **実装 PR は merge 前に、実装した文脈から独立したレビュー 1 周が必須**
+  （別エージェント/セッションに「refute しろ」と明示。検証・レビューは Opus 側）。
+  実装者の自己検証と CI 緑は代替にならない — PR #5–#9 を自己検証のみで
+  merge し、全量の独立再レビュー（t-74y3）を招いた実績。
+  例外: ロジックに触らない docs-only、または数行の機械的修正のみ。
 
 ## Commits
 

@@ -27,9 +27,11 @@ func New(p board.Provider, o Options) *Model {
 	}
 	if o.Filter != "" {
 		m.ti.SetValue(o.Filter)
-		// KEEP the returned Cmd: on a live provider applyFilter's work is the
-		// async query this arms, and dropping it left the bar showing a
-		// query the board never ran (t-74y3 — every task stayed visible).
+		// On a live store applyFilter returns the debounce tick that will
+		// eventually fetch the verdict; a constructor has no runtime to hand
+		// it to, so Init carries it. Dropping it here made -filter a silent
+		// no-op against the real store (the fixture answers synchronously,
+		// which is why every headless frame hid the bug).
 		m.startupFilter = m.applyFilter(o.Filter)
 	}
 	if o.Table {
@@ -93,6 +95,21 @@ func (m *Model) demoState(kind string) error {
 		m.Update(tea.MouseClickMsg{X: grab.X + 3, Y: grab.Y + 1, Button: tea.MouseLeft})
 		m.Update(tea.MouseMotionMsg{X: dst.X + 8, Y: dst.Top + 4, Button: tea.MouseLeft})
 
+	case "slice":
+		// Panel open + focused, sliced to the ui label: the inset board, the
+		// selected row and the composed verdict all land in one frame.
+		m.toggleSlice()
+		m.sliceField = sliceLabel
+		rows := m.sliceRows()
+		for i, r := range rows {
+			if r.value == "ui" {
+				m.sliceIdx = i
+			}
+		}
+		if c := m.selectSlice(sliceLabel, "ui"); c != nil {
+			_ = c
+		}
+
 	case "add":
 		// A filtered board, so the modal PROVES the context inheritance: the
 		// filter's label lands in the chips, not silently on the task.
@@ -131,7 +148,7 @@ func (m *Model) demoState(kind string) error {
 		m.openGraph()
 
 	default:
-		return fmt.Errorf("unknown -demo %q (want move|drag|add|edit|graph|help)", kind)
+		return fmt.Errorf("unknown -demo %q (want move|drag|add|edit|graph|help|slice)", kind)
 	}
 	m.relayout()
 	return nil

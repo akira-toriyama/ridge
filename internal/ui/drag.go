@@ -99,20 +99,49 @@ func (m *Model) dropTarget(x, y int) (string, bool) {
 	return lane, true
 }
 
-func (m *Model) onMouseDown(msg tea.MouseClickMsg) {
-	if !m.mouseOn || m.mode == modeFilter || m.lay == nil {
-		return
+func (m *Model) onMouseDown(msg tea.MouseClickMsg) tea.Cmd {
+	// The board's mouse surface exists only while the board IS the surface.
+	// m.lay describes board geometry, so hit-testing it under a modal overlay
+	// (filter, edit, add) or a non-board view (table, graph, full help) sends
+	// the click to a card nobody can see — reviewed live: a click on the edit
+	// overlay silently re-pointed the selection underneath it. The render
+	// path composites these layers; the hit path agrees by refusing here, not
+	// by growing a parallel hit-test.
+	if !m.mouseOn || m.lay == nil || m.fullHelp {
+		return nil
 	}
 	if msg.Button != tea.MouseLeft {
-		return
+		return nil
 	}
-	if m.inPeek(msg.X, msg.Y) {
-		return
+	// The slice panel is the one overlay with its own click surface: its
+	// inset strip is live wherever the panel is RENDERED (board and table,
+	// never the graph) — but only while the board or the panel itself holds
+	// the keyboard. A modal (add/edit/filter) or a lifted card must not have
+	// the mode switched out from under it by a panel click (review round 2:
+	// a click during modeAdd stranded a half-typed title behind an invariant
+	// break).
+	if m.sliceOpen && msg.X < sliceInsetW && msg.Y >= boardTop && m.view != viewGraph &&
+		(m.mode == modeNormal || m.mode == modeSlice) {
+		return m.sliceClick(msg.X, msg.Y)
+	}
+	if m.mode == modeSlice {
+		// The panel holds the keyboard; board clicks stay dead until it is
+		// closed or unfocused.
+		return nil
+	}
+	if m.view != viewBoard {
+		return nil
 	}
 	if m.mode == modeMove {
 		// A keyboard move is in flight; a click would give the card two owners.
 		m.note("finish the keyboard move first (⏎ commit / esc cancel)")
-		return
+		return nil
+	}
+	if m.mode != modeNormal {
+		return nil
+	}
+	if m.inPeek(msg.X, msg.Y) {
+		return nil
 	}
 
 	lane, idx, ok := m.lay.cardAt(msg.X, msg.Y)
@@ -122,11 +151,11 @@ func (m *Model) onMouseDown(msg tea.MouseClickMsg) {
 				m.curLane = i
 			}
 		}
-		return
+		return nil
 	}
 	c := m.lay.Col(lane)
 	if c == nil || idx >= len(c.Tasks) {
-		return
+		return nil
 	}
 	t := c.Tasks[idx]
 
@@ -148,10 +177,19 @@ func (m *Model) onMouseDown(msg tea.MouseClickMsg) {
 		grabDX: msg.X - box.X, grabDY: msg.Y - box.Y,
 		dropLane: lane, dropIdx: idx,
 	}
+	return nil
 }
 
 func (m *Model) onMouseMove(msg tea.MouseMotionMsg) tea.Cmd {
 	if !m.drag.armed || m.drag.cancelled || m.lay == nil {
+		return nil
+	}
+	if m.view != viewBoard || m.fullHelp || m.mode != modeNormal {
+		// An overlay or view change took the screen mid-gesture: the pointer
+		// is no longer over what it grabbed, so the drag dies here and the
+		// release that follows must be a no-op — completing it would commit a
+		// move nobody can see (reproduced under the quick-add modal).
+		m.drag.reset()
 		return nil
 	}
 	// Deliberately NOT checking msg.Button: see (2) above.
@@ -231,6 +269,12 @@ func (m *Model) onMouseUp(msg tea.MouseReleaseMsg) tea.Cmd {
 	if !m.drag.armed {
 		return nil
 	}
+	if m.view != viewBoard || m.fullHelp || m.mode != modeNormal {
+		// Same rule as onMouseMove: a release under an overlay or in another
+		// view must never commit into the invisible board.
+		m.drag.reset()
+		return nil
+	}
 	if m.drag.cancelled {
 		m.drag.reset()
 		return nil
@@ -270,13 +314,17 @@ func (m *Model) onMouseUp(msg tea.MouseReleaseMsg) tea.Cmd {
 }
 
 func (m *Model) onWheel(msg tea.MouseWheelMsg) {
-	if !m.mouseOn || m.mode == modeFilter {
-		// Symmetry with onMouseDown: while the filter input is modal it owns the
-		// mouse too. Scrolling the board under a modal text input is the kind of
-		// asymmetry that says the modality was not thought through.
+	// fullHelp covers the whole screen (zHelp > zPeek) and the graph view
+	// never renders the peek — in both, `inPeek` would say yes to a panel
+	// that is not on screen.
+	if !m.mouseOn || m.fullHelp {
 		return
 	}
-	if m.inPeek(msg.X, msg.Y) {
+	// The peek scrolls in EVERY mode it is visible in — the edit overlay
+	// deliberately opens it (enterEdit), and review confirmed the modality
+	// guard below made a long body unreadable while editing. Scrolling the
+	// peek commits nothing; it is not the board's hit surface.
+	if m.view != viewGraph && m.inPeek(msg.X, msg.Y) {
 		switch msg.Button {
 		case tea.MouseWheelUp:
 			m.vp.ScrollUp(3)
@@ -285,7 +333,28 @@ func (m *Model) onWheel(msg tea.MouseWheelMsg) {
 		}
 		return
 	}
-	if m.lay == nil {
+	// The slice panel scrolls under the wheel wherever it is rendered. The
+	// cursor deliberately stays put — like a board column, a panel scrolled
+	// away from its cursor is a legitimate state (the next arrow re-pulls).
+	if m.sliceOpen && msg.X < sliceInsetW && msg.Y >= boardTop && m.view != viewGraph {
+		switch msg.Button {
+		case tea.MouseWheelUp:
+			m.sliceOff--
+		case tea.MouseWheelDown:
+			m.sliceOff++
+		}
+		off, _, _ := m.sliceViewport(len(m.sliceRows()))
+		m.sliceOff = off
+		return
+	}
+	// The BOARD wheel needs the board on screen and no modal overlay over
+	// it. modeMove and modeSlice stay scrollable — a lifted card is not an
+	// overlay, and the panel sits BESIDE the columns, not over them.
+	if m.mode != modeNormal && m.mode != modeMove && m.mode != modeSlice {
+		return
+	}
+	if m.view != viewBoard || m.lay == nil {
+		// Table and graph have no board columns on screen to scroll.
 		return
 	}
 	lane, ok := m.lay.laneAtX(msg.X)

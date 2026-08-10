@@ -2,41 +2,13 @@ package ui
 
 import (
 	"testing"
-
-	"github.com/akira-toriyama/ridge/internal/store/memstore"
 )
 
-// The two filter-lifecycle defects from t-74y3: the startup -filter armed
-// nothing on a live provider (its async query Cmd was discarded, so the bar
-// showed a query the board never ran), and a verdict landing mid-keyboard-move
-// reshaped the columns under the aimed slot, so the commit wrote a different
-// position than the status line promised.
-
-func TestStartupFilterFiresOnALiveStore(t *testing.T) {
-	p := &liveQueryProvider{b: memstore.New().Board()}
-	m := New(p, Options{Filter: "lane:ready"})
-	m.w, m.h = 140, 40
-	m.recompute()
-	m.relayout()
-
-	if m.startupFilter == nil {
-		t.Fatal("-filter on a live provider must arm the async query — dropping the Cmd left every task visible")
-	}
-	// Drive the armed chain the way Init's runner would: debounce tick, then
-	// the query Cmd it fires.
-	msg := m.startupFilter()
-	_, cmd := m.Update(msg)
-	if cmd == nil {
-		t.Fatal("the startup tick must fire the store query")
-	}
-	m.Update(cmd())
-	if calls := p.queryCalls(); len(calls) != 1 || calls[0] != "lane:ready" {
-		t.Fatalf("store queries = %v, want the startup filter", calls)
-	}
-	if m.qMatched == nil {
-		t.Fatal("the startup verdict must land")
-	}
-}
+// The mid-move half of the t-74y3 filter-lifecycle findings: a verdict landing
+// mid-keyboard-move reshaped the columns under the aimed slot, so the commit
+// wrote a different position than the status line promised. (The other half —
+// the startup -filter arming nothing on a live provider — is covered by
+// TestStartupFilterReachesTheLiveStore in hardening_test.go.)
 
 func TestMoveHoldsTheVerdictUntilTheMoveResolves(t *testing.T) {
 	m, _ := scriptedModel(t)
@@ -82,5 +54,28 @@ func TestStaleHeldVerdictIsDroppedOnRelease(t *testing.T) {
 	press(m, "esc")
 	if got := len(m.cols["ready"]); got != 3 {
 		t.Fatalf("a stale held verdict must be dropped, ready shows %d, want 3", got)
+	}
+}
+
+// A held verdict released by a commit that queued a persist must NOT land over
+// the optimistic move — the queued-writes guard applies on release too, and
+// the post-drain reconcile requeries instead.
+func TestHeldVerdictYieldsToTheCommitsQueuedWrite(t *testing.T) {
+	m, _ := scriptedModel(t)
+	m.applyFilter("title:x")
+	m.Update(filterResultMsg{seq: m.qSeq, ids: []string{"a", "b", "c", "z"}})
+
+	m.selectID("a", false) // lift from the three-card lane, not backlog's only card
+	press(m, "enter")
+	m.Update(filterResultMsg{seq: m.qSeq, ids: []string{"a"}}) // held mid-aim
+	press(m, "down", "down", "enter")                          // commit: queues the persist
+	if len(m.pending) == 0 && !m.inflight {
+		t.Fatal("setup: the commit must queue a persist")
+	}
+	if got := len(m.cols["ready"]); got != 3 {
+		t.Fatalf("the held verdict landed over the queued move: ready shows %d, want 3", got)
+	}
+	if m.heldVerdict != nil {
+		t.Fatal("the hold must be consumed on exit either way")
 	}
 }
