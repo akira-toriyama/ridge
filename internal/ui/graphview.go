@@ -155,11 +155,22 @@ func (m *Model) renderGraph() string {
 	if sh := m.graphStripHeight(); sh > 0 {
 		parts = append(parts, m.graphStrip(l, sh))
 	}
-	parts = append(parts,
-		pad(m.statusLine(), m.w),
-		pad(m.help.ShortHelpView(m.keys.graphHelp()), m.w))
+	parts = append(parts, pad(m.statusLine(), m.w))
 
-	return m.fitFrame(strings.Join(parts, "\n"))
+	frame := m.fitFrame(strings.Join(parts, "\n"))
+	// The graph is composed as a string, not through the compositor, so `?`
+	// used to set fullHelp and change not one pixel here — the overlay was
+	// simply never drawn, and the next Esc went on clearing an invisible flag.
+	// Harmless while the graph had a footer of its own; a lie the moment this
+	// view started advertising `? help` in its title bar. It is also the only
+	// way to read the key surface from inside a full-screen mode.
+	if m.fullHelp {
+		frame = m.fitFrame(lg.NewCompositor(
+			lg.NewLayer(frame).X(0).Y(0).Z(zChrome),
+			m.helpLayer(),
+		).Render())
+	}
+	return frame
 }
 
 func (m *Model) graphTitleBar(l *egoLayout) string {
@@ -168,8 +179,11 @@ func (m *Model) graphTitleBar(l *egoLayout) string {
 		th.tabOff.Render("Board") + th.dim.Render(" │ ") +
 		th.tabOff.Render("Table") + th.dim.Render(" │ ") +
 		th.tabOn.Render("Graph")
+	// `? help` here too: the graph is a full-screen mode, so once its footer
+	// went this row became the only pointer to the key surface from inside it.
 	right := th.crumb.Render(fmt.Sprintf("%d nodes · %d edges  ·  ",
-		len(l.Real()), len(l.Edges))) + th.accent.Render("⟨GRAPH⟩")
+		len(l.Real()), len(l.Edges))) + th.accent.Render("⟨GRAPH⟩") +
+		th.dim.Render("  ·  ? help")
 	return joinEnds(left, right, m.w)
 }
 
@@ -603,8 +617,8 @@ func (m *Model) graphBack() {
 func (m *Model) cycleGraphRadius() {
 	for i, r := range graphRadii {
 		if r == m.graphRadius {
+			// The graph header prints the radius every frame; see model.go.
 			m.graphRadius = graphRadii[(i+1)%len(graphRadii)]
-			m.note("hop radius %s", radiusLabel(m.graphRadius))
 			return
 		}
 	}

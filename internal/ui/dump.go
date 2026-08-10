@@ -41,9 +41,24 @@ func New(p board.Provider, o Options) *Model {
 		m.peekOpen = true
 		m.treeOpen = o.Tree
 	}
-	if p.Live() && m.b.Writable() {
-		m.note("loaded %d tasks in %dms · r reload · R sync · ? help",
-			len(m.b.Tasks()), o.LoadMS)
+	// What the read cost is the one thing the opening frame knows and the
+	// screen does not show anywhere else. The keys that used to be tacked on
+	// here (`r reload · R sync · ? help`) were a third partial key list.
+	//
+	// The read-only case says NOTHING, on purpose. newModel has already put
+	// "board is read-only … writes will fail until `furrow upgrade`" in the
+	// status, and that warning is set exactly once per session — nothing
+	// restores it later, so anything written over it is gone for good. An
+	// earlier revision of this function overwrote it with "fixture · N tasks",
+	// which was worse than losing it: on a live store gated by the schema
+	// check, "fixture" is the one word that means nothing you do touches disk
+	// (independent review of PR #21, blocker 1).
+	switch {
+	case !m.b.Writable():
+	case p.Live():
+		m.note("loaded %d tasks in %dms", len(m.b.Tasks()), o.LoadMS)
+	default:
+		m.note("fixture · %d tasks", len(m.b.Tasks()))
 	}
 	return m
 }

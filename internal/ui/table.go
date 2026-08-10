@@ -134,11 +134,10 @@ func (m *Model) setSort(k sortKey, asc bool) {
 	if keep != "" {
 		m.selectID(keep, false)
 	}
-	if k == sortCanonical {
-		m.note("sort: canonical (lane order)")
-		return
-	}
-	m.note("sort: %s %s — o cycles · same header click flips", k, sortArrow(asc))
+	// No note. The filter bar carries the sort for as long as it is not
+	// canonical, and the column ▲▼ appear and vanish with it, so both states
+	// are already on screen — in a place that survives the next keystroke,
+	// which the status line does not.
 }
 
 // cycleSort is the `o` key: canonical → updated → created → value → effort →

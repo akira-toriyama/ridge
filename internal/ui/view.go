@@ -107,7 +107,7 @@ func (m *Model) renderBoard() string {
 	return m.fitFrame(lg.NewCompositor(layers...).Render())
 }
 
-// chromeLayers draws the title bar, filter bar, footer and help line.
+// chromeLayers draws the title bar, the filter bar and the status line.
 func (m *Model) chromeLayers() []*lg.Layer {
 	th := m.th
 	total := len(m.b.Tasks())
@@ -131,10 +131,15 @@ func (m *Model) chromeLayers() []*lg.Layer {
 	}
 	// The passive latency readout: the last persist and how long the store
 	// took. Empty until the first real write, so fixture frames are unchanged.
-	tail := counts + "  ·  " + m.modeBadge()
+	// `? help` rides up here rather than in a footer because it never changes:
+	// the top rows carry standing state, the bottom row carries the one
+	// message that is about to be replaced. It is also the whole in-app
+	// pointer to the key surface now that the footers are gone.
+	tail := counts
 	if m.lastPersist != "" {
-		tail = counts + "  ·  " + m.lastPersist + "  ·  " + m.modeBadge()
+		tail += "  ·  " + m.lastPersist
 	}
+	tail += "  ·  " + m.modeBadge() + th.dim.Render("  ·  ? help")
 	right := th.crumb.Render(tail)
 	title := joinEnds(left, right, m.w)
 
@@ -172,26 +177,16 @@ func (m *Model) chromeLayers() []*lg.Layer {
 		filter = joinEnds(filter, th.accent.Render(fmt.Sprintf("+%d pinned by jump", len(m.pinned))), m.w)
 	}
 
-	status := m.statusLine()
-	var helpBar string
-	switch m.mode {
-	case modeMove:
-		helpBar = m.help.ShortHelpView(m.keys.moveHelp())
-	case modeEdit:
-		helpBar = m.help.ShortHelpView(m.keys.editHelp())
-	default:
-		helpBar = m.help.ShortHelpView(m.keys.ShortHelp())
-	}
-
-	// maxInt(0, …): on a 1- or 2-row terminal m.h-2 is negative, and the
-	// compositor NORMALISES negative coordinates by shifting the whole scene
-	// down — so a 1-row terminal came back 6 rows tall with the help bar on row
-	// 0. Clamp to the canvas and let fitFrame trim.
+	// The last row is the status line and nothing else. It stays on the canvas
+	// even when empty so that a message appearing never shifts the board.
+	//
+	// maxInt(0, …): on a 1-row terminal m.h-1 is 0 and anything negative would
+	// be NORMALISED by the compositor, which shifts the whole scene down — a
+	// 1-row terminal once came back 6 rows tall. Clamp and let fitFrame trim.
 	return []*lg.Layer{
 		lg.NewLayer(pad(title, m.w)).X(0).Y(rowTitle).Z(zChrome),
 		lg.NewLayer(pad(filter, m.w)).X(0).Y(rowFilter).Z(zChrome),
-		lg.NewLayer(pad(status, m.w)).X(0).Y(maxInt(0, m.h-2)).Z(zChrome),
-		lg.NewLayer(pad(helpBar, m.w)).X(0).Y(maxInt(0, m.h-1)).Z(zChrome),
+		lg.NewLayer(pad(m.statusLine(), m.w)).X(0).Y(maxInt(0, m.h-footerH)).Z(zChrome),
 	}
 }
 
