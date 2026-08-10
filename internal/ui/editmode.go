@@ -110,6 +110,12 @@ func (m *Model) onEditKey(msg tea.KeyPressMsg) tea.Cmd {
 	if t == nil {
 		return nil
 	}
+	// ctrl+c quits from every stage — in the input stages `q` types, and
+	// bubbletea's raw mode delivers ctrl+c as an ordinary keystroke, so
+	// nothing else would ever let go of the keyboard.
+	if key.Matches(msg, m.keys.ForceQuit) {
+		return m.quitOrFlush()
+	}
 	e := m.edit
 	if e.stage == stageInput {
 		return m.onEditInputKey(msg, t)
@@ -272,10 +278,16 @@ func (m *Model) editListSelect(t *board.Task) tea.Cmd {
 		return m.applyPatch("epic", board.FieldPatch{Epic: &id})
 	case fieldChecklist:
 		i := e.listIdx
+		if i >= len(t.Checklist) {
+			return nil
+		}
+		// Captured NOW, on the UI thread — the persist closure runs at drain
+		// time, when the checklist may have shrunk or the task vanished, so
+		// it must not read the live board (that read was both an index-panic
+		// and a data race; the provider contract says persists carry values).
+		done := !t.Checklist[i].Done
 		return m.applyCheck("check", func() error { return m.b.ToggleCheck(t.ID, i) },
-			func() error {
-				return m.prov.PersistCheck(t.ID, i, m.b.Task(t.ID).Checklist[i].Done)
-			})
+			func() error { return m.prov.PersistCheck(t.ID, i, done) })
 	}
 	return nil
 }

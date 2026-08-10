@@ -130,6 +130,12 @@ func (m *Model) onFilterResult(msg filterResultMsg) {
 	if msg.seq != m.qSeq {
 		return
 	}
+	if m.inflight || len(m.pending) > 0 {
+		// The verdict was computed from store truth that predates the queued
+		// optimistic writes — applying it would blink the user's own edit off
+		// the board. The post-drain reconcile requeries without a debounce.
+		return
+	}
 	if msg.err != nil {
 		// All-or-nothing refusal (furrow exit 2): keep the last good verdict
 		// on screen and say why. A half-typed `value:>` must not blank the

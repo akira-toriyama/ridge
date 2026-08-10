@@ -276,6 +276,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.BackgroundColorMsg:
 		m.th = newTheme(msg.IsDark())
+		// The measurer caches card heights per theme; leaving it bound to the
+		// old theme splits render geometry from hit-test geometry.
+		m.ms.rebind(m.g, m.th)
 
 	case editorDoneMsg:
 		if msg.err != nil {
@@ -310,11 +313,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case filterResultMsg:
 		m.onFilterResult(msg)
-
-	case addDoneMsg:
-		if c := m.onAddDone(msg); c != nil {
-			cmds = append(cmds, c)
-		}
 
 	case tea.KeyPressMsg:
 		if c := m.onKey(msg); c != nil {
@@ -465,6 +463,10 @@ func (m *Model) onGraphKey(msg tea.KeyPressMsg) tea.Cmd {
 
 func (m *Model) onFilterKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
+	case key.Matches(msg, m.keys.ForceQuit):
+		// `q` types into the filter; ctrl+c stays a way out (raw mode hands
+		// it to us as an ordinary keystroke — nobody else will quit for us).
+		return m.quitOrFlush()
 	case key.Matches(msg, m.keys.Cancel):
 		m.mode = modeNormal
 		m.ti.Blur()
@@ -575,6 +577,13 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.jumpBack()
 
 	case key.Matches(msg, m.keys.Reload):
+		if m.inflight || len(m.pending) > 0 {
+			// The reload would race the queue's own furrow process, land
+			// behind the guard in onReloadDone and be dropped — leaving
+			// "reloading…" on screen forever. The drain reconciles anyway.
+			m.note("writes in flight — the board re-reads itself once they land")
+			return nil
+		}
 		label := "reloaded"
 		if !m.prov.Live() {
 			label = "reloaded from the fixture — session edits discarded"
