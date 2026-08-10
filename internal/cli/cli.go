@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -48,7 +49,7 @@ func Execute() Code {
 		table     = flag.Bool("table", false, "-dump the table view")
 		light     = flag.Bool("light", false, "light palette")
 		plain     = flag.Bool("plain", false, "-dump without ANSI styling (diffable)")
-		demo      = flag.String("demo", "", "-dump in a transient state: move|drag|add|edit|graph|help|slice|sort (always the fixture)")
+		demo      = flag.String("demo", "", "-dump in a transient state: "+strings.Join(ui.DemoNames, "|")+" (always the fixture)")
 		mock      = flag.Bool("mock", false, "serve the built-in fixture instead of the real furrow store")
 		readonly  = flag.Bool("readonly", false, "serve the fixture as a schema-gated read-only board (implies -mock)")
 		perflog   = flag.String("perflog", "", "append one 'op\\tms' line per furrow command to this file")
