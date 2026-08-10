@@ -90,6 +90,21 @@ func (m *Model) demoState(kind string) error {
 		m.Update(tea.MouseClickMsg{X: grab.X + 3, Y: grab.Y + 1, Button: tea.MouseLeft})
 		m.Update(tea.MouseMotionMsg{X: dst.X + 8, Y: dst.Top + 4, Button: tea.MouseLeft})
 
+	case "slice":
+		// Panel open + focused, sliced to the ui label: the inset board, the
+		// selected row and the composed verdict all land in one frame.
+		m.toggleSlice()
+		m.sliceField = sliceLabel
+		rows := m.sliceRows()
+		for i, r := range rows {
+			if r.value == "ui" {
+				m.sliceIdx = i
+			}
+		}
+		if c := m.selectSlice(sliceLabel, "ui"); c != nil {
+			_ = c
+		}
+
 	case "add":
 		// A filtered board, so the modal PROVES the context inheritance: the
 		// filter's label lands in the chips, not silently on the task.
@@ -128,7 +143,7 @@ func (m *Model) demoState(kind string) error {
 		m.openGraph()
 
 	default:
-		return fmt.Errorf("unknown -demo %q (want move|drag|add|edit|graph|help)", kind)
+		return fmt.Errorf("unknown -demo %q (want move|drag|add|edit|graph|help|slice)", kind)
 	}
 	m.relayout()
 	return nil

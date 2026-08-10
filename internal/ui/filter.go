@@ -32,11 +32,21 @@ type filterResultMsg struct {
 	err error
 }
 
+// effectiveQuery is what the store is actually asked: the typed query AND
+// the slice panel's term. They are held separately so a slice switch never
+// edits the user's text.
+func (m *Model) effectiveQuery() string {
+	if t := m.sliceTerm(); t != "" {
+		return strings.TrimSpace(m.qRaw + " " + t)
+	}
+	return m.qRaw
+}
+
 // taskVisible is THE visibility predicate: every view (board columns, table
 // rows, graph nodes) must agree with it or the same query shows different
 // boards.
 func (m *Model) taskVisible(t *board.Task) bool {
-	if m.qRaw == "" || m.pinned[t.ID] {
+	if m.effectiveQuery() == "" || m.pinned[t.ID] {
 		return true
 	}
 	if m.qMatched == nil {
@@ -45,16 +55,26 @@ func (m *Model) taskVisible(t *board.Task) bool {
 	return m.qMatched[t.ID]
 }
 
-// applyFilter makes s the active query. It returns the Cmd that will
+// applyFilter makes s the active typed query. It returns the Cmd that will
 // eventually deliver the store's verdict: a debounce tick on a live store, or
 // nil when the verdict was applied synchronously (fixture, or an empty
 // query).
 func (m *Model) applyFilter(s string) tea.Cmd {
 	prev := m.curTask()
 	m.qRaw = strings.TrimSpace(s)
-	m.qSeq++ // fences off every in-flight tick and result
 	if m.qRaw == "" {
 		m.pinned = map[string]bool{} // clearing the filter clears jump pins too
+	}
+	return m.refire(prev, true)
+}
+
+// refire re-asks the store for a verdict on the effective query. debounce is
+// true for keystrokes, false for slice switches and reloads — deliberate
+// gestures with no follow-up keystroke coming.
+func (m *Model) refire(prev *board.Task, debounce bool) tea.Cmd {
+	m.qSeq++ // fences off every in-flight tick and result
+	eq := m.effectiveQuery()
+	if eq == "" {
 		m.qMatched, m.qErr = nil, ""
 		m.refilter(prev)
 		return nil
@@ -62,8 +82,11 @@ func (m *Model) applyFilter(s string) tea.Cmd {
 	if !m.prov.Live() {
 		// The fixture evaluator is in-memory and instant: answer now, so
 		// -dump stays a single deterministic frame and tests need no loop.
-		m.onFilterResult(filterResultMsg{seq: m.qSeq, ids: nil, err: nil}.evaluate(m.prov, m.qRaw))
+		m.onFilterResult(filterResultMsg{seq: m.qSeq}.evaluate(m.prov, eq))
 		return nil
+	}
+	if !debounce {
+		return m.queryCmd(m.qSeq)
 	}
 	seq := m.qSeq
 	return tea.Tick(filterDebounce, func(time.Time) tea.Msg { return filterTickMsg{seq: seq} })
@@ -87,19 +110,14 @@ func (m *Model) onFilterTick(msg filterTickMsg) tea.Cmd {
 // requery re-runs the active query NOW, without the debounce — after a
 // reload the board changed under the matched set, so the verdict is stale.
 func (m *Model) requery() tea.Cmd {
-	if m.qRaw == "" {
+	if m.effectiveQuery() == "" {
 		return nil
 	}
-	m.qSeq++
-	if !m.prov.Live() {
-		m.onFilterResult(filterResultMsg{seq: m.qSeq}.evaluate(m.prov, m.qRaw))
-		return nil
-	}
-	return m.queryCmd(m.qSeq)
+	return m.refire(m.curTask(), false)
 }
 
 func (m *Model) queryCmd(seq int) tea.Cmd {
-	prov, raw := m.prov, m.qRaw
+	prov, raw := m.prov, m.effectiveQuery()
 	return func() tea.Msg {
 		return filterResultMsg{seq: seq}.evaluate(prov, raw)
 	}

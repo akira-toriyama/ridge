@@ -99,20 +99,23 @@ func (m *Model) dropTarget(x, y int) (string, bool) {
 	return lane, true
 }
 
-func (m *Model) onMouseDown(msg tea.MouseClickMsg) {
+func (m *Model) onMouseDown(msg tea.MouseClickMsg) tea.Cmd {
 	if !m.mouseOn || m.mode == modeFilter || m.lay == nil {
-		return
+		return nil
 	}
 	if msg.Button != tea.MouseLeft {
-		return
+		return nil
 	}
 	if m.inPeek(msg.X, msg.Y) {
-		return
+		return nil
+	}
+	if m.sliceOpen && msg.X < sliceInsetW && msg.Y >= boardTop && m.view == viewBoard {
+		return m.sliceClick(msg.X, msg.Y)
 	}
 	if m.mode == modeMove {
 		// A keyboard move is in flight; a click would give the card two owners.
 		m.note("finish the keyboard move first (⏎ commit / esc cancel)")
-		return
+		return nil
 	}
 
 	lane, idx, ok := m.lay.cardAt(msg.X, msg.Y)
@@ -122,11 +125,11 @@ func (m *Model) onMouseDown(msg tea.MouseClickMsg) {
 				m.curLane = i
 			}
 		}
-		return
+		return nil
 	}
 	c := m.lay.Col(lane)
 	if c == nil || idx >= len(c.Tasks) {
-		return
+		return nil
 	}
 	t := c.Tasks[idx]
 
@@ -148,6 +151,7 @@ func (m *Model) onMouseDown(msg tea.MouseClickMsg) {
 		grabDX: msg.X - box.X, grabDY: msg.Y - box.Y,
 		dropLane: lane, dropIdx: idx,
 	}
+	return nil
 }
 
 func (m *Model) onMouseMove(msg tea.MouseMotionMsg) tea.Cmd {
