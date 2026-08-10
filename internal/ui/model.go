@@ -166,7 +166,6 @@ func newModel(p board.Provider) *Model {
 		curIdx:      map[string]int{},
 		scroll:      map[string]int{},
 		graphRadius: 2,
-		status:      "space detail · ⇧space dep graph · ⏎ move mode · / filter · > blocker · ? help",
 	}
 	m.reload()
 	// Start on the first lane that actually has work.
@@ -450,12 +449,11 @@ func (m *Model) onGraphKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	case key.Matches(msg, m.keys.GraphRadius):
 		switch msg.String() {
+		// No note: the graph header states the radius on every frame.
 		case "1", "2", "3":
 			m.graphRadius = int(msg.String()[0] - '0')
-			m.note("hop radius %d", m.graphRadius)
 		case "0":
 			m.graphRadius = graphAllRadius
-			m.note("hop radius all")
 		default:
 			m.cycleGraphRadius()
 		}
@@ -552,15 +550,15 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.ti.Focus()
 
 	case key.Matches(msg, m.keys.View):
+		// No note: the tab strip in the title row already says which view is
+		// up, and the whole screen changed.
 		if m.view == viewBoard {
 			m.view, m.tableIdx = viewTable, 0
 			if t := m.curTask(); t != nil {
 				m.selectID(t.ID, false)
 			}
-			m.note("table view — v returns to the board")
 		} else {
 			m.view = viewBoard
-			m.note("board view")
 		}
 
 	case key.Matches(msg, m.keys.Sort):
@@ -607,15 +605,16 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 	case key.Matches(msg, m.keys.OnlyBlock):
 		// TOKEN-wise, never a substring ReplaceAll: on "-is:blocked" that left a
 		// bare "-" behind, which parses as a bare-word term and quietly changed
-		// what the board showed while the status line said "off".
+		// what the board showed while claiming the toggle was off.
+		//
+		// No note either way: `b` edits the filter query itself, so the filter
+		// bar shows `is:blocked` appearing and disappearing.
 		if q, had := dropToken(m.qRaw, "is:blocked"); had {
 			cmd := m.applyFilter(q)
-			m.note("blocked-only off")
 			m.ti.SetValue(m.qRaw)
 			return cmd
 		}
 		cmd := m.applyFilter(strings.TrimSpace(m.qRaw + " is:blocked"))
-		m.note("blocked-only on")
 		m.ti.SetValue(m.qRaw)
 		return cmd
 
@@ -879,7 +878,7 @@ func (m *Model) cycleLane(d int) tea.Cmd {
 	}
 	m.recompute()
 	m.selectID(id, false)
-	m.note("%s → %s", id, dest)
+	// No note: the card is now in the other lane, with the cursor on it.
 	return m.persistPlacement(id, dest)
 }
 
@@ -918,10 +917,12 @@ func (m *Model) quickReorder(d int) tea.Cmd {
 		return nil
 	}
 	if !moved {
+		// This one stays: nothing happened, and nothing NOT happening is
+		// exactly what the screen cannot show.
 		m.note("%s did not move", t.ID)
 		return nil
 	}
-	m.note("%s %s in %s", t.ID, map[bool]string{true: "lowered", false: "raised"}[d > 0], t.Status)
+	// The card visibly changed places, so there is nothing left to report.
 	return cmd
 }
 

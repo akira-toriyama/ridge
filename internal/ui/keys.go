@@ -118,19 +118,11 @@ func defaultKeys() keyMap {
 	}
 }
 
-// ShortHelp is the one-line footer.
-func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Left, k.Down, k.Up, k.Right, k.Move, k.Peek, k.Graph, k.Filter, k.JumpBlock, k.Help, k.Quit}
-}
-
-// graphHelp is the footer inside the graph view — a different mode gets a
-// different keymap, so the footer never lies about what the arrows do.
-func (k keyMap) graphHelp() []key.Binding {
-	return []key.Binding{k.Left, k.Down, k.Up, k.Right, k.GraphRoot, k.JumpBack,
-		k.GraphRadius, k.Peek, k.Cancel, k.Quit}
-}
-
-// FullHelp is the `?` overlay.
+// FullHelp is the `?` overlay — and, since the footers went, the ONLY place
+// the key surface is listed. That is the point: it is built from the same
+// key.Bindings the Update path matches on, so it cannot advertise a key that
+// does not work. The footers could, and did — the graph's offered `space
+// detail` while the graph had no Peek case at all.
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Left, k.Right, k.NextCol, k.PrevCol, k.Top, k.Bottom},
@@ -143,14 +135,8 @@ func (k keyMap) FullHelp() [][]key.Binding {
 	}
 }
 
-// editHelp is the footer while the field-edit overlay is up. The overlay
-// carries its own per-stage hints; the footer only shows the frame.
-func (k keyMap) editHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Commit, k.Check, k.Cancel, k.ForceQuit}
-}
-
-// moveHelp is the footer while a card is lifted — a different mode gets a
-// different keymap, so the footer never lies about what the arrows will do.
-func (k keyMap) moveHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Left, k.Right, k.MoveTop, k.MoveBottom, k.Commit, k.Cancel}
-}
+// The per-mode footers (move, edit, graph) lived here. They are gone: every
+// mode already names its own exits where the eye is. Move and drag put
+// "⏎ commit · esc restore" in the status line, the edit overlay carries its
+// per-stage hints inside the box, and the graph's status line spells out
+// "⏎ re-roots · z cycles radius · esc returns".

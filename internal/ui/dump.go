@@ -41,9 +41,13 @@ func New(p board.Provider, o Options) *Model {
 		m.peekOpen = true
 		m.treeOpen = o.Tree
 	}
+	// What the read cost is the one thing the opening frame knows and the
+	// screen does not show anywhere else. The keys that used to be tacked on
+	// here (`r reload · R sync · ? help`) were a third partial key list.
 	if p.Live() && m.b.Writable() {
-		m.note("loaded %d tasks in %dms · r reload · R sync · ? help",
-			len(m.b.Tasks()), o.LoadMS)
+		m.note("loaded %d tasks in %dms", len(m.b.Tasks()), o.LoadMS)
+	} else {
+		m.note("fixture · %d tasks", len(m.b.Tasks()))
 	}
 	return m
 }

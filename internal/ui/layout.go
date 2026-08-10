@@ -40,7 +40,12 @@ const (
 	rowColSum = 3 // value/effort sums
 	rowRule   = 4
 	boardTop  = 5 // first card row
-	footerH   = 2 // status line + help line
+	// One row, and it is the status line. There is no key list down here: a
+	// partial one is worse than none, because a reader takes it for the whole
+	// surface — `>` was listed without `<`, so the jump looked one-way. The
+	// key list lives in `?`, which is generated from the same key.Bindings the
+	// handlers match on and therefore cannot drift.
+	footerH = 1
 )
 
 // cardBox is one card's measured place on screen.

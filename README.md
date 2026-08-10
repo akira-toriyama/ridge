@@ -85,32 +85,23 @@ due / repos / checklist（カーソルで項目選択・toggle/add/delete/reword
 
 ## キー
 
+**全キーは `?` が正典。** 起動して `?` を押すと、その時点で有効なキーが全部出る
+（一覧は `internal/ui/keys.go` の `key.Binding` から生成しているので、handler が
+照合しているものとズレない）。ここに表を置くとその写しが手書きで増えるだけなので、
+置くのは取っ掛かりの5つだけにする。
+
 | キー | 動作 |
 |---|---|
-| `←→↑↓` / `hjkl` | カーソル移動 |
-| `Enter` / `m` | move mode（`Enter` 確定・`Esc` 取消）。peek が開いている時と Table 行では `Enter` = **フィールド編集メニュー** |
-| `K` / `J` | レーン内で1つ上/下へ |
-| `[` / `]` | レーンを前/次へ |
+| `?` | **キー一覧**（ここから全部辿れる） |
 | `Space` | 詳細ペイン |
-| `t` | 依存ツリー（詳細ペイン内） |
-| `S` / `Shift+Space` | **依存グラフ** |
-| `>` / `<` | blocker へジャンプ / 戻る |
-| `/` | フィルタ = furrow `-q` パススルー（`lane:ready repo:vista is:blocked value:>=4 updated:>=-2w`。文法の正本は `furrow ls --help` の -q 節） |
-| `b` | blocked のみ表示 |
-| `s` | **slice パネル**（repo / label / epic の値で絞る左パネル。選択は filter と AND 合成・`Esc` でパネルを残して盤面へ・再選択で解除） |
-| `v` | Board ⇄ Table |
-| `o` | Table のソート（canonical → updated → created → value → effort → due を循環・再押しで昇降反転）。対応列のヘッダに `▲▼`・現在のソートはフィルタバーに常時表示（created / effort は列が無いのでこちらだけ）。ソート可能なヘッダのクリックでも同じ・`lane` クリックで canonical へ |
-| `a` | quick add（フォーカス列へ起票。適用中 filter の label/epic/repo を継承 — チップで明示） |
-| `d` | done |
-| `e` | 本文を `$EDITOR` で編集 |
-| `r` | store 再読 |
-| `R` | `furrow sync`（git）→ 再読 |
-| `M` | マウス追跡 ON/OFF |
-| `?` | ヘルプ |
+| `S` | 依存グラフ |
+| `Enter` | move mode（`Enter` 確定・`Esc` 取消） |
 | `q` | 終了 |
 
-グラフ内では `←→↑↓` でノード移動、`Enter` で再ルート、`z`/`1`/`2`/`3`/`0` で
-ホップ半径、`Esc` で盤面へ。
+画面下部は1行だけで、そこに出るのは**画面に出ていないこと**（今入ったモードの
+出口・失敗・読み込み実績）に限る。キー一覧は出さない — 部分的なキー列は、
+読んだ人に「これで全部」と思わせる分だけ無い方がましだった（`>` があって `<` が
+無く、blocker を辿ったら戻れないと読まれた）。
 
 ## 設計方針
 
