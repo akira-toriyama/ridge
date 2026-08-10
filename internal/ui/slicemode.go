@@ -287,7 +287,10 @@ func (m *Model) sliceRowAt(y int, rowCount int) int {
 // sliceClick is a mouse press inside the panel: a value row selects, the
 // axis line cycles, everything else — indicators included — is inert.
 func (m *Model) sliceClick(_, y int) tea.Cmd {
-	if y == boardTop+1 { // the axis line
+	// The axis line is a fixed row, but it must still be RENDERED to be
+	// clickable — at h ≤ 7 this y is the help line or past the frame
+	// (round-3 residual: the one click path not built on sliceViewport).
+	if y == boardTop+1 && y < m.h-footerH { // the axis line
 		return m.cycleSliceField(+1)
 	}
 	rows := m.sliceRows()
