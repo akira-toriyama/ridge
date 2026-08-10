@@ -37,3 +37,39 @@ jobs:
 # No `extras` job: ridge is one package whose surface is a terminal UI, so there is
 # no shipped-binary smoke to run beyond what the core test job already covers. Add
 # one here if a CLI entry point ever grows.
+
+  # The furrowstore contract suite self-skips when the furrow binary is absent
+  # (store_test.go: LookPath guard) — which is exactly what happened in the ci
+  # job above: the hub go-ci runner has no furrow, so the ONLY tests that pin
+  # the real CLI grammar never executed here. Measured (t-74y3): three semantic
+  # mutations of store.go (--clear-value→--clear-effort, dropping Add's -l,
+  # --before→--after) all rode a green CI. This job installs the pinned furrow
+  # release and runs the suite for real; bump the pin alongside furrow
+  # releases (the fleet's own task-status pin lags a flag day behind).
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # SHA-pinned to the same v7.0.0s the hub reusables pin (fleet hygiene).
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Install furrow (pinned release binary)
+        # NOT `go install`: furrow's module path carries no /vN suffix, so Go
+        # refuses source installs of every v2+ tag ("module path must match
+        # major version"). The release tarball is how the fleet's own
+        # sync-task-status gate installs it — checksum-pinned here.
+        run: |
+          curl -fsSL -o /tmp/furrow.tgz             https://github.com/akira-toriyama/furrow/releases/download/v4.0.0/furrow_4.0.0_linux_amd64.tar.gz
+          echo "32a19beea1871d6ca8df359d92e857e1a4642f57d7267b25c95c422d3abb9e10  /tmp/furrow.tgz" | sha256sum -c -
+          tar -C /tmp -xzf /tmp/furrow.tgz furrow
+          sudo install -m 0755 /tmp/furrow /usr/local/bin/furrow
+      - name: Contract tests against the real CLI
+        env:
+          GOTOOLCHAIN: local
+        run: |
+          furrow --help >/dev/null
+          go test ./internal/store/furrowstore/ -run TestContract -v
