@@ -1,10 +1,14 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/akira-toriyama/ridge/internal/board"
+	"github.com/akira-toriyama/ridge/internal/store/memstore"
 )
 
 func press(m *Model, keys ...string) {
@@ -152,8 +156,11 @@ func TestEditEpicFileAndUnfile(t *testing.T) {
 	drainPersists(m, t)
 
 	m.edit.menuIdx = int(fieldEpic)
-	press(m, "enter") // reopen; row 0 = (unfiled)
-	press(m, "enter")
+	press(m, "enter") // reopen: the cursor lands on the CURRENT epic, not on row 0
+	if m.edit.listIdx != 1 {
+		t.Fatalf("listIdx = %d, want the current epic's row", m.edit.listIdx)
+	}
+	press(m, "up", "enter") // row 0 = (unfiled), one deliberate step away
 	if got := m.b.Task("t-ehk7").Epic; got != "" {
 		t.Errorf("epic = %q, want unfiled", got)
 	}
@@ -283,5 +290,117 @@ func TestEditEscWalksBackOut(t *testing.T) {
 	press(m, "esc")
 	if m.mode != modeNormal || m.edit != nil {
 		t.Error("esc from the menu must close the overlay")
+	}
+}
+
+// epicPickerModel is the shape that broke the picker: a task whose epic
+// vocabulary is far taller than the terminal. The real board carries 101
+// epics against a 50-row window, so every row past the fold — the footer
+// included — used to be clipped away by editLayer's MaxHeight.
+func epicPickerModel(t *testing.T, epics int, filed string) *Model {
+	t.Helper()
+	vocab := make([]board.EpicInfo, epics)
+	for i := range vocab {
+		vocab[i] = board.EpicInfo{ID: fmt.Sprintf("e-%04d", i), Title: fmt.Sprintf("エピック %04d", i)}
+	}
+	task := &board.Task{ID: "t-big", Status: "ready", Title: "the task under edit", Epic: filed}
+	m := New(memstore.NewWith(board.NewBoard([]*board.Task{task}, vocab...)), Options{})
+	m.w, m.h = 200, 50
+	m.recompute()
+	m.relayout()
+	if !m.selectID("t-big", false) {
+		t.Fatal("could not select t-big")
+	}
+	m.enterEdit()
+	m.edit.menuIdx = int(fieldEpic)
+	press(m, "enter")
+	if m.edit.stage != stageList || m.edit.field != fieldEpic {
+		t.Fatalf("stage = %d field = %d, want the epic list", m.edit.stage, m.edit.field)
+	}
+	return m
+}
+
+// cursorLine is the frame line carrying the list cursor. The board view draws
+// no other ▌, so this is unambiguous while the overlay is up.
+func cursorLine(t *testing.T, out string) string {
+	t.Helper()
+	for _, l := range strings.Split(out, "\n") {
+		if strings.Contains(l, "▌ ") {
+			return l
+		}
+	}
+	t.Fatalf("no list cursor in the frame:\n%s", out)
+	return ""
+}
+
+func TestEditListKeepsTheFooterOnFrame(t *testing.T) {
+	m := epicPickerModel(t, 101, "")
+	out := frame(m)
+	if !strings.Contains(out, "⏎ select · esc back") {
+		t.Error("a vocabulary taller than the terminal must not push the key hints off-frame")
+	}
+	// The clipped tail has to SAY it is clipped, the way a clipped column does.
+	if !strings.Contains(out, "below") {
+		t.Errorf("the clipped tail must be announced:\n%s", out)
+	}
+}
+
+func TestEditListWindowsAroundTheCursor(t *testing.T) {
+	m := epicPickerModel(t, 101, "")
+	press(m, strings.Split(strings.Repeat("down ", 60), " ")[:60]...)
+	if m.edit.listIdx != 60 {
+		t.Fatalf("listIdx = %d, want 60", m.edit.listIdx)
+	}
+	rows := m.editListRows(m.b.Task("t-big"))
+	out := frame(m)
+	if line := cursorLine(t, out); !strings.Contains(line, rows[60]) {
+		t.Errorf("the cursor walked off-frame: cursor line %q, want %q", line, rows[60])
+	}
+	if !strings.Contains(out, "above") || !strings.Contains(out, "below") {
+		t.Errorf("a window clipped at both ends must announce both:\n%s", out)
+	}
+	if !strings.Contains(out, "⏎ select · esc back") {
+		t.Error("the key hints must survive a deep cursor")
+	}
+
+	// Selection semantics are untouched: up from row 0 still wraps to the last
+	// row, and the render follows it to the tail.
+	press(m, strings.Split(strings.Repeat("up ", 60), " ")[:60]...)
+	press(m, "up")
+	if m.edit.listIdx != len(rows)-1 {
+		t.Fatalf("listIdx = %d, want a wrap to %d", m.edit.listIdx, len(rows)-1)
+	}
+	out = frame(m)
+	if line := cursorLine(t, out); !strings.Contains(line, rows[len(rows)-1]) {
+		t.Errorf("the wrapped cursor is off-frame: cursor line %q", line)
+	}
+	if !strings.Contains(out, "⏎ select · esc back") {
+		t.Error("the key hints must survive the wrap to the tail")
+	}
+}
+
+func TestEditEpicOpensOnTheCurrentEpic(t *testing.T) {
+	// Row 0 is "(unfiled)", whose Enter PERSISTS `furrow set -e ""`. A filed
+	// task must never open there.
+	m := epicPickerModel(t, 101, "e-0042")
+	if got := m.edit.listIdx; got != 43 {
+		t.Errorf("listIdx = %d, want 43 (row 0 is (unfiled), so e-0042 is row 43)", got)
+	}
+	rows := m.editListRows(m.b.Task("t-big"))
+	if line := cursorLine(t, frame(m)); !strings.Contains(line, rows[43]) {
+		t.Errorf("the opening cursor is off-frame: cursor line %q", line)
+	}
+
+	// Unfiled still opens on "(unfiled)".
+	m2 := epicPickerModel(t, 101, "")
+	if got := m2.edit.listIdx; got != 0 {
+		t.Errorf("unfiled listIdx = %d, want 0", got)
+	}
+
+	// An id the board cannot resolve falls back to row 0 rather than to a
+	// wrong epic.
+	m3 := epicPickerModel(t, 101, "e-gone")
+	if got := m3.edit.listIdx; got != 0 {
+		t.Errorf("stale membership listIdx = %d, want 0", got)
 	}
 }
