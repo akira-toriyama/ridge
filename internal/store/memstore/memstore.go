@@ -17,6 +17,11 @@ type Store struct {
 	b       *board.Board
 	rebuild func() *board.Board
 	addSeq  int
+	// writeErr is what every persist returns when the board is gated. A
+	// non-writable board whose writes all SUCCEED is the fixture lying in the
+	// one direction the gate exists to describe, so the refusal lives on the
+	// store, not only in Board.Writable().
+	writeErr error
 }
 
 // New serves the fixture snapshot.
@@ -30,6 +35,34 @@ func New() *Store {
 func NewWith(b *board.Board) *Store {
 	return &Store{b: b, rebuild: func() *board.Board { return b }}
 }
+
+// NewGated serves the fixture as a board furrow would REFUSE to write to —
+// the schema gate that `furrow board --json` reports as writable:false.
+//
+// It exists because that state was unreachable by hand: producing it for real
+// needs a store on an older schema, so the one frame that carries the
+// read-only warning could not be looked at, only unit-tested. A regression
+// that deleted that warning therefore shipped to review unseen (t-04f8).
+func NewGated(schema string) *Store {
+	f := func() *board.Board {
+		b := board.NewBoard(fixtureTasks(), fixtureEpics()...)
+		return board.NewStoreBoard(b.Lanes(), b.Tasks(), b.Epics(), false, schema)
+	}
+	return &Store{
+		b:       f(),
+		rebuild: f,
+		// Measured against a real store forced onto an older schema: `furrow
+		// board --json` reports writable:false and every set/done/check/add
+		// exits 2 with schema-upgrade-required. A gated fixture that accepted
+		// writes would render "writes will fail" and then let them all
+		// through — the same class of lie as the fixture's -q guessing
+		// instead of refusing (1139e1b).
+		writeErr: fmt.Errorf("board is read-only (%s): furrow refuses writes until `furrow upgrade`", schema),
+	}
+}
+
+// gate is the schema pre-flight every write goes through.
+func (p *Store) gate() error { return p.writeErr }
 
 // Board returns the current snapshot (board.Provider).
 func (p *Store) Board() *board.Board { return p.b }
@@ -46,6 +79,9 @@ func (p *Store) Live() bool { return false }
 
 // PersistMove validates the ids and records nothing (board.Provider).
 func (p *Store) PersistMove(id, lane, _, _ string) ([]string, error) {
+	if err := p.gate(); err != nil {
+		return nil, err
+	}
 	if p.b.Task(id) == nil {
 		return nil, fmt.Errorf("unknown task %q", id)
 	}
@@ -57,6 +93,9 @@ func (p *Store) PersistMove(id, lane, _, _ string) ([]string, error) {
 
 // PersistDone validates the id and records nothing (board.Provider).
 func (p *Store) PersistDone(id string) error {
+	if err := p.gate(); err != nil {
+		return err
+	}
 	if p.b.Task(id) == nil {
 		return fmt.Errorf("unknown task %q", id)
 	}
@@ -65,6 +104,9 @@ func (p *Store) PersistDone(id string) error {
 
 // PersistCheck validates the item and records nothing (board.Provider).
 func (p *Store) PersistCheck(id string, i int, _ bool) error {
+	if err := p.gate(); err != nil {
+		return err
+	}
 	t := p.b.Task(id)
 	if t == nil {
 		return fmt.Errorf("unknown task %q", id)
@@ -77,6 +119,9 @@ func (p *Store) PersistCheck(id string, i int, _ bool) error {
 
 // PersistBody validates the id and records nothing (board.Provider).
 func (p *Store) PersistBody(id, _ string) error {
+	if err := p.gate(); err != nil {
+		return err
+	}
 	if p.b.Task(id) == nil {
 		return fmt.Errorf("unknown task %q", id)
 	}
@@ -108,6 +153,9 @@ func (p *Store) Query(q string) ([]string, error) {
 // PersistFields validates the id and records nothing (board.Provider) — the
 // local apply already validated the patch against the same board.
 func (p *Store) PersistFields(id string, _ board.FieldPatch) error {
+	if err := p.gate(); err != nil {
+		return err
+	}
 	if p.b.Task(id) == nil {
 		return fmt.Errorf("unknown task %q", id)
 	}
@@ -116,6 +164,9 @@ func (p *Store) PersistFields(id string, _ board.FieldPatch) error {
 
 // PersistCheckAdd validates the id and records nothing (board.Provider).
 func (p *Store) PersistCheckAdd(id, _ string) error {
+	if err := p.gate(); err != nil {
+		return err
+	}
 	if p.b.Task(id) == nil {
 		return fmt.Errorf("unknown task %q", id)
 	}
@@ -124,6 +175,9 @@ func (p *Store) PersistCheckAdd(id, _ string) error {
 
 // PersistCheckRm validates the item and records nothing (board.Provider).
 func (p *Store) PersistCheckRm(id string, i int) error {
+	if err := p.gate(); err != nil {
+		return err
+	}
 	t := p.b.Task(id)
 	if t == nil {
 		return fmt.Errorf("unknown task %q", id)
@@ -144,6 +198,9 @@ func (p *Store) PersistCheckReword(id string, i int, _ string) error {
 // lands, and Reload keeps serving it (discarding it would make the mock lie
 // about the add having happened).
 func (p *Store) Add(title string, o board.AddOptions) (string, error) {
+	if err := p.gate(); err != nil {
+		return "", err
+	}
 	if strings.TrimSpace(title) == "" {
 		return "", fmt.Errorf("a title cannot be empty")
 	}

@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -48,8 +49,9 @@ func Execute() Code {
 		table     = flag.Bool("table", false, "-dump the table view")
 		light     = flag.Bool("light", false, "light palette")
 		plain     = flag.Bool("plain", false, "-dump without ANSI styling (diffable)")
-		demo      = flag.String("demo", "", "-dump in a transient state: move|drag|add|edit|graph|help|slice|sort (always the fixture)")
+		demo      = flag.String("demo", "", "-dump in a transient state: "+strings.Join(ui.DemoNames, "|")+" (always the fixture)")
 		mock      = flag.Bool("mock", false, "serve the built-in fixture instead of the real furrow store")
+		readonly  = flag.Bool("readonly", false, "serve the fixture as a schema-gated read-only board (implies -mock)")
 		perflog   = flag.String("perflog", "", "append one 'op\\tms' line per furrow command to this file")
 		benchload = flag.Bool("benchload", false, "load the real board once, print the latency breakdown, exit (read-only)")
 	)
@@ -61,15 +63,23 @@ func Execute() Code {
 
 	// -dump and -demo are the headless verification surface; they stay on the
 	// fixture so their frames are deterministic and diffable.
-	useMock := *mock || *dump || *demo != ""
+	useMock := *mock || *dump || *demo != "" || *readonly
 
 	var (
 		prov   board.Provider
 		loadMS int
 	)
-	if useMock {
+	switch {
+	case useMock && *readonly:
+		// The one board state that cannot be produced by hand: reaching it for
+		// real needs a store on an older schema. Without this the frame
+		// carrying the read-only warning could only be unit-tested, never
+		// looked at — which is how a regression that deleted that warning got
+		// as far as review (t-04f8).
+		prov = memstore.NewGated("board-behind")
+	case useMock:
 		prov = memstore.New()
-	} else {
+	default:
 		perf, err := perfHook(*perflog)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "error: -perflog:", err)

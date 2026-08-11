@@ -209,3 +209,79 @@ func TestFrameStaysRectangularAfterTheFooterWent(t *testing.T) {
 		}
 	}
 }
+
+// The read-only warning survives to the frame at every width this board is
+// read at, and it is the ⚠ row rather than a quiet note. Reaching this state
+// for real needs a store on an older schema, so `-readonly` (memstore.NewGated)
+// is the only way a human ever sees it — this pins that the route works.
+func TestGatedBoardRendersItsWarningAtEveryWidth(t *testing.T) {
+	for _, w := range []int{240, 320, 400} {
+		gated := memstore.NewGated("board-behind")
+		m := New(gated, Options{})
+		out, err := m.Dump(w, 50, "", true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		lines := strings.Split(out, "\n")
+		last := strings.TrimSpace(lines[len(lines)-1])
+		if !strings.Contains(last, "read-only") || !strings.Contains(last, "board-behind") {
+			t.Errorf("w=%d last row = %q, want the read-only warning naming the schema state", w, last)
+		}
+		if !strings.HasPrefix(last, "⚠") {
+			t.Errorf("w=%d last row = %q, want the ⚠ error row", w, last)
+		}
+	}
+}
+
+// Every -demo name in ui.DemoNames must render AND must actually change the
+// frame. An err==nil check alone passed with both new demo bodies deleted:
+// demoState returns nil for any name it has a case for, empty or not
+// (independent review of PR #22).
+func TestEveryAdvertisedDemoRenders(t *testing.T) {
+	plain := strings.Join(dumpFrame(t, 240, 50, ""), "\n")
+	for _, d := range DemoNames {
+		m := New(memstore.New(), Options{})
+		out, err := m.Dump(240, 50, d, true)
+		if err != nil {
+			t.Errorf("-demo %s: %v", d, err)
+			continue
+		}
+		if out == plain {
+			t.Errorf("-demo %s renders the same frame as no demo at all — the case is empty", d)
+		}
+	}
+	m := New(memstore.New(), Options{})
+	if _, err := m.Dump(240, 50, "nope", true); err == nil {
+		t.Error("an unknown -demo must be an error, not a silent board")
+	}
+}
+
+// The gated fixture REFUSES writes, the way a real schema-gated store does.
+// Gating only Board.Writable() left every persist succeeding, so `-mock
+// -readonly` said "writes will fail" and then let them all through — measured
+// against a real store on an older schema, where every set/done/add exits 2.
+func TestGatedBoardRollsBackAWrite(t *testing.T) {
+	m := New(memstore.NewGated("board-behind"), Options{})
+	m.w, m.h = 240, 50
+	m.recompute()
+	m.relayout()
+
+	moved, cmd, err := m.commitMove("t-ehk7", "backlog", "ready", 0, 0)
+	if err != nil || !moved || cmd == nil {
+		t.Fatalf("setup: moved=%v cmd=%v err=%v", moved, cmd != nil, err)
+	}
+	msg, ok := cmd().(persistDoneMsg)
+	if !ok {
+		t.Fatal("setup: the move did not produce a persist result")
+	}
+	if msg.err == nil {
+		t.Fatal("a gated store accepted a move — the read-only board is not read-only")
+	}
+	m.onPersistDone(msg)
+	if !m.rollingBack {
+		t.Error("a refused write did not open the rollback window")
+	}
+	if !m.statusErr {
+		t.Error("a refused write did not surface as an error row")
+	}
+}

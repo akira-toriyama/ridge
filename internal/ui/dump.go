@@ -2,11 +2,18 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/akira-toriyama/ridge/internal/board"
 )
+
+// DemoNames is every -demo state, spelled once. The flag's usage string, the
+// unknown-name error and the tests all read this slice, because the list was
+// duplicated in three places and adding two states updated two of them —
+// `ridge -h` then advertised eight of ten (independent review of PR #22).
+var DemoNames = []string{"move", "drag", "add", "edit", "graph", "help", "slice", "sort", "filter", "fail"}
 
 // Options configures a freshly-constructed Model. The zero value is the
 // default TUI: dark palette, board view, no filter.
@@ -169,8 +176,27 @@ func (m *Model) demoState(kind string) error {
 		m.view = viewTable
 		m.setSort(sortDue, true)
 
+	case "filter":
+		// The modal filter input with text in it: the ⟨FILTER⟩ badge, the
+		// prompt holding the keyboard, and the board already narrowed behind
+		// it. Reachable only mid-keystroke otherwise.
+		m.mode = modeFilter
+		m.ti.SetValue("lane:backlog is:blocked")
+		m.ti.Focus()
+		_ = m.applyFilter(m.ti.Value())
+
+	case "fail":
+		// A refused write. The ⚠ styling has its own colour and its own row,
+		// and nothing else in the demo set renders an error at all.
+		// onPersistDone sets lastPersist BEFORE it branches on the error, so a
+		// real refusal always carries the latency readout too. Leaving it
+		// empty rendered a frame the app cannot actually be in.
+		m.lastPersist = "move t-jv3j 96ms"
+		m.fail("t-jv3j: the store refused the write — the board is rolling back")
+		m.rollingBack = true
+
 	default:
-		return fmt.Errorf("unknown -demo %q (want move|drag|add|edit|graph|help|slice|sort)", kind)
+		return fmt.Errorf("unknown -demo %q (want %s)", kind, strings.Join(DemoNames, "|"))
 	}
 	m.relayout()
 	return nil
