@@ -34,7 +34,7 @@
 
 | 用語 | トークン | 意味 |
 |---|---|---|
-| **normal mode** | ⟨NORMAL⟩ | 既定の mode。カーソル移動・ビュー切替・各 modal への入口。`?` はここと graph からだけ開ける。 |
+| **normal mode** | ⟨NORMAL⟩ | 既定の mode。カーソル移動・ビュー切替・各 modal への入口。`?` はここ・move mode・graph で開ける（modal 入力中は不可 — キーボードは modal のもの）。 |
 | **move mode** | ⟨MOVE⟩ | カードを持ち上げて置き直す（下の操作表を参照）。 |
 | **filter mode** | ⟨FILTER⟩ | `/` で filter bar が入力を専有。 |
 | **edit mode** | ⟨EDIT⟩ | 編集メニュー（edit overlay）が専有。 |

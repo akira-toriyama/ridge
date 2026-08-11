@@ -64,7 +64,21 @@ func (m *Model) cancelMove() {
 
 func (m *Model) onMoveKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
+	// `?` must work here: the move-mode title row advertises it, and the help
+	// overlay is the only listing of the K/J/H/L extremes. It used to be a dead
+	// key in exactly the mode its section documents (independent review of
+	// PR #23 and the t-8xk8 branch, both).
+	case key.Matches(msg, m.keys.Help):
+		m.fullHelp = !m.fullHelp
+		return nil
+
 	case key.Matches(msg, m.keys.Cancel):
+		// The overlay is on top, so it is what esc takes off first — same
+		// ordering as the board's and the graph's Cancel.
+		if m.fullHelp {
+			m.fullHelp = false
+			return nil
+		}
 		m.cancelMove()
 		return nil
 

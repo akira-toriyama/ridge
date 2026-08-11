@@ -390,23 +390,26 @@ func (m *Model) helpLayer() *lg.Layer {
 	inner := maxInt(16, m.w-6)
 
 	// One titled block per mode section, so a key is read under the mode that
-	// answers it. The current mode's heading is lit — the overlay is reachable
-	// from normal mode and the graph, so "which of these columns is mine right
-	// now" is a real question with two answers.
+	// answers it. The current mode's heading is lit — the overlay opens from
+	// normal mode, move mode and the graph, so "which of these blocks is mine
+	// right now" is a real question with three answers. Mode outranks view:
+	// a lift is a lift on whatever screen it started from.
 	now := "normal mode"
-	if m.view == viewGraph {
+	switch {
+	case m.mode == modeMove:
+		now = "move mode"
+	case m.view == viewGraph:
 		now = "graph"
 	}
-	var rows []string
-	for si, sec := range m.keys.HelpSections() {
+
+	// Render each section as its own block first…
+	var blocks []string
+	for _, sec := range m.keys.HelpSections() {
 		hdr := m.th.dim.Render(sec.title)
 		if sec.title == now {
 			hdr = m.th.accent.Render(sec.title + " — you are here")
 		}
-		if si > 0 {
-			rows = append(rows, "")
-		}
-		rows = append(rows, hdr)
+		rows := []string{hdr}
 
 		var cur [][]key.Binding
 		flush := func() {
@@ -425,7 +428,35 @@ func (m *Model) helpLayer() *lg.Layer {
 			cur = cand
 		}
 		flush()
+		blocks = append(blocks, strings.Join(rows, "\n"))
 	}
+
+	// …then shelve the blocks side by side while they fit. Stacking them
+	// vertically cost ~6 rows over the flat overlay and, at 240×24 — a stock
+	// terminal height on the repo's stated width floor — the centred box
+	// covered the title bar: the frame lost the very mode badge this overlay
+	// is sectioned around (independent review, B1). Width is the abundant
+	// dimension here; spend it.
+	const shelfGap = "    "
+	gapW := lg.Width(shelfGap)
+	var shelves []string
+	var shelf []string
+	shelfW := 0
+	for _, b := range blocks {
+		w := lg.Width(b)
+		if len(shelf) > 0 && shelfW+gapW+w > inner {
+			shelves = append(shelves, lg.JoinHorizontal(lg.Top, shelf...))
+			shelf, shelfW = nil, 0
+		}
+		if len(shelf) > 0 {
+			shelf = append(shelf, shelfGap)
+			shelfW += gapW
+		}
+		shelf = append(shelf, b)
+		shelfW += w
+	}
+	shelves = append(shelves, lg.JoinHorizontal(lg.Top, shelf...))
+	rows := []string{strings.Join(shelves, "\n\n")}
 
 	syntax := wrapJoin([]string{"filter syntax (furrow -q):",
 		"field:value · comma = OR · leading - negates · no:/has:",
@@ -436,10 +467,14 @@ func (m *Model) helpLayer() *lg.Layer {
 	box := m.th.peek.Render(m.th.peekHdr.Render("keys") + "\n\n" +
 		strings.Join(rows, "\n") + "\n\n" +
 		m.th.dim.Render(syntax) + "\n" + m.th.dim.Render(note))
-	// Hard backstop: an overlay must never be able to overflow the frame.
-	box = lg.NewStyle().MaxWidth(m.w).MaxHeight(m.h).Render(box)
+	// Hard backstop: an overlay must never be able to overflow the frame —
+	// and row 0 is not the overlay's to take. The title bar carries the mode
+	// badge and the tab strip; when the terminal is too short for both, the
+	// overlay is the one that gives (its bottom is trimmed), because a help
+	// screen that hides which mode you are in defeats its own sections.
+	box = lg.NewStyle().MaxWidth(m.w).MaxHeight(maxInt(1, m.h-1)).Render(box)
 
 	x := maxInt(0, (m.w-lg.Width(box))/2)
-	y := maxInt(0, (m.h-lg.Height(box))/2)
+	y := maxInt(1, (m.h-lg.Height(box))/2)
 	return lg.NewLayer(box).ID("help").X(x).Y(y).Z(zHelp)
 }

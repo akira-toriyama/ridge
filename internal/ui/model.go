@@ -545,6 +545,10 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 		// Entering a modal input mid-drag would leave the drag armed and its
 		// release would commit a move nobody is looking at any more.
 		m.cancelDrag()
+		// A modal owns the whole keyboard, so the help overlay must not ride
+		// into it: `?` cannot be typed there to close it, and its "you are
+		// here" would keep naming the mode that was just left.
+		m.fullHelp = false
 		m.mode = modeFilter
 		m.ti.SetValue(m.qRaw)
 		return m.ti.Focus()
@@ -651,9 +655,11 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.syncCmd()
 
 	case key.Matches(msg, m.keys.Add):
+		m.fullHelp = false // same rule as Filter: a modal never inherits the overlay
 		return m.enterAdd()
 
 	case key.Matches(msg, m.keys.Slice):
+		m.fullHelp = false
 		m.toggleSlice()
 
 	case key.Matches(msg, m.keys.Done):
@@ -684,6 +690,11 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 		// GitHub's Enter is cell EDITING; move mode is the board-only lift.
 		// With the peek open (or on a table row) Enter edits the fields — the
 		// board without a peek keeps Enter as the move-mode muscle memory.
+		//
+		// Close the overlay either way: the edit modal never inherits it, and
+		// a lift needs the board visible — `?` works inside move mode for
+		// whoever wants the listing back.
+		m.fullHelp = false
 		if m.view == viewTable || m.peekOpen {
 			m.enterEdit()
 		} else {
