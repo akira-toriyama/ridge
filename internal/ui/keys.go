@@ -126,20 +126,40 @@ func defaultKeys() keyMap {
 	}
 }
 
-// FullHelp is the `?` overlay — and, since the footers went, the ONLY place
-// the key surface is listed. That is the point: it is built from the same
-// key.Bindings the Update path matches on, so it cannot advertise a key that
-// does not work. The footers could, and did — the graph's offered `space
+// helpSection is one mode's slice of the key surface: the `?` overlay renders
+// one titled block per section, so a key is listed under the mode that will
+// actually answer it.
+type helpSection struct {
+	title  string // the glossary's mode name, verbatim
+	groups [][]key.Binding
+}
+
+// HelpSections is the `?` overlay — and, since the footers went, the ONLY
+// place the key surface is listed. That is the point: it is built from the
+// same key.Bindings the Update path matches on, so it cannot advertise a key
+// that does not work. The footers could, and did — the graph's offered `space
 // detail` while the graph had no Peek case at all.
-func (k keyMap) FullHelp() [][]key.Binding {
-	return [][]key.Binding{
-		{k.Up, k.Down, k.Left, k.Right, k.NextCol, k.PrevCol, k.Top, k.Bottom},
-		{k.Move, k.Commit, k.Cancel, k.QuickUp, k.QuickDown, k.LaneBack, k.LaneFwd},
-		{k.MoveTop, k.MoveBottom, k.MoveFirst, k.MoveLast},
-		{k.Peek, k.Tree, k.PeekScroll, k.Filter, k.OnlyBlock, k.Slice, k.View, k.Sort},
-		{k.Graph, k.GraphRoot, k.GraphRadius},
-		{k.JumpBlock, k.JumpBack, k.Add, k.Done, k.Edit, k.Reload, k.Sync},
-		{k.Mouse, k.Help, k.Quit},
+//
+// The sections mirror the dispatch: onNormalKey, onMoveKey, onGraphKey. The
+// modal inputs (filter / edit / add / slice) are absent by the same rule that
+// keeps dead keys out — their keys live inside their overlays, and `?` cannot
+// even be typed there.
+func (k keyMap) HelpSections() []helpSection {
+	return []helpSection{
+		{"normal mode", [][]key.Binding{
+			{k.Up, k.Down, k.Left, k.Right, k.NextCol, k.PrevCol, k.Top, k.Bottom},
+			{k.Move, k.QuickUp, k.QuickDown, k.LaneBack, k.LaneFwd, k.Done, k.Edit, k.Add},
+			{k.Peek, k.Tree, k.PeekScroll, k.Filter, k.OnlyBlock, k.Slice, k.View, k.Sort},
+			{k.Graph, k.JumpBlock, k.JumpBack, k.Reload, k.Sync, k.Mouse, k.Help, k.Quit},
+		}},
+		{"move mode", [][]key.Binding{
+			{k.Commit, k.Cancel},
+			{k.MoveTop, k.MoveBottom},
+			{k.MoveFirst, k.MoveLast},
+		}},
+		{"graph", [][]key.Binding{
+			{k.GraphRoot, k.GraphRadius},
+		}},
 	}
 }
 

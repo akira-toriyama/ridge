@@ -11,6 +11,64 @@ import (
 
 func frame(m *Model) string { return ansiStrip(m.View().Content) }
 
+// The mode badge is the ONLY place the current mode is named — the modes are
+// otherwise invisible state (the complaint that opened t-8xk8). Every state a
+// demo can pin must carry its token, normal included.
+func TestModeBadgeAlwaysNamesTheMode(t *testing.T) {
+	cases := []struct{ demo, token string }{
+		{"", "⟨NORMAL⟩"},
+		{"move", "⟨MOVE⟩"},
+		{"drag", "⟨DRAG⟩"},
+		{"filter", "⟨FILTER⟩"},
+		{"edit", "⟨EDIT⟩"},
+		{"add", "⟨ADD⟩"},
+		{"slice", "⟨SLICE⟩"},
+		{"graph", "⟨GRAPH⟩"},
+	}
+	for _, tc := range cases {
+		m := boardModel(t, 200, 40)
+		if tc.demo != "" {
+			if err := m.demoState(tc.demo); err != nil {
+				t.Fatalf("%s: %v", tc.demo, err)
+			}
+		}
+		if out := frame(m); !strings.Contains(out, tc.token) {
+			t.Errorf("demo %q: frame does not carry %s", tc.demo, tc.token)
+		}
+	}
+}
+
+// The `?` overlay is sectioned by mode, and the section you are in says so.
+func TestHelpOverlayIsSectionedByMode(t *testing.T) {
+	m := boardModel(t, 200, 50)
+	if err := m.demoState("help"); err != nil {
+		t.Fatal(err)
+	}
+	out := frame(m)
+	if !strings.Contains(out, "normal mode — you are here") {
+		t.Error("help must mark the current mode's section")
+	}
+	for _, sec := range []string{"move mode", "graph"} {
+		if !strings.Contains(out, sec) {
+			t.Errorf("help lost the %q section", sec)
+		}
+	}
+
+	// From the graph the marker must follow.
+	g := boardModel(t, 200, 50)
+	if err := g.demoState("graph"); err != nil {
+		t.Fatal(err)
+	}
+	g.fullHelp = true
+	gout := frame(g)
+	if !strings.Contains(gout, "graph — you are here") {
+		t.Error("the graph's help must mark the graph section")
+	}
+	if strings.Contains(gout, "normal mode — you are here") {
+		t.Error("the graph's help still marks normal mode as current")
+	}
+}
+
 func TestMoveModeRendersALiftedCardAndADropIndicator(t *testing.T) {
 	m := boardModel(t, 140, 30)
 	if err := m.demoState("move"); err != nil {

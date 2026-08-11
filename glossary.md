@@ -26,11 +26,28 @@
 | **peek**（詳細ペイン） | 選択中タスクの詳細を横に出すオーバーレイ。`Space`。 |
 | **依存マップ** | *(未実装)* 全依存クラスタを一画面で俯瞰するビュー。Graph が「1タスク起点」なのに対し、こちらは「全体」。 |
 
+## mode（キーボードの所有者）
+
+現在 mode はタイトル行右端の ⟨…⟩ トークンで**常時**表示される（graph だけは自前のタイトル行
+— Graph タブ + ⟨GRAPH⟩）。`?` help はこの mode 名で節分けされ、今いる mode の節に
+「you are here」が付く。トークンの正式語はこの表が正本。
+
+| 用語 | トークン | 意味 |
+|---|---|---|
+| **normal mode** | ⟨NORMAL⟩ | 既定の mode。カーソル移動・ビュー切替・各 modal への入口。`?` はここと graph からだけ開ける。 |
+| **move mode** | ⟨MOVE⟩ | カードを持ち上げて置き直す（下の操作表を参照）。 |
+| **filter mode** | ⟨FILTER⟩ | `/` で filter bar が入力を専有。 |
+| **edit mode** | ⟨EDIT⟩ | 編集メニュー（edit overlay）が専有。 |
+| **add mode** | ⟨ADD⟩ | quick add modal が専有。 |
+| **slice mode** | ⟨SLICE⟩ | slice パネルが専有。 |
+| **graph** | ⟨GRAPH⟩ | mode enum 外だがキーボードを専有する full-screen view — 実質 7 つ目。 |
+| **drag** | ⟨DRAG⟩ | mode ではない（`dragState`）が、gesture 中はトークンが出る。 |
+
 ## 操作
 
 | 用語 | 意味 |
 |---|---|
-| **move mode** | GitHub Projects 由来の並べ替え操作。`Enter` で持ち上げ → 矢印で移動 → `Enter` 確定 / `Esc` 取消。furrow の sparse priority 並べ替えに 1:1 対応。 |
+| **move mode** | GitHub Projects 由来の並べ替え操作。`Enter`/`m` で持ち上げ → 矢印・hjkl で 1 歩、大文字 K/J/H/L でその方向の端まで → `Enter` 確定 / `Esc` 取消。furrow の sparse priority 並べ替えに 1:1 対応。 |
 | **drag**（DnD） | マウスでカードを掴んで運ぶ。move mode のマウス版で、確定経路は同一（`commitMove`）。 |
 | **ghost** | ドラッグ中にカーソルに追従する半透明のカード。lipgloss の Layer（Z=99）。 |
 | **drop indicator** | ドロップ先を示す印。Layer だが **ID を持たない**ので `Compositor.Hit` に拾われない（＝クリックを吸わない）。 |

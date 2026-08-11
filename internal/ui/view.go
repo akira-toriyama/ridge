@@ -139,7 +139,13 @@ func (m *Model) chromeLayers() []*lg.Layer {
 	if m.lastPersist != "" {
 		tail += "  ·  " + m.lastPersist
 	}
-	tail += "  ·  " + m.modeBadge() + th.dim.Render("  ·  ? help")
+	tail += "  ·  " + m.modeBadge()
+	// The mouse toggle used to share the badge slot with the modes; it is
+	// standing state of its own kind, so it gets its own token.
+	if !m.mouseOn {
+		tail += th.dim.Render("  ·  mouse off")
+	}
+	tail += th.dim.Render("  ·  ? help")
 	right := th.crumb.Render(tail)
 	title := joinEnds(left, right, m.w)
 
@@ -190,19 +196,29 @@ func (m *Model) chromeLayers() []*lg.Layer {
 	}
 }
 
+// modeBadge names the current mode, ALWAYS — normal included. The modes are
+// invisible state otherwise: nothing else on screen says whose keyboard this
+// is, and the `?` overlay's sections are keyed to these same names (glossary:
+// mode). ⟨DRAG⟩ is the one non-mode badge — a drag lives in dragState, not in
+// m.mode, but it owns the gesture just as completely.
 func (m *Model) modeBadge() string {
 	th := m.th
-	switch {
-	case m.mode == modeMove:
-		return th.accent.Render("⟨MOVE⟩")
-	case m.drag.moved:
+	if m.drag.moved {
 		return th.accent.Render("⟨DRAG⟩")
-	case m.mode == modeFilter:
-		return th.chipAlt.Render("⟨FILTER⟩")
-	case !m.mouseOn:
-		return th.dim.Render("mouse off")
 	}
-	return th.dim.Render("mouse on")
+	switch m.mode {
+	case modeMove:
+		return th.accent.Render("⟨MOVE⟩")
+	case modeFilter:
+		return th.chipAlt.Render("⟨FILTER⟩")
+	case modeEdit:
+		return th.chipAlt.Render("⟨EDIT⟩")
+	case modeAdd:
+		return th.chipAlt.Render("⟨ADD⟩")
+	case modeSlice:
+		return th.chipAlt.Render("⟨SLICE⟩")
+	}
+	return th.dim.Render("⟨NORMAL⟩")
 }
 
 func (m *Model) statusLine() string {
@@ -373,24 +389,43 @@ func (m *Model) ghostLayer() *lg.Layer {
 func (m *Model) helpLayer() *lg.Layer {
 	inner := maxInt(16, m.w-6)
 
+	// One titled block per mode section, so a key is read under the mode that
+	// answers it. The current mode's heading is lit — the overlay is reachable
+	// from normal mode and the graph, so "which of these columns is mine right
+	// now" is a real question with two answers.
+	now := "normal mode"
+	if m.view == viewGraph {
+		now = "graph"
+	}
 	var rows []string
-	var cur [][]key.Binding
-	flush := func() {
-		if len(cur) > 0 {
-			rows = append(rows, m.help.FullHelpView(cur))
-			cur = nil
+	for si, sec := range m.keys.HelpSections() {
+		hdr := m.th.dim.Render(sec.title)
+		if sec.title == now {
+			hdr = m.th.accent.Render(sec.title + " — you are here")
 		}
-	}
-	for _, grp := range m.keys.FullHelp() {
-		cand := append(append([][]key.Binding{}, cur...), grp)
-		if len(cur) > 0 && lg.Width(m.help.FullHelpView(cand)) > inner {
-			flush()
-			cur = [][]key.Binding{grp}
-			continue
+		if si > 0 {
+			rows = append(rows, "")
 		}
-		cur = cand
+		rows = append(rows, hdr)
+
+		var cur [][]key.Binding
+		flush := func() {
+			if len(cur) > 0 {
+				rows = append(rows, m.help.FullHelpView(cur))
+				cur = nil
+			}
+		}
+		for _, grp := range sec.groups {
+			cand := append(append([][]key.Binding{}, cur...), grp)
+			if len(cur) > 0 && lg.Width(m.help.FullHelpView(cand)) > inner {
+				flush()
+				cur = [][]key.Binding{grp}
+				continue
+			}
+			cur = cand
+		}
+		flush()
 	}
-	flush()
 
 	syntax := wrapJoin([]string{"filter syntax (furrow -q):",
 		"field:value · comma = OR · leading - negates · no:/has:",
