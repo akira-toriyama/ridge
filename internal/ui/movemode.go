@@ -90,8 +90,9 @@ func (m *Model) onMoveKey(msg tea.KeyPressMsg) tea.Cmd {
 	case key.Matches(msg, m.keys.Quit):
 		return m.quitOrFlush()
 
-	// GitHub Projects' documented ctrl+arrow extremes: top / bottom of the
-	// column, leftmost / rightmost column.
+	// To the extremes: top / bottom of the column, leftmost / rightmost lane.
+	// K/J/H/L primary (uppercase = "all the way" vs lowercase's one step),
+	// GitHub's ctrl+arrows kept as silent aliases.
 	case key.Matches(msg, m.keys.MoveTop):
 		m.dropIdx = 0
 	case key.Matches(msg, m.keys.MoveBottom):

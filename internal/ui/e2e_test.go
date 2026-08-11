@@ -225,10 +225,19 @@ func TestE2EDoneAndLaneCycle(t *testing.T) {
 		t.Error("closing must stamp Closed")
 	}
 
-	// ] and [ cycle a lane forward and back, and land where they started.
-	m2 := run(t, 140, 40, "]", "[")
+	// L and H cycle a lane forward and back. The LANE round-trips; the position
+	// does not — cycleLane appends to the destination lane's end both ways, so
+	// the card lands at the BOTTOM of its home lane. Asserting that index is
+	// what makes this test falsifiable: with the keys unbound the card would
+	// still be in backlog, but at its original top slot (independent review of
+	// PR #23 proved the lane-only assertion could not fail).
+	m2 := run(t, 140, 40, "L", "H")
 	if got := laneOf(m2, target); got != "backlog" {
-		t.Errorf("] then [ left %s in %s", target, got)
+		t.Errorf("L then H left %s in %s", target, got)
+	}
+	if lane := m2.b.LaneTasks("backlog"); lane[len(lane)-1].ID != target {
+		t.Errorf("L then H should append %s to backlog's end, found it at index %d",
+			target, indexOf(lane, target))
 	}
 }
 

@@ -220,6 +220,9 @@ func TestContractPersistDoneCheckBody(t *testing.T) {
 // gesture, and the store itself as the assertion target. This is the one test
 // where the optimistic queue's Cmd actually runs inside bubbletea's loop and
 // the reconcile re-read lands.
+//
+// bite-exempt: execs a real furrow binary and always skips where furrow is not
+// on PATH — which is CI, so the gate can never judge it there
 func TestContractProgramMovesForReal(t *testing.T) {
 	p, dir := newLabProvider(t)
 	id := labAdd(t, dir, "動かす対象")
@@ -229,7 +232,7 @@ func TestContractProgramMovesForReal(t *testing.T) {
 
 	m := ui.New(p, ui.Options{})
 	var in bytes.Buffer
-	in.WriteString("]") // cycle the selected card one lane forward
+	in.WriteString("L") // cycle the selected card one lane forward
 	// Give the persist queue's Cmds time to run inside the program loop
 	// before quitting: q arrives after the input above in the same script,
 	// but bubbletea processes queued Cmd results before Quit tears down.

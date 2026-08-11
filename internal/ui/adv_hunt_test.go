@@ -108,7 +108,7 @@ func TestAdvEmptyBoardSurvivesEveryGesture(t *testing.T) {
 	}()
 
 	keys := []string{"j", "k", "h", "l", "enter", "esc", "space", "t", "b", ">", "<",
-		"d", "x", "K", "J", "[", "]", "g", "G", "v", "M", "?", "r"}
+		"d", "x", "K", "J", "H", "L", "g", "G", "v", "M", "?", "r"}
 	for _, k := range keys {
 		m.Update(tea.KeyPressMsg{Code: keyCodeFor(k), Text: keyTextFor(k)})
 		_ = m.View().Content
