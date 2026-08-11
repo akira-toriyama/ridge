@@ -229,7 +229,7 @@ func TestContractProgramMovesForReal(t *testing.T) {
 
 	m := ui.New(p, ui.Options{})
 	var in bytes.Buffer
-	in.WriteString("]") // cycle the selected card one lane forward
+	in.WriteString("L") // cycle the selected card one lane forward
 	// Give the persist queue's Cmds time to run inside the program loop
 	// before quitting: q arrives after the input above in the same script,
 	// but bubbletea processes queued Cmd results before Quit tears down.

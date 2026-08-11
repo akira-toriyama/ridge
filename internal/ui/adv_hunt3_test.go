@@ -237,8 +237,14 @@ func TestKeyBindingsMatchTheirRealKeyStrings(t *testing.T) {
 		{tea.KeyPressMsg{Code: tea.KeyDown, Mod: tea.ModCtrl}, k.MoveBottom, "ctrl+down"},
 		{tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModCtrl}, k.MoveFirst, "ctrl+left"},
 		{tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModCtrl}, k.MoveLast, "ctrl+right"},
+		{tea.KeyPressMsg{Code: 'K', Text: "K"}, k.MoveTop, "K (move)"},
+		{tea.KeyPressMsg{Code: 'J', Text: "J"}, k.MoveBottom, "J (move)"},
+		{tea.KeyPressMsg{Code: 'H', Text: "H"}, k.MoveFirst, "H (move)"},
+		{tea.KeyPressMsg{Code: 'L', Text: "L"}, k.MoveLast, "L (move)"},
 		{tea.KeyPressMsg{Code: 'K', Text: "K"}, k.QuickUp, "K"},
 		{tea.KeyPressMsg{Code: 'J', Text: "J"}, k.QuickDown, "J"},
+		{tea.KeyPressMsg{Code: 'H', Text: "H"}, k.LaneBack, "H"},
+		{tea.KeyPressMsg{Code: 'L', Text: "L"}, k.LaneFwd, "L"},
 		{tea.KeyPressMsg{Code: 'M', Text: "M"}, k.Mouse, "M"},
 	}
 	for _, tc := range cases {

@@ -75,15 +75,23 @@ func defaultKeys() keyMap {
 		Move:   key.NewBinding(key.WithKeys("enter", "m"), key.WithHelp("⏎/m", "move mode")),
 		Commit: key.NewBinding(key.WithKeys("enter"), key.WithHelp("⏎", "commit")),
 		Cancel: key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
-		// ctrl+arrow = move to the extremes, also straight from GitHub's table.
-		MoveTop:    key.NewBinding(key.WithKeys("ctrl+up"), key.WithHelp("^↑", "to top")),
-		MoveBottom: key.NewBinding(key.WithKeys("ctrl+down"), key.WithHelp("^↓", "to bottom")),
-		MoveFirst:  key.NewBinding(key.WithKeys("ctrl+left"), key.WithHelp("^←", "first lane")),
-		MoveLast:   key.NewBinding(key.WithKeys("ctrl+right"), key.WithHelp("^→", "last lane")),
-		QuickUp:    key.NewBinding(key.WithKeys("K"), key.WithHelp("K", "raise")),
-		QuickDown:  key.NewBinding(key.WithKeys("J"), key.WithHelp("J", "lower")),
-		LaneBack:   key.NewBinding(key.WithKeys("["), key.WithHelp("[", "lane ←")),
-		LaneFwd:    key.NewBinding(key.WithKeys("]"), key.WithHelp("]", "lane →")),
+		// Move-to-the-extremes: uppercase = "all the way", the shifted sibling of
+		// the lowercase hjkl single steps inside move mode. GitHub's documented
+		// ctrl+arrows stay as silent aliases — macOS Terminal never delivers them
+		// (Mission Control owns all four), and the repo rule is that a modified
+		// gesture always has a bare-key alias. Help shows only the letters.
+		MoveTop:    key.NewBinding(key.WithKeys("K", "ctrl+up"), key.WithHelp("K", "to top")),
+		MoveBottom: key.NewBinding(key.WithKeys("J", "ctrl+down"), key.WithHelp("J", "to bottom")),
+		MoveFirst:  key.NewBinding(key.WithKeys("H", "ctrl+left"), key.WithHelp("H", "first lane")),
+		MoveLast:   key.NewBinding(key.WithKeys("L", "ctrl+right"), key.WithHelp("L", "last lane")),
+		// Normal mode's uppercase row moves the CARD one step where lowercase
+		// moves the cursor: K/J raise/lower in the lane, H/L carry it one lane
+		// over — the taskell/kanban-tui convention. `[` `]` (the old lane pair)
+		// are freed, not reassigned.
+		QuickUp:   key.NewBinding(key.WithKeys("K"), key.WithHelp("K", "raise")),
+		QuickDown: key.NewBinding(key.WithKeys("J"), key.WithHelp("J", "lower")),
+		LaneBack:  key.NewBinding(key.WithKeys("H"), key.WithHelp("H", "lane ←")),
+		LaneFwd:   key.NewBinding(key.WithKeys("L"), key.WithHelp("L", "lane →")),
 
 		Peek:      key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "detail")),
 		Filter:    key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "filter")),

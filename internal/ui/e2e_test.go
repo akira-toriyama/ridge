@@ -225,10 +225,10 @@ func TestE2EDoneAndLaneCycle(t *testing.T) {
 		t.Error("closing must stamp Closed")
 	}
 
-	// ] and [ cycle a lane forward and back, and land where they started.
-	m2 := run(t, 140, 40, "]", "[")
+	// L and H cycle a lane forward and back, and land where they started.
+	m2 := run(t, 140, 40, "L", "H")
 	if got := laneOf(m2, target); got != "backlog" {
-		t.Errorf("] then [ left %s in %s", target, got)
+		t.Errorf("L then H left %s in %s", target, got)
 	}
 }
 

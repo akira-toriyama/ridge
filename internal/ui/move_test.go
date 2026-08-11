@@ -1,10 +1,12 @@
 package ui
 
 import (
-	"github.com/akira-toriyama/ridge/internal/board"
-	"github.com/akira-toriyama/ridge/internal/store/memstore"
 	"strings"
 	"testing"
+
+	tea "charm.land/bubbletea/v2"
+	"github.com/akira-toriyama/ridge/internal/board"
+	"github.com/akira-toriyama/ridge/internal/store/memstore"
 )
 
 // boardInsertIndex is the OTHER translation: a drop measured in a FILTERED
@@ -115,6 +117,46 @@ func TestQuickReorder(t *testing.T) {
 	m.quickReorder(-1)
 	if !strings.Contains(m.status, "already at the top") {
 		t.Errorf("status = %q", m.status)
+	}
+}
+
+// Move mode's extremes, driven by the letter keys through the real Update
+// path. The letters are the PRIMARY binding: macOS Terminal never delivers the
+// ctrl+arrow aliases, so if K/J/H/L regress the gesture is simply gone there.
+func TestMoveModeLettersReachTheExtremes(t *testing.T) {
+	m := New(memstore.New(), Options{})
+	m.w, m.h = 140, 40
+	m.curLane = m.b.LaneIndex("backlog")
+	m.setPos(1)
+	m.recompute()
+	m.relayout()
+	m.enterMove()
+	if m.mode != modeMove {
+		t.Fatal("enterMove did not enter move mode")
+	}
+
+	press := func(r rune) {
+		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+
+	press('J')
+	if want := m.dropSpan(m.dropLane); m.dropIdx != want {
+		t.Errorf("J: dropIdx = %d, want the bottom (%d)", m.dropIdx, want)
+	}
+	press('K')
+	if m.dropIdx != 0 {
+		t.Errorf("K: dropIdx = %d, want 0", m.dropIdx)
+	}
+	press('L')
+	if got := m.b.LaneIndex(m.dropLane); got != len(m.b.Lanes())-1 {
+		t.Errorf("L: dropLane = %s (index %d), want the last lane", m.dropLane, got)
+	}
+	press('H')
+	if got := m.b.LaneIndex(m.dropLane); got != 0 {
+		t.Errorf("H: dropLane = %s (index %d), want the first lane", m.dropLane, got)
+	}
+	if m.mode != modeMove {
+		t.Errorf("the extremes must not leave move mode, got mode %v", m.mode)
 	}
 }
 
