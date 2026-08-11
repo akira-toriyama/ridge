@@ -104,19 +104,21 @@ func defaultKeys() keyMap {
 		// `o` (order), not the `s` t-qve3 sketched: `s` is the slice panel, and
 		// the panel deliberately reaches the table view too — two owners for
 		// one key, and the panel got there first.
-		Sort:       key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "sort (table)")),
-		Done:       key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "done")),
-		Edit:       key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "$EDITOR")),
-		Check:      key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "toggle")),
-		Add:        key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add item")),
-		Slice:      key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "slice panel")),
-		Reload:     key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reload")),
-		Sync:       key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "sync (git)")),
-		Mouse:      key.NewBinding(key.WithKeys("M"), key.WithHelp("M", "mouse on/off")),
-		Help:       key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
-		Quit:       key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
-		ForceQuit:  key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("^c", "quit")),
-		PeekScroll: key.NewBinding(key.WithKeys("ctrl+d", "ctrl+u"), key.WithHelp("^d/^u", "scroll peek")),
+		Sort:      key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "sort (table)")),
+		Done:      key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "done")),
+		Edit:      key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "$EDITOR")),
+		Check:     key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "toggle")),
+		Add:       key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add item")),
+		Slice:     key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "slice panel")),
+		Reload:    key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reload")),
+		Sync:      key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "sync (git)")),
+		Mouse:     key.NewBinding(key.WithKeys("M"), key.WithHelp("M", "mouse on/off")),
+		Help:      key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
+		Quit:      key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
+		ForceQuit: key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("^c", "quit")),
+		// "scroll", not "scroll peek": the same binding scrolls the graph canvas,
+		// and a help entry must stay true in every section that lists it.
+		PeekScroll: key.NewBinding(key.WithKeys("ctrl+d", "ctrl+u"), key.WithHelp("^d/^u", "scroll")),
 
 		// Note WithKeys("shift+space"), not " " and not "shift+ ": key.Matches
 		// compares Key.String(), which renders the space bar as "space".
@@ -126,20 +128,45 @@ func defaultKeys() keyMap {
 	}
 }
 
-// FullHelp is the `?` overlay — and, since the footers went, the ONLY place
-// the key surface is listed. That is the point: it is built from the same
-// key.Bindings the Update path matches on, so it cannot advertise a key that
-// does not work. The footers could, and did — the graph's offered `space
+// helpSection is one mode's slice of the key surface: the `?` overlay renders
+// one titled block per section, so a key is listed under the mode that will
+// actually answer it.
+type helpSection struct {
+	title  string // the glossary's mode name, verbatim
+	groups [][]key.Binding
+}
+
+// HelpSections is the `?` overlay — and, since the footers went, the ONLY
+// place the key surface is listed. That is the point: it is built from the
+// same key.Bindings the Update path matches on, so it cannot advertise a key
+// that does not work. The footers could, and did — the graph's offered `space
 // detail` while the graph had no Peek case at all.
-func (k keyMap) FullHelp() [][]key.Binding {
-	return [][]key.Binding{
-		{k.Up, k.Down, k.Left, k.Right, k.NextCol, k.PrevCol, k.Top, k.Bottom},
-		{k.Move, k.Commit, k.Cancel, k.QuickUp, k.QuickDown, k.LaneBack, k.LaneFwd},
-		{k.MoveTop, k.MoveBottom, k.MoveFirst, k.MoveLast},
-		{k.Peek, k.Tree, k.PeekScroll, k.Filter, k.OnlyBlock, k.Slice, k.View, k.Sort},
-		{k.Graph, k.GraphRoot, k.GraphRadius},
-		{k.JumpBlock, k.JumpBack, k.Add, k.Done, k.Edit, k.Reload, k.Sync},
-		{k.Mouse, k.Help, k.Quit},
+//
+// The sections mirror the dispatch: onNormalKey, onMoveKey, onGraphKey. The
+// modal inputs (filter / edit / add / slice) are absent by the same rule that
+// keeps dead keys out — their keys live inside their overlays, and `?` cannot
+// even be typed there.
+func (k keyMap) HelpSections() []helpSection {
+	return []helpSection{
+		{"normal mode", [][]key.Binding{
+			{k.Up, k.Down, k.Left, k.Right, k.NextCol, k.PrevCol, k.Top, k.Bottom},
+			{k.Move, k.QuickUp, k.QuickDown, k.LaneBack, k.LaneFwd, k.Done, k.Edit, k.Add},
+			{k.Peek, k.Tree, k.PeekScroll, k.Filter, k.OnlyBlock, k.Slice, k.View, k.Sort},
+			{k.Graph, k.JumpBlock, k.JumpBack, k.Reload, k.Sync, k.Mouse, k.Cancel, k.Help, k.Quit},
+		}},
+		{"move mode", [][]key.Binding{
+			{k.Commit, k.Cancel},
+			{k.MoveTop, k.MoveBottom},
+			{k.MoveFirst, k.MoveLast},
+		}},
+		// The graph's full surface, not just its two custom bindings: sectioning
+		// turned this block into "your keys right now", so listing 2 of the ~10
+		// keys — and no way out — was an assertion, not an omission.
+		{"graph", [][]key.Binding{
+			{k.GraphRoot, k.GraphRadius},
+			{k.JumpBack, k.PeekScroll},
+			{k.View, k.Cancel},
+		}},
 	}
 }
 

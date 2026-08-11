@@ -1,15 +1,146 @@
 package ui
 
 import (
-	"github.com/akira-toriyama/ridge/internal/board"
-	"github.com/akira-toriyama/ridge/internal/store/memstore"
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	lg "charm.land/lipgloss/v2"
+	"github.com/akira-toriyama/ridge/internal/board"
+	"github.com/akira-toriyama/ridge/internal/store/memstore"
 )
 
 func frame(m *Model) string { return ansiStrip(m.View().Content) }
+
+// The mode badge is the ONLY place the current mode is named — the modes are
+// otherwise invisible state (the complaint that opened t-8xk8). Every state a
+// demo can pin must carry its token, normal included.
+func TestModeBadgeAlwaysNamesTheMode(t *testing.T) {
+	cases := []struct{ demo, token string }{
+		{"", "⟨NORMAL⟩"},
+		{"move", "⟨MOVE⟩"},
+		{"drag", "⟨DRAG⟩"},
+		{"filter", "⟨FILTER⟩"},
+		{"edit", "⟨EDIT⟩"},
+		{"add", "⟨ADD⟩"},
+		{"slice", "⟨SLICE⟩"},
+		{"graph", "⟨GRAPH⟩"},
+	}
+	for _, tc := range cases {
+		m := boardModel(t, 200, 40)
+		if tc.demo != "" {
+			if err := m.demoState(tc.demo); err != nil {
+				t.Fatalf("%s: %v", tc.demo, err)
+			}
+		}
+		if out := frame(m); !strings.Contains(out, tc.token) {
+			t.Errorf("demo %q: frame does not carry %s", tc.demo, tc.token)
+		}
+	}
+}
+
+// The `?` overlay is sectioned by mode, and the section you are in says so.
+func TestHelpOverlayIsSectionedByMode(t *testing.T) {
+	m := boardModel(t, 200, 50)
+	if err := m.demoState("help"); err != nil {
+		t.Fatal(err)
+	}
+	out := frame(m)
+	if !strings.Contains(out, "normal mode — you are here") {
+		t.Error("help must mark the current mode's section")
+	}
+	for _, sec := range []string{"move mode", "graph"} {
+		if !strings.Contains(out, sec) {
+			t.Errorf("help lost the %q section", sec)
+		}
+	}
+
+	// From the graph the marker must follow.
+	g := boardModel(t, 200, 50)
+	if err := g.demoState("graph"); err != nil {
+		t.Fatal(err)
+	}
+	g.fullHelp = true
+	gout := frame(g)
+	if !strings.Contains(gout, "graph — you are here") {
+		t.Error("the graph's help must mark the graph section")
+	}
+	if strings.Contains(gout, "normal mode — you are here") {
+		t.Error("the graph's help still marks normal mode as current")
+	}
+
+	// And from move mode — where `?` must WORK: the move-mode title row
+	// advertises it, and this section is the only listing of the extremes.
+	mv := boardModel(t, 200, 50)
+	if err := mv.demoState("move"); err != nil {
+		t.Fatal(err)
+	}
+	mv.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
+	if !mv.fullHelp {
+		t.Fatal("? must open the help from move mode")
+	}
+	mout := frame(mv)
+	if !strings.Contains(mout, "move mode — you are here") {
+		t.Error("move mode's help must mark the move-mode section")
+	}
+	// esc peels the overlay first and leaves the lift alone, same ordering as
+	// the board and the graph.
+	mv.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if mv.fullHelp {
+		t.Error("esc must close the help before anything else")
+	}
+	if mv.mode != modeMove {
+		t.Error("closing the help must not cancel the move")
+	}
+}
+
+// The overlay must not ride into a modal, and its marker must never contradict
+// the badge — `?` then a mode key was exactly the two-keystroke sequence that
+// shipped a frame saying ⟨FILTER⟩ and "normal mode — you are here" at once
+// (independent review, B2).
+func TestHelpOverlayNeverRidesIntoAModal(t *testing.T) {
+	for _, tc := range []struct {
+		key  rune
+		mode mode
+	}{
+		{'/', modeFilter},
+		{'a', modeAdd},
+		{'s', modeSlice},
+		{'m', modeMove}, // move keeps help REACHABLE (?) but never inherits it
+	} {
+		m := boardModel(t, 200, 50)
+		m.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
+		if !m.fullHelp {
+			t.Fatal("? did not open the help")
+		}
+		m.Update(tea.KeyPressMsg{Code: tc.key, Text: string(tc.key)})
+		if m.mode != tc.mode {
+			t.Fatalf("%q: mode = %v, want %v", tc.key, m.mode, tc.mode)
+		}
+		if m.fullHelp {
+			t.Errorf("%q: the help overlay rode into mode %v", tc.key, tc.mode)
+		}
+	}
+}
+
+// At 240 columns — the repo's stated width floor — a stock 24-row (and even
+// 20-row) terminal must keep the title bar: it carries the mode badge this
+// overlay is sectioned around. The sectioned help once grew past it and
+// covered row 0 (independent review, B1).
+func TestHelpOverlayLeavesTheTitleRowAtStockHeights(t *testing.T) {
+	// 12 and 16 sit where the h-1 cap + y floor are load-bearing on their own;
+	// 20-24 is the window the unshelved sections regressed. Both mutations die.
+	for _, h := range []int{12, 16, 20, 22, 24, 40} {
+		m := boardModel(t, 240, h)
+		if err := m.demoState("help"); err != nil {
+			t.Fatal(err)
+		}
+		top := strings.SplitN(frame(m), "\n", 2)[0]
+		if !strings.Contains(top, "furrow board") || !strings.Contains(top, "⟨NORMAL⟩") {
+			t.Errorf("h=%d: the help overlay covers the title row: %q", h, top)
+		}
+	}
+}
 
 func TestMoveModeRendersALiftedCardAndADropIndicator(t *testing.T) {
 	m := boardModel(t, 140, 30)
