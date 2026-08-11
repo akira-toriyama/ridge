@@ -198,6 +198,32 @@ func TestRefusalDoesNotReopenInTheGraphView(t *testing.T) {
 	}
 }
 
+// …and the help overlay is the OTHER layer that hides addLayer (zHelp sits
+// above it): a refusal landing under an open `?` must not reopen either, or
+// the keyboard ends up inside an invisible modal that `?` types into instead
+// of closing (independent review of t-8xk8, F1 — the last ungated mode
+// assignment in the package).
+func TestRefusalDoesNotReopenUnderTheHelpOverlay(t *testing.T) {
+	m, p := scriptedModel(t)
+	p.addErr = errors.New("epic e-nope not found")
+
+	press(m, "a")
+	m.add.input.SetValue("unseen")
+	_, addCmd := m.Update(keyMsg("enter"))
+	if addCmd == nil {
+		t.Fatal("add did not fire")
+	}
+	press(m, "?") // the user opened the help before the refusal lands
+	m.Update(addCmd())
+
+	if m.mode != modeNormal || m.add != nil {
+		t.Fatal("the refusal must not steal the keyboard into a modal the overlay hides")
+	}
+	if !m.statusErr {
+		t.Error("the refusal must still surface as an error")
+	}
+}
+
 // A $EDITOR body landing inside the rollback window is the one write whose
 // payload cannot be re-typed from a note (the temp file is already deleted):
 // it must be HELD and replayed once the window closes, not refused

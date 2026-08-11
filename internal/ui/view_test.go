@@ -128,7 +128,9 @@ func TestHelpOverlayNeverRidesIntoAModal(t *testing.T) {
 // overlay is sectioned around. The sectioned help once grew past it and
 // covered row 0 (independent review, B1).
 func TestHelpOverlayLeavesTheTitleRowAtStockHeights(t *testing.T) {
-	for _, h := range []int{20, 22, 24, 40} {
+	// 12 and 16 sit where the h-1 cap + y floor are load-bearing on their own;
+	// 20-24 is the window the unshelved sections regressed. Both mutations die.
+	for _, h := range []int{12, 16, 20, 22, 24, 40} {
 		m := boardModel(t, 240, h)
 		if err := m.demoState("help"); err != nil {
 			t.Fatal(err)
