@@ -81,7 +81,6 @@ type boardJSON struct {
 	Lanes       []string `json:"lanes"`
 	NextLanes   []string `json:"next_lanes"`
 	DoneLane    string   `json:"done_lane"`
-	Terminal    []string `json:"terminal"`
 	Writable    bool     `json:"writable"`
 	SchemaState string   `json:"schema_state"`
 	Store       string   `json:"store"`
@@ -119,13 +118,11 @@ type taskJSON struct {
 type epicJSON struct {
 	ID       string `json:"id"`
 	Title    string `json:"title"`
-	Goal     string `json:"goal"`
 	Progress struct {
 		Done  int `json:"done"`
 		Total int `json:"total"`
 	} `json:"progress"`
-	Stuck  bool `json:"stuck"`
-	Active bool `json:"active"`
+	Stuck bool `json:"stuck"`
 }
 
 // wipDefaults renders the WIP budget on the lanes that have one — Projects #5
@@ -176,14 +173,13 @@ func (p *Store) load() (*board.Board, error) {
 		}
 	}
 
-	inNext, inTerm := toSet(cfg.NextLanes), toSet(cfg.Terminal)
+	inNext := toSet(cfg.NextLanes)
 	lanes := make([]board.Lane, 0, len(cfg.Lanes))
 	for _, name := range cfg.Lanes {
 		lanes = append(lanes, board.Lane{
 			Name: name,
 			Next: inNext[name],
 			Done: name == cfg.DoneLane,
-			Term: inTerm[name],
 			WIP:  wipDefaults[name],
 		})
 	}
@@ -220,9 +216,9 @@ func (p *Store) load() (*board.Board, error) {
 	epics := make([]board.EpicInfo, 0, len(boxes))
 	for _, e := range boxes {
 		epics = append(epics, board.EpicInfo{
-			ID: e.ID, Title: e.Title, Goal: e.Goal,
+			ID: e.ID, Title: e.Title,
 			Done: e.Progress.Done, Total: e.Progress.Total,
-			Stuck: e.Stuck, Active: e.Active,
+			Stuck: e.Stuck,
 		})
 	}
 

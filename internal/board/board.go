@@ -80,8 +80,7 @@ type Lane struct {
 	Name string
 	Next bool // one of the lanes `furrow next` considers
 	Done bool
-	Term bool // terminal: work does not leave it
-	WIP  int  // 0 = unset. RENDERED, never enforced — GitHub Projects parity.
+	WIP  int // 0 = unset. RENDERED, never enforced — GitHub Projects parity.
 }
 
 // DisplayName is the lane as a HUMAN reads it — "In progress", not the
@@ -102,21 +101,19 @@ var boardLanes = []Lane{
 	{Name: "backlog"},
 	{Name: "ready", Next: true, WIP: 2},
 	{Name: "in-progress", Next: true, WIP: 1},
-	{Name: "done", Done: true, Term: true},
-	{Name: "icebox", Term: true},
+	{Name: "done", Done: true},
+	{Name: "icebox"},
 }
 
 // EpicInfo is one epic entity as `furrow epic ls --json` reports it. Epics
 // have no lane, so they are board-level metadata rather than tasks: cards
 // reference them by id (Task.Epic) and render the resolved title.
 type EpicInfo struct {
-	ID     string
-	Title  string
-	Goal   string
-	Done   int
-	Total  int
-	Stuck  bool
-	Active bool
+	ID    string
+	Title string
+	Done  int
+	Total int
+	Stuck bool
 }
 
 // Board is the in-memory task set. Lane membership is Task.Status and lane

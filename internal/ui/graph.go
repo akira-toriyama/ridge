@@ -122,18 +122,6 @@ func (l *egoLayout) Node(key string) *egoNode { return l.Nodes[key] }
 // middle of an empty screen and leaving the reader to wonder what broke.
 func (l *egoLayout) Empty() bool { return l.UpCount == 0 && l.DownCount == 0 }
 
-// WidestRow is how many nodes the busiest row holds — the "4" of the measured
-// 4-wide × 5-tall bound.
-func (l *egoLayout) WidestRow() int {
-	w := 0
-	for _, row := range l.Layers {
-		if len(row) > w {
-			w = len(row)
-		}
-	}
-	return w
-}
-
 // longestDist is bounded longest-path layering from `from` over the edges
 // `next` yields. Longest path — not shortest — is Sugiyama's phase 1: it is
 // what guarantees every edge points strictly downward, which is what lets the

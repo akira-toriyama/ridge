@@ -22,10 +22,9 @@ const (
 	// lines and truncated. Titles measure a median of 82 display cells and a
 	// p90 of 133, so a card only becomes genuinely READABLE somewhere north of
 	// 45 — which is exactly what six lanes across 320+ columns can afford.
-	colMinW   = 24 // never narrower, unless the terminal itself is
-	colOuterW = 28 // the width a column wants when it is the only one
-	colMaxW   = 64 // a card may be a paragraph now; there is room for one
-	colGap    = 2
+	colMinW = 24 // never narrower, unless the terminal itself is
+	colMaxW = 64 // a card may be a paragraph now; there is room for one
+	colGap  = 2
 
 	// cardGapY is the single strongest "these are discrete draggable objects"
 	// cue on the board. Without it `╰───╯` sits directly on the next `╭───╮` and

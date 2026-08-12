@@ -108,8 +108,8 @@ func TestContractLoadMapsTheStore(t *testing.T) {
 	if b.Lane("inbox") == nil || b.DoneLane() == "" {
 		t.Errorf("lane vocabulary not mapped: %+v", b.Lanes())
 	}
-	if got := b.Lane(b.DoneLane()); got == nil || !got.Term {
-		t.Error("the done lane must be terminal")
+	if got := b.Lane(b.DoneLane()); got == nil || !got.Done {
+		t.Error("the done lane must be marked done")
 	}
 
 	x := b.Task(t1)

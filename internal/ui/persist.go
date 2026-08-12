@@ -37,10 +37,9 @@ type persistOp struct {
 }
 
 type persistDoneMsg struct {
-	label      string
-	renumbered []string
-	ms         int
-	err        error
+	label string
+	ms    int
+	err   error
 }
 
 // reloadDoneMsg reports an async store re-read: an explicit reload, the
@@ -78,8 +77,13 @@ func (m *Model) firePersist() tea.Cmd {
 	op := m.pending[0]
 	return func() tea.Msg {
 		start := time.Now()
-		renumbered, err := op.run()
-		return persistDoneMsg{label: op.label, renumbered: renumbered,
+		// The store's respace report is discarded here on purpose: the board
+		// has already been respaced locally by MoveTo, whose own report is
+		// what the status line quotes. The port still returns it — it is the
+		// documented shape of a furrow write — but this queue has no use for
+		// it, and carrying it in the message only looked like it did.
+		_, err := op.run()
+		return persistDoneMsg{label: op.label,
 			ms: int(time.Since(start).Milliseconds()), err: err}
 	}
 }

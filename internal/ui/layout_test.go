@@ -37,27 +37,32 @@ func TestGlyphsAreSingleWidth(t *testing.T) {
 // The geometry is handed straight to the mouse hit-test, so a card whose
 // measured height differs from its rendered height would make cards accept
 // drops aimed at their neighbours.
+// testColW is one representative card width. The whole range the app actually
+// negotiates (38-64 cells, from terminals 238-404 wide) is swept by
+// TestCardLinesFillTheirColumnAcrossTheDeclaredWidthRange.
+const testColW = 28
+
 func TestCardGeometryMatchesTheRender(t *testing.T) {
 	b, g := fixtureGraph(t)
 	th := newTheme(true)
 
 	for _, task := range b.Tasks() {
 		for _, st := range []cardState{cardNormal, cardSelected, cardLifted, cardShadow, cardGhost} {
-			out := renderCard(task, g, th, colOuterW, st)
-			if w := lg.Width(out); w != colOuterW {
-				t.Errorf("%s state=%d rendered width %d, want %d", task.ID, st, w, colOuterW)
+			out := renderCard(task, g, th, testColW, st)
+			if w := lg.Width(out); w != testColW {
+				t.Errorf("%s state=%d rendered width %d, want %d", task.ID, st, w, testColW)
 			}
-			if h := lg.Height(out); h != cardHeight(task, g, th, colOuterW) {
+			if h := lg.Height(out); h != cardHeight(task, g, th, testColW) {
 				t.Errorf("%s state=%d rendered height %d, cardHeight says %d",
-					task.ID, st, h, cardHeight(task, g, th, colOuterW))
+					task.ID, st, h, cardHeight(task, g, th, testColW))
 			}
 			// Every individual line must be exactly the card width: a
 			// double-width CJK glyph landing on the boundary would produce a
 			// short line and a ragged border.
 			for i, line := range strings.Split(out, "\n") {
-				if w := lg.Width(line); w != colOuterW {
+				if w := lg.Width(line); w != testColW {
 					t.Errorf("%s line %d is %d cells wide, want %d: %q",
-						task.ID, i, w, colOuterW, ansiStrip(line))
+						task.ID, i, w, testColW, ansiStrip(line))
 				}
 			}
 		}
@@ -68,7 +73,7 @@ func TestCardTitleIsCapped(t *testing.T) {
 	g := board.NewGraph(board.NewBoard([]*board.Task{{ID: "x", Status: "backlog"}}))
 	th := newTheme(true)
 	long := &board.Task{ID: "x", Status: "backlog", Title: strings.Repeat("非常に長い日本語のタイトル", 20)}
-	lines := cardLines(long, g, th, cardInner(colOuterW))
+	lines := cardLines(long, g, th, cardInner(testColW))
 	// maxTitleLines of title + the meta line; no labels so no chip line.
 	if len(lines) != maxTitleLines+1 {
 		t.Errorf("card has %d lines, want %d", len(lines), maxTitleLines+1)
