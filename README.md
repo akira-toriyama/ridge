@@ -145,6 +145,10 @@ go run ./cmd/ridge -readonly -dump           # schema gate で read-only の盤�
 
 ## 既知の課題
 
+- 本文編集はファイル直書きなので shard の `updated` が進まない。furrow 側の
+  `edit --body`（t-8q8c・2026-08-10 着地）が正しい経路だが**未リリース** —
+  最新 release は v4.0.0（2026-08-09）で `unknown flag: --body`。release が出たら
+  乗り換える（contract job が release を pin しているので、そこで自動的に分かる）。
 - swimlane（group by）未実装。
 - Table ビューに横スクロールが無い（ワイド前提の設計判断。要るなら既存依存の
   bubbles viewport v2 の `SoftWrap=false` + `XOffset` を配線する — 新規実装不要と
