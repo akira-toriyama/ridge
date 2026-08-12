@@ -303,7 +303,17 @@ func (m *Model) renderGraphNode(n *egoNode, titleLines int) string {
 	if n.Both {
 		head += " " + th.warn.Render("↕ both directions")
 	}
-	right := th.laneDot(*m.b.Lane(t.Status)).Render(glyphLaneDot) + " " + th.muted.Render(t.Status)
+	// Board.Lane is documented to return nil for a slug outside the board's
+	// vocabulary, and laneDot takes a Lane BY VALUE and reads only .Name
+	// precisely so an unknown lane degrades to the muted default. Dereferencing
+	// here defeated both: such a task never reaches a column (recompute fills
+	// m.cols for known lanes only) but IS drawn as a graph node whenever it
+	// sits in the ego graph of whatever the user rooted on.
+	ln := board.Lane{Name: t.Status}
+	if l := m.b.Lane(t.Status); l != nil {
+		ln = *l
+	}
+	right := th.laneDot(ln).Render(glyphLaneDot) + " " + th.muted.Render(t.Status)
 	if r := t.ShortRepo(); r != "" {
 		right += th.dim.Render(" · ") + th.chipAlt.Render(r)
 	}
@@ -431,7 +441,14 @@ func (m *Model) graphStrip(l *egoLayout, h int) string {
 		meta = append(meta, "labels "+strings.Join(t.Labels, ","))
 	}
 	if t.Epic != "" {
-		meta = append(meta, "epic "+t.Epic)
+		// Resolve the way the card, the table column and the peek all do. An
+		// epic is an entity; the raw e- id in a frame is a leak the repo
+		// already asserts against in two other views.
+		label := t.Epic
+		if e := m.b.Epic(t.Epic); e != nil {
+			label = e.Title
+		}
+		meta = append(meta, "epic "+label)
 	}
 	if d, tot := t.CheckProgress(); tot > 0 {
 		meta = append(meta, fmt.Sprintf("checklist %d/%d", d, tot))
@@ -630,8 +647,14 @@ func (m *Model) cycleGraphRadius() {
 // you.
 func (m *Model) closeGraph() {
 	m.view = viewBoard
-	if n := m.graphLay.Node(m.graphSel); n != nil && n.Kind == egoReal {
-		m.selectID(n.ID, true)
+	// graphLay is written only by renderGraph, so a driver that calls Update
+	// without View — every headless harness in this package — reaches here with
+	// it still nil, and Node dereferences its receiver. The two other readers
+	// (graphMove, rerootGraph) already guard; this one did not.
+	if l := m.graphLay; l != nil {
+		if n := l.Node(m.graphSel); n != nil && n.Kind == egoReal {
+			m.selectID(n.ID, true)
+		}
 	}
 	m.note("board view — the cursor followed the graph walk")
 }
