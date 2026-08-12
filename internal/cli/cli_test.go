@@ -175,8 +175,8 @@ func TestDumpDefaultsToTheDesignFloor(t *testing.T) {
 			widest = n
 		}
 	}
-	if widest < 200 {
-		t.Errorf("the default dump is only %d cells wide; the README declares 240 the floor", widest)
+	if widest != 240 {
+		t.Errorf("the default dump is %d cells wide; the README declares 240 the floor and -cols defaults to it", widest)
 	}
 }
 

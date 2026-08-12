@@ -105,24 +105,46 @@ func TestTheDropPromiseAgreesWithTheReleaseEverywhere(t *testing.T) {
 
 	// The card band, the row under it, the chrome above it, the footer, and
 	// the gutter between two columns.
+	// c.Bot and m.h-1 were the same cell, so the sweep spent two of its five
+	// probes on one point.
+	second := m.lay.Cols[1]
 	points := []struct {
 		name string
 		x, y int
 	}{
 		{"inside the card band", x, c.Top + 1},
+		{"the last usable row", x, c.Bot - 1},
 		{"one row below the band", x, c.Bot},
 		{"the header rows", x, rowColHdr},
 		{"the footer", x, m.h - 1},
 		{"the gutter between columns", c.X + c.W, c.Top + 1},
+		{"a second column's band", second.X + 3, second.Top + 1},
 	}
 
 	for _, p := range points {
 		m := boardModel(t, 240, 60)
 		dragFrom(t, m, "backlog", p.x, p.y)
 
-		_, wouldDrop := m.dropTarget(p.x, p.y)
+		wantLane, wouldDrop := m.dropTarget(p.x, p.y)
 		gotBar := m.dropLayer() != nil
-		promises := strings.Contains(m.statusLine(), "release to drop")
+		status := ansiStrip(m.statusLine())
+		promises := strings.Contains(status, "release to drop")
+
+		// The lane the frame NAMES has to be the lane the release would use.
+		// Gating on the boolean alone stayed green while the bar marked and
+		// the status announced a different column.
+		if wouldDrop && !strings.Contains(status, wantLane) {
+			t.Errorf("%s (%d,%d): the release would drop into %q but the status says %q",
+				p.name, p.x, p.y, wantLane, status)
+		}
+		if wouldDrop {
+			if l := m.dropLayer(); l != nil {
+				if col := m.lay.Col(wantLane); col != nil && l.GetX() != col.X {
+					t.Errorf("%s (%d,%d): the insertion bar is drawn at x=%d, but %q starts at x=%d",
+						p.name, p.x, p.y, l.GetX(), wantLane, col.X)
+				}
+			}
+		}
 
 		if gotBar != wouldDrop {
 			t.Errorf("%s (%d,%d): dropTarget=%v but an insertion bar is %v — the frame and the release disagree",
@@ -131,6 +153,51 @@ func TestTheDropPromiseAgreesWithTheReleaseEverywhere(t *testing.T) {
 		if promises != wouldDrop {
 			t.Errorf("%s (%d,%d): dropTarget=%v but the status promises a drop=%v",
 				p.name, p.x, p.y, wouldDrop, promises)
+		}
+	}
+}
+
+// The divergence the render-time predicate exists for: nothing says a motion
+// event precedes every frame. A resize (or the auto-scroll's own relayout)
+// moves the columns under a pointer that has not moved, so values cached at
+// motion time now name a different lane than the release would choose.
+func TestTheDropPromiseFollowsTheColumnsAcrossAResize(t *testing.T) {
+	m := boardModel(t, 240, 60)
+	if len(m.lay.Cols) < 3 {
+		t.Skip("need at least three visible columns")
+	}
+	// A point deep in the third column at this width.
+	third := m.lay.Cols[2]
+	x, y := third.X+3, third.Top+1
+	dragFrom(t, m, "backlog", x, y)
+
+	cached := m.drag.dropLane
+	if cached != third.Lane.Name {
+		t.Fatalf("setup: the drag tracked %q, want %q", cached, third.Lane.Name)
+	}
+
+	// Widen the terminal WITHOUT another mouse event. The columns grow, so the
+	// same x now falls in an earlier lane.
+	m.w = 400
+	m.relayout()
+
+	want, ok := m.dropTarget(x, y)
+	if !ok {
+		t.Skip("the point left the board entirely at the new width")
+	}
+	if want == cached {
+		t.Skip("the resize did not move this point into a different lane")
+	}
+
+	status := ansiStrip(m.statusLine())
+	if !strings.Contains(status, want) {
+		t.Errorf("after the resize the release would drop into %q, but the status still says %q (cached %q)",
+			want, status, cached)
+	}
+	if l := m.dropLayer(); l != nil {
+		if col := m.lay.Col(want); col != nil && l.GetX() != col.X {
+			t.Errorf("the insertion bar is still drawn over the old column: x=%d, %q starts at x=%d",
+				l.GetX(), want, col.X)
 		}
 	}
 }

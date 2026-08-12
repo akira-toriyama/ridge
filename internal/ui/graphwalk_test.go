@@ -259,6 +259,8 @@ func TestGraphStripResolvesTheEpicTitle(t *testing.T) {
 	if title == "" {
 		t.Skip("the fixture epic has no title to resolve")
 	}
+	// A needle long enough to be this epic's, not merely a common prefix:
+	// "vista:" alone is shared by ten fixture titles.
 	want := truncatedPrefix(title)
 	for _, line := range strings.Split(frame, "\n") {
 		if strings.Contains(line, "epic ") && strings.Contains(line, want) {
@@ -272,10 +274,53 @@ func TestGraphStripResolvesTheEpicTitle(t *testing.T) {
 // ellipsis the strip applies.
 func truncatedPrefix(s string) string {
 	r := []rune(s)
-	if len(r) > 6 {
-		r = r[:6]
+	if len(r) > 14 {
+		r = r[:14]
 	}
 	return string(r)
 }
 
 var _ = tea.KeyPressMsg{}
+
+// Through Update(), so the ROUTING is pinned too. Calling the handlers directly
+// proves each one works but leaves onGraphKey free to wire ⏎ to graphBack and
+// `<` to rerootGraph — a swap that survived the entire suite.
+func TestGraphKeysAreRoutedToTheRightHandlers(t *testing.T) {
+	m := graphModel(t, 240, 60)
+	start := m.graphFocus
+
+	moved := false
+	for _, dir := range [][2]int{{0, -1}, {0, +1}, {+1, 0}, {-1, 0}} {
+		m.graphMove(dir[0], dir[1])
+		if m.graphSel != start {
+			moved = true
+			break
+		}
+	}
+	if !moved {
+		t.Skip("no reachable neighbour to move the graph selection to")
+	}
+	target := m.graphSel
+
+	press(m, "enter") // must RE-ROOT, not retrace
+	if m.graphFocus != target {
+		t.Errorf("⏎ in the graph left the focus on %s, want %s — is it wired to graphBack?", m.graphFocus, target)
+	}
+	if len(m.graphStack) != 1 {
+		t.Fatalf("⏎ did not push onto the walk stack: %v", m.graphStack)
+	}
+
+	press(m, "<") // must RETRACE, not re-root
+	if m.graphFocus != start {
+		t.Errorf("`<` retraced to %s, want %s — is it wired to rerootGraph?", m.graphFocus, start)
+	}
+	if len(m.graphStack) != 0 {
+		t.Errorf("`<` left %d entries on the walk stack", len(m.graphStack))
+	}
+
+	// esc leaves the graph rather than doing anything inside it.
+	press(m, "esc")
+	if m.view != viewBoard {
+		t.Errorf("esc left the view at %v", m.view)
+	}
+}

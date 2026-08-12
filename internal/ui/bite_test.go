@@ -345,3 +345,37 @@ func TestCardLinesFillTheirColumnAcrossTheDeclaredWidthRange(t *testing.T) {
 
 // cmdOf unwraps the (tea.Model, tea.Cmd) pair Update returns.
 func cmdOf(_ tea.Model, cmd tea.Cmd) tea.Cmd { return cmd }
+
+// The other half of `R`'s guard pair: the fixture has no store to sync, so the
+// key must say so and run nothing. Deleting `if !m.prov.Live()` left every
+// package green — memstore.Sync's own error is swallowed into a reloadDoneMsg
+// nobody was asserting on.
+func TestSyncIsRefusedOnTheFixture(t *testing.T) {
+	p := &countingFixture{Store: memstore.New()}
+	m := New(p, Options{})
+	m.w, m.h = 240, 60
+	m.recompute()
+	m.relayout()
+
+	if cmd := cmdOf(m.Update(tea.KeyPressMsg{Code: 'R', Text: "R"})); cmd != nil {
+		t.Error("R started a git sync against the fixture, which has no store behind it")
+	}
+	if p.syncs != 0 {
+		t.Errorf("Sync ran %d times on the fixture", p.syncs)
+	}
+	if !strings.Contains(m.status, "sync") {
+		t.Errorf("the refusal does not mention syncing: %q", m.status)
+	}
+}
+
+// countingFixture is the fixture with its Live() answer left alone, counting
+// Sync so the refusal can be asserted as "never called".
+type countingFixture struct {
+	*memstore.Store
+	syncs int
+}
+
+func (p *countingFixture) Sync() error {
+	p.syncs++
+	return p.Store.Sync()
+}
