@@ -83,6 +83,12 @@ func labLaneOrder(t *testing.T, dir, lane string) []string {
 	return ids
 }
 
+// The done-lane assertion here was changed from a tautology to a real check on
+// furrow's done_lane mapping; it DOES bite (dropping `Done: name ==
+// cfg.DoneLane` makes it report `""`), but only where a furrow binary exists to
+// build a store from. The `contract` job supplies one and runs it for real.
+//
+// bite-exempt: execs a real furrow binary and always skips where furrow is not
 func TestContractLoadMapsTheStore(t *testing.T) {
 	p, dir := newLabProvider(t)
 
