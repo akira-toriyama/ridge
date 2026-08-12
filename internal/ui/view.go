@@ -228,6 +228,14 @@ func (m *Model) statusLine() string {
 			glyphLift, m.moveID, m.dropLane, m.dropIdx))
 	}
 	if m.drag.moved {
+		// Same predicate as the release and the drop indicator. Saying
+		// "release to drop" over the chrome, the gutter or the peek was a lie
+		// the release then made good on by cancelling.
+		if _, ok := m.dropTarget(m.drag.x, m.drag.y); !ok {
+			return th.accent.Render(fmt.Sprintf(
+				"%s DRAG %s   off the board — release cancels · drag back over a column to drop",
+				glyphLift, m.drag.id))
+		}
 		return th.accent.Render(fmt.Sprintf("%s DRAG %s → %s [slot %d]   release to drop · esc cancel",
 			glyphLift, m.drag.id, m.drag.dropLane, m.drag.dropIdx))
 	}
@@ -345,6 +353,15 @@ func (m *Model) dropLayer() *lg.Layer {
 	case m.mode == modeMove:
 		lane, idx = m.dropLane, m.dropIdx
 	case m.drag.moved:
+		// Ask the same predicate the RELEASE asks, and ask it now rather than
+		// trusting a bool cached at motion time: an auto-scroll relayout or a
+		// resize moves the columns under a pointer that never sent another
+		// event. Off the board there is no slot to mark — the release cancels,
+		// and an insertion bar promising otherwise made the "will drop" and
+		// "will cancel" frames byte-identical.
+		if _, ok := m.dropTarget(m.drag.x, m.drag.y); !ok {
+			return nil
+		}
 		lane, idx = m.drag.dropLane, m.drag.dropIdx
 	default:
 		return nil
