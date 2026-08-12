@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/akira-toriyama/ridge/internal/board"
 	"github.com/akira-toriyama/ridge/internal/store/memstore"
+	"strings"
 	"testing"
 )
 
@@ -71,13 +72,34 @@ func BenchmarkRecomputeAtBoardSize(b *testing.B) {
 
 // TestScalesToARealBoard is the assertion, not just a measurement: a full-size
 // board must still render a sane frame.
+//
+// Both original assertions were tautologies — `len(m.b.Tasks()) != 658` is true
+// by construction and a composited frame is never the empty string — so a
+// 658-task board that rendered ZERO cards in every lane passed. It asserts the
+// board's actual job now: a lane with tasks shows cards, and those cards carry
+// their ids.
 func TestScalesToARealBoard(t *testing.T) {
 	m := scaledModel(658, 150, 40)
 	out := ansiStrip(m.View().Content)
-	if len(out) == 0 {
-		t.Fatal("658-task board rendered an empty frame")
+
+	populated := 0
+	for i := range m.lay.Cols {
+		c := &m.lay.Cols[i]
+		if len(c.Tasks) == 0 {
+			continue
+		}
+		populated++
+		if len(c.Cards) == 0 {
+			t.Errorf("lane %s holds %d tasks and rendered no cards at all", c.Lane.Name, len(c.Tasks))
+			continue
+		}
+		// Lane headers alone are not a board: the first card's id must be on
+		// screen.
+		if id := c.Tasks[c.Scroll].ID; !strings.Contains(out, id) {
+			t.Errorf("lane %s renders %d cards but %s is not in the frame", c.Lane.Name, len(c.Cards), id)
+		}
 	}
-	if n := len(m.b.Tasks()); n != 658 {
-		t.Fatalf("expected 658 tasks, got %d", n)
+	if populated == 0 {
+		t.Fatal("a 658-task board produced no populated lane")
 	}
 }

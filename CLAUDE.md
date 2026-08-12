@@ -21,7 +21,7 @@
 
 - `go build ./...` / `go test ./...` が通ることを終了前に確認する。
   Go 1.25+ では `GOTOOLCHAIN=local`。
-- house style は [go-dev skill] に従う（薄い main + `internal/`、typed exit code、
+- house style は go-dev skill に従う（薄い main + `internal/`、typed exit code、
   stdlib のみのテスト）。構成: `cmd/ridge`（3行 main）/ `internal/cli`（flag・
   exit code）/ `internal/board`（純粋 core + Provider port）/
   `internal/store/{furrowstore,memstore}`（adapter）/ `internal/ui`（TUI 全部）。
@@ -84,8 +84,10 @@ v1 から大きく変わっている。以下は実際に踏んで確認済み:
 - `-dump` で TTY 無しに1フレーム出せる。`-plain` は ANSI 無しなので diff 可能。
 - **フレームが変わる状態は必ず headless で1枚出せるようにする**（`-demo` / `-readonly`）。
   出せない状態は verification の穴になる — read-only の警告を消す退行を1度通した。
-- **ジェスチャ中の状態は `-demo` で1フレームに落とす**（`move` / `drag` /
-  `add` / `edit` / `graph` / `help` / `slice` / `sort`）。「ドロップ位置の印は出ているか」を人間の目に頼らない。
+- **ジェスチャ中の状態は `-demo` で1フレームに落とす**（名前の正本は
+  `ui.DemoNames` — ここに写しを置くと必ず古くなる。実際 PR #22 が3箇所の写しを
+  1本化した後、この行だけ8/10のまま残った）。「ドロップ位置の印は出ているか」を
+  人間の目に頼らない。
 - **マウスは合成 SGR バイトを `tea.WithInput` に流して駆動できる**
   （`\x1b[<0;X;YM` 押下 / `\x1b[<32;X;Ym` 移動 / `\x1b[<0;X;Ym` 離す）。
   実 Program を回す e2e はこの方式。

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"github.com/akira-toriyama/ridge/internal/store/memstore"
 	"io"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -148,9 +149,17 @@ func TestProgramNegotiatesAltScreenAndMouseOnTheWire(t *testing.T) {
 	if strings.Contains(raw, "\x1b[?1003h") {
 		t.Error("the program requested AllMotion (1003); CellMotion (1002) is the house choice")
 	}
-	// The window title is a View field too.
-	if !strings.Contains(raw, "furrow board (POC)") {
-		t.Error("the window title never reached the terminal")
+	// The window title is a View field too. Asserted on the OSC 2 SEQUENCE, not
+	// on the words: "furrow board" is also the on-screen title bar, so matching
+	// the text alone passes even when no window title is sent at all. The text
+	// is checked inside the sequence rather than as the whole string because
+	// the title used to carry "(POC)" long after the POC phase ended, and
+	// pinning it whole here is what kept it there.
+	title := regexp.MustCompile(`\x1b\]2;([^\x07\x1b]*)(?:\x07|\x1b\\)`).FindStringSubmatch(raw)
+	if title == nil {
+		t.Error("the program never sent an OSC 2 window-title sequence")
+	} else if !strings.Contains(title[1], "furrow board") {
+		t.Errorf("the window title is %q, which does not name the board", title[1])
 	}
 }
 

@@ -407,11 +407,9 @@ func fixtureTasks() []*board.Task {
 // the 18 member tasks point at. Done/Total agree with the member lanes above.
 func fixtureEpics() []board.EpicInfo {
 	return []board.EpicInfo{{
-		ID:     "e-fw2m",
-		Title:  "vista: furrow GUI v1 — Tauri v2 + React（kanban／依存グラフ／CRUD）",
-		Goal:   "furrow GUI v1 — kanban／依存グラフ／CRUD を Tauri v2 + React で",
-		Done:   6,
-		Total:  18,
-		Active: true,
+		ID:    "e-fw2m",
+		Title: "vista: furrow GUI v1 — Tauri v2 + React（kanban／依存グラフ／CRUD）",
+		Done:  6,
+		Total: 18,
 	}}
 }

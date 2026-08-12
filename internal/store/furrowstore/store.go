@@ -81,7 +81,6 @@ type boardJSON struct {
 	Lanes       []string `json:"lanes"`
 	NextLanes   []string `json:"next_lanes"`
 	DoneLane    string   `json:"done_lane"`
-	Terminal    []string `json:"terminal"`
 	Writable    bool     `json:"writable"`
 	SchemaState string   `json:"schema_state"`
 	Store       string   `json:"store"`
@@ -119,13 +118,11 @@ type taskJSON struct {
 type epicJSON struct {
 	ID       string `json:"id"`
 	Title    string `json:"title"`
-	Goal     string `json:"goal"`
 	Progress struct {
 		Done  int `json:"done"`
 		Total int `json:"total"`
 	} `json:"progress"`
-	Stuck  bool `json:"stuck"`
-	Active bool `json:"active"`
+	Stuck bool `json:"stuck"`
 }
 
 // wipDefaults renders the WIP budget on the lanes that have one — Projects #5
@@ -176,14 +173,13 @@ func (p *Store) load() (*board.Board, error) {
 		}
 	}
 
-	inNext, inTerm := toSet(cfg.NextLanes), toSet(cfg.Terminal)
+	inNext := toSet(cfg.NextLanes)
 	lanes := make([]board.Lane, 0, len(cfg.Lanes))
 	for _, name := range cfg.Lanes {
 		lanes = append(lanes, board.Lane{
 			Name: name,
 			Next: inNext[name],
 			Done: name == cfg.DoneLane,
-			Term: inTerm[name],
 			WIP:  wipDefaults[name],
 		})
 	}
@@ -220,9 +216,9 @@ func (p *Store) load() (*board.Board, error) {
 	epics := make([]board.EpicInfo, 0, len(boxes))
 	for _, e := range boxes {
 		epics = append(epics, board.EpicInfo{
-			ID: e.ID, Title: e.Title, Goal: e.Goal,
+			ID: e.ID, Title: e.Title,
 			Done: e.Progress.Done, Total: e.Progress.Total,
-			Stuck: e.Stuck, Active: e.Active,
+			Stuck: e.Stuck,
 		})
 	}
 
@@ -349,10 +345,16 @@ func (p *Store) PersistCheck(id string, i int, done bool) error {
 }
 
 // PersistBody asks furrow for the body path (`edit` prints it when there is no
-// TTY) and replaces the file. Direct body edits are inside furrow's contract —
-// bodies are the hand-editable half of the store — but they do NOT advance the
-// shard's `updated`; the fix for that gap is filed upstream (t-8q8c), and until
-// it lands the staleness drift is accepted (t-s86r's recorded decision).
+// TTY) and replaces the file.
+//
+// `furrow edit --body -` would be better — it replaces the body AND stamps the
+// entity's `updated` in one command, where a direct write leaves `updated`
+// stale. It is implemented (t-8q8c, 2026-08-10) but NOT RELEASED: the newest
+// furrow release is v4.0.0 (2026-08-09), and the contract job — which pins a
+// release precisely so ridge cannot drift ahead of one — answers
+// `unknown flag: --body`. Switching now would work only against a
+// source-built furrow and break every released one, so it waits for the
+// release that carries it.
 func (p *Store) PersistBody(id, body string) error {
 	out, err := p.c.run("edit", "edit", id, "--json")
 	if err != nil {
@@ -432,7 +434,11 @@ func (p *Store) PersistFields(id string, patch board.FieldPatch) error {
 		}
 	}
 	if patch.Title != nil {
-		if _, err := p.c.run("retitle", "retitle", id, *patch.Title); err != nil {
+		// `--` before the title: it is user free text, and furrow's parser
+		// reads a leading `-` as a shorthand flag. Without it a retitle to
+		// "-foo" exits 2 AFTER the board optimistically showed the rename,
+		// so the user watched it land and then get yanked by the rollback.
+		if _, err := p.c.run("retitle", "retitle", id, "--", *patch.Title); err != nil {
 			return err
 		}
 	}
@@ -481,7 +487,7 @@ type addRow struct {
 // Add creates a task via `furrow add` (board.Provider), mapping the
 // inherited context onto -s/-l/-e/-r.
 func (p *Store) Add(title string, o board.AddOptions) (string, error) {
-	args := []string{"add", title, "--json"}
+	args := []string{"add", "--json"}
 	if o.Lane != "" {
 		args = append(args, "-s", o.Lane)
 	}
@@ -494,6 +500,9 @@ func (p *Store) Add(title string, o board.AddOptions) (string, error) {
 	if o.Repo != "" {
 		args = append(args, "-r", o.Repo)
 	}
+	// The title goes LAST, behind `--`: it is user free text and a leading
+	// dash would otherwise be parsed as a flag and refused.
+	args = append(args, "--", title)
 	out, err := p.c.run("add", args...)
 	if err != nil {
 		return "", err

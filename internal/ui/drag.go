@@ -82,10 +82,24 @@ func (m *Model) inPeek(x, y int) bool {
 
 // dropTarget resolves a point to a lane that can actually receive a card: it
 // must be inside a column horizontally AND inside that column's card band
-// vertically. The chrome rows, the footer and the empty area past the last
-// column are all "off the board".
+// vertically, and it must not be under an overlay that hides the board. The
+// chrome rows, the footer, the empty area past the last column and the open
+// side-peek are all "off the board".
+//
+// This is the ONE predicate for "would a release here drop": the renderer asks
+// it too (dropLayer, statusLine), so the frame cannot promise a drop that the
+// release then cancels.
 func (m *Model) dropTarget(x, y int) (string, bool) {
 	if m.lay == nil {
+		return "", false
+	}
+	// The peek sits ABOVE the drop indicator (zPeek > zDrop), so a column under
+	// it is a column the user cannot see — and the indicator that would mark
+	// the slot is painted behind the panel. Releasing there committed a lane
+	// change into the invisible board, which is exactly the rule note (4)
+	// states. Guarded by POINT, not by column: the strip of a column still
+	// visible beside the peek stays a legal drop.
+	if m.inPeek(x, y) {
 		return "", false
 	}
 	lane, ok := m.lay.laneAtX(x)
@@ -206,7 +220,11 @@ func (m *Model) onMouseMove(msg tea.MouseMotionMsg) tea.Cmd {
 		}
 		m.drag.moved = true
 	}
-	if lane, ok := m.lay.laneAtX(msg.X); ok {
+	// Which column the pointer is over, for the ghost's target and the
+	// auto-scroll hot zone below. The peek is excluded for the same reason
+	// dropTarget excludes it: the columns beneath it are not on screen, so
+	// tracking one would aim the gesture at something invisible.
+	if lane, ok := m.lay.laneAtX(msg.X); ok && !m.inPeek(msg.X, msg.Y) {
 		m.drag.dropLane = lane
 		m.drag.dropIdx = m.lay.idxAtY(lane, msg.Y)
 	}

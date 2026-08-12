@@ -9,8 +9,14 @@ import (
 )
 
 // Glyphs. Every one of these is asserted single-width by
-// TestGlyphsAreSingleWidth — an East-Asian-ambiguous glyph would silently shear
+// TestGlyphsAreSingleWidth: a Wide or Fullwidth glyph would silently shear
 // every card's right border on a CJK board, and this fixture IS a CJK board.
+//
+// East-Asian-AMBIGUOUS glyphs are deliberately allowed. lipgloss measures them
+// as 1, several of the ones below (▤ ↕ ▲ ▼ ●) are ambiguous, and so is the
+// rounded/thick box-drawing frame the entire UI is built from — so
+// "ambiguous renders narrow" is an assumption this codebase already makes
+// everywhere and could not drop without redrawing every border.
 const (
 	glyphActionable = "▸" // furrow next would hand you this one
 	glyphBlocked    = "x" // unsatisfied deps

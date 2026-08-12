@@ -40,7 +40,14 @@ func dumpFrame(t *testing.T, w, h int, demo string) []string {
 // listed at least six bindings, and no markdown line in the fixture carries two
 // bullets.
 func TestNoKeyListOutsideTheHelpOverlay(t *testing.T) {
-	for _, demo := range []string{"", "move", "drag", "add", "edit", "graph", "slice", "sort"} {
+	// Driven off DemoNames, not a hand-copied list: the hardcoded one predated
+	// PR #22 and quietly exempted `filter` and `fail` from this invariant. ""
+	// is the plain board, which has no demo name.
+	demos := append([]string{""}, DemoNames...)
+	for _, demo := range demos {
+		if demo == "help" {
+			continue // the help overlay is the one place a key list belongs
+		}
 		name := demo
 		if name == "" {
 			name = "board"

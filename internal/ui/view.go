@@ -58,7 +58,7 @@ func (m *Model) View() tea.View {
 	// from space until every key comes back as an escape code. Basic
 	// disambiguation (flag 1, always on) is not enough for this gesture.
 	v.KeyboardEnhancements = tea.KeyboardEnhancements{ReportAllKeysAsEscapeCodes: true}
-	v.WindowTitle = "furrow board (POC)"
+	v.WindowTitle = "furrow board"
 	return v
 }
 
@@ -223,13 +223,33 @@ func (m *Model) modeBadge() string {
 
 func (m *Model) statusLine() string {
 	th := m.th
+	// A gesture owns this row, but this row is also m.status's ONLY render
+	// site. Returning the gesture string alone meant a persist refusal landing
+	// while a card was lifted rendered nowhere at all, and the rollback that
+	// followed was completely silent. Append instead of replace: the [slot N]
+	// readout has to stay while the card is still in the air.
+	warn := ""
+	if m.statusErr {
+		warn = th.errText.Render("   ⚠ " + m.status)
+	}
 	if m.mode == modeMove {
 		return th.accent.Render(fmt.Sprintf("%s MOVE %s → %s [slot %d]   ⏎ commit · esc restore",
-			glyphLift, m.moveID, m.dropLane, m.dropIdx))
+			glyphLift, m.moveID, m.dropLane, m.dropIdx)) + warn
 	}
 	if m.drag.moved {
+		// Same predicate as the release and the drop indicator, and the same
+		// lane it resolves — naming the motion-time cache here could announce
+		// a different column from the one the bar marks. Saying "release to
+		// drop" over the chrome, the gutter or the peek was a lie the release
+		// then made good on by cancelling.
+		to, ok := m.dropTarget(m.drag.x, m.drag.y)
+		if !ok {
+			return th.accent.Render(fmt.Sprintf(
+				"%s DRAG %s   off the board — release cancels · drag back over a column to drop",
+				glyphLift, m.drag.id)) + warn
+		}
 		return th.accent.Render(fmt.Sprintf("%s DRAG %s → %s [slot %d]   release to drop · esc cancel",
-			glyphLift, m.drag.id, m.drag.dropLane, m.drag.dropIdx))
+			glyphLift, m.drag.id, to, m.lay.idxAtY(to, m.drag.y))) + warn
 	}
 	if m.statusErr {
 		return th.errText.Render("⚠ " + m.status)
@@ -345,7 +365,18 @@ func (m *Model) dropLayer() *lg.Layer {
 	case m.mode == modeMove:
 		lane, idx = m.dropLane, m.dropIdx
 	case m.drag.moved:
-		lane, idx = m.drag.dropLane, m.drag.dropIdx
+		// Ask the same predicate the RELEASE asks, take the lane IT resolves,
+		// and ask now rather than trusting values cached at motion time: an
+		// auto-scroll relayout or a resize moves the columns under a pointer
+		// that never sent another event, so the cached lane can name a column
+		// the release would not choose. Off the board there is no slot to mark
+		// — the release cancels, and an insertion bar promising otherwise made
+		// the "will drop" and "will cancel" frames byte-identical.
+		to, ok := m.dropTarget(m.drag.x, m.drag.y)
+		if !ok {
+			return nil
+		}
+		lane, idx = to, m.lay.idxAtY(to, m.drag.y)
 	default:
 		return nil
 	}
@@ -404,7 +435,7 @@ func (m *Model) helpLayer() *lg.Layer {
 
 	// Render each section as its own block first…
 	var blocks []string
-	for _, sec := range m.keys.HelpSections() {
+	for _, sec := range m.keys.HelpSections(m.view == viewTable || m.peekOpen) {
 		hdr := m.th.dim.Render(sec.title)
 		if sec.title == now {
 			hdr = m.th.accent.Render(sec.title + " — you are here")

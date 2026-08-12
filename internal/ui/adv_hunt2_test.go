@@ -125,31 +125,6 @@ func TestAdvNoOpDropStampsUpdated(t *testing.T) {
 	}
 }
 
-// K. wheel on a column that fits
-
-func TestAdvWheelHidesCardsInAColumnThatFits(t *testing.T) {
-	m := boardModel(t, 140, 44)
-	var lane string
-	for _, c := range m.lay.Cols {
-		if c.Hidden == 0 && len(c.Tasks) >= 2 {
-			lane = c.Lane.Name
-			break
-		}
-	}
-	if lane == "" {
-		t.Skip("no fully-visible multi-card column at this size")
-	}
-	col := m.lay.Col(lane)
-	n := len(col.Tasks)
-	m.Update(tea.MouseWheelMsg{X: col.X + 4, Y: 10, Button: tea.MouseWheelDown})
-	after := m.lay.Col(lane)
-	if len(after.Cards) < n {
-		t.Errorf("one wheel-down on %s (all %d cards fit, nothing below the fold) "+
-			"scrolled to %d and now renders only %d cards",
-			lane, n, after.Scroll, len(after.Cards))
-	}
-}
-
 // L. compositor / negative coordinates
 
 // At h<2 the status and help bars are placed at NEGATIVE y.

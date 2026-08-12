@@ -346,8 +346,10 @@ func (m *Model) renderTable() string {
 	inset := m.sliceInset()
 	layers = append(layers,
 		lg.NewLayer(th.colHdr.Render(pad(head, avail))).X(inset).Y(rowColHdr).Z(zChrome),
-		// maxInt, not m.w: strings.Repeat panics on a negative count, and
-		// `-dump -w -1` reached it.
+		// maxInt, not m.w: strings.Repeat panics on a negative count, and a
+		// negative width reached it (via `-dump -w -1`, before the geometry
+		// flags became -cols/-rows; TestAdvTableViewPanicsOnNegativeWidth
+		// pins it directly now).
 		lg.NewLayer(th.rule.Render(strings.Repeat("─", maxInt(m.w, 1)))).X(0).Y(rowColSum).Z(zChrome),
 	)
 

@@ -212,8 +212,34 @@ func TestDragRendersAGhostAndLeavesAShadow(t *testing.T) {
 	if m.drag.grabDX == 0 && m.drag.grabDY == 0 {
 		t.Error("the grab offset was not recorded")
 	}
-	if g.GetX() != clamp(m.drag.x-m.drag.grabDX, 0, maxInt(0, m.w-colOuterW)) {
-		t.Error("the ghost is not offset by the grab point")
+	// The grab offset itself, away from either clamp.
+	if g.GetX() != m.drag.x-m.drag.grabDX {
+		t.Errorf("ghost X = %d, want %d — the card snapped under the cursor",
+			g.GetX(), m.drag.x-m.drag.grabDX)
+	}
+
+	// And the clamps, asserted as the PROPERTY they exist for rather than by
+	// recomputing the formula. The old assertion re-derived X using the
+	// since-deleted colOuterW — by then a constant with no production readers
+	// — and at these coordinates neither bound bound, so it degenerated to the
+	// line above and pinned nothing. Y had no assertion at all.
+	//
+	// The ghost is a layer, and a compositor grows its canvas to fit any
+	// layer: one that overhangs widens the whole frame.
+	m.drag.x, m.drag.y = m.w-1, m.h-1
+	g = m.ghostLayer()
+	if g == nil {
+		t.Fatal("no ghost layer at the far corner")
+	}
+	card := renderCard(m.b.Task(m.drag.id), m.g, m.th, minInt(m.lay.ColW, maxInt(m.w, 1)), cardGhost)
+	if right := g.GetX() + lg.Width(card); right > m.w {
+		t.Errorf("the ghost reaches column %d on a %d-wide terminal — it would widen the frame", right, m.w)
+	}
+	if bottom := g.GetY() + lg.Height(card); bottom > m.h {
+		t.Errorf("the ghost reaches row %d on a %d-tall terminal — it would grow the frame", bottom, m.h)
+	}
+	if g.GetX() < 0 || g.GetY() < 0 {
+		t.Errorf("the ghost is at (%d,%d); a negative offset shifts the whole scene", g.GetX(), g.GetY())
 	}
 }
 

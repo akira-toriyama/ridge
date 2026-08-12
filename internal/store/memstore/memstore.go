@@ -8,15 +8,31 @@ package memstore
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/akira-toriyama/ridge/internal/board"
 )
 
 // Store is the fixture-backed board.Provider.
+//
+// The mutex is not decoration: persists run OFF the UI thread inside a
+// tea.Cmd, so Add used to append to the very board View() was rendering. The
+// port contract is explicit — "a provider must never mutate a Board it has
+// handed out: Reload builds a fresh one and swaps" — and furrowstore already
+// honoured it. This one now does too: every write to b/added/addSeq is under
+// the lock, and Add swaps a freshly built board in rather than growing the
+// live one.
 type Store struct {
-	b       *board.Board
-	rebuild func() *board.Board
-	addSeq  int
+	mu sync.Mutex
+
+	b    *board.Board
+	base func() *board.Board // the pristine source, rebuilt on every Reload
+	// added holds quick adds BY VALUE so a reload can materialize each one
+	// fresh. Keeping the *Task would make edits to an added card survive a
+	// reload while every other card's were discarded — a worse contract than
+	// either alternative.
+	added  []board.Task
+	addSeq int
 	// writeErr is what every persist returns when the board is gated. A
 	// non-writable board whose writes all SUCCEED is the fixture lying in the
 	// one direction the gate exists to describe, so the refusal lives on the
@@ -27,13 +43,13 @@ type Store struct {
 // New serves the fixture snapshot.
 func New() *Store {
 	f := func() *board.Board { return board.NewBoard(fixtureTasks(), fixtureEpics()...) }
-	return &Store{b: f(), rebuild: f}
+	return &Store{b: f(), base: f}
 }
 
 // NewWith serves an arbitrary in-memory board (tests). Reload keeps serving
 // the same board: there is no pristine source to rebuild from.
 func NewWith(b *board.Board) *Store {
-	return &Store{b: b, rebuild: func() *board.Board { return b }}
+	return &Store{b: b, base: func() *board.Board { return b }}
 }
 
 // NewGated serves the fixture as a board furrow would REFUSE to write to —
@@ -49,8 +65,8 @@ func NewGated(schema string) *Store {
 		return board.NewStoreBoard(b.Lanes(), b.Tasks(), b.Epics(), false, schema)
 	}
 	return &Store{
-		b:       f(),
-		rebuild: f,
+		b:    f(),
+		base: f,
 		// Measured against a real store forced onto an older schema: `furrow
 		// board --json` reports writable:false and every set/done/check/add
 		// exits 2 with schema-upgrade-required. A gated fixture that accepted
@@ -65,11 +81,75 @@ func NewGated(schema string) *Store {
 func (p *Store) gate() error { return p.writeErr }
 
 // Board returns the current snapshot (board.Provider).
-func (p *Store) Board() *board.Board { return p.b }
+func (p *Store) Board() *board.Board { return p.snapshot() }
+
+// snapshot is the ONE read of the current board. Every Persist* and Query runs
+// on the persist queue's goroutine while the UI thread renders, so none of them
+// may touch the field directly.
+func (p *Store) snapshot() *board.Board {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.b
+}
 
 // Reload rebuilds the pristine board, discarding session edits
 // (board.Provider).
-func (p *Store) Reload() error { p.b = p.rebuild(); return nil }
+//
+// Quick adds are the one exception, and deliberately so: a reload that
+// discarded the add would make the fixture lie about it having happened
+// (PR #9). They are rebuilt from the value captured at Add time, so the ADD
+// survives while edits made to it afterwards are discarded like everyone
+// else's — the alternative silently exempted added cards from the reload.
+func (p *Store) Reload() error {
+	b := p.rebuild()
+	p.mu.Lock()
+	p.b = b
+	p.mu.Unlock()
+	return nil
+}
+
+// rebuild materializes the pristine board plus a fresh copy of every task
+// added this session.
+func (p *Store) rebuild() *board.Board {
+	p.mu.Lock()
+	added := make([]board.Task, len(p.added))
+	copy(added, p.added)
+	p.mu.Unlock()
+
+	b := p.base()
+	for i := range added {
+		// NewWith's base is the caller's OWN board, handed back as-is, so an
+		// add appended to it on the first rebuild is still there on the
+		// second. Without this guard every reload stacked another copy of the
+		// same id.
+		if b.Task(added[i].ID) != nil {
+			continue
+		}
+		t := cloneTask(added[i])
+		b.Append(&t)
+	}
+	return b
+}
+
+// withTask copies a board's task list, appends one task and returns a NEW
+// board. The original is left untouched — it is the snapshot the UI thread is
+// rendering.
+func withTask(b *board.Board, extra *board.Task) *board.Board {
+	tasks := append([]*board.Task(nil), b.Tasks()...)
+	tasks = append(tasks, extra)
+	return board.NewStoreBoard(b.Lanes(), tasks, b.Epics(), b.Writable(), b.SchemaState())
+}
+
+// cloneTask deep-copies the slice fields so a rebuilt board never aliases the
+// captured value (or a previous rebuild).
+func cloneTask(t board.Task) board.Task {
+	t.Labels = append([]string(nil), t.Labels...)
+	t.Repos = append([]string(nil), t.Repos...)
+	t.Deps = append([]string(nil), t.Deps...)
+	t.Refs = append([]string(nil), t.Refs...)
+	t.Checklist = append([]board.ChecklistItem(nil), t.Checklist...)
+	return t
+}
 
 // Sync always fails: there is no store behind the fixture (board.Provider).
 func (p *Store) Sync() error { return fmt.Errorf("the fixture has no store to sync") }
@@ -82,10 +162,10 @@ func (p *Store) PersistMove(id, lane, _, _ string) ([]string, error) {
 	if err := p.gate(); err != nil {
 		return nil, err
 	}
-	if p.b.Task(id) == nil {
+	if p.snapshot().Task(id) == nil {
 		return nil, fmt.Errorf("unknown task %q", id)
 	}
-	if p.b.Lane(lane) == nil {
+	if p.snapshot().Lane(lane) == nil {
 		return nil, fmt.Errorf("unknown lane %q", lane)
 	}
 	return nil, nil
@@ -96,7 +176,7 @@ func (p *Store) PersistDone(id string) error {
 	if err := p.gate(); err != nil {
 		return err
 	}
-	if p.b.Task(id) == nil {
+	if p.snapshot().Task(id) == nil {
 		return fmt.Errorf("unknown task %q", id)
 	}
 	return nil
@@ -107,7 +187,7 @@ func (p *Store) PersistCheck(id string, i int, _ bool) error {
 	if err := p.gate(); err != nil {
 		return err
 	}
-	t := p.b.Task(id)
+	t := p.snapshot().Task(id)
 	if t == nil {
 		return fmt.Errorf("unknown task %q", id)
 	}
@@ -122,7 +202,7 @@ func (p *Store) PersistBody(id, _ string) error {
 	if err := p.gate(); err != nil {
 		return err
 	}
-	if p.b.Task(id) == nil {
+	if p.snapshot().Task(id) == nil {
 		return fmt.Errorf("unknown task %q", id)
 	}
 	return nil
@@ -136,13 +216,17 @@ var _ board.Provider = (*Store)(nil)
 // no ids. The lane and repo vocabularies come from the board being served,
 // because furrow validates those two at parse time.
 func (p *Store) Query(q string) ([]string, error) {
-	parsed := parseQuery(q, boardVocab(p.b))
+	// ONE snapshot for the whole evaluation: taking three would let a
+	// concurrent add parse the query against one board and match against
+	// another.
+	b := p.snapshot()
+	parsed := parseQuery(q, boardVocab(b))
 	if len(parsed.problems) > 0 {
 		return nil, fmt.Errorf("%s", strings.Join(parsed.problems, "; "))
 	}
-	g := board.NewGraph(p.b)
+	g := board.NewGraph(b)
 	var ids []string
-	for _, t := range p.b.Tasks() {
+	for _, t := range b.Tasks() {
 		if parsed.match(t, g) {
 			ids = append(ids, t.ID)
 		}
@@ -156,7 +240,7 @@ func (p *Store) PersistFields(id string, _ board.FieldPatch) error {
 	if err := p.gate(); err != nil {
 		return err
 	}
-	if p.b.Task(id) == nil {
+	if p.snapshot().Task(id) == nil {
 		return fmt.Errorf("unknown task %q", id)
 	}
 	return nil
@@ -167,7 +251,7 @@ func (p *Store) PersistCheckAdd(id, _ string) error {
 	if err := p.gate(); err != nil {
 		return err
 	}
-	if p.b.Task(id) == nil {
+	if p.snapshot().Task(id) == nil {
 		return fmt.Errorf("unknown task %q", id)
 	}
 	return nil
@@ -178,7 +262,7 @@ func (p *Store) PersistCheckRm(id string, i int) error {
 	if err := p.gate(); err != nil {
 		return err
 	}
-	t := p.b.Task(id)
+	t := p.snapshot().Task(id)
 	if t == nil {
 		return fmt.Errorf("unknown task %q", id)
 	}
@@ -193,10 +277,13 @@ func (p *Store) PersistCheckReword(id string, i int, _ string) error {
 	return p.PersistCheckRm(id, i) // same bounds contract
 }
 
-// Add appends a task to the CURRENT board (board.Provider) — the fixture has
-// no external store, so the board the model mutates is also where an add
-// lands, and Reload keeps serving it (discarding it would make the mock lie
-// about the add having happened).
+// Add records a task and swaps in a board that contains it (board.Provider).
+//
+// It runs on the persist queue's goroutine while the UI thread renders the
+// board it was handed, so it must not append to that board — it builds a fresh
+// one and swaps it under the lock, the way furrowstore does. Reload keeps
+// serving the add afterwards (discarding it would make the mock lie about the
+// add having happened).
 func (p *Store) Add(title string, o board.AddOptions) (string, error) {
 	if err := p.gate(); err != nil {
 		return "", err
@@ -204,15 +291,19 @@ func (p *Store) Add(title string, o board.AddOptions) (string, error) {
 	if strings.TrimSpace(title) == "" {
 		return "", fmt.Errorf("a title cannot be empty")
 	}
+
+	p.mu.Lock()
+	cur := p.b
 	lane := o.Lane
 	if lane == "" {
-		lane = p.b.Lanes()[0].Name
+		lane = cur.Lanes()[0].Name
 	}
-	if p.b.Lane(lane) == nil {
+	if cur.Lane(lane) == nil {
+		p.mu.Unlock()
 		return "", fmt.Errorf("unknown lane %q", lane)
 	}
 	p.addSeq++
-	t := &board.Task{
+	t := board.Task{
 		ID:     fmt.Sprintf("t-new%d", p.addSeq),
 		Title:  title,
 		Status: lane,
@@ -224,14 +315,19 @@ func (p *Store) Add(title string, o board.AddOptions) (string, error) {
 	if o.Repo != "" {
 		t.Repos = []string{o.Repo}
 	}
-	last := p.b.LaneTasks(lane)
+	last := cur.LaneTasks(lane)
 	if len(last) > 0 {
 		t.Priority = last[len(last)-1].Priority + 10
 	} else {
 		t.Priority = 10
 	}
-	p.b.Append(t)
-	b := p.b
-	p.rebuild = func() *board.Board { return b }
+	p.added = append(p.added, t)
+	// A fresh board carrying the CURRENT session state plus the new card.
+	// Building it from the pristine base instead would make a quick add
+	// silently throw away every move and edit made this session — Reload is
+	// the operation that discards, an add is not.
+	added := cloneTask(t)
+	p.b = withTask(cur, &added)
+	p.mu.Unlock()
 	return t.ID, nil
 }

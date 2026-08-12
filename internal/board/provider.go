@@ -16,7 +16,9 @@ type Provider interface {
 	Board() *Board
 
 	// Reload re-reads the backing store into a fresh Board. For the mock the
-	// backing store is the fixture, so a reload discards session edits.
+	// backing store is the fixture, so a reload discards session edits —
+	// except a quick add, which the fixture keeps so it does not lie about
+	// the add having happened.
 	Reload() error
 
 	// Sync runs the store's git sync (commit, pull --rebase, push). A

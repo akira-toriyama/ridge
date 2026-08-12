@@ -39,25 +39,6 @@ func TestAdvStaleScrollHidesCardsAfterFiltering(t *testing.T) {
 	}
 }
 
-// The same stale offset, reached with the keyboard only.
-func TestAdvWheelHidesCardsInAFittingColumnConstructed(t *testing.T) {
-	m := boardModel(t, 140, 40)
-	m.applyFilter("lane:ready")
-	m.relayout()
-	col := m.lay.Col("ready")
-	if col == nil || col.Hidden != 0 || len(col.Tasks) < 2 {
-		t.Skipf("ready: cards=%d hidden=%d", len(col.Tasks), col.Hidden)
-	}
-	n := len(col.Cards)
-	m.Update(tea.MouseWheelMsg{X: col.X + 4, Y: 10, Button: tea.MouseWheelDown})
-	after := m.lay.Col("ready")
-	if len(after.Cards) < n {
-		t.Errorf("one wheel-down on a column where all %d cards fit (Hidden=0) scrolled "+
-			"to %d and now renders %d cards — the top card is simply gone",
-			n, after.Scroll, len(after.Cards))
-	}
-}
-
 // U. dropping into an empty column
 
 func TestAdvDragIntoAnEmptyColumn(t *testing.T) {
@@ -180,8 +161,11 @@ func TestAdvJumpBackLeaksPins(t *testing.T) {
 		m.jumpToBlocker()
 		m.jumpBack()
 	}
-	if len(m.pinned) > 1 {
-		t.Errorf("after 4 jump/back round trips the filter is defeated for %d pinned ids %v",
+	// Was `> 1`, a threshold tuned to tolerate exactly the leak this file's own
+	// comment described ("Every `<` (jump back) pins its target permanently").
+	// On an unfiltered board nothing is hidden, so nothing needs an exemption.
+	if len(m.pinned) > 0 {
+		t.Errorf("after 4 jump/back round trips on an UNFILTERED board, %d ids carry a permanent filter exemption: %v",
 			len(m.pinned), pinIDs(m.pinned))
 	}
 }

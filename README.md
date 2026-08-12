@@ -95,7 +95,7 @@ due / repos / checklist（カーソルで項目選択・toggle/add/delete/reword
 | `?` | **キー一覧**（ここから全部辿れる） |
 | `Space` | 詳細ペイン |
 | `S` | 依存グラフ |
-| `Enter` | move mode（`Enter` 確定・`Esc` 取消） |
+| `Enter` | move mode（`Enter` 確定・`Esc` 取消）。**peek を開いていると / Table では編集メニュー** |
 | `q` | 終了 |
 
 画面下部は1行だけで、そこに出るのは**画面に出ていないこと**（今入ったモードの
@@ -122,7 +122,7 @@ due / repos / checklist（カーソルで項目選択・toggle/add/delete/reword
 
 ```sh
 go test ./...                      # 全テスト（furrow が PATH にあれば contract test も回る）
-go run ./cmd/ridge -dump -plain -w 240 -h 60 # 1フレームを平文で出力
+go run ./cmd/ridge -dump -plain -cols 240 -rows 60 # 1フレームを平文で出力
 go run ./cmd/ridge -dump -peek               # 詳細ペインを開いた状態
 go run ./cmd/ridge -dump -tree               # 依存ツリーを開いた状態
 go run ./cmd/ridge -demo graph -dump         # 依存グラフ
@@ -134,6 +134,7 @@ go run ./cmd/ridge -demo slice -dump         # slice パネル（label:ui 選択
 go run ./cmd/ridge -demo sort -dump          # Table を due ▲ でソートした状態
 go run ./cmd/ridge -demo filter -dump        # フィルタ入力がキーボードを持っている状態
 go run ./cmd/ridge -demo fail -dump          # 書き込みが拒否された ⚠ 行
+go run ./cmd/ridge -demo help -dump          # `?` キー一覧オーバーレイ
 go run ./cmd/ridge -readonly -dump           # schema gate で read-only の盤面
 ```
 
@@ -144,8 +145,10 @@ go run ./cmd/ridge -readonly -dump           # schema gate で read-only の盤�
 
 ## 既知の課題
 
-- 本文編集はファイル直書きなので shard の `updated` が進まない（furrow 側の
-  置換コマンド要望 t-8q8c が着地したら乗り換える）。
+- 本文編集はファイル直書きなので shard の `updated` が進まない。furrow 側の
+  `edit --body`（t-8q8c・2026-08-10 着地）が正しい経路だが**未リリース** —
+  最新 release は v4.0.0（2026-08-09）で `unknown flag: --body`。release が出たら
+  乗り換える（contract job が release を pin しているので、そこで自動的に分かる）。
 - swimlane（group by）未実装。
 - Table ビューに横スクロールが無い（ワイド前提の設計判断。要るなら既存依存の
   bubbles viewport v2 の `SoftWrap=false` + `XOffset` を配線する — 新規実装不要と
@@ -154,9 +157,10 @@ go run ./cmd/ridge -readonly -dump           # schema gate で read-only の盤�
 ## スタック
 
 ```
-charm.land/bubbletea/v2  ランタイム
-charm.land/lipgloss/v2   スタイル・レイアウト・コンポジタ（Layer / Hit）
-charm.land/bubbles/v2    help / key / textinput / viewport
+charm.land/bubbletea/v2      ランタイム
+charm.land/lipgloss/v2       スタイル・レイアウト・コンポジタ（Layer / Hit）
+charm.land/bubbles/v2        help / key / textinput / viewport
+github.com/charmbracelet/x/ansi  幅を保つ切り詰め（CJK 必須。`len()` 禁止の相方）
 ```
 
 v2 からモジュールパスが `github.com/charmbracelet/*` → `charm.land/*` に
