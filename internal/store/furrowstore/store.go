@@ -348,24 +348,24 @@ func (p *Store) PersistCheck(id string, i int, done bool) error {
 	return err
 }
 
-// PersistBody asks furrow for the body path (`edit` prints it when there is no
-// TTY) and replaces the file. Direct body edits are inside furrow's contract —
-// bodies are the hand-editable half of the store — but they do NOT advance the
-// shard's `updated`; the fix for that gap is filed upstream (t-8q8c), and until
-// it lands the staleness drift is accepted (t-s86r's recorded decision).
+// PersistBody replaces the whole body through `furrow edit --body -`, which
+// stamps the entity's `updated` in the same command.
+//
+// This used to ask furrow for the body path and write the file directly. That
+// is inside furrow's contract — bodies are the hand-editable half of the store
+// — but a direct write leaves `updated` stale, which made the tracker's
+// staleness signals (revisit, lint's reconcile-gap, `updated:>=-2w`) report the
+// opposite of the truth on exactly the tasks just worked on, and made the
+// on-screen stamp visibly revert after the post-write re-read. t-8q8c, the
+// upstream gap this waited on, landed 2026-08-10.
+//
+// The body rides stdin: it is arbitrary multi-line markdown. Note that furrow
+// makes an EMPTY replacement exit 2 rather than silently clearing, so emptying
+// the buffer in $EDITOR is now a refused write that rolls back — deliberately,
+// since a silent clear of a body is not a thing to do by accident.
 func (p *Store) PersistBody(id, body string) error {
-	out, err := p.c.run("edit", "edit", id, "--json")
-	if err != nil {
-		return err
-	}
-	var resp struct {
-		Path string `json:"path"`
-	}
-	if err := json.Unmarshal(out, &resp); err != nil || resp.Path == "" {
-		return fmt.Errorf("furrow edit: no body path in %q", string(out))
-	}
-	// 0600 matches the mode furrow itself creates body files with.
-	return os.WriteFile(resp.Path, []byte(body), 0o600)
+	_, err := p.c.runStdin("edit-body", body, "edit", id, "--body", "-")
+	return err
 }
 
 var _ board.Provider = (*Store)(nil)
@@ -432,7 +432,11 @@ func (p *Store) PersistFields(id string, patch board.FieldPatch) error {
 		}
 	}
 	if patch.Title != nil {
-		if _, err := p.c.run("retitle", "retitle", id, *patch.Title); err != nil {
+		// `--` before the title: it is user free text, and furrow's parser
+		// reads a leading `-` as a shorthand flag. Without it a retitle to
+		// "-foo" exits 2 AFTER the board optimistically showed the rename,
+		// so the user watched it land and then get yanked by the rollback.
+		if _, err := p.c.run("retitle", "retitle", id, "--", *patch.Title); err != nil {
 			return err
 		}
 	}
@@ -481,7 +485,7 @@ type addRow struct {
 // Add creates a task via `furrow add` (board.Provider), mapping the
 // inherited context onto -s/-l/-e/-r.
 func (p *Store) Add(title string, o board.AddOptions) (string, error) {
-	args := []string{"add", title, "--json"}
+	args := []string{"add", "--json"}
 	if o.Lane != "" {
 		args = append(args, "-s", o.Lane)
 	}
@@ -494,6 +498,9 @@ func (p *Store) Add(title string, o board.AddOptions) (string, error) {
 	if o.Repo != "" {
 		args = append(args, "-r", o.Repo)
 	}
+	// The title goes LAST, behind `--`: it is user free text and a leading
+	// dash would otherwise be parsed as a flag and refused.
+	args = append(args, "--", title)
 	out, err := p.c.run("add", args...)
 	if err != nil {
 		return "", err

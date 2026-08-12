@@ -53,9 +53,20 @@ func (c *furrowClient) run(op string, args ...string) ([]byte, error) {
 	return c.runTimeout(op, c.timeout, args...)
 }
 
+// runStdin is run with a body fed on stdin, for furrow's `-`=stdin commands.
+// A body goes down the pipe rather than into argv: it is arbitrary multi-line
+// markdown, and argv has length limits an argument does not warn you about.
+func (c *furrowClient) runStdin(op, stdin string, args ...string) ([]byte, error) {
+	return c.runFull(op, c.timeout, stdin, args...)
+}
+
 // runTimeout is run with an explicit deadline, for the commands that hit the
 // network (sync) rather than the local store.
 func (c *furrowClient) runTimeout(op string, timeout time.Duration, args ...string) ([]byte, error) {
+	return c.runFull(op, timeout, "", args...)
+}
+
+func (c *furrowClient) runFull(op string, timeout time.Duration, stdin string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -63,6 +74,9 @@ func (c *furrowClient) runTimeout(op string, timeout time.Duration, args ...stri
 	// a CLI/JSON client by contract (G204).
 	cmd := exec.CommandContext(ctx, c.bin, args...) //nolint:gosec
 	cmd.Dir = c.dir
+	if stdin != "" {
+		cmd.Stdin = strings.NewReader(stdin)
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 

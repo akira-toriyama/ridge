@@ -56,7 +56,10 @@ func lab(t *testing.T, dir string, name string, args ...string) []byte {
 // itself discovered.
 func labAdd(t *testing.T, dir, title string, extra ...string) string {
 	t.Helper()
-	args := append([]string{"add", title, "-r", "lab/lab", "--json"}, extra...)
+	// The title goes last, behind `--`: this harness seeds titles the tests
+	// choose, and one of them deliberately starts with a dash.
+	args := append([]string{"add", "-r", "lab/lab", "--json"}, extra...)
+	args = append(args, "--", title)
 	out := lab(t, dir, "furrow", args...)
 	var row struct {
 		ID string `json:"id"`
