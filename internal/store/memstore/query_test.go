@@ -437,6 +437,13 @@ func TestQueryPresenceVocabularyIsFurrows(t *testing.T) {
 		{"repo", all, 0},
 		{"epic", 18, all - 18},
 		{"checklist", 7, all - 7},
+		// value/effort/body are presence fields too. They used to be "covered"
+		// by a `has + no == all` check below, which is the exact tautology this
+		// file condemns elsewhere: `no:` is the literal negation of `has:`, so
+		// it holds for any predicate at all, including a broken one.
+		{"value", 22, 1},
+		{"effort", 22, 1},
+		{"body", 23, 0},
 	}
 	for _, tc := range cases {
 		t.Run(tc.field, func(t *testing.T) {
@@ -453,10 +460,6 @@ func TestQueryPresenceVocabularyIsFurrows(t *testing.T) {
 	err := queryErr(t, "no:dep")
 	if !strings.Contains(err.Error(), "deps") {
 		t.Errorf("no:dep refusal should point at deps: %v", err)
-	}
-	// value/effort are presence fields too, and the fixture carries both.
-	if len(matched(t, "has:value"))+len(matched(t, "no:value")) != all {
-		t.Error("has:value and no:value must partition the board")
 	}
 }
 

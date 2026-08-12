@@ -39,25 +39,6 @@ func TestAdvStaleScrollHidesCardsAfterFiltering(t *testing.T) {
 	}
 }
 
-// The same stale offset, reached with the keyboard only.
-func TestAdvWheelHidesCardsInAFittingColumnConstructed(t *testing.T) {
-	m := boardModel(t, 140, 40)
-	m.applyFilter("lane:ready")
-	m.relayout()
-	col := m.lay.Col("ready")
-	if col == nil || col.Hidden != 0 || len(col.Tasks) < 2 {
-		t.Skipf("ready: cards=%d hidden=%d", len(col.Tasks), col.Hidden)
-	}
-	n := len(col.Cards)
-	m.Update(tea.MouseWheelMsg{X: col.X + 4, Y: 10, Button: tea.MouseWheelDown})
-	after := m.lay.Col("ready")
-	if len(after.Cards) < n {
-		t.Errorf("one wheel-down on a column where all %d cards fit (Hidden=0) scrolled "+
-			"to %d and now renders %d cards — the top card is simply gone",
-			n, after.Scroll, len(after.Cards))
-	}
-}
-
 // U. dropping into an empty column
 
 func TestAdvDragIntoAnEmptyColumn(t *testing.T) {

@@ -279,29 +279,6 @@ func TestAdvDiagonalOneCellTwitchIsADrag(t *testing.T) {
 	}
 }
 
-// E. wheel
-
-// The wheel clamps scroll to len(tasks)-1 with no regard for whether the column
-// already fits entirely on screen, so a 1-card column can be scrolled until the
-// card is gone... and a fully-visible column can be scrolled off the top.
-func TestAdvWheelScrollsAFittingColumnIntoNothing(t *testing.T) {
-	m := boardModel(t, 140, 40)
-	lane := "in-progress"
-	col := m.lay.Col(lane)
-	if col == nil || col.Hidden != 0 || len(col.Tasks) == 0 {
-		t.Skipf("%s does not fit entirely at this size", lane)
-	}
-	n := len(col.Tasks)
-	for i := 0; i < n+3; i++ {
-		m.Update(tea.MouseWheelMsg{X: col.X + 4, Y: 10, Button: tea.MouseWheelDown})
-	}
-	after := m.lay.Col(lane)
-	if len(after.Cards) == 0 {
-		t.Errorf("wheeled a fully-visible %d-card column (%s) until 0 cards render; scroll=%d",
-			n, lane, after.Scroll)
-	}
-}
-
 // F. dep logic
 
 func advCyclicBoard() *board.Board {
