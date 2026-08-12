@@ -47,6 +47,30 @@ const (
 	fieldCount // one past the last menu row
 )
 
+// editFieldName is the menu row's label, spelled once: the menu renders it and
+// the status row names the field the sub-editor is on.
+func editFieldName(f editField) string {
+	switch f {
+	case fieldTitle:
+		return "title"
+	case fieldValue:
+		return "value"
+	case fieldEffort:
+		return "effort"
+	case fieldLabels:
+		return "labels"
+	case fieldEpic:
+		return "epic"
+	case fieldDue:
+		return "due"
+	case fieldRepos:
+		return "repos"
+	case fieldChecklist:
+		return "checklist"
+	}
+	return ""
+}
+
 // inputKind says what the text input commits to.
 type inputKind int
 
@@ -84,12 +108,36 @@ func (m *Model) enterEdit() {
 	m.mode = modeEdit
 	m.peekOpen = true
 	m.syncPeek()
-	m.note("edit %s — ⏎ pick a field · esc closes", t.ID)
+	m.noteEditStage()
 }
 
 func (m *Model) exitEdit() {
 	m.mode = modeNormal
 	m.edit = nil
+}
+
+// noteEditStage keeps the bottom row true as the overlay moves between stages.
+// enterEdit wrote it once and nothing re-wrote it, so every sub-editor still
+// advertised "⏎ pick a field · esc closes" — while in stageList ⏎ was toggling
+// a checklist item and esc went BACK to the menu, and in stagePick ⏎ was a
+// literal no-op. It is the only note in the app that made an imperative key
+// claim false at read time, which is the failure the one-row status exists to
+// prevent. Every other mode already re-notes on state change.
+func (m *Model) noteEditStage() {
+	e := m.edit
+	if e == nil {
+		return
+	}
+	switch e.stage {
+	case stagePick:
+		m.note("edit %s · %s — 1-5 sets · 0 clears · esc back", e.id, editFieldName(e.field))
+	case stageList:
+		m.note("edit %s · %s — ⏎/x toggle · esc back", e.id, editFieldName(e.field))
+	case stageInput:
+		m.note("edit %s · %s — ⏎ apply · esc back", e.id, inputTitleFor(e.inputFor))
+	default:
+		m.note("edit %s — ⏎ pick a field · esc closes", e.id)
+	}
 }
 
 // editTask resolves the task under edit; losing it (a reload dropped the id)
@@ -131,6 +179,7 @@ func (m *Model) onEditKey(msg tea.KeyPressMsg) tea.Cmd {
 			m.exitEdit()
 		} else {
 			e.stage, e.listIdx = stageMenu, 0
+			m.noteEditStage()
 		}
 		return nil
 	case key.Matches(msg, m.keys.Quit) && e.stage == stageMenu:
@@ -169,6 +218,7 @@ func (m *Model) openField(f editField, t *board.Task) tea.Cmd {
 		return m.startInput(inputTitle, t.Title, "title")
 	case fieldValue, fieldEffort:
 		e.stage = stagePick
+		m.noteEditStage()
 	case fieldDue:
 		cur := ""
 		if !t.Due.IsZero() {
@@ -185,6 +235,7 @@ func (m *Model) openField(f editField, t *board.Task) tea.Cmd {
 			// fall back to row 0 when the task really is unfiled.
 			e.listIdx = epicRow(m.b.Epics(), t.Epic)
 		}
+		m.noteEditStage()
 	}
 	return nil
 }
@@ -210,6 +261,7 @@ func (m *Model) startInput(kind inputKind, value, placeholder string) tea.Cmd {
 	e.input.SetValue(value)
 	e.input.Placeholder = placeholder
 	e.input.SetWidth(48)
+	m.noteEditStage()
 	return e.input.Focus()
 }
 
@@ -552,14 +604,14 @@ func (m *Model) renderEditMenu(t *board.Task, inner int) string {
 	}
 	cd, ct := t.CheckProgress()
 	rows := []struct{ name, cur string }{
-		{"title", ansi.Truncate(t.Title, inner-14, "…")},
-		{"value", est(t.Value)},
-		{"effort", est(t.Effort)},
-		{"labels", strings.Join(t.Labels, ",")},
-		{"epic", epicLabel},
-		{"due", due},
-		{"repos", ansi.Truncate(strings.Join(t.Repos, ","), inner-14, "…")},
-		{"checklist", fmt.Sprintf("%d/%d", cd, ct)},
+		{editFieldName(fieldTitle), ansi.Truncate(t.Title, inner-14, "…")},
+		{editFieldName(fieldValue), est(t.Value)},
+		{editFieldName(fieldEffort), est(t.Effort)},
+		{editFieldName(fieldLabels), strings.Join(t.Labels, ",")},
+		{editFieldName(fieldEpic), epicLabel},
+		{editFieldName(fieldDue), due},
+		{editFieldName(fieldRepos), ansi.Truncate(strings.Join(t.Repos, ","), inner-14, "…")},
+		{editFieldName(fieldChecklist), fmt.Sprintf("%d/%d", cd, ct)},
 	}
 	var b strings.Builder
 	for i, r := range rows {

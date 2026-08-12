@@ -653,7 +653,12 @@ func (m *Model) closeGraph() {
 	// (graphMove, rerootGraph) already guard; this one did not.
 	if l := m.graphLay; l != nil {
 		if n := l.Node(m.graphSel); n != nil && n.Kind == egoReal {
-			m.selectID(n.ID, true)
+			// Same rule as jumpToBlocker/jumpBack: pin only what the filter
+			// would otherwise hide, so an unfiltered walk leaves no permanent
+			// exemption behind.
+			if !m.selectID(n.ID, false) {
+				m.selectID(n.ID, true)
+			}
 		}
 	}
 	m.note("board view — the cursor followed the graph walk")

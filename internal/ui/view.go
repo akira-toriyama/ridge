@@ -223,9 +223,18 @@ func (m *Model) modeBadge() string {
 
 func (m *Model) statusLine() string {
 	th := m.th
+	// A gesture owns this row, but this row is also m.status's ONLY render
+	// site. Returning the gesture string alone meant a persist refusal landing
+	// while a card was lifted rendered nowhere at all, and the rollback that
+	// followed was completely silent. Append instead of replace: the [slot N]
+	// readout has to stay while the card is still in the air.
+	warn := ""
+	if m.statusErr {
+		warn = th.errText.Render("   ⚠ " + m.status)
+	}
 	if m.mode == modeMove {
 		return th.accent.Render(fmt.Sprintf("%s MOVE %s → %s [slot %d]   ⏎ commit · esc restore",
-			glyphLift, m.moveID, m.dropLane, m.dropIdx))
+			glyphLift, m.moveID, m.dropLane, m.dropIdx)) + warn
 	}
 	if m.drag.moved {
 		// Same predicate as the release and the drop indicator. Saying
@@ -234,10 +243,10 @@ func (m *Model) statusLine() string {
 		if _, ok := m.dropTarget(m.drag.x, m.drag.y); !ok {
 			return th.accent.Render(fmt.Sprintf(
 				"%s DRAG %s   off the board — release cancels · drag back over a column to drop",
-				glyphLift, m.drag.id))
+				glyphLift, m.drag.id)) + warn
 		}
 		return th.accent.Render(fmt.Sprintf("%s DRAG %s → %s [slot %d]   release to drop · esc cancel",
-			glyphLift, m.drag.id, m.drag.dropLane, m.drag.dropIdx))
+			glyphLift, m.drag.id, m.drag.dropLane, m.drag.dropIdx)) + warn
 	}
 	if m.statusErr {
 		return th.errText.Render("⚠ " + m.status)

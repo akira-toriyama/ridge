@@ -556,13 +556,19 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 	case key.Matches(msg, m.keys.View):
 		// No note: the tab strip in the title row already says which view is
 		// up, and the whole screen changed.
+		// Capture the selection BEFORE switching: curTask() reads whichever
+		// view is current, so asking after the switch returned table row 0 —
+		// the row just assigned — and selectID then wrote that back over the
+		// board cursor, lane included. setSort already does this correctly
+		// ("a sort that teleports the cursor ... is a re-ordering of the user").
+		t := m.curTask()
 		if m.view == viewBoard {
 			m.view, m.tableIdx = viewTable, 0
-			if t := m.curTask(); t != nil {
-				m.selectID(t.ID, false)
-			}
 		} else {
 			m.view = viewBoard
+		}
+		if t != nil {
+			m.selectID(t.ID, false)
 		}
 
 	case key.Matches(msg, m.keys.Sort):
@@ -585,6 +591,14 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	case key.Matches(msg, m.keys.Peek):
 		m.peekOpen = !m.peekOpen
+		if !m.peekOpen {
+			// The tree renders only INSIDE the peek, so peek=false/tree=true is
+			// invisible state: the next esc came off the ladder's treeOpen rung
+			// and changed no pixel, and the next `t` appeared dead because it
+			// was toggling the tree back OFF. Make the pair unrepresentable
+			// rather than leave a state no frame can show.
+			m.treeOpen = false
+		}
 		m.syncPeek()
 
 	case key.Matches(msg, m.keys.PeekScroll):
@@ -850,7 +864,14 @@ func (m *Model) jumpBack() {
 	}
 	id := m.jumpStack[len(m.jumpStack)-1]
 	m.jumpStack = m.jumpStack[:len(m.jumpStack)-1]
-	m.selectID(id, true)
+	// Pin only when the target is genuinely hidden, the way jumpToBlocker does.
+	// A pin is a permanent filter exemption plus a "+N pinned by jump" chip,
+	// and pins are cleared only when the effective query empties — so pinning
+	// unconditionally on an unfiltered board leaked an exemption that then
+	// defied a filter typed later.
+	if !m.selectID(id, false) {
+		m.selectID(id, true)
+	}
 	m.note("← %s (%d left on the stack)", id, len(m.jumpStack))
 }
 

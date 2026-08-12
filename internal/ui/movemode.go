@@ -51,7 +51,13 @@ func (m *Model) enterMove() {
 // cancelMove restores both the board (nothing was mutated) and the cursor.
 func (m *Model) cancelMove() {
 	m.mode = modeNormal
-	m.note("move cancelled — %s stayed in %s", m.moveID, m.moveFrom)
+	// Do not overwrite a refusal the user has not seen yet. A persist failure
+	// that landed mid-gesture rides the MOVE row as a ⚠ suffix; clobbering it
+	// here was the second half of "the rollback lands silently" — the warning
+	// appeared for exactly as long as the card stayed lifted, and esc erased it.
+	if !m.statusErr {
+		m.note("move cancelled — %s stayed in %s", m.moveID, m.moveFrom)
+	}
 	m.curLane = m.moveCurLane
 	if m.moveCurIdx != nil {
 		m.curIdx = m.moveCurIdx
