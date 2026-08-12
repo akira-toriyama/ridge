@@ -130,3 +130,82 @@ func depth(n *DepNode) int {
 	}
 	return d + 1
 }
+
+// A node first reached AT the depth cap used to be recorded as "drawn" even
+// though it was emitted as a bare childless leaf. When the walk later reached
+// it by a SHORTER path it was flagged Repeat and not expanded, so the reader
+// was told "you already saw this subtree above" while the earlier drawing had
+// shown nothing — and everything under it, well inside the cap, disappeared.
+func TestTreeOfExpandsANodeFirstSeenAtTheDepthCap(t *testing.T) {
+	// root -> deep1 -> deep2 -> shared   (shared first met at depth 3)
+	// root -> shared -> leaf             (and again at depth 1, where it fits)
+	tasks := []*Task{
+		{ID: "root", Status: "backlog", Deps: []string{"deep1", "shared"}},
+		{ID: "deep1", Status: "backlog", Deps: []string{"deep2"}},
+		{ID: "deep2", Status: "backlog", Deps: []string{"shared"}},
+		{ID: "shared", Status: "backlog", Deps: []string{"leaf"}},
+		{ID: "leaf", Status: "backlog"},
+	}
+	g := NewGraph(NewBoard(tasks))
+
+	// A cap of 3 puts the deep sighting of `shared` exactly AT the cap.
+	tree := g.TreeOf("root", DirBlockedBy, 3)
+
+	var shallow *DepNode
+	for _, c := range tree.Children {
+		if c.ID == "shared" {
+			shallow = c
+		}
+	}
+	if shallow == nil {
+		t.Fatal("`shared` is a direct dep of root and must appear as a child of it")
+	}
+	if shallow.Repeat {
+		t.Error("the depth-1 sighting of `shared` is marked ↩seen, but the only earlier sighting was truncated at the cap and drew nothing")
+	}
+	if len(shallow.Children) == 0 {
+		t.Error("`leaf` sits at depth 2, well inside the cap of 3, and was dropped from the tree entirely")
+	}
+}
+
+// The Repeat marker must still fire for a genuine second sighting of a subtree
+// that WAS expanded — that is the DAG-flattening contract.
+func TestTreeOfStillMarksAGenuinelyRepeatedSubtree(t *testing.T) {
+	tasks := []*Task{
+		{ID: "root", Status: "backlog", Deps: []string{"a", "b"}},
+		{ID: "a", Status: "backlog", Deps: []string{"shared"}},
+		{ID: "b", Status: "backlog", Deps: []string{"shared"}},
+		{ID: "shared", Status: "backlog", Deps: []string{"leaf"}},
+		{ID: "leaf", Status: "backlog"},
+	}
+	g := NewGraph(NewBoard(tasks))
+	tree := g.TreeOf("root", DirBlockedBy, 9)
+
+	var sightings []*DepNode
+	var walk func(*DepNode)
+	walk = func(n *DepNode) {
+		if n.ID == "shared" {
+			sightings = append(sightings, n)
+		}
+		for _, c := range n.Children {
+			walk(c)
+		}
+	}
+	walk(tree)
+
+	if len(sightings) != 2 {
+		t.Fatalf("`shared` is reachable by two paths; got %d sightings", len(sightings))
+	}
+	expanded, repeats := 0, 0
+	for _, s := range sightings {
+		if s.Repeat {
+			repeats++
+		}
+		if len(s.Children) > 0 {
+			expanded++
+		}
+	}
+	if expanded != 1 || repeats != 1 {
+		t.Errorf("want exactly one expanded sighting and one ↩seen; got expanded=%d repeat=%d", expanded, repeats)
+	}
+}

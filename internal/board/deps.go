@@ -124,7 +124,6 @@ func (g *Graph) TreeOf(id string, dir Dir, maxDepth int) *DepNode {
 			n.Repeat = true
 			return n
 		}
-		drawn[cur] = true
 		if depth >= maxDepth || path[cur] {
 			return n
 		}
@@ -132,6 +131,15 @@ func (g *Graph) TreeOf(id string, dir Dir, maxDepth int) *DepNode {
 			n.Elided = true
 			return n
 		}
+		// Marked drawn only once the node is actually EXPANDED. Setting it
+		// above the two returns meant a node first reached AT the cap was
+		// emitted as a bare childless leaf and still counted as drawn — so a
+		// later, shallower sighting rendered `↩seen` ("you saw this subtree
+		// above") when the earlier drawing had shown nothing, and the in-cap
+		// remainder of that subtree vanished from the tree. Termination is
+		// unaffected: drawn still stops re-expansion, path[] still cuts
+		// cycles, and depth still only grows.
+		drawn[cur] = true
 		var next []string
 		if dir == DirBlockedBy {
 			if t := g.b.Task(cur); t != nil {
