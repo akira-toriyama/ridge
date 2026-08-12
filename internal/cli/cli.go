@@ -92,15 +92,6 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 		return CodeUsage
 	}
 
-	// -demo is a -dump modifier (glossary), and it used to be READ only inside
-	// the -dump branch while still forcing the fixture: a bare `-demo move`
-	// launched an ordinary fixture TUI with the state silently dropped, and a
-	// bare `-demo bogus` exited 0 without ever validating the name.
-	if *demo != "" && !*dump {
-		_, _ = fmt.Fprintf(stderr, "error: -demo %s needs -dump (it fixes one transient state into a single frame)\n", *demo)
-		return CodeUsage
-	}
-
 	// Which flags the caller actually TYPED. Testing the values instead would
 	// make a flag with a non-zero default (-cols, -rows) indistinguishable
 	// from one left alone.
@@ -114,6 +105,10 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 		// damagingly -mock, which left `-benchload -mock` reading the REAL
 		// store. Derived from the flag set, so a new flag is refused here by
 		// default rather than joining the list of things quietly dropped.
+		//
+		// Checked BEFORE the -demo gate below: otherwise `-benchload -demo move`
+		// told the user to add -dump, and adding it produced a second, different
+		// refusal — two steps to learn the combination was never going to work.
 		for _, name := range []string{
 			"mock", "readonly", "dump", "demo", "plain", "cols", "rows",
 			"filter", "peek", "tree", "table", "light",
@@ -130,6 +125,15 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 			return CodeUsage
 		}
 		return runBenchload(stdout, stderr, perf)
+	}
+
+	// -demo is a -dump modifier (glossary), and it used to be READ only inside
+	// the -dump branch while still forcing the fixture: a bare `-demo move`
+	// launched an ordinary fixture TUI with the state silently dropped, and a
+	// bare `-demo bogus` exited 0 without ever validating the name.
+	if *demo != "" && !*dump {
+		_, _ = fmt.Fprintf(stderr, "error: -demo %s needs -dump (it fixes one transient state into a single frame)\n", *demo)
+		return CodeUsage
 	}
 
 	// -dump is the headless verification surface; it stays on the fixture so

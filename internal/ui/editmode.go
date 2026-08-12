@@ -427,18 +427,30 @@ func (m *Model) onEditInputKey(msg tea.KeyPressMsg, t *board.Task) tea.Cmd {
 		case inputNewLabel:
 			e.stage = stageList
 			if v == "" {
+				// An empty submission just backs out to the list, so the row
+				// has to stop advertising the input's keys — in stageList ⏎
+				// TOGGLES, which is a board write, not an apply.
+				m.noteEditStage()
 				return nil
 			}
 			return m.applyPatch("label", board.FieldPatch{AddLabels: []string{v}})
 		case inputNewRepo:
 			e.stage = stageList
 			if v == "" {
+				// An empty submission just backs out to the list, so the row
+				// has to stop advertising the input's keys — in stageList ⏎
+				// TOGGLES, which is a board write, not an apply.
+				m.noteEditStage()
 				return nil
 			}
 			return m.applyPatch("repo", board.FieldPatch{AddRepos: []string{v}})
 		case inputCheckAdd:
 			e.stage = stageList
 			if v == "" {
+				// An empty submission just backs out to the list, so the row
+				// has to stop advertising the input's keys — in stageList ⏎
+				// TOGGLES, which is a board write, not an apply.
+				m.noteEditStage()
 				return nil
 			}
 			return m.applyCheck("check add", func() error { return m.b.CheckAdd(t.ID, v) },

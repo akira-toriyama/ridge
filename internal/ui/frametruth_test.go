@@ -151,6 +151,32 @@ func TestARefusalDuringAGestureReachesTheFrame(t *testing.T) {
 	if !strings.Contains(ansiStrip(m.View().Content), "store refused") {
 		t.Error("esc clobbered the unread refusal — the rollback lands silently again")
 	}
+
+	// The DRAG half of the same fix, which the move-only body left unpinned:
+	// deleting the warning from both drag branches was green.
+	t.Run("during a drag", func(t *testing.T) {
+		for _, where := range []string{"over a column", "off the board"} {
+			m := boardModel(t, 240, 60)
+			c := m.lay.Col("backlog")
+			if c == nil || len(c.Cards) == 0 {
+				t.Skip("backlog is empty")
+			}
+			x, y := c.X+3, c.Top+1
+			if where == "off the board" {
+				y = rowColHdr
+			}
+			dragFrom(t, m, "backlog", x, y)
+			m.fail("move t-x: store refused — rolling back")
+
+			frame := ansiStrip(m.View().Content)
+			if !strings.Contains(frame, "store refused") {
+				t.Errorf("%s: a refusal raised mid-drag never reached the frame", where)
+			}
+			if !strings.Contains(frame, "DRAG") {
+				t.Errorf("%s: the refusal replaced the DRAG readout instead of riding alongside it", where)
+			}
+		}
+	})
 }
 
 // The bottom row makes imperative key claims; they must be true at read time.
@@ -301,5 +327,27 @@ func TestEscapingATextInputRenotesTheStage(t *testing.T) {
 	}
 	if !strings.Contains(m.status, "pick a field") {
 		t.Errorf("escaping the input left the row on the input's keys: %q", m.status)
+	}
+
+	// The OTHER exit: submitting an empty value also backs out to the list,
+	// where ⏎ toggles rather than applies. Only the esc exit re-noted, so the
+	// row kept "⏎ apply" while ⏎ had become a board write.
+	m.openField(fieldLabels, m.editTask())
+	if m.edit.stage != stageList {
+		t.Fatalf("labels did not open a list, stage=%v", m.edit.stage)
+	}
+	press(m, "a") // new-label input
+	if m.edit.stage != stageInput {
+		t.Fatalf("`a` did not open the input, stage=%v", m.edit.stage)
+	}
+	press(m, "enter") // empty submission
+	if m.edit.stage != stageList {
+		t.Fatalf("an empty submission left the stage at %v", m.edit.stage)
+	}
+	if strings.Contains(m.status, "apply") {
+		t.Errorf("after an empty submission the row still claims ⏎ applies, but ⏎ now toggles: %q", m.status)
+	}
+	if !strings.Contains(m.status, "toggle") {
+		t.Errorf("the row does not name the list stage's keys: %q", m.status)
 	}
 }

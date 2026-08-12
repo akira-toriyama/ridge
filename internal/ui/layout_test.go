@@ -36,14 +36,14 @@ func TestGlyphsAreSingleWidth(t *testing.T) {
 	}
 }
 
-// The geometry is handed straight to the mouse hit-test, so a card whose
-// measured height differs from its rendered height would make cards accept
-// drops aimed at their neighbours.
 // testColW is one representative card width. The whole range the app actually
 // negotiates (38-64 cells, from terminals 238-404 wide) is swept by
 // TestCardLinesFillTheirColumnAcrossTheDeclaredWidthRange.
 const testColW = 28
 
+// The geometry is handed straight to the mouse hit-test, so a card whose
+// measured height differs from its rendered height would make cards accept
+// drops aimed at their neighbours.
 func TestCardGeometryMatchesTheRender(t *testing.T) {
 	b, g := fixtureGraph(t)
 	th := newTheme(true)
