@@ -144,8 +144,11 @@ func (m *Model) demoState(kind string) error {
 		m.add.input.SetValue("盤面から起票するタスク")
 
 	case "edit":
-		// Open the field-edit overlay on a task with a checklist AND labels,
-		// so the menu row values and the checklist cursor are all exercised.
+		// Open the field-edit overlay on a task with a checklist AND labels
+		// and advance straight into the checklist sub-editor — the stage with
+		// a cursor, which is the one a still frame can say something about.
+		// The menu rows themselves are NOT exercised by this demo; they are
+		// covered by unit tests instead.
 		if !m.selectID("t-9sa6", false) {
 			return fmt.Errorf("demo edit: t-9sa6 is not on the fixture board")
 		}

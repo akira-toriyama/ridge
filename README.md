@@ -134,6 +134,7 @@ go run ./cmd/ridge -demo slice -dump         # slice パネル（label:ui 選択
 go run ./cmd/ridge -demo sort -dump          # Table を due ▲ でソートした状態
 go run ./cmd/ridge -demo filter -dump        # フィルタ入力がキーボードを持っている状態
 go run ./cmd/ridge -demo fail -dump          # 書き込みが拒否された ⚠ 行
+go run ./cmd/ridge -demo help -dump          # `?` キー一覧オーバーレイ
 go run ./cmd/ridge -readonly -dump           # schema gate で read-only の盤面
 ```
 
@@ -152,9 +153,10 @@ go run ./cmd/ridge -readonly -dump           # schema gate で read-only の盤�
 ## スタック
 
 ```
-charm.land/bubbletea/v2  ランタイム
-charm.land/lipgloss/v2   スタイル・レイアウト・コンポジタ（Layer / Hit）
-charm.land/bubbles/v2    help / key / textinput / viewport
+charm.land/bubbletea/v2      ランタイム
+charm.land/lipgloss/v2       スタイル・レイアウト・コンポジタ（Layer / Hit）
+charm.land/bubbles/v2        help / key / textinput / viewport
+github.com/charmbracelet/x/ansi  幅を保つ切り詰め（CJK 必須。`len()` 禁止の相方）
 ```
 
 v2 からモジュールパスが `github.com/charmbracelet/*` → `charm.land/*` に

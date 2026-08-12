@@ -148,8 +148,10 @@ func TestProgramNegotiatesAltScreenAndMouseOnTheWire(t *testing.T) {
 	if strings.Contains(raw, "\x1b[?1003h") {
 		t.Error("the program requested AllMotion (1003); CellMotion (1002) is the house choice")
 	}
-	// The window title is a View field too.
-	if !strings.Contains(raw, "furrow board (POC)") {
+	// The window title is a View field too. Asserted on the stable half: the
+	// title used to carry "(POC)" long after the POC phase ended, and pinning
+	// the whole string here is what kept it there.
+	if !strings.Contains(raw, "furrow board") {
 		t.Error("the window title never reached the terminal")
 	}
 }

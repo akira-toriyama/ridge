@@ -122,7 +122,13 @@ func defaultKeys() keyMap {
 
 		// Note WithKeys("shift+space"), not " " and not "shift+ ": key.Matches
 		// compares Key.String(), which renders the space bar as "space".
-		Graph:       key.NewBinding(key.WithKeys("shift+space", "S"), key.WithHelp("⇧space", "dep graph")),
+		// BOTH keys in the label, unlike MoveTop/MoveBottom where the hidden
+		// alias is the dead one. Here it is the printed key that is dead:
+		// shift+space cannot be encoded without the Kitty protocol, so on
+		// macOS Terminal and most tmux `S` is the only way in — and the `?`
+		// overlay, which renders Help() and can never show a WithKeys alias,
+		// was advertising only the unreachable half.
+		Graph:       key.NewBinding(key.WithKeys("shift+space", "S"), key.WithHelp("⇧space/S", "dep graph")),
 		GraphRoot:   key.NewBinding(key.WithKeys("enter"), key.WithHelp("⏎", "re-root here")),
 		GraphRadius: key.NewBinding(key.WithKeys("z", "1", "2", "3", "0"), key.WithHelp("z/1-3/0", "hop radius")),
 	}
@@ -146,15 +152,27 @@ type helpSection struct {
 // modal inputs (filter / edit / add / slice) are absent by the same rule that
 // keeps dead keys out — their keys live inside their overlays, and `?` cannot
 // even be typed there.
-func (k keyMap) HelpSections() []helpSection {
+// enterEdits says whether ⏎/m would open the EDIT overlay rather than lift the
+// card — it diverts with the peek open or on a table row (model.go). The one
+// canonical key list has to name the thing the next press actually does.
+func (k keyMap) HelpSections(enterEdits bool) []helpSection {
+	open := k.Move
+	if enterEdits {
+		open = key.NewBinding(key.WithKeys("enter", "m"), key.WithHelp("⏎/m", "edit fields"))
+	}
 	return []helpSection{
 		{"normal mode", [][]key.Binding{
 			{k.Up, k.Down, k.Left, k.Right, k.NextCol, k.PrevCol, k.Top, k.Bottom},
-			{k.Move, k.QuickUp, k.QuickDown, k.LaneBack, k.LaneFwd, k.Done, k.Edit, k.Add},
+			{open, k.QuickUp, k.QuickDown, k.LaneBack, k.LaneFwd, k.Done, k.Edit, k.Add},
 			{k.Peek, k.Tree, k.PeekScroll, k.Filter, k.OnlyBlock, k.Slice, k.View, k.Sort},
 			{k.Graph, k.JumpBlock, k.JumpBack, k.Reload, k.Sync, k.Mouse, k.Cancel, k.Help, k.Quit},
 		}},
 		{"move mode", [][]key.Binding{
+			// The arrows come first because they are how the lifted card is
+			// actually placed; onMoveKey has handled them all along, and the
+			// section that omitted them left the extremes looking like the
+			// only movement on offer.
+			{k.Up, k.Down, k.Left, k.Right},
 			{k.Commit, k.Cancel},
 			{k.MoveTop, k.MoveBottom},
 			{k.MoveFirst, k.MoveLast},
@@ -163,6 +181,10 @@ func (k keyMap) HelpSections() []helpSection {
 		// turned this block into "your keys right now", so listing 2 of the ~10
 		// keys — and no way out — was an assertion, not an omission.
 		{"graph", [][]key.Binding{
+			// Sharpest omission of the three: re-rooting answers "is already
+			// the root — move the selection first" while no listed key moved
+			// it. onGraphKey has always handled the arrows.
+			{k.Up, k.Down, k.Left, k.Right},
 			{k.GraphRoot, k.GraphRadius},
 			{k.JumpBack, k.PeekScroll},
 			{k.View, k.Cancel},

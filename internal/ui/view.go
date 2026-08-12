@@ -58,7 +58,7 @@ func (m *Model) View() tea.View {
 	// from space until every key comes back as an escape code. Basic
 	// disambiguation (flag 1, always on) is not enough for this gesture.
 	v.KeyboardEnhancements = tea.KeyboardEnhancements{ReportAllKeysAsEscapeCodes: true}
-	v.WindowTitle = "furrow board (POC)"
+	v.WindowTitle = "furrow board"
 	return v
 }
 
@@ -430,7 +430,7 @@ func (m *Model) helpLayer() *lg.Layer {
 
 	// Render each section as its own block first…
 	var blocks []string
-	for _, sec := range m.keys.HelpSections() {
+	for _, sec := range m.keys.HelpSections(m.view == viewTable || m.peekOpen) {
 		hdr := m.th.dim.Render(sec.title)
 		if sec.title == now {
 			hdr = m.th.accent.Render(sec.title + " — you are here")

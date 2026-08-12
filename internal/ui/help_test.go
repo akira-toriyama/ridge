@@ -1,6 +1,11 @@
 package ui
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"charm.land/bubbles/v2/key"
+)
 
 // Esc takes off the TOP layer and nothing else. The board's Cancel used to have
 // no fullHelp case at all, so `?` then Esc left the overlay up AND quietly
@@ -109,5 +114,86 @@ func TestEscClosesHelpInsideTheGraph(t *testing.T) {
 	}
 	if m.view != viewGraph {
 		t.Error("esc closing the help also left the graph")
+	}
+}
+
+// `?` is the canonical key list, built from the same bindings the Update path
+// matches on so it "cannot advertise a key that does not work". The converse
+// was never checked: it could, and did, OMIT keys that do work.
+func TestHelpListsEveryKeyItsSectionsModesHandle(t *testing.T) {
+	k := defaultKeys()
+	secs := k.HelpSections(false)
+
+	byTitle := map[string]helpSection{}
+	for _, s := range secs {
+		byTitle[s.title] = s
+	}
+
+	lists := func(sec helpSection, want key.Binding) bool {
+		for _, g := range sec.groups {
+			for _, b := range g {
+				if b.Help().Key == want.Help().Key {
+					return true
+				}
+			}
+		}
+		return false
+	}
+
+	// onMoveKey and onGraphKey both handle the arrows; neither section listed
+	// them. In the graph that was sharp: re-rooting answers "move the
+	// selection first" and no listed key moved it.
+	for _, title := range []string{"move mode", "graph"} {
+		sec, ok := byTitle[title]
+		if !ok {
+			t.Fatalf("no %q section in the help overlay", title)
+		}
+		for _, b := range []key.Binding{k.Up, k.Down, k.Left, k.Right} {
+			if !lists(sec, b) {
+				t.Errorf("the %q section omits %q, which its own handler acts on", title, b.Help().Key)
+			}
+		}
+	}
+}
+
+// shift+space cannot be encoded without the Kitty keyboard protocol, so on a
+// plain terminal `S` is the only way into the graph. The overlay renders
+// Help(), which can never show a WithKeys alias, so it advertised only the
+// half that does not work.
+func TestHelpAdvertisesThePortableGraphKey(t *testing.T) {
+	frame := strings.Join(dumpFrame(t, 240, 50, "help"), "\n")
+	if !strings.Contains(frame, "S") || !strings.Contains(frame, "dep graph") {
+		t.Fatal("the help overlay does not mention the graph at all")
+	}
+	for _, line := range strings.Split(frame, "\n") {
+		if !strings.Contains(line, "dep graph") {
+			continue
+		}
+		if !strings.Contains(line, "/S") {
+			t.Errorf("the graph entry advertises only the key a plain terminal cannot send: %q", strings.TrimSpace(line))
+		}
+		return
+	}
+}
+
+// ⏎/m lifts the card on the bare board and opens the EDIT overlay with the
+// peek open or on a table row. The one canonical list has to say which.
+func TestHelpNamesWhatEnterWillActuallyDo(t *testing.T) {
+	k := defaultKeys()
+	find := func(enterEdits bool) string {
+		for _, g := range k.HelpSections(enterEdits)[0].groups {
+			for _, b := range g {
+				if b.Help().Key == "⏎/m" {
+					return b.Help().Desc
+				}
+			}
+		}
+		return ""
+	}
+	if got := find(false); got != "move mode" {
+		t.Errorf("on the bare board ⏎/m lifts the card, help says %q", got)
+	}
+	if got := find(true); got == "move mode" {
+		t.Error("with the peek open or in Table view ⏎/m opens the edit overlay, but help still says move mode")
 	}
 }

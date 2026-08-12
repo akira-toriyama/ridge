@@ -9,15 +9,22 @@ import (
 	lg "charm.land/lipgloss/v2"
 )
 
-// Every glyph the UI draws must be single-width. An East-Asian-AMBIGUOUS glyph
-// (★ and ⊘ are both ambiguous) measures 1 here and 2 in a CJK-configured
-// terminal, which shears the right border of every card by one column — and
-// this fixture is entirely Japanese titles, so it would show up immediately.
+// Every glyph the UI draws must measure one cell. What this rejects is a Wide
+// or Fullwidth rune, which would shear the right border of every card by one
+// column on a board that is entirely Japanese titles.
+//
+// It does NOT reject East-Asian-ambiguous runes, and must not: lipgloss scores
+// them 1, five of the glyphs below are ambiguous (▤ ↕ ▲ ▼ ●), and the
+// box-drawing frame around every card is ambiguous too. Adding an EAW check
+// here would fail on all of them and on the borders — the "ambiguous renders
+// narrow" assumption is load-bearing for the whole UI, not just these runes.
 func TestGlyphsAreSingleWidth(t *testing.T) {
+	// Every glyph const in theme.go, so "every glyph the UI draws" is true.
 	glyphs := map[string]string{
 		"actionable": glyphActionable, "blocked": glyphBlocked, "epic": glyphEpic,
 		"done": glyphDone, "open": glyphOpen,
 		"unknown": glyphUnknown, "wipOver": glyphWIPOver, "drop": glyphDrop,
+		"dropL": glyphDropL, "dropR": glyphDropR, "laneDot": glyphLaneDot,
 		"lift": glyphLift, "sortAsc": glyphSortAsc, "sortDesc": glyphSortDesc,
 	}
 	for name, g := range glyphs {
