@@ -122,7 +122,7 @@ due / repos / checklist（カーソルで項目選択・toggle/add/delete/reword
 
 ```sh
 go test ./...                      # 全テスト（furrow が PATH にあれば contract test も回る）
-go run ./cmd/ridge -dump -plain -w 240 -h 60 # 1フレームを平文で出力
+go run ./cmd/ridge -dump -plain -cols 240 -rows 60 # 1フレームを平文で出力
 go run ./cmd/ridge -dump -peek               # 詳細ペインを開いた状態
 go run ./cmd/ridge -dump -tree               # 依存ツリーを開いた状態
 go run ./cmd/ridge -demo graph -dump         # 依存グラフ

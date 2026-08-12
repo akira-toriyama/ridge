@@ -7,6 +7,7 @@ package cli
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"sync"
@@ -31,39 +32,100 @@ const (
 	// died. The invocation was well-formed; fix the environment and retry.
 	CodeRun Code = 1
 	// CodeUsage is a malformed invocation — an unknown -demo, an unopenable
-	// -perflog. Fix the arguments; retrying verbatim cannot succeed.
-	// flag.ExitOnError exits with 2 on unparseable flags, matching this.
+	// -perflog, a flag combination with no coherent meaning. Fix the
+	// arguments; retrying verbatim cannot succeed.
 	CodeUsage Code = 2
 )
 
 // Execute runs ridge and returns the process exit code. It is the one funnel
 // between every failure and the number the shell sees.
-func Execute() Code {
-	var (
-		dump      = flag.Bool("dump", false, "render one frame to stdout at -w x -h and exit (no TTY needed; always the fixture)")
-		w         = flag.Int("w", 140, "width for -dump")
-		h         = flag.Int("h", 40, "height for -dump")
-		filter    = flag.String("filter", "", "initial filter query, e.g. 'lane:backlog is:blocked'")
-		peek      = flag.Bool("peek", false, "-dump with the detail side-peek open")
-		tree      = flag.Bool("tree", false, "-dump with the dep tree overlay open (implies -peek)")
-		table     = flag.Bool("table", false, "-dump the table view")
-		light     = flag.Bool("light", false, "light palette")
-		plain     = flag.Bool("plain", false, "-dump without ANSI styling (diffable)")
-		demo      = flag.String("demo", "", "-dump in a transient state: "+strings.Join(ui.DemoNames, "|")+" (always the fixture)")
-		mock      = flag.Bool("mock", false, "serve the built-in fixture instead of the real furrow store")
-		readonly  = flag.Bool("readonly", false, "serve the fixture as a schema-gated read-only board (implies -mock)")
-		perflog   = flag.String("perflog", "", "append one 'op\\tms' line per furrow command to this file")
-		benchload = flag.Bool("benchload", false, "load the real board once, print the latency breakdown, exit (read-only)")
-	)
-	flag.Parse()
+func Execute() Code { return run(os.Args[1:], os.Stdout, os.Stderr) }
 
-	if *benchload {
-		return runBenchload()
+// run is Execute with its process globals passed in, so the exit-code contract
+// above can actually be asserted by a test.
+func run(argv []string, stdout, stderr io.Writer) Code {
+	// A private FlagSet with ContinueOnError, not the global one: ExitOnError
+	// calls os.Exit from inside Parse, which makes every code path below
+	// unreachable from a test and takes the exit code out of this funnel's
+	// hands.
+	fs := flag.NewFlagSet("ridge", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+
+	var (
+		dump = fs.Bool("dump", false, "render one frame to stdout at -cols x -rows and exit (no TTY needed; always the fixture)")
+		// -cols/-rows, not -w/-h: `-h` is the one flag name every CLI reserves
+		// for help, and binding it to a height made `ridge -h` fail with
+		// "flag needs an argument: -h" and exit 2.
+		cols      = fs.Int("cols", 240, "width for -dump (240 is the board's design floor)")
+		rows      = fs.Int("rows", 40, "height for -dump")
+		filter    = fs.String("filter", "", "initial filter query, e.g. 'lane:backlog is:blocked'")
+		peek      = fs.Bool("peek", false, "-dump with the detail side-peek open")
+		tree      = fs.Bool("tree", false, "-dump with the dep tree overlay open (implies -peek)")
+		table     = fs.Bool("table", false, "-dump the table view")
+		light     = fs.Bool("light", false, "light palette")
+		plain     = fs.Bool("plain", false, "-dump without ANSI styling (diffable)")
+		demo      = fs.String("demo", "", "-dump in a transient state: "+strings.Join(ui.DemoNames, "|")+" (requires -dump; always the fixture)")
+		mock      = fs.Bool("mock", false, "serve the built-in fixture instead of the real furrow store")
+		readonly  = fs.Bool("readonly", false, "serve the fixture as a schema-gated read-only board (implies -mock)")
+		perflog   = fs.String("perflog", "", "append one 'op\\tms' line per furrow command to this file")
+		benchload = fs.Bool("benchload", false, "load the real board once, print the latency breakdown, exit (read-only)")
+		// Both spellings are DEFINED rather than left to flag's built-in
+		// handler, which writes the usage block to stderr — explicitly asked-for
+		// help is the payload, so `ridge --help | grep demo` has to work.
+		help  = fs.Bool("help", false, "print this usage and exit")
+		helpH = fs.Bool("h", false, "print this usage and exit")
+	)
+
+	if err := fs.Parse(argv); err != nil {
+		// Parse already wrote the complaint and the usage block to stderr.
+		return CodeUsage
+	}
+	if *help || *helpH {
+		fs.SetOutput(stdout)
+		fs.Usage()
+		return CodeOK
+	}
+	if n := fs.NArg(); n > 0 {
+		_, _ = fmt.Fprintf(stderr, "error: ridge takes no positional arguments, got %q\n", fs.Arg(0))
+		return CodeUsage
 	}
 
-	// -dump and -demo are the headless verification surface; they stay on the
-	// fixture so their frames are deterministic and diffable.
-	useMock := *mock || *dump || *demo != "" || *readonly
+	// -demo is a -dump modifier (glossary), and it used to be READ only inside
+	// the -dump branch while still forcing the fixture: a bare `-demo move`
+	// launched an ordinary fixture TUI with the state silently dropped, and a
+	// bare `-demo bogus` exited 0 without ever validating the name.
+	if *demo != "" && !*dump {
+		_, _ = fmt.Fprintf(stderr, "error: -demo %s needs -dump (it fixes one transient state into a single frame)\n", *demo)
+		return CodeUsage
+	}
+
+	if *benchload {
+		// Every other flag either contradicts benchload or is silently
+		// dropped by it; saying so beats measuring something the caller did
+		// not ask for. -mock in particular used to be accepted and ignored,
+		// so `-benchload -mock` read the REAL store.
+		for _, bad := range []struct {
+			name string
+			on   bool
+		}{{"-mock", *mock}, {"-dump", *dump}, {"-readonly", *readonly}, {"-demo", *demo != ""}} {
+			if bad.on {
+				_, _ = fmt.Fprintf(stderr, "error: -benchload measures the real store; %s cannot apply\n", bad.name)
+				return CodeUsage
+			}
+		}
+		perf, err := perfHook(*perflog)
+		if err != nil {
+			_, _ = fmt.Fprintln(stderr, "error: -perflog:", err)
+			return CodeUsage
+		}
+		return runBenchload(stdout, stderr, perf)
+	}
+
+	// -dump is the headless verification surface; it stays on the fixture so
+	// its frames are deterministic and diffable. -demo is not listed: it is
+	// refused above unless -dump is set, so it can no longer force the fixture
+	// on its own.
+	useMock := *mock || *dump || *readonly
 
 	var (
 		prov   board.Provider
@@ -82,14 +144,14 @@ func Execute() Code {
 	default:
 		perf, err := perfHook(*perflog)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "error: -perflog:", err)
+			_, _ = fmt.Fprintln(stderr, "error: -perflog:", err)
 			return CodeUsage
 		}
 		start := time.Now()
 		p, err := furrowstore.New(perf)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "error:", err)
-			fmt.Fprintln(os.Stderr, "hint: `ridge -mock` runs the built-in fixture without a furrow store")
+			_, _ = fmt.Fprintln(stderr, "error:", err)
+			_, _ = fmt.Fprintln(stderr, "hint: `ridge -mock` runs the built-in fixture without a furrow store")
 			return CodeRun
 		}
 		prov, loadMS = p, int(time.Since(start).Milliseconds())
@@ -105,17 +167,19 @@ func Execute() Code {
 	})
 
 	if *dump {
-		out, err := m.Dump(*w, *h, *demo, *plain)
+		out, err := m.Dump(*cols, *rows, *demo, *plain)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "error:", err)
+			// The only failure Dump has is an unknown -demo name, which is a
+			// malformed invocation.
+			_, _ = fmt.Fprintln(stderr, "error:", err)
 			return CodeUsage
 		}
-		fmt.Println(out)
+		_, _ = fmt.Fprintln(stdout, out)
 		return CodeOK
 	}
 
 	if _, err := tea.NewProgram(m).Run(); err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
+		_, _ = fmt.Fprintln(stderr, "error:", err)
 		return CodeRun
 	}
 	return CodeOK
@@ -124,7 +188,7 @@ func Execute() Code {
 // runBenchload answers t-s86r's standing question — what does opening the
 // real board cost? — with reads only: the three furrow execs (concurrent),
 // the body files, nothing written anywhere.
-func runBenchload() Code {
+func runBenchload(stdout, stderr io.Writer, extra func(op string, d time.Duration)) Code {
 	var mu sync.Mutex
 	type sample struct {
 		op string
@@ -133,14 +197,20 @@ func runBenchload() Code {
 	var samples []sample
 	perf := func(op string, d time.Duration) {
 		mu.Lock()
-		defer mu.Unlock()
 		samples = append(samples, sample{op, d.Milliseconds()})
+		mu.Unlock()
+		// -perflog used to be dropped here: the branch returned before
+		// perfHook ran at all, so the one mode whose purpose is measuring
+		// furrow latency discarded the flag that persists the measurement.
+		if extra != nil {
+			extra(op, d)
+		}
 	}
 
 	start := time.Now()
 	p, err := furrowstore.New(perf)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
+		_, _ = fmt.Fprintln(stderr, "error:", err)
 		return CodeRun
 	}
 	total := time.Since(start).Milliseconds()
@@ -153,9 +223,9 @@ func runBenchload() Code {
 		}
 	}
 	for _, s := range samples {
-		fmt.Printf("%-8s %4dms (concurrent)\n", s.op, s.ms)
+		_, _ = fmt.Fprintf(stdout, "%-8s %4dms (concurrent)\n", s.op, s.ms)
 	}
-	fmt.Printf("%-8s %4dms  %d tasks · %d epics · %d bodies read\n",
+	_, _ = fmt.Fprintf(stdout, "%-8s %4dms  %d tasks · %d epics · %d bodies read\n",
 		"total", total, len(b.Tasks()), len(b.Epics()), bodies)
 	return CodeOK
 }
