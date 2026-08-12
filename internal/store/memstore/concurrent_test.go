@@ -150,3 +150,57 @@ func TestGatedStoreStaysGatedAcrossReload(t *testing.T) {
 		t.Error("the reloaded board lost its schema gate")
 	}
 }
+
+// A quick add is not a reload. The first attempt at the Reload contract built
+// the post-add board from the PRISTINE base, so adding a card in -mock threw
+// away every move and edit made in the session — caught by independent review,
+// reproduced here first.
+func TestAddKeepsSessionEdits(t *testing.T) {
+	p := New()
+	b := p.Board()
+	victim := b.Tasks()[0]
+	if _, err := b.MoveTo(victim.ID, "ready", 0); err != nil {
+		t.Fatal(err)
+	}
+
+	id, err := p.Add("新しいカード", board.AddOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	after := p.Board()
+	if after.Task(id) == nil {
+		t.Errorf("the add did not reach the new snapshot")
+	}
+	if got := after.Task(victim.ID).Status; got != "ready" {
+		t.Errorf("the add discarded a session move: %s is back in %s", victim.ID, got)
+	}
+}
+
+// NewWith hands back the caller's own board, so an add appended during the
+// first rebuild is still present on the second. Without a guard every reload
+// stacked another copy of the same id.
+func TestAddsAreNotDuplicatedByRepeatedReloadsOnAHandedInBoard(t *testing.T) {
+	b := board.NewBoard([]*board.Task{{ID: "t-1", Status: "backlog", Priority: 10}})
+	p := NewWith(b)
+
+	id, err := p.Add("一度だけ現れるべき", board.AddOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 3; i++ {
+		if err := p.Reload(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	n := 0
+	for _, task := range p.Board().Tasks() {
+		if task.ID == id {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("after three reloads %s appears %d times", id, n)
+	}
+}

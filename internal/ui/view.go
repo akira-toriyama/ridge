@@ -237,16 +237,19 @@ func (m *Model) statusLine() string {
 			glyphLift, m.moveID, m.dropLane, m.dropIdx)) + warn
 	}
 	if m.drag.moved {
-		// Same predicate as the release and the drop indicator. Saying
-		// "release to drop" over the chrome, the gutter or the peek was a lie
-		// the release then made good on by cancelling.
-		if _, ok := m.dropTarget(m.drag.x, m.drag.y); !ok {
+		// Same predicate as the release and the drop indicator, and the same
+		// lane it resolves — naming the motion-time cache here could announce
+		// a different column from the one the bar marks. Saying "release to
+		// drop" over the chrome, the gutter or the peek was a lie the release
+		// then made good on by cancelling.
+		to, ok := m.dropTarget(m.drag.x, m.drag.y)
+		if !ok {
 			return th.accent.Render(fmt.Sprintf(
 				"%s DRAG %s   off the board — release cancels · drag back over a column to drop",
 				glyphLift, m.drag.id)) + warn
 		}
 		return th.accent.Render(fmt.Sprintf("%s DRAG %s → %s [slot %d]   release to drop · esc cancel",
-			glyphLift, m.drag.id, m.drag.dropLane, m.drag.dropIdx)) + warn
+			glyphLift, m.drag.id, to, m.lay.idxAtY(to, m.drag.y))) + warn
 	}
 	if m.statusErr {
 		return th.errText.Render("⚠ " + m.status)
@@ -362,16 +365,18 @@ func (m *Model) dropLayer() *lg.Layer {
 	case m.mode == modeMove:
 		lane, idx = m.dropLane, m.dropIdx
 	case m.drag.moved:
-		// Ask the same predicate the RELEASE asks, and ask it now rather than
-		// trusting a bool cached at motion time: an auto-scroll relayout or a
-		// resize moves the columns under a pointer that never sent another
-		// event. Off the board there is no slot to mark — the release cancels,
-		// and an insertion bar promising otherwise made the "will drop" and
-		// "will cancel" frames byte-identical.
-		if _, ok := m.dropTarget(m.drag.x, m.drag.y); !ok {
+		// Ask the same predicate the RELEASE asks, take the lane IT resolves,
+		// and ask now rather than trusting values cached at motion time: an
+		// auto-scroll relayout or a resize moves the columns under a pointer
+		// that never sent another event, so the cached lane can name a column
+		// the release would not choose. Off the board there is no slot to mark
+		// — the release cancels, and an insertion bar promising otherwise made
+		// the "will drop" and "will cancel" frames byte-identical.
+		to, ok := m.dropTarget(m.drag.x, m.drag.y)
+		if !ok {
 			return nil
 		}
-		lane, idx = m.drag.dropLane, m.drag.dropIdx
+		lane, idx = to, m.lay.idxAtY(to, m.drag.y)
 	default:
 		return nil
 	}

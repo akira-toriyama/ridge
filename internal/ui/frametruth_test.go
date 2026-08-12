@@ -252,3 +252,54 @@ func itoa(n int) string {
 	}
 	return string(b)
 }
+
+// The stage note must not erase a refusal the user has not read — the same rule
+// this branch gave cancelMove. A rejected edit reports through m.fail, and the
+// stage change that follows would wipe it.
+func TestTheEditStageNoteDoesNotClobberARefusal(t *testing.T) {
+	m := boardModel(t, 240, 60)
+	if len(m.cols["backlog"]) == 0 {
+		t.Skip("backlog is empty")
+	}
+	m.selectID(m.cols["backlog"][0].ID, false)
+	m.enterEdit()
+	if m.edit == nil {
+		t.Fatal("the edit overlay did not open")
+	}
+
+	m.fail("value: store refused the write — rolling back")
+	m.openField(fieldChecklist, m.editTask())
+
+	if !strings.Contains(m.status, "store refused") {
+		t.Errorf("opening a field erased the unread refusal; the row now reads %q", m.status)
+	}
+	if !m.statusErr {
+		t.Error("the refusal lost its error styling")
+	}
+}
+
+// Esc out of a text input lands on a different stage, so the row has to follow.
+func TestEscapingATextInputRenotesTheStage(t *testing.T) {
+	m := boardModel(t, 240, 60)
+	if len(m.cols["backlog"]) == 0 {
+		t.Skip("backlog is empty")
+	}
+	m.selectID(m.cols["backlog"][0].ID, false)
+	m.enterEdit()
+
+	m.openField(fieldTitle, m.editTask()) // stageInput
+	if m.edit.stage != stageInput {
+		t.Fatalf("title did not open a text input, stage=%v", m.edit.stage)
+	}
+	if !strings.Contains(m.status, "apply") {
+		t.Errorf("the input stage should advertise applying; got %q", m.status)
+	}
+
+	press(m, "esc") // back to the menu
+	if m.edit == nil || m.edit.stage != stageMenu {
+		t.Fatal("esc did not return to the menu")
+	}
+	if !strings.Contains(m.status, "pick a field") {
+		t.Errorf("escaping the input left the row on the input's keys: %q", m.status)
+	}
+}

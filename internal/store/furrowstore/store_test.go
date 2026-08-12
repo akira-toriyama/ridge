@@ -108,8 +108,12 @@ func TestContractLoadMapsTheStore(t *testing.T) {
 	if b.Lane("inbox") == nil || b.DoneLane() == "" {
 		t.Errorf("lane vocabulary not mapped: %+v", b.Lanes())
 	}
-	if got := b.Lane(b.DoneLane()); got == nil || !got.Done {
-		t.Error("the done lane must be marked done")
+	// DoneLane() finds the lane whose Done flag is set, so asserting that
+	// lane's Done flag proves nothing. Assert the MAPPING instead: furrow
+	// reports done_lane and ridge must mark that lane. Dropping
+	// `Done: name == cfg.DoneLane` makes this return "".
+	if got := b.DoneLane(); got != "done" {
+		t.Errorf("furrow's done_lane mapped to %q, want \"done\"", got)
 	}
 
 	x := b.Task(t1)

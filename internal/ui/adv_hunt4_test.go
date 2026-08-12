@@ -31,10 +31,10 @@ func advSmallModel(t *testing.T, w, h int) *Model {
 	return m
 }
 
-// The wheel has two clamps and this is the SOLE guard on either: three sibling
-// tests aimed at the shipped fixture, and every one of them skipped on every
-// run because no terminal size satisfied its precondition. They are gone; this
-// builds the board it needs instead.
+// The wheel has two clamps and these two tests are the only guard on either:
+// three sibling tests aimed at the shipped fixture, and every one of them
+// skipped on every run because no terminal size satisfied its precondition.
+// They are gone; these build the board they need instead.
 //
 // Clamp 1: wheel-down does nothing when nothing is below the fold. Without it,
 // one wheel-down on a column where every card already fits scrolls the top card
@@ -46,6 +46,16 @@ func TestAdvWheelScrollsAColumnThatEntirelyFits(t *testing.T) {
 		t.Fatalf("setup: cards=%d hidden=%d", len(col.Cards), col.Hidden)
 	}
 	m.Update(tea.MouseWheelMsg{X: col.X + 4, Y: 10, Button: tea.MouseWheelDown})
+
+	// On m.scroll, the field the wheel WRITES — not on the laid-out column.
+	// buildLayout clamps every offset to maxScrollFor, which is 0 for a column
+	// that fits, so the rendered result is identical with or without the
+	// handler's guard and an assertion on it cannot fail. (Independent review
+	// caught exactly that: deleting `if c.Hidden > 0` left the suite green.)
+	if got := m.scroll["ready"]; got != 0 {
+		t.Errorf("wheel-down on a column with Hidden=0 advanced the stored offset to %d; "+
+			"the layout hides it today, but the model now disagrees with what is on screen", got)
+	}
 	after := m.lay.Col("ready")
 	if after.Scroll != 0 || len(after.Cards) != 3 {
 		t.Errorf("wheel-down on a column with Hidden=0: scroll %d->%d, cards 3->%d "+

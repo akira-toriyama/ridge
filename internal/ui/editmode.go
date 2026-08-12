@@ -128,6 +128,13 @@ func (m *Model) noteEditStage() {
 	if e == nil {
 		return
 	}
+	// Never over-write a refusal nobody has read yet. applyPatch reports a
+	// rejected edit through m.fail, and the stage change that follows would
+	// erase it — the same failure cancelMove was taught to avoid in this
+	// branch, and the reason the status row exists at all.
+	if m.statusErr {
+		return
+	}
 	switch e.stage {
 	case stagePick:
 		m.note("edit %s · %s — 1-5 sets · 0 clears · esc back", e.id, editFieldName(e.field))
@@ -405,6 +412,7 @@ func (m *Model) onEditInputKey(msg tea.KeyPressMsg, t *board.Task) tea.Cmd {
 		} else {
 			e.stage = stageList
 		}
+		m.noteEditStage()
 		return nil
 	case key.Matches(msg, m.keys.Commit):
 		v := strings.TrimSpace(e.input.Value())

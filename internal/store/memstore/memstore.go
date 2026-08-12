@@ -81,7 +81,12 @@ func NewGated(schema string) *Store {
 func (p *Store) gate() error { return p.writeErr }
 
 // Board returns the current snapshot (board.Provider).
-func (p *Store) Board() *board.Board {
+func (p *Store) Board() *board.Board { return p.snapshot() }
+
+// snapshot is the ONE read of the current board. Every Persist* and Query runs
+// on the persist queue's goroutine while the UI thread renders, so none of them
+// may touch the field directly.
+func (p *Store) snapshot() *board.Board {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.b
@@ -113,10 +118,26 @@ func (p *Store) rebuild() *board.Board {
 
 	b := p.base()
 	for i := range added {
+		// NewWith's base is the caller's OWN board, handed back as-is, so an
+		// add appended to it on the first rebuild is still there on the
+		// second. Without this guard every reload stacked another copy of the
+		// same id.
+		if b.Task(added[i].ID) != nil {
+			continue
+		}
 		t := cloneTask(added[i])
 		b.Append(&t)
 	}
 	return b
+}
+
+// withTask copies a board's task list, appends one task and returns a NEW
+// board. The original is left untouched — it is the snapshot the UI thread is
+// rendering.
+func withTask(b *board.Board, extra *board.Task) *board.Board {
+	tasks := append([]*board.Task(nil), b.Tasks()...)
+	tasks = append(tasks, extra)
+	return board.NewStoreBoard(b.Lanes(), tasks, b.Epics(), b.Writable(), b.SchemaState())
 }
 
 // cloneTask deep-copies the slice fields so a rebuilt board never aliases the
@@ -141,10 +162,10 @@ func (p *Store) PersistMove(id, lane, _, _ string) ([]string, error) {
 	if err := p.gate(); err != nil {
 		return nil, err
 	}
-	if p.b.Task(id) == nil {
+	if p.snapshot().Task(id) == nil {
 		return nil, fmt.Errorf("unknown task %q", id)
 	}
-	if p.b.Lane(lane) == nil {
+	if p.snapshot().Lane(lane) == nil {
 		return nil, fmt.Errorf("unknown lane %q", lane)
 	}
 	return nil, nil
@@ -155,7 +176,7 @@ func (p *Store) PersistDone(id string) error {
 	if err := p.gate(); err != nil {
 		return err
 	}
-	if p.b.Task(id) == nil {
+	if p.snapshot().Task(id) == nil {
 		return fmt.Errorf("unknown task %q", id)
 	}
 	return nil
@@ -166,7 +187,7 @@ func (p *Store) PersistCheck(id string, i int, _ bool) error {
 	if err := p.gate(); err != nil {
 		return err
 	}
-	t := p.b.Task(id)
+	t := p.snapshot().Task(id)
 	if t == nil {
 		return fmt.Errorf("unknown task %q", id)
 	}
@@ -181,7 +202,7 @@ func (p *Store) PersistBody(id, _ string) error {
 	if err := p.gate(); err != nil {
 		return err
 	}
-	if p.b.Task(id) == nil {
+	if p.snapshot().Task(id) == nil {
 		return fmt.Errorf("unknown task %q", id)
 	}
 	return nil
@@ -195,13 +216,17 @@ var _ board.Provider = (*Store)(nil)
 // no ids. The lane and repo vocabularies come from the board being served,
 // because furrow validates those two at parse time.
 func (p *Store) Query(q string) ([]string, error) {
-	parsed := parseQuery(q, boardVocab(p.b))
+	// ONE snapshot for the whole evaluation: taking three would let a
+	// concurrent add parse the query against one board and match against
+	// another.
+	b := p.snapshot()
+	parsed := parseQuery(q, boardVocab(b))
 	if len(parsed.problems) > 0 {
 		return nil, fmt.Errorf("%s", strings.Join(parsed.problems, "; "))
 	}
-	g := board.NewGraph(p.b)
+	g := board.NewGraph(b)
 	var ids []string
-	for _, t := range p.b.Tasks() {
+	for _, t := range b.Tasks() {
 		if parsed.match(t, g) {
 			ids = append(ids, t.ID)
 		}
@@ -215,7 +240,7 @@ func (p *Store) PersistFields(id string, _ board.FieldPatch) error {
 	if err := p.gate(); err != nil {
 		return err
 	}
-	if p.b.Task(id) == nil {
+	if p.snapshot().Task(id) == nil {
 		return fmt.Errorf("unknown task %q", id)
 	}
 	return nil
@@ -226,7 +251,7 @@ func (p *Store) PersistCheckAdd(id, _ string) error {
 	if err := p.gate(); err != nil {
 		return err
 	}
-	if p.b.Task(id) == nil {
+	if p.snapshot().Task(id) == nil {
 		return fmt.Errorf("unknown task %q", id)
 	}
 	return nil
@@ -237,7 +262,7 @@ func (p *Store) PersistCheckRm(id string, i int) error {
 	if err := p.gate(); err != nil {
 		return err
 	}
-	t := p.b.Task(id)
+	t := p.snapshot().Task(id)
 	if t == nil {
 		return fmt.Errorf("unknown task %q", id)
 	}
@@ -297,12 +322,12 @@ func (p *Store) Add(title string, o board.AddOptions) (string, error) {
 		t.Priority = 10
 	}
 	p.added = append(p.added, t)
-	p.mu.Unlock()
-
-	// A FRESH board, not an append to the one already on screen.
-	b := p.rebuild()
-	p.mu.Lock()
-	p.b = b
+	// A fresh board carrying the CURRENT session state plus the new card.
+	// Building it from the pristine base instead would make a quick add
+	// silently throw away every move and edit made this session — Reload is
+	// the operation that discards, an add is not.
+	added := cloneTask(t)
+	p.b = withTask(cur, &added)
 	p.mu.Unlock()
 	return t.ID, nil
 }

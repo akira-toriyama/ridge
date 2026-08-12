@@ -15,8 +15,17 @@ import (
 // walk was at 0% coverage, and no -demo frame can prove any of them: a demo is
 // one still, and re-root/retrace/radius are transitions between stills.
 //
-// These tests drive Update() without View(), which is also what made the
-// closeGraph nil guard necessary — graphLay is written by the renderer.
+// Most of these call the handlers directly rather than through Update(), and
+// graphModel renders once first so graphLay exists. The exception is
+// TestClosingTheGraphBeforeItRendersDoesNotPanic, which deliberately skips that
+// render — the state every headless driver in this package can reach and the
+// one the nil guard exists for.
+//
+// Only three of these fail against the pre-fix source (the two panics and the
+// epic-id leak). The rest are new coverage for handlers that were correct but
+// untested; they are verified by mutation instead — dropping the graphStack
+// push, freezing cycleGraphRadius, or removing closeGraph's cursor carry each
+// turns one of them red.
 
 // graphModel opens the graph rooted on a task that has structure in both
 // directions, and renders once so graphLay exists.
@@ -242,9 +251,21 @@ func TestGraphStripResolvesTheEpicTitle(t *testing.T) {
 	if strings.Contains(frame, withEpic.Epic) {
 		t.Errorf("the raw epic id %q leaked into the graph frame — every other view resolves it", withEpic.Epic)
 	}
-	if title := m.b.Epic(withEpic.Epic).Title; title != "" && !strings.Contains(frame, truncatedPrefix(title)) {
-		t.Errorf("the graph strip did not render the epic title %q", title)
+
+	// On the line that actually carries the strip's "epic " label, not merely
+	// somewhere in the frame: the title also appears on cards, so a
+	// frame-wide Contains passes against a strip that resolves nothing.
+	title := m.b.Epic(withEpic.Epic).Title
+	if title == "" {
+		t.Skip("the fixture epic has no title to resolve")
 	}
+	want := truncatedPrefix(title)
+	for _, line := range strings.Split(frame, "\n") {
+		if strings.Contains(line, "epic ") && strings.Contains(line, want) {
+			return
+		}
+	}
+	t.Errorf("no line carries both the strip's \"epic \" label and the resolved title %q", title)
 }
 
 // truncatedPrefix is the leading run of a title that survives any wrap or
