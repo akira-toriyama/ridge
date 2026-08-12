@@ -95,7 +95,7 @@ due / repos / checklist（カーソルで項目選択・toggle/add/delete/reword
 | `?` | **キー一覧**（ここから全部辿れる） |
 | `Space` | 詳細ペイン |
 | `S` | 依存グラフ |
-| `Enter` | move mode（`Enter` 確定・`Esc` 取消） |
+| `Enter` | move mode（`Enter` 確定・`Esc` 取消）。**peek を開いていると / Table では編集メニュー** |
 | `q` | 終了 |
 
 画面下部は1行だけで、そこに出るのは**画面に出ていないこと**（今入ったモードの

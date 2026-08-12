@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	lg "charm.land/lipgloss/v2"
+
 	"github.com/akira-toriyama/ridge/internal/ui"
 )
 
@@ -165,13 +167,63 @@ func TestDumpDefaultsToTheDesignFloor(t *testing.T) {
 	if code != CodeOK {
 		t.Fatalf("exited %d: %s", code, errb)
 	}
+	// DISPLAY width, not rune count: the fixture is Japanese and one rune is
+	// two cells, so counting runes understates every line that carries a title.
 	widest := 0
 	for _, line := range strings.Split(out, "\n") {
-		if n := len([]rune(line)); n > widest {
+		if n := lg.Width(line); n > widest {
 			widest = n
 		}
 	}
 	if widest < 200 {
 		t.Errorf("the default dump is only %d cells wide; the README declares 240 the floor", widest)
+	}
+}
+
+// -benchload used to accept and ignore most of the flag surface. The list is
+// derived from what the caller TYPED, so a flag left at its default never
+// trips it.
+func TestBenchloadRefusesEveryFrameShapingFlag(t *testing.T) {
+	for _, arg := range [][]string{
+		{"-mock"}, {"-readonly"}, {"-dump"}, {"-plain"},
+		{"-cols", "300"}, {"-rows", "50"}, {"-filter", "lane:ready"},
+		{"-peek"}, {"-tree"}, {"-table"}, {"-light"},
+	} {
+		args := append([]string{"-benchload"}, arg...)
+		code, _, errb := runArgs(t, args...)
+		if code != CodeUsage {
+			t.Errorf("%v exited %d, want %d", args, code, CodeUsage)
+		}
+		if !strings.Contains(errb, strings.TrimPrefix(arg[0], "-")) {
+			t.Errorf("%v did not name the offending flag: %q", args, errb)
+		}
+	}
+}
+
+// -perflog measures furrow execs. On the fixture there are none, and perfHook
+// is not even consulted — so accepting it promised a log that never gets written.
+func TestPerflogIsRefusedOnTheFixture(t *testing.T) {
+	log := filepath.Join(t.TempDir(), "perf.tsv")
+	for _, arg := range []string{"-mock", "-dump", "-readonly"} {
+		code, _, errb := runArgs(t, arg, "-perflog", log)
+		if code != CodeUsage {
+			t.Errorf("%s -perflog exited %d, want %d", arg, code, CodeUsage)
+		}
+		if !strings.Contains(errb, "perflog") {
+			t.Errorf("%s -perflog did not explain itself: %q", arg, errb)
+		}
+	}
+	if _, err := os.Stat(log); err == nil {
+		t.Error("a refused -perflog still created the file")
+	}
+}
+
+// A flag left at its default must not trip the benchload refusal.
+func TestBenchloadAcceptsAnUntypedDefault(t *testing.T) {
+	// -cols has a non-zero default; testing values rather than what was typed
+	// would refuse every benchload run.
+	code, _, errb := runArgs(t, "-benchload", "-perflog", filepath.Join(t.TempDir(), "p.tsv"))
+	if code == CodeUsage && strings.Contains(errb, "cannot apply") {
+		t.Errorf("-benchload refused itself over an untyped default: %q", errb)
 	}
 }

@@ -219,10 +219,10 @@ func TestDragRendersAGhostAndLeavesAShadow(t *testing.T) {
 	}
 
 	// And the clamps, asserted as the PROPERTY they exist for rather than by
-	// recomputing the formula. The old assertion re-derived X using
-	// colOuterW — a constant with no production readers left — and at these
-	// coordinates neither bound bound, so it degenerated to the line above and
-	// pinned nothing. Y had no assertion at all.
+	// recomputing the formula. The old assertion re-derived X using the
+	// since-deleted colOuterW — by then a constant with no production readers
+	// — and at these coordinates neither bound bound, so it degenerated to the
+	// line above and pinned nothing. Y had no assertion at all.
 	//
 	// The ghost is a layer, and a compositor grows its canvas to fit any
 	// layer: one that overhangs widens the whole frame.

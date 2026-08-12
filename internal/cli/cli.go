@@ -31,9 +31,11 @@ const (
 	// CodeRun is a runtime failure — the store was unreachable or the program
 	// died. The invocation was well-formed; fix the environment and retry.
 	CodeRun Code = 1
-	// CodeUsage is a malformed invocation — an unknown -demo, an unopenable
-	// -perflog, a flag combination with no coherent meaning. Fix the
-	// arguments; retrying verbatim cannot succeed.
+	// CodeUsage is a malformed invocation — an unknown flag or -demo, a
+	// positional argument, an unopenable -perflog, or a flag combination with
+	// no coherent meaning (-demo without -dump, -benchload with anything that
+	// shapes a frame, -perflog with the fixture). Fix the arguments; retrying
+	// verbatim cannot succeed.
 	CodeUsage Code = 2
 )
 
@@ -99,17 +101,26 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 		return CodeUsage
 	}
 
+	// Which flags the caller actually TYPED. Testing the values instead would
+	// make a flag with a non-zero default (-cols, -rows) indistinguishable
+	// from one left alone.
+	set := map[string]bool{}
+	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
+
 	if *benchload {
-		// Every other flag either contradicts benchload or is silently
-		// dropped by it; saying so beats measuring something the caller did
-		// not ask for. -mock in particular used to be accepted and ignored,
-		// so `-benchload -mock` read the REAL store.
-		for _, bad := range []struct {
-			name string
-			on   bool
-		}{{"-mock", *mock}, {"-dump", *dump}, {"-readonly", *readonly}, {"-demo", *demo != ""}} {
-			if bad.on {
-				_, _ = fmt.Fprintf(stderr, "error: -benchload measures the real store; %s cannot apply\n", bad.name)
+		// -benchload opens the real store, prints a latency breakdown and
+		// exits. Everything that shapes a FRAME or swaps in the fixture is
+		// meaningless to it, and it used to accept them all silently — most
+		// damagingly -mock, which left `-benchload -mock` reading the REAL
+		// store. Derived from the flag set, so a new flag is refused here by
+		// default rather than joining the list of things quietly dropped.
+		for _, name := range []string{
+			"mock", "readonly", "dump", "demo", "plain", "cols", "rows",
+			"filter", "peek", "tree", "table", "light",
+		} {
+			if set[name] {
+				_, _ = fmt.Fprintf(stderr,
+					"error: -benchload measures the real store and prints numbers; -%s cannot apply\n", name)
 				return CodeUsage
 			}
 		}
@@ -126,6 +137,15 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 	// refused above unless -dump is set, so it can no longer force the fixture
 	// on its own.
 	useMock := *mock || *dump || *readonly
+
+	// -perflog records the latency of furrow execs. The fixture runs none, and
+	// perfHook is not even consulted on that path — so accepting it there
+	// promises a measurement that will never be written.
+	if set["perflog"] && useMock {
+		_, _ = fmt.Fprintln(stderr,
+			"error: -perflog records furrow exec latency; the fixture (-mock/-dump/-readonly) execs nothing")
+		return CodeUsage
+	}
 
 	var (
 		prov   board.Provider

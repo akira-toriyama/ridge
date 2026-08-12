@@ -136,9 +136,20 @@ func (g *Graph) TreeOf(id string, dir Dir, maxDepth int) *DepNode {
 		// emitted as a bare childless leaf and still counted as drawn — so a
 		// later, shallower sighting rendered `↩seen` ("you saw this subtree
 		// above") when the earlier drawing had shown nothing, and the in-cap
-		// remainder of that subtree vanished from the tree. Termination is
-		// unaffected: drawn still stops re-expansion, path[] still cuts
-		// cycles, and depth still only grows.
+		// remainder of that subtree vanished from the tree.
+		//
+		// Termination rests on `drawn` and on depth, NOT on path[]: every node
+		// in path is an expanded ancestor, so it is already in drawn and the
+		// Repeat return above fires first. path[cur] is unreachable for depth>0
+		// and false at the root — it is a backstop the drawn check preempts,
+		// kept because it costs nothing and states the intent.
+		//
+		// Two residuals this does NOT fix, both narrower than the bug above:
+		// a node whose first expansion was itself truncated deeper down still
+		// reports `↩seen` on a later shallower sighting (it drew something,
+		// just not all of it), and two sightings that BOTH land at the cap now
+		// render as two bare leaves with nothing marking them the same node.
+		// Fixing either needs a drawnAt[] depth map and re-expansion.
 		drawn[cur] = true
 		var next []string
 		if dir == DirBlockedBy {

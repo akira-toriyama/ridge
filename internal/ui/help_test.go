@@ -140,18 +140,39 @@ func TestHelpListsEveryKeyItsSectionsModesHandle(t *testing.T) {
 		return false
 	}
 
-	// onMoveKey and onGraphKey both handle the arrows; neither section listed
-	// them. In the graph that was sharp: re-rooting answers "move the
-	// selection first" and no listed key moved it.
-	for _, title := range []string{"move mode", "graph"} {
+	// Every MODE-SPECIFIC key its handler acts on. The three globals — `?`,
+	// `q` and `^c` — are deliberately listed once, in normal mode, rather than
+	// repeated in every section; and in the graph `⇧space/S` is an alias for
+	// GraphRoot, already listed as `⏎ re-root here`, so a second row carrying
+	// the "dep graph" description would make the overlay worse, not better.
+	want := map[string][]key.Binding{
+		// onMoveKey (movemode.go)
+		"move mode": {k.Up, k.Down, k.Left, k.Right, k.Commit, k.Cancel,
+			k.MoveTop, k.MoveBottom, k.MoveFirst, k.MoveLast},
+		// onGraphKey (model.go)
+		"graph": {k.Up, k.Down, k.Left, k.Right, k.GraphRoot, k.GraphRadius,
+			k.JumpBack, k.PeekScroll, k.View, k.Cancel},
+	}
+	for title, bindings := range want {
 		sec, ok := byTitle[title]
 		if !ok {
 			t.Fatalf("no %q section in the help overlay", title)
 		}
-		for _, b := range []key.Binding{k.Up, k.Down, k.Left, k.Right} {
+		for _, b := range bindings {
 			if !lists(sec, b) {
 				t.Errorf("the %q section omits %q, which its own handler acts on", title, b.Help().Key)
 			}
+		}
+	}
+
+	// And the globals are reachable from the listing at all.
+	normal, ok := byTitle["normal mode"]
+	if !ok {
+		t.Fatal("no normal-mode section")
+	}
+	for _, b := range []key.Binding{k.Help, k.Quit} {
+		if !lists(normal, b) {
+			t.Errorf("normal mode omits the global key %q", b.Help().Key)
 		}
 	}
 }
@@ -178,22 +199,36 @@ func TestHelpAdvertisesThePortableGraphKey(t *testing.T) {
 
 // ⏎/m lifts the card on the bare board and opens the EDIT overlay with the
 // peek open or on a table row. The one canonical list has to say which.
+//
+// Driven through the RENDERED FRAME, not by calling HelpSections directly:
+// asking the keymap proves the parameter works but leaves the call site free
+// to pass a constant, which is exactly the mutation that survived the first
+// version of this test.
 func TestHelpNamesWhatEnterWillActuallyDo(t *testing.T) {
-	k := defaultKeys()
-	find := func(enterEdits bool) string {
-		for _, g := range k.HelpSections(enterEdits)[0].groups {
-			for _, b := range g {
-				if b.Help().Key == "⏎/m" {
-					return b.Help().Desc
+	descFor := func(t *testing.T, setup func(*Model)) string {
+		t.Helper()
+		m := boardModel(t, 240, 50)
+		setup(m)
+		m.fullHelp = true
+		for _, line := range strings.Split(ansiStrip(m.View().Content), "\n") {
+			if i := strings.Index(line, "⏎/m"); i >= 0 {
+				rest := strings.TrimSpace(line[i+len("⏎/m"):])
+				if j := strings.Index(rest, "  "); j > 0 {
+					rest = rest[:j]
 				}
+				return strings.TrimSpace(rest)
 			}
 		}
 		return ""
 	}
-	if got := find(false); got != "move mode" {
-		t.Errorf("on the bare board ⏎/m lifts the card, help says %q", got)
+
+	if got := descFor(t, func(*Model) {}); got != "move mode" {
+		t.Errorf("on the bare board ⏎/m lifts the card, the overlay says %q", got)
 	}
-	if got := find(true); got == "move mode" {
-		t.Error("with the peek open or in Table view ⏎/m opens the edit overlay, but help still says move mode")
+	if got := descFor(t, func(m *Model) { m.peekOpen = true; m.syncPeek() }); got == "move mode" {
+		t.Error("with the peek open ⏎/m opens the edit overlay, but the overlay still says move mode")
+	}
+	if got := descFor(t, func(m *Model) { m.view = viewTable }); got == "move mode" {
+		t.Error("in Table view ⏎/m opens the edit overlay, but the overlay still says move mode")
 	}
 }
