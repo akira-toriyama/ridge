@@ -126,7 +126,10 @@ func (m *Model) peekContent(w int) string {
 				// set: show the raw id rather than inventing a state.
 				parts = append(parts, d)
 			case de.Stuck:
-				parts = append(parts, fmt.Sprintf("%s (%d/%d) STUCK %s", d, de.Done, de.Total, de.Title))
+				// warn, like the own-epic line's STUCK: a marker that
+				// reads as dim body text is the one thing it must not be.
+				parts = append(parts, fmt.Sprintf("%s (%d/%d) %s %s",
+					d, de.Done, de.Total, th.warn.Render("STUCK"), de.Title))
 			default:
 				// Progress BEFORE the title: a CJK epic title routinely
 				// overflows the box and truncates, and the numbers are

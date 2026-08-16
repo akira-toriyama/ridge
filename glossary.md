@@ -68,7 +68,7 @@
 |---|---|
 | `▸` | **actionable** — next レーンにあり、すべての依存が完了済み（＝今すぐ着手できる）。 |
 | `x` / `x1` | **blocked** — 未完了の blocker がある（数字はその件数）。**隠さず印を付ける**（隠すのは `furrow next` の役目）。 |
-| `▤` | **epic チップ**。epic は lane を持たない別エンティティ（`EpicInfo`）で、カードには所属 epic のタイトルを解決して表示する。epic が stuck なら warn 色。peek には `(done/total)` と STUCK、epic が open な dep を待つ間は resolved な `epic waits on` 行（open は `id (d/t) title`・furrow が `open_deps` から解決済みの dep は `(satisfied)`。open/満了の判定は furrow 導出値で、ridge は再計算しない）。 |
+| `▤` | **epic チップ**。epic は lane を持たない別エンティティ（`EpicInfo`）で、カードには所属 epic のタイトルを解決して表示する。epic が stuck なら warn 色。peek には `(done/total)` と STUCK、epic が open な dep を待つ間は resolved な `epic waits on` 行（open は `id (d/t) title`・stuck なら `id (d/t) STUCK title`（warn 色）・furrow が `open_deps` から解決済みの dep は `(satisfied)`。open/満了の判定は furrow 導出値で、ridge は再計算しない）。 |
 | `v` | done。 |
 | `[0/7]` | チェックリストの進捗。 |
 | `v5 e4` | value / effort（各 1..5）。 |

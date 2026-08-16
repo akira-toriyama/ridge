@@ -69,6 +69,34 @@ func TestPeekOmitsTheDepLineWhenNothingIsOpen(t *testing.T) {
 	}
 }
 
+// The two dep renderings the fixture cannot hold: an open dep that is STUCK
+// (marked, warn-coloured like the own-epic line's STUCK) and a dep furrow
+// reports open but this read cannot resolve — shown as the bare id, the
+// promise the branch's comment makes. Unreachable against real furrow (the
+// unscoped read serves every open epic), so a synthetic board is the only
+// harness.
+func TestPeekMarksStuckAndUnresolvableOpenDeps(t *testing.T) {
+	b := board.NewBoard(
+		[]*board.Task{{ID: "t-solo", Title: "箱の中の一枚", Status: "backlog", Priority: 10, Epic: "e-wait"}},
+		board.EpicInfo{ID: "e-wait", Title: "待つ箱", Total: 1,
+			Deps: []string{"e-stuck", "e-ghost"}, OpenDeps: []string{"e-stuck", "e-ghost"}},
+		board.EpicInfo{ID: "e-stuck", Title: "詰まった箱", Done: 1, Total: 4, Stuck: true},
+	)
+	m := New(memstore.NewWith(b), Options{})
+	m.Update(tea.WindowSizeMsg{Width: 240, Height: 50})
+	if !m.selectID("t-solo", false) {
+		t.Fatal("t-solo is not on the synthetic board")
+	}
+	press(m, "space")
+	out := frame(m)
+	if !strings.Contains(out, "e-stuck (1/4) STUCK 詰まった箱") {
+		t.Error("an open stuck dep must carry the STUCK marker between progress and title")
+	}
+	if !strings.Contains(out, "e-ghost") || strings.Contains(out, "e-ghost (") {
+		t.Error("an open-but-unresolvable dep is the bare id — no invented state")
+	}
+}
+
 // The `-demo epicdeps` frame must actually carry the line it exists to show.
 // TestEveryAdvertisedDemoRenders only proves the frame differs from the bare
 // board, and the selectID alone satisfies that — a demo whose peek never
