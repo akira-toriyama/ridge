@@ -483,6 +483,20 @@ func (p *Store) PersistCheckReword(id string, i int, text string) error {
 	return err
 }
 
+// PersistDepAdd records an already-applied dependency via `furrow dep`
+// (board.Provider).
+func (p *Store) PersistDepAdd(id, dep string) error {
+	_, err := p.c.run("dep", "dep", id, dep)
+	return err
+}
+
+// PersistDepRm records an already-applied dependency removal via `furrow dep
+// --rm` (board.Provider).
+func (p *Store) PersistDepRm(id, dep string) error {
+	_, err := p.c.run("dep-rm", "dep", id, dep, "--rm")
+	return err
+}
+
 // addRow is the one field Add needs back from `furrow add --json` (a single
 // add answers with ONE object; only --stdin bulk answers with an array).
 type addRow struct {

@@ -404,3 +404,62 @@ func TestEditEpicOpensOnTheCurrentEpic(t *testing.T) {
 		t.Errorf("stale membership listIdx = %d, want 0", got)
 	}
 }
+
+func TestEditDepsRemovesAndAddsEdges(t *testing.T) {
+	m := editModel(t, "t-jv3j") // waits on t-ehk7 (open) and t-t38k (done)
+	m.edit.menuIdx = int(fieldDeps)
+	press(m, "enter") // into the deps list
+	if m.edit.stage != stageList || m.edit.field != fieldDeps {
+		t.Fatalf("the deps sub-editor did not open: stage=%d field=%d", m.edit.stage, m.edit.field)
+	}
+
+	// ⏎ on a row removes the edge — deps have no re-add toggle.
+	press(m, "enter")
+	if got := strings.Join(m.b.Task("t-jv3j").Deps, ","); got != "t-t38k" {
+		t.Errorf("deps = %q, want t-t38k (t-ehk7 removed)", got)
+	}
+	drainPersists(m, t)
+
+	// a + a task id re-adds it, and the rebuilt graph blocks on it again.
+	press(m, "a")
+	m.edit.input.SetValue("t-ehk7")
+	press(m, "enter")
+	if got := strings.Join(m.b.Task("t-jv3j").Deps, ","); got != "t-t38k,t-ehk7" {
+		t.Errorf("deps = %q, want t-t38k,t-ehk7", got)
+	}
+	if got := m.g.BlockedBy("t-jv3j"); len(got) != 1 || got[0] != "t-ehk7" {
+		t.Errorf("the graph must be recomputed after the add: BlockedBy = %v", got)
+	}
+	drainPersists(m, t)
+}
+
+func TestEditDepsRefusesWhatFurrowWould(t *testing.T) {
+	m := editModel(t, "t-jv3j")
+	m.edit.menuIdx = int(fieldDeps)
+	press(m, "enter")
+
+	// An id not on the board: refused locally, nothing queued.
+	press(m, "a")
+	m.edit.input.SetValue("t-nope")
+	press(m, "enter")
+	if got := strings.Join(m.b.Task("t-jv3j").Deps, ","); got != "t-ehk7,t-t38k" {
+		t.Errorf("a refused add must leave deps untouched: %q", got)
+	}
+	if !m.statusErr {
+		t.Error("the refusal must land on the status row")
+	}
+	if m.inflight || len(m.pending) > 0 {
+		t.Error("a locally refused add must not reach the persist queue")
+	}
+
+	// A cycle: t-pk4f already waits on t-jv3j, so t-jv3j → t-pk4f closes it.
+	press(m, "a")
+	m.edit.input.SetValue("t-pk4f")
+	press(m, "enter")
+	if got := strings.Join(m.b.Task("t-jv3j").Deps, ","); got != "t-ehk7,t-t38k" {
+		t.Errorf("a cycle-closing add must refuse: %q", got)
+	}
+	if m.inflight || len(m.pending) > 0 {
+		t.Error("a cycle-closing add must not reach the persist queue")
+	}
+}

@@ -511,3 +511,38 @@ func TestContractEpicDepsReachTheSnapshot(t *testing.T) {
 		t.Errorf("OpenDeps = %v, want [%s] — furrow resolves the closed dep away", e.OpenDeps, dep)
 	}
 }
+
+func TestContractPersistDepAddAndRm(t *testing.T) {
+	p, dir := newLabProvider(t)
+	waiter := labAdd(t, dir, "待つ方")
+	blocker := labAdd(t, dir, "先にやる方")
+
+	if err := p.PersistDepAdd(waiter, blocker); err != nil {
+		t.Fatalf("dep add: %v", err)
+	}
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	if got := p.Board().Task(waiter); len(got.Deps) != 1 || got.Deps[0] != blocker {
+		t.Errorf("deps = %v, want [%s]", got.Deps, blocker)
+	}
+
+	// The acyclic rule is furrow's own: the reverse edge must be refused,
+	// which is what makes the board-side mirror safe to trust optimistically.
+	if err := p.PersistDepAdd(blocker, waiter); err == nil {
+		t.Error("the cycle-closing dep was accepted; furrow must refuse it")
+	}
+	if err := p.PersistDepAdd(waiter, "t-nope"); err == nil {
+		t.Error("a dep on a missing id was accepted; every dep must exist")
+	}
+
+	if err := p.PersistDepRm(waiter, blocker); err != nil {
+		t.Fatalf("dep rm: %v", err)
+	}
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	if got := p.Board().Task(waiter); len(got.Deps) != 0 {
+		t.Errorf("deps = %v, want none after the rm", got.Deps)
+	}
+}

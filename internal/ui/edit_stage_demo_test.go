@@ -68,3 +68,24 @@ func TestEditInputDemoSeedsTheFocusedInput(t *testing.T) {
 		t.Error("the demo's input is not focused")
 	}
 }
+
+// The deps sub-editor demo must prove both state glyphs at once — an open dep
+// and a done one — plus the one-way key contract (remove, never toggle).
+func TestEditDepsDemoProvesBothStates(t *testing.T) {
+	m := New(memstore.New(), Options{})
+	frame, err := m.Dump(240, 60, "editdeps", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"edit t-jv3j",
+		"deps — waits on",
+		"o t-ehk7",
+		"v t-t38k",
+		"⏎/x remove · a add · esc back",
+	} {
+		if !strings.Contains(frame, want) {
+			t.Errorf("-demo editdeps: %q is missing from the frame", want)
+		}
+	}
+}

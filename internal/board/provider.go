@@ -70,6 +70,14 @@ type Provider interface {
 	// PersistCheckReword records checklist item i's already-applied rewording.
 	PersistCheckReword(id string, i int, text string) error
 
+	// PersistDepAdd records id's already-applied dependency on dep. The
+	// acyclic/exists rules are furrow's; the local apply (Board.DepAdd) only
+	// mirrors them, so a refusal here still rolls the board back.
+	PersistDepAdd(id, dep string) error
+
+	// PersistDepRm records id's already-applied dependency removal.
+	PersistDepRm(id, dep string) error
+
 	// Add creates a task in the store and returns its id. Unlike the
 	// Persist* family this is NOT the record of an applied edit: the store
 	// owns id assignment, so the model waits for the id and re-reads instead

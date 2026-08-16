@@ -58,6 +58,8 @@ func (p *scriptedProvider) Query(raw string) ([]string, error) {
 func (p *scriptedProvider) PersistFields(_ string, _ board.FieldPatch) error   { return nil }
 func (p *scriptedProvider) PersistCheckAdd(_, _ string) error                  { return nil }
 func (p *scriptedProvider) PersistCheckReword(_ string, _ int, _ string) error { return nil }
+func (p *scriptedProvider) PersistDepAdd(_, _ string) error                    { return nil }
+func (p *scriptedProvider) PersistDepRm(_, _ string) error                     { return nil }
 func (p *scriptedProvider) Live() bool                                         { return true }
 
 func (p *scriptedProvider) PersistCheckRm(id string, i int) error {
