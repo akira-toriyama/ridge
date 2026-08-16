@@ -607,11 +607,58 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 		// Driven explicitly rather than by forwarding keys to the viewport:
 		// viewport's default keymap owns up/down, which would make j/k scroll
 		// the peek AND move the board cursor at the same time.
-		if m.peekOpen {
-			if msg.String() == "ctrl+d" {
+		//
+		// The keys scroll whatever the user is looking at — the open peek
+		// wins, then the table, then the focused column. They used to be
+		// peek-only, which left them a SILENT dead key in the other two
+		// states while the help advertised a plain "scroll" (t-84r1); a
+		// gesture that cannot move must say so instead.
+		down := msg.String() == "ctrl+d"
+		dir := 1
+		if !down {
+			dir = -1
+		}
+		switch {
+		case m.peekOpen:
+			if down {
 				m.vp.ScrollDown(maxInt(1, m.vp.Height()/2))
 			} else {
 				m.vp.ScrollUp(maxInt(1, m.vp.Height()/2))
+			}
+		case m.view == viewTable:
+			// The table's window centers on the cursor, so half a page of
+			// rows IS a cursor move — j/k's model, just bigger.
+			rows := len(m.tableRows())
+			step := maxInt(1, maxInt(1, m.h-rowRule-footerH)/2)
+			before := m.tableIdx
+			m.tableIdx = clamp(m.tableIdx+dir*step, 0, maxInt(0, rows-1))
+			if m.tableIdx == before {
+				m.note("already at the %s of the table", endName(dir))
+			}
+		default:
+			// The focused board column, in the wheel's unit (cards) with the
+			// wheel's guards, so the two scroll surfaces cannot disagree
+			// about where the column ends. The cursor deliberately stays put
+			// — like the wheel, a column scrolled away from its cursor is a
+			// legitimate state (the next arrow re-pulls).
+			lane := m.curLaneName()
+			moved := 0
+			if c := m.lay.Col(lane); c != nil {
+				for i := maxInt(1, len(c.Cards)/2); i > 0; i-- {
+					cc := m.lay.Col(lane)
+					if down && cc.Hidden > 0 {
+						m.scroll[lane] = cc.Scroll + 1
+					} else if !down && cc.Scroll > 0 {
+						m.scroll[lane] = cc.Scroll - 1
+					} else {
+						break
+					}
+					m.relayout()
+					moved++
+				}
+			}
+			if moved == 0 {
+				m.note("%s is already at the %s", lane, endName(dir))
 			}
 		}
 
