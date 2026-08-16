@@ -162,10 +162,11 @@ func (m *Model) demoState(kind string) error {
 
 	case "editpick":
 		// The 1..5 picker (value / effort). With editinput below, one of the
-		// two edit stages no frame could show (t-36yr): both exist only
-		// between two keystrokes of a live overlay, so a regression that
-		// blanked them could ship unseen — the exact hole -demo exists to
-		// close.
+		// two SUB-EDITOR stages -dump could not reach (t-36yr): both exist
+		// only between two keystrokes of a live overlay, so a regression that
+		// blanked them could ship unseen. stageMenu is still -dump-less on
+		// purpose — due_test frames it directly, and a menu is not a
+		// mid-keystroke state.
 		if !m.selectID("t-9sa6", false) {
 			return fmt.Errorf("demo editpick: t-9sa6 is not on the fixture board")
 		}

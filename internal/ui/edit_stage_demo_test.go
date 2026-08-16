@@ -7,32 +7,58 @@ import (
 	"github.com/akira-toriyama/ridge/internal/store/memstore"
 )
 
-// stagePick and stageInput exist only between two keystrokes of a live
-// overlay, so until t-36yr no frame could show them: a regression that blanked
-// either stage would have shipped unseen. These pin what each demo frame must
-// prove; footer_test's DemoNames sweep already guarantees both render and
-// differ from the bare board.
-func TestEditStageDemosProveTheirStages(t *testing.T) {
-	for _, tc := range []struct {
-		demo  string
-		wants []string
-	}{
-		// The picker: its field header and the full key contract.
-		{"editpick", []string{"edit t-9sa6", "set value", "press 1-5 · 0 clears · esc back"}},
-		// The input: the sub-editor's name, the apply/back keys, and the tail
-		// of the seeded CJK title (the cursor sits at the end, so the 48-cell
-		// window shows the value's tail).
-		{"editinput", []string{"edit t-9sa6", "retitle", "⏎ apply · esc back", "仮想化"}},
-	} {
-		m := New(memstore.New(), Options{})
-		frame, err := m.Dump(240, 60, tc.demo, true)
-		if err != nil {
-			t.Fatalf("%s: %v", tc.demo, err)
+// The two sub-editor stages exist only between two keystrokes of a live
+// overlay, so until t-36yr no -dump frame could show them: a regression that
+// blanked either would have shipped unseen. These pin what each demo frame
+// must prove; footer_test's DemoNames sweep already guarantees both render
+// and differ from the bare board.
+func TestEditPickDemoProvesThePicker(t *testing.T) {
+	m := New(memstore.New(), Options{})
+	frame, err := m.Dump(240, 60, "editpick", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The field header and the full key contract — blanking the pick body
+	// drops both (measured against the blanked mutant).
+	for _, want := range []string{"edit t-9sa6", "set value", "press 1-5 · 0 clears · esc back"} {
+		if !strings.Contains(frame, want) {
+			t.Errorf("-demo editpick: %q is missing from the frame", want)
 		}
-		for _, want := range tc.wants {
-			if !strings.Contains(frame, want) {
-				t.Errorf("-demo %s: %q is missing from the frame", tc.demo, want)
-			}
+	}
+}
+
+// The input assertions are LINE-scoped on purpose: the seeded title's tail
+// also appears in the peek header and on the selected card, so a whole-frame
+// Contains stayed green with the seed deleted, the input un-rendered, and the
+// cursor moved to the head (independent review of this PR, R1 — the same
+// class footer_test's sweep note records from PR #22). The one line carrying
+// the prompt is the input; it must hold the value's TAIL and not its head,
+// because the cursor sits at the end of a title wider than the window.
+func TestEditInputDemoSeedsTheFocusedInput(t *testing.T) {
+	m := New(memstore.New(), Options{})
+	frame, err := m.Dump(240, 60, "editinput", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var promptLines []string
+	for _, l := range strings.Split(frame, "\n") {
+		if strings.Contains(l, "> ") {
+			promptLines = append(promptLines, l)
+		}
+	}
+	if len(promptLines) != 1 {
+		t.Fatalf("want exactly one prompt line in the frame, got %d: %q", len(promptLines), promptLines)
+	}
+	line := promptLines[0]
+	if !strings.Contains(line, "仮想化") {
+		t.Errorf("the input line lost the seeded tail (seeded from t-9sa6's fixture title): %q", line)
+	}
+	if strings.Contains(line, "vista: Table") {
+		t.Errorf("the input shows the value's head — the cursor must sit at the end: %q", line)
+	}
+	for _, want := range []string{"edit t-9sa6", "retitle", "⏎ apply · esc back"} {
+		if !strings.Contains(frame, want) {
+			t.Errorf("-demo editinput: %q is missing from the frame", want)
 		}
 	}
 }
