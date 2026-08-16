@@ -209,7 +209,7 @@ func (m *Model) reload() {
 }
 
 // recompute rebuilds the derived graph and the filtered columns, then clamps
-// every cursor. Called after any mutation: with 24 tasks it is free, and it
+// every cursor. Called after any mutation: with 33 tasks it is free, and it
 // removes a whole class of stale-index bugs.
 func (m *Model) recompute() {
 	m.g = board.NewGraph(m.b)
