@@ -13,7 +13,7 @@ import (
 // unknown-name error and the tests all read this slice, because the list was
 // duplicated in three places and adding two states updated two of them —
 // `ridge -h` then advertised eight of ten (independent review of PR #22).
-var DemoNames = []string{"move", "drag", "add", "edit", "graph", "help", "slice", "sort", "filter", "filterchips", "fail"}
+var DemoNames = []string{"move", "drag", "add", "edit", "editpick", "editinput", "graph", "help", "slice", "sort", "filter", "filterchips", "fail"}
 
 // Options configures a freshly-constructed Model. The zero value is the
 // default TUI: dark palette, board view, no filter.
@@ -159,6 +159,40 @@ func (m *Model) demoState(kind string) error {
 		m.edit.menuIdx = int(fieldChecklist)
 		m.openField(fieldChecklist, m.b.Task("t-9sa6"))
 		m.edit.listIdx = 1
+
+	case "editpick":
+		// The 1..5 picker (value / effort). With editinput below, one of the
+		// two edit stages no frame could show (t-36yr): both exist only
+		// between two keystrokes of a live overlay, so a regression that
+		// blanked them could ship unseen — the exact hole -demo exists to
+		// close.
+		if !m.selectID("t-9sa6", false) {
+			return fmt.Errorf("demo editpick: t-9sa6 is not on the fixture board")
+		}
+		m.enterEdit()
+		if m.edit == nil {
+			return fmt.Errorf("demo editpick: the edit menu did not open")
+		}
+		m.edit.menuIdx = int(fieldValue)
+		if c := m.openField(fieldValue, m.b.Task("t-9sa6")); c != nil {
+			_ = c
+		}
+
+	case "editinput":
+		// The retitle input, focused and pre-seeded with the task's CJK
+		// title: one frame proves the prompt, the seeded value (its tail —
+		// the cursor sits at the end) and the apply/back keys.
+		if !m.selectID("t-9sa6", false) {
+			return fmt.Errorf("demo editinput: t-9sa6 is not on the fixture board")
+		}
+		m.enterEdit()
+		if m.edit == nil {
+			return fmt.Errorf("demo editinput: the edit menu did not open")
+		}
+		m.edit.menuIdx = int(fieldTitle)
+		if c := m.openField(fieldTitle, m.b.Task("t-9sa6")); c != nil {
+			_ = c
+		}
 
 	case "graph":
 		// Root the graph on a task that actually HAS both directions, so the
