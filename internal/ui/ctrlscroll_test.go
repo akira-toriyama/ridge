@@ -31,35 +31,81 @@ func TestCtrlScrollMovesTheOpenPeek(t *testing.T) {
 }
 
 func TestCtrlScrollMovesTheFocusedColumnWhenThePeekIsClosed(t *testing.T) {
-	// A column guaranteed to overflow a 30-row terminal.
+	// A tall frame, so the column shows enough cards for the HALF to be a
+	// real number: at h=30 only 2-3 cards fit and the step degenerates to 1,
+	// which let step and relayout mutants survive (review of this PR,
+	// refutation 1 — the half-page claim was untested).
 	m := New(memstore.NewWith(board.NewBoard(scaledTasks(60))), Options{})
-	m.Update(tea.WindowSizeMsg{Width: 240, Height: 30})
+	m.Update(tea.WindowSizeMsg{Width: 240, Height: 60})
 
 	lane := m.curLaneName()
 	c := m.lay.Col(lane)
 	if c == nil || c.Hidden == 0 {
 		t.Fatalf("fixture: column %s must overflow (hidden=%v)", lane, c)
 	}
-	m.Update(ctrlD())
-	scrolled := m.lay.Col(lane).Scroll
-	if scrolled == 0 {
-		t.Fatal("ctrl+d did not scroll the column")
+	if len(c.Cards) < 4 {
+		t.Fatalf("fixture: need >= 4 visible cards for a real half page, got %d", len(c.Cards))
 	}
-	// The wheel's unit and guards: roughly half the visible cards, never past
-	// the point where the column stops hiding anything below.
+	wantStep := len(c.Cards) / 2
+	m.Update(ctrlD())
+	if got := m.lay.Col(lane).Scroll; got != wantStep {
+		t.Errorf("ctrl+d scrolled %d cards, want half the %d visible = %d", got, len(c.Cards), wantStep)
+	}
 	m.Update(ctrlU())
-	if got := m.lay.Col(lane).Scroll; got >= scrolled {
-		t.Errorf("ctrl+u did not scroll back: %d -> %d", scrolled, got)
+	if got := m.lay.Col(lane).Scroll; got != 0 {
+		t.Errorf("ctrl+u did not scroll back to the top, at %d", got)
 	}
 
 	// At the very top, ctrl+u must SAY it cannot move.
-	for i := 0; i < 50; i++ {
-		m.Update(ctrlU())
-	}
 	m.status = ""
 	m.Update(ctrlU())
 	if !strings.Contains(m.status, "already at the top") {
 		t.Errorf("a ctrl+u that cannot move must say so, status=%q", m.status)
+	}
+
+	// And the BOTTOM must speak too: the Hidden>0 guard is what separates a
+	// real move from a clamped one, and dropping it revived the silent dead
+	// key at the bottom while every other assert stayed green (refutation 2).
+	for i := 0; i < 80; i++ {
+		m.Update(ctrlD())
+	}
+	m.status = ""
+	m.Update(ctrlD())
+	if !strings.Contains(m.status, "already at the bottom") {
+		t.Errorf("a ctrl+d that cannot move must say so, status=%q", m.status)
+	}
+	if m.lay.Col(lane).Hidden != 0 {
+		t.Error("the column claims the bottom while still hiding cards")
+	}
+}
+
+// The open peek outranks the table — and it is genuinely on screen there
+// (table.go renders peekLayer), so this is not an invisible scroll. The
+// precedence was untested: narrowing the peek case to board view survived the
+// suite (review of this PR, refutation 3).
+func TestCtrlScrollPrefersTheOpenPeekOverTheTable(t *testing.T) {
+	m := New(memstore.New(), Options{Table: true, Peek: true})
+	m.Update(tea.WindowSizeMsg{Width: 240, Height: 40})
+	before := m.tableIdx
+	m.Update(ctrlD())
+	if m.vp.YOffset() == 0 {
+		t.Error("ctrl+d did not scroll the open peek in the table view")
+	}
+	if m.tableIdx != before {
+		t.Errorf("ctrl+d moved the table cursor (%d -> %d) instead of the peek", before, m.tableIdx)
+	}
+}
+
+// An empty column has no bottom to be at — the note must say what is actually
+// true instead of claiming an edge.
+func TestCtrlScrollNamesAnEmptyLane(t *testing.T) {
+	m := New(memstore.NewWith(board.NewBoard([]*board.Task{{ID: "t-1", Title: "x", Status: "ready", Priority: 100}})), Options{})
+	m.Update(tea.WindowSizeMsg{Width: 240, Height: 40})
+	m.curLane = m.b.LaneIndex("backlog")
+	m.status = ""
+	m.Update(ctrlD())
+	if !strings.Contains(m.status, "backlog is empty") {
+		t.Errorf("scrolling an empty lane must say it is empty, status=%q", m.status)
 	}
 }
 

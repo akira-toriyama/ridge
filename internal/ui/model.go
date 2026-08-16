@@ -629,7 +629,7 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 			// The table's window centers on the cursor, so half a page of
 			// rows IS a cursor move — j/k's model, just bigger.
 			rows := len(m.tableRows())
-			step := maxInt(1, maxInt(1, m.h-rowRule-footerH)/2)
+			step := maxInt(1, maxInt(1, m.tableVisRows())/2)
 			before := m.tableIdx
 			m.tableIdx = clamp(m.tableIdx+dir*step, 0, maxInt(0, rows-1))
 			if m.tableIdx == before {
@@ -644,6 +644,10 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 			lane := m.curLaneName()
 			moved := 0
 			if c := m.lay.Col(lane); c != nil {
+				if len(c.Tasks) == 0 {
+					m.note("%s is empty", lane)
+					return nil
+				}
 				for i := maxInt(1, len(c.Cards)/2); i > 0; i-- {
 					cc := m.lay.Col(lane)
 					if down && cc.Hidden > 0 {

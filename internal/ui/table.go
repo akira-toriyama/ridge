@@ -17,6 +17,10 @@ import (
 // fixed int column widths. Its truncation itself is CJK-safe (ansi.Truncate,
 // grapheme-width) — that was once cited as a reason and is not one.
 
+// tableVisRows is how many task rows fit under the chrome — the renderer's
+// window and the ^d/^u half-page share it, so the two cannot drift apart.
+func (m *Model) tableVisRows() int { return m.h - rowRule - footerH }
+
 // sortKey is the table's sort axis. sortCanonical is the board's own
 // lane-then-priority order — the absence of a field sort, which is why it has
 // no direction. The values are the `o` cycle order from t-qve3.
@@ -354,7 +358,7 @@ func (m *Model) renderTable() string {
 	)
 
 	const tableTop = rowRule // the table needs no per-column rule row
-	visRows := m.h - tableTop - footerH
+	visRows := m.tableVisRows()
 	top := clamp(m.tableIdx-visRows/2, 0, maxInt(0, len(body)-visRows))
 	for i := top; i < len(body) && tableTop+i-top < m.h-footerH; i++ {
 		layers = append(layers, lg.NewLayer(body[i]).X(inset).Y(tableTop+i-top).Z(zCard))
