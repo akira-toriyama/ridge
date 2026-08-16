@@ -41,7 +41,7 @@ func TestBoardInsertIndexUnderAFilter(t *testing.T) {
 func TestCommitMoveRespectsHiddenTasks(t *testing.T) {
 	m := New(memstore.New(), Options{})
 	m.w, m.h = 140, 40
-	m.applyFilter("label:ui")
+	m.applyFilter("label:bbq")
 	m.recompute()
 
 	vis := m.cols["backlog"]

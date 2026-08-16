@@ -8,9 +8,9 @@ import (
 	"testing"
 )
 
-// scaledTasks inflates the 23-task fixture to n tasks by cloning it with fresh
+// scaledTasks inflates the 33-task fixture to n tasks by cloning it with fresh
 // ids, so the board has a realistic per-lane depth. The real central board is
-// 658 tasks; the POC fixture is 24, so nothing here had measured what a full
+// 658 tasks; the fixture is 33, so nothing here had measured what a full
 // board costs to render.
 func scaledTasks(n int) []*board.Task {
 	base := memstore.New().Board().Tasks()

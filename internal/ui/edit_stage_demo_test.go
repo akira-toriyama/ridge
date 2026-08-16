@@ -50,10 +50,10 @@ func TestEditInputDemoSeedsTheFocusedInput(t *testing.T) {
 		t.Fatalf("want exactly one prompt line in the frame, got %d: %q", len(promptLines), promptLines)
 	}
 	line := promptLines[0]
-	if !strings.Contains(line, "仮想化") {
+	if !strings.Contains(line, "積載図に落とす") {
 		t.Errorf("the input line lost the seeded tail (seeded from t-9sa6's fixture title): %q", line)
 	}
-	if strings.Contains(line, "vista: Table") {
+	if strings.Contains(line, "持ち物リスト") {
 		t.Errorf("the input shows the value's head — the cursor must sit at the end: %q", line)
 	}
 	for _, want := range []string{"edit t-9sa6", "retitle", "⏎ apply · esc back"} {

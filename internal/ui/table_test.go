@@ -244,7 +244,7 @@ func TestTableRendersDueEpicUpdatedColumns(t *testing.T) {
 	if want := m.b.Task("t-ehk7").Due.Local().Format("2006-01-02"); !strings.Contains(out, want) {
 		t.Errorf("t-ehk7's due day %s is not in the frame", want)
 	}
-	if !strings.Contains(out, "vista: furrow") || strings.Contains(out, "e-fw2m") {
+	if !strings.Contains(out, "九州キャンプ") || strings.Contains(out, "e-fw2m") {
 		t.Error("the epic column must resolve the id to its title")
 	}
 	if !strings.Contains(out, "d ago") {
@@ -347,7 +347,7 @@ func TestTableColumnsAlignUnderCJKTitles(t *testing.T) {
 		}
 		rows := m.tableRows()
 		for i, task := range rows {
-			y := rowRule + i // 23 fixture rows all fit in h=40, so top is 0
+			y := rowRule + i // 33 fixture rows fit h=40's 35-row budget (2 spare), so top is 0
 			if y >= len(lines) || y >= 40-footerH {
 				t.Fatalf("w=%d: row %d fell off the frame — the test premise broke", w, i)
 			}

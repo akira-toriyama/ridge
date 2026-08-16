@@ -6,7 +6,7 @@ import "sort"
 // defined. The card glyph, the filter, the detail pane and the dep-tree
 // overlay all read it, so they cannot drift apart.
 //
-// It is rebuilt after every mutation — with 24 tasks (and 658 on the real
+// It is rebuilt after every mutation — with 33 tasks (and 658 on the real
 // board, 102 edges) that is free, and it removes a whole class of stale-cache
 // bugs.
 type Graph struct {

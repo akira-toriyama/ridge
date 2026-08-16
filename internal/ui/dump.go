@@ -122,25 +122,25 @@ func (m *Model) demoState(kind string) error {
 		m.Update(tea.MouseMotionMsg{X: dst.X + 8, Y: dst.Top + 4, Button: tea.MouseLeft})
 
 	case "slice":
-		// Panel open + focused, sliced to the ui label: the inset board, the
+		// Panel open + focused, sliced to the bbq label: the inset board, the
 		// selected row and the composed verdict all land in one frame.
 		m.toggleSlice()
 		m.sliceField = sliceLabel
 		rows := m.sliceRows()
 		for i, r := range rows {
-			if r.value == "ui" {
+			if r.value == "bbq" {
 				m.sliceIdx = i
 			}
 		}
-		if c := m.selectSlice(sliceLabel, "ui"); c != nil {
+		if c := m.selectSlice(sliceLabel, "bbq"); c != nil {
 			_ = c
 		}
 
 	case "add":
 		// A filtered board, so the modal PROVES the context inheritance: the
 		// filter's label lands in the chips, not silently on the task.
-		m.ti.SetValue("label:ui")
-		m.applyFilter("label:ui")
+		m.ti.SetValue("label:bbq")
+		m.applyFilter("label:bbq")
 		m.relayout()
 		if c := m.enterAdd(); c != nil {
 			_ = c
