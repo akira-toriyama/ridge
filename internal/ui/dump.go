@@ -122,7 +122,7 @@ func (m *Model) demoState(kind string) error {
 		m.Update(tea.MouseMotionMsg{X: dst.X + 8, Y: dst.Top + 4, Button: tea.MouseLeft})
 
 	case "slice":
-		// Panel open + focused, sliced to the ui label: the inset board, the
+		// Panel open + focused, sliced to the bbq label: the inset board, the
 		// selected row and the composed verdict all land in one frame.
 		m.toggleSlice()
 		m.sliceField = sliceLabel

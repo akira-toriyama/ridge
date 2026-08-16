@@ -315,12 +315,17 @@ func TestActionableAndEpicChips(t *testing.T) {
 	m := boardModel(t, 240, 50)
 	out := frame(m)
 
-	// t-n2fc is the one actionable task.
+	// t-n2fc is the ready lane's one card; the glyph must sit on ITS title —
+	// as the adjacent "▸ <title>" pair, because a terminal ROW carries every
+	// column, so line-scoping still matched the neighbour column's glyph. A
+	// frame-wide Contains stopped meaning anything when the in-progress
+	// additions became actionable too (review of this PR, R2 — the
+	// ready-is-never-actionable mutant survived both loose forms).
 	if !strings.Contains(out, "t-n2fc") {
 		t.Fatal("t-n2fc is not on the board")
 	}
-	if !strings.Contains(out, glyphActionable) {
-		t.Errorf("the actionable glyph (%q) is missing from the frame", glyphActionable)
+	if !strings.Contains(out, glyphActionable+" 出発前夜") {
+		t.Errorf("the actionable glyph (%q) is missing from t-n2fc's card", glyphActionable)
 	}
 	// An epic is an ENTITY, never a card: no lane holds e-fw2m, and member
 	// cards carry a chip with the epic's RESOLVED title, not its raw id.

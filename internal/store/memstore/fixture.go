@@ -1,5 +1,5 @@
 // A synthetic 33-task board: a family's Kyushu camping trip (the epic and
-// its 18 members) plus a home-cooking prep line (unfiled). It began as a
+// its 18 members) plus unfiled kitchen and trip-support tasks. It began as a
 // snapshot of a real work board; t-862b re-themed the SURFACE (titles,
 // bodies, label/repo names, the epic title) while keeping every id, lane,
 // priority, dependency, timestamp and checklist shape — the structure is
@@ -38,7 +38,7 @@ func fixtureTasks() []*board.Task {
 			Deps:     []string{"t-ehk7", "t-t38k"},
 			Created:  ts("2026-07-16T08:35:54Z"),
 			Updated:  ts("2026-07-16T15:47:40Z"),
-			// The three Due values in this fixture are NOT from the snapshot
+			// The four Due values in this fixture are NOT from the snapshot
 			// (the real board had none in 2026-07); they exist so the table's
 			// due column and `-demo sort` have dates to show. Each is furrow's
 			// bare-day form: the last second of that local (JST) day, in UTC.
@@ -233,7 +233,7 @@ func fixtureTasks() []*board.Task {
 		},
 		{
 			ID:       "t-614w",
-			Title:    "クーラーボックスの氷持ち実測 — 3日運用の詰め方を決める",
+			Title:    "クーラーの氷持ち実測 — 温泉待ちと焚き火の熱を織り込んで3日運用を決める",
 			Status:   "done",
 			Priority: 515,
 			Value:    4,
@@ -245,7 +245,7 @@ func fixtureTasks() []*board.Task {
 			Created:  ts("2026-07-17T06:58:54Z"),
 			Updated:  ts("2026-07-17T14:06:15Z"),
 			Closed:   ts("2026-07-17T14:06:15Z"),
-			Body:     "# クーラーボックスの氷持ち実測\n\nベランダで3日間の実測をした。結論: 板氷2枚 + 保冷剤で、開閉を朝夕に絞れば3日目の朝まで 5℃ 以下を維持できる。袋氷は溶けが早く、飲料用の使い捨てと割り切る。\n\n- 実測: 外気 32℃ 日陰。1日目 2℃ / 2日目 4℃ / 3日目朝 5℃\n- 開閉を自由にした比較側は2日目夕方に 9℃ まで上がった\n- 事前予冷（前夜から氷1枚）で立ち上がりが 3℃ 変わる\n\nこの結果を [[t-9m2q]] の2台割りの前提にする。温泉の待ち時間（[[t-2qyb]]）の車内放置が最大のリスクなので、3日目は生鮮を使い切ってから温泉に寄る順にする。",
+			Body:     "# クーラーボックスの氷持ち実測\n\nベランダで3日間の実測をした。結論: 板氷2枚 + 保冷剤で、開閉を朝夕に絞れば3日目の朝まで 5℃ 以下を維持できる。袋氷は溶けが早く、飲料用の使い捨てと割り切る。\n\n- 実測: 外気 32℃ 日陰。1日目 2℃ / 2日目 4℃ / 3日目朝 5℃\n- 開閉を自由にした比較側は2日目夕方に 9℃ まで上がった\n- 事前予冷（前夜から氷1枚）で立ち上がりが 3℃ 変わる\n\nこの結果を [[t-9m2q]] の2台割りの前提にする。焚き火台（[[t-wf4p]]）の風下に置くと輻射で溶けが早まるのも比較で分かったので、設置図では日陰の風上に固定する。温泉の待ち時間（[[t-2qyb]]）の車内放置が最大のリスクなので、3日目は生鮮を使い切ってから温泉に寄る順にする。",
 		},
 		{
 			ID:       "t-px9p",
@@ -390,7 +390,7 @@ func fixtureTasks() []*board.Task {
 		},
 		{
 			ID:       "t-t38k",
-			Title:    "ベースキャンプ予約 — 阿蘇の BBQ サイト2泊を確定（デッキ付き区画）",
+			Title:    "決行判定と BBQ サイト予約 — 道具・車・食がそろったので阿蘇2泊を確定（デッキ付き A-7）",
 			Status:   "done",
 			Priority: 1620,
 			Value:    5,
@@ -401,7 +401,7 @@ func fixtureTasks() []*board.Task {
 			Created:  ts("2026-07-16T08:35:54Z"),
 			Updated:  ts("2026-07-16T14:48:11Z"),
 			Closed:   ts("2026-07-16T14:48:11Z"),
-			Body:     "# ベースキャンプ予約\n\n候補調査（[[t-6etg]]）の本命 B キャンプ場に電話して、デッキ付き区画を2泊で確定した。BBQ サイトは焚き火台必須（直火不可）なので、選定済みの浅型（[[t-wf4p]]）で問題ない。チェックイン 13 時 / アウト 11 時、車の乗り入れ可。\n\n- 予約: 8/29-31 デッキ付き A-7 区画\n- 支払いは現地・現金のみ（電子決済なし）\n- 増水時は川側の遊歩道が閉鎖される — 遊び計画（[[t-r7wr]]）の代替に注意\n- 薪は場内売店が 18 時まで。買い出し計画（[[t-pk4f]]）に依存しない",
+			Body:     "# 決行判定と BBQ サイト予約\n\n決行の条件は「道具・車・食の3点がそろうこと」と決めていた。ダッチオーブンの復活（[[t-ecfm]]）、車の点検（[[t-g8bn]]）、常備菜の回転が家で回っている実績（[[t-phgp]] — 現地の食事プランはこの延長で組める）がそろったので、候補調査の本命 B キャンプ場（[[t-6etg]]）に電話して2泊を確定した。\n\n- 予約: 8/29-31 デッキ付き A-7 区画（BBQ サイト・直火不可。焚き火台は選定済みの浅型 [[t-wf4p]] で可）\n- チェックイン 13 時 / アウト 11 時・車の乗り入れ可・支払いは現地の現金のみ\n- 増水時は川側の遊歩道が閉鎖される — 遊び計画（[[t-r7wr]]）の代替に注意\n- 薪は場内売店が 18 時まで。買い出し計画（[[t-pk4f]]）に依存しない",
 		},
 		{
 			ID:       "t-kv82",

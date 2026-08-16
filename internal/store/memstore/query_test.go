@@ -194,7 +194,7 @@ func TestQueryMatchesFixture(t *testing.T) {
 		{q: "label:bbq", min: 9},
 		{q: "no:label", min: 1},
 		{q: "no:repo", want: []string{}}, // the fixture has no drafts
-		// Of the fixture's three dues, only t-jv3j (2026-07-31) is past the
+		// Of the fixture's four dues, only t-jv3j (2026-07-31) is past the
 		// pinned clock and still open.
 		{q: "is:overdue", want: []string{"t-jv3j"}},
 	}
@@ -292,7 +292,10 @@ func TestQueryAndOrNegation(t *testing.T) {
 }
 
 func TestQueryBareWordIsCaseInsensitiveSubstring(t *testing.T) {
-	if got := matched(t, "BBQ"); len(got) == 0 {
+	// Lowercase on purpose: the titles hold uppercase BBQ, so this match
+	// EXISTS only if the evaluator folds case (review of this PR, R1 — the
+	// uppercase needle matched literally and the fold mutant survived).
+	if got := matched(t, "bbq"); len(got) == 0 {
 		t.Error("bare word must be case-insensitive")
 	}
 	// A CJK bare word has to work: the whole fixture is Japanese titles.

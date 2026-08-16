@@ -79,10 +79,10 @@ func TestQuickAddCreatesInTheFocusedLaneAndSelects(t *testing.T) {
 
 func TestQuickAddInheritsTheFilterContext(t *testing.T) {
 	m := boardModel(t, 240, 50)
-	m.applyFilter("label:ui")
+	m.applyFilter("label:bbq")
 	press(m, "a")
-	if m.add.opts.Label != "ui" {
-		t.Fatalf("label = %q, want ui inherited from the filter", m.add.opts.Label)
+	if m.add.opts.Label != "bbq" {
+		t.Fatalf("label = %q, want bbq inherited from the filter", m.add.opts.Label)
 	}
 	m.add.input.SetValue("フィルタ文脈つき")
 	commitAdd(t, m)
@@ -91,8 +91,8 @@ func TestQuickAddInheritsTheFilterContext(t *testing.T) {
 	if cur == nil || cur.Title != "フィルタ文脈つき" {
 		t.Fatalf("selection = %+v", cur)
 	}
-	if !containsStrUI(cur.Labels, "ui") {
-		t.Errorf("labels = %v, want the inherited ui", cur.Labels)
+	if !containsStrUI(cur.Labels, "bbq") {
+		t.Errorf("labels = %v, want the inherited bbq", cur.Labels)
 	}
 	// The new card must be under the cursor even though... it MATCHES here;
 	// the pin guarantee is what selectID(id, true) carries for the miss case.
