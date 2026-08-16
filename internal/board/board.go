@@ -108,12 +108,24 @@ var boardLanes = []Lane{
 // EpicInfo is one epic entity as `furrow epic ls --json` reports it. Epics
 // have no lane, so they are board-level metadata rather than tasks: cards
 // reference them by id (Task.Epic) and render the resolved title.
+//
+// Deps is the epic-to-epic edge furrow's `epic dep` records: "open this box
+// after those close". It is INFORMATION, not enforcement — furrow itself
+// warns and proceeds — so ridge renders it and gates nothing on it.
+//
+// OpenDeps is the subset still waiting, and it arrives DERIVED, exactly like
+// Done/Total/Stuck: `epic ls --json` computes it (a dep on a closed epic is
+// simply satisfied) and ridge consumes it verbatim. Recomputing it here from
+// the served epic set would be the front-end logic this repo exists to not
+// have — and would silently break the day the epic read gains a scope.
 type EpicInfo struct {
-	ID    string
-	Title string
-	Done  int
-	Total int
-	Stuck bool
+	ID       string
+	Title    string
+	Done     int
+	Total    int
+	Stuck    bool
+	Deps     []string
+	OpenDeps []string
 }
 
 // Board is the in-memory task set. Lane membership is Task.Status and lane

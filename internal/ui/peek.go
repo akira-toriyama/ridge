@@ -88,7 +88,9 @@ func (m *Model) peekContent(w int) string {
 	if t.Epic != "" {
 		label := t.Epic
 		if e := m.b.Epic(t.Epic); e != nil {
-			label = fmt.Sprintf("%s %s (%d/%d)", t.Epic, e.Title, e.Done, e.Total)
+			// Progress before the title, like the dep lines below: the
+			// numbers must survive a CJK title's ellipsis.
+			label = fmt.Sprintf("%s (%d/%d) %s", t.Epic, e.Done, e.Total, e.Title)
 			if e.Stuck {
 				label += " " + th.warn.Render("STUCK")
 			}
@@ -99,6 +101,44 @@ func (m *Model) peekContent(w int) string {
 		meta2 = append(meta2, "labels "+strings.Join(t.Labels, ","))
 	}
 	b.WriteString(th.muted.Render(wrapJoin(meta2, " · ", w)) + "\n")
+	// The epic's own dep edges, resolved — `furrow epic dep --list`'s "waits
+	// on", in its wording. Gated on furrow's derived open_deps, the same
+	// field the slice panel counts for →N, so the two surfaces cannot
+	// disagree about whether a box still waits; with every dep satisfied
+	// there is no line, exactly as there is no arrow. A dep outside
+	// open_deps is rendered "(satisfied)" — furrow's word for a dep on a
+	// closed epic — never "(closed)": the open-only read cannot tell a
+	// closed dep from a dangling one (furrow lints the latter as
+	// epic-dep-missing), so ridge does not claim to.
+	if e := m.b.Epic(t.Epic); e != nil && len(e.OpenDeps) > 0 {
+		open := make(map[string]bool, len(e.OpenDeps))
+		for _, d := range e.OpenDeps {
+			open[d] = true
+		}
+		parts := []string{"epic waits on"}
+		for _, d := range e.Deps {
+			de := m.b.Epic(d)
+			switch {
+			case !open[d]:
+				parts = append(parts, d+" (satisfied)")
+			case de == nil:
+				// Open per furrow's verdict but not in this read's epic
+				// set: show the raw id rather than inventing a state.
+				parts = append(parts, d)
+			case de.Stuck:
+				// warn, like the own-epic line's STUCK: a marker that
+				// reads as dim body text is the one thing it must not be.
+				parts = append(parts, fmt.Sprintf("%s (%d/%d) %s %s",
+					d, de.Done, de.Total, th.warn.Render("STUCK"), de.Title))
+			default:
+				// Progress BEFORE the title: a CJK epic title routinely
+				// overflows the box and truncates, and the numbers are
+				// the half that must survive the ellipsis.
+				parts = append(parts, fmt.Sprintf("%s (%d/%d) %s", d, de.Done, de.Total, de.Title))
+			}
+		}
+		b.WriteString(th.muted.Render(wrapJoin(parts, " · ", w)) + "\n")
+	}
 	stamps := fmt.Sprintf("updated %s · created %s", ago(t.Updated), t.Created.Format("2006-01-02"))
 	if !t.Due.IsZero() {
 		// Local: the instant furrow stores is UTC, and an evening-local due

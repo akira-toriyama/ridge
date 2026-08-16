@@ -1,5 +1,6 @@
-// A synthetic 33-task board: a family's Kyushu camping trip (the epic and
-// its 18 members) plus unfiled kitchen and trip-support tasks. It began as a
+// A synthetic 33-task board: a family's Kyushu camping trip (an 18-member
+// epic), three smaller boxes wired to it by epic deps (t-vfm9), and unfiled
+// kitchen and trip-support tasks. It began as a
 // snapshot of a real work board; t-862b re-themed the SURFACE (titles,
 // bodies, label/repo names, the epic title) while keeping every id, lane,
 // priority, dependency, timestamp and checklist shape — the structure is
@@ -159,6 +160,7 @@ func fixtureTasks() []*board.Task {
 			Value:    4,
 			Effort:   2,
 			Repos:    []string{"tomo/joubisai"},
+			Epic:     "e-p3dx",
 			Created:  ts("2026-07-16T08:35:54Z"),
 			Updated:  ts("2026-07-16T11:26:43Z"),
 			Closed:   ts("2026-07-16T11:14:01Z"),
@@ -327,6 +329,7 @@ func fixtureTasks() []*board.Task {
 			Effort:   3,
 			Labels:   []string{"gear"},
 			Repos:    []string{"tomo/kyushu-trip"},
+			Epic:     "e-9wtv",
 			Checklist: []board.ChecklistItem{
 				{Text: "ナイフの受け渡しと持ち方（座って・鞘に戻すまで）", Done: false},
 				{Text: "フェザースティック作りを1本最後まで", Done: false},
@@ -412,6 +415,7 @@ func fixtureTasks() []*board.Task {
 			Effort:   1,
 			Labels:   []string{"bento"},
 			Repos:    []string{"tomo/joubisai"},
+			Epic:     "e-p3dx",
 			Created:  ts("2026-08-02T09:10:00Z"),
 			Updated:  ts("2026-08-09T10:05:00Z"),
 			Body:     "# 梅シロップの瓶詰め\n\n6月に漬けた分が上がった。大瓶のままだと冷蔵庫を占領するので、消毒した小瓶3本に分けて1本は実家行き。梅の実は別容器で回収して、ゼリーにするか検討中。",
@@ -425,6 +429,7 @@ func fixtureTasks() []*board.Task {
 			Effort:   2,
 			Labels:   []string{"bento"},
 			Repos:    []string{"tomo/joubisai"},
+			Epic:     "e-p3dx",
 			Created:  ts("2026-08-03T11:00:00Z"),
 			Updated:  ts("2026-08-09T11:20:00Z"),
 			Body:     "# 味噌の天地返し\n\n3月仕込み分の様子見。縁に白カビが少し出ているが産膜酵母の範囲。表面 1cm を外して天地返しし、塩を薄く振り直してラップを密着させる。次の確認は10月。",
@@ -464,6 +469,7 @@ func fixtureTasks() []*board.Task {
 			Effort:   2,
 			Labels:   []string{"bento"},
 			Repos:    []string{"tomo/joubisai"},
+			Epic:     "e-p3dx",
 			Created:  ts("2026-08-07T12:00:00Z"),
 			Updated:  ts("2026-08-09T12:30:00Z"),
 			Body:     "# 常備菜ローテ拡張\n\n回転表 v1（[[t-phgp]]）が夏メニューに寄っているので、秋に向けて根菜3品（きんぴら・煮浸し・南蛮）を試作する。子どもの反応を見て2品を正式採用、1品は弁当専用に回す。",
@@ -490,6 +496,7 @@ func fixtureTasks() []*board.Task {
 			Value:    2,
 			Effort:   1,
 			Repos:    []string{"tomo/kyushu-trip"},
+			Epic:     "e-9wtv",
 			Created:  ts("2026-08-08T10:00:00Z"),
 			Updated:  ts("2026-08-09T10:30:00Z"),
 			Body:     "# 星見の予習\n\nベースキャンプは光害が少ない（[[t-t38k]]）。当日にアプリの使い方を覚え始めると子どもが飽きるので、ベランダで1回予習する。観察ノートの型は自由研究（[[t-0esb]]）と共用。",
@@ -519,6 +526,7 @@ func fixtureTasks() []*board.Task {
 			Value:    2,
 			Effort:   3,
 			Repos:    []string{"tomo/kyushu-trip"},
+			Epic:     "e-c4mt",
 			Created:  ts("2026-08-08T12:00:00Z"),
 			Updated:  ts("2026-08-09T12:10:00Z"),
 			Body:     "# 冬キャンプ構想\n\n今回の旅が回ったら考える。薪ストーブはテントの幕質と煙突ポートの有無から。結露と一酸化炭素の対策を先に調べる。",
@@ -531,6 +539,7 @@ func fixtureTasks() []*board.Task {
 			Value:    2,
 			Effort:   3,
 			Repos:    []string{"tomo/joubisai"},
+			Epic:     "e-p3dx",
 			Created:  ts("2026-08-08T13:00:00Z"),
 			Updated:  ts("2026-08-09T13:05:00Z"),
 			Body:     "# 燻製チャレンジ\n\nダッチオーブン（[[t-ecfm]]）で温燻ができるらしい。ただしベランダの煙は近所問題になるので、熱源と煙の少ないチップの組合せを調べてから。キャンプ場でやる案が先かもしれない。",
@@ -538,13 +547,49 @@ func fixtureTasks() []*board.Task {
 	}
 }
 
-// fixtureEpics mirrors `furrow epic ls --json` for the snapshot: the one box
-// the 18 member tasks point at. Done/Total agree with the member lanes above.
+// fixtureEpics mirrors `furrow epic ls --json` for the snapshot — OPEN epics
+// only, the population that read serves. Done/Total agree with the member
+// lanes above (fixture_test pins that per epic).
+//
+// OpenDeps is hand-written the way Done/Total/Stuck are: all four arrive
+// DERIVED from furrow, and fixture_test pins that the hand-kept values agree
+// with the tasks and epics this file actually holds.
+//
+// The dep edges exercise every rendering state: e-fw2m waits on ONE open box,
+// e-c4mt waits on an open box AND on e-2b7h — a dep furrow has already
+// resolved away (outside open_deps, absent from the open-only read: the
+// shape a dep on a closed epic arrives in), and e-9wtv is the stuck epic the
+// warn glyph needs.
 func fixtureEpics() []board.EpicInfo {
-	return []board.EpicInfo{{
-		ID:    "e-fw2m",
-		Title: "九州キャンプ旅 2026 — 行程・予約・装備（阿蘇→高千穂 3泊）",
-		Done:  6,
-		Total: 18,
-	}}
+	return []board.EpicInfo{
+		{
+			ID:       "e-fw2m",
+			Title:    "九州キャンプ旅 2026 — 行程・予約・装備（阿蘇→高千穂 3泊）",
+			Done:     6,
+			Total:    18,
+			Deps:     []string{"e-p3dx"},
+			OpenDeps: []string{"e-p3dx"},
+		},
+		{
+			ID:    "e-p3dx",
+			Title: "常備菜ライン 2026 夏→秋 — 平日を回しつつキャンプへ供給する",
+			Done:  1,
+			Total: 5,
+		},
+		{
+			ID:    "e-9wtv",
+			Title: "夏休み自由研究 — 火起こしと星の観察記録",
+			Done:  0,
+			Total: 2,
+			Stuck: true,
+		},
+		{
+			ID:       "e-c4mt",
+			Title:    "冬キャンプ 2026-27 — 薪ストーブ泊まで",
+			Done:     0,
+			Total:    1,
+			Deps:     []string{"e-fw2m", "e-2b7h"},
+			OpenDeps: []string{"e-fw2m"},
+		},
+	}
 }

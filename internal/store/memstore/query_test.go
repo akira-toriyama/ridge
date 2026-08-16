@@ -188,8 +188,8 @@ func TestQueryMatchesFixture(t *testing.T) {
 		{q: "is:actionable", want: []string{"t-c9dm", "t-e5hq", "t-kv82", "t-n2fc", "t-w3np"}},
 		{q: "id:t-jv3j", want: []string{"t-jv3j"}},
 		{q: "epic:e-fw2m", min: 18},
-		{q: "has:epic", min: 18},
-		{q: "is:unfiled", min: 15}, // 33 tasks - 18 members - the epic entity itself is no task
+		{q: "has:epic", min: 26},
+		{q: "is:unfiled", min: 7}, // 33 tasks - 26 filed under the four boxes; epics themselves are no tasks
 		{q: "repo:kyushu-trip", min: 27},
 		{q: "label:bbq", min: 9},
 		{q: "no:label", min: 1},
@@ -438,7 +438,7 @@ func TestQueryPresenceVocabularyIsFurrows(t *testing.T) {
 		{"reviewed", 0, all},
 		{"label", 18, 15},
 		{"repo", all, 0},
-		{"epic", 18, all - 18},
+		{"epic", 26, all - 26},
 		{"checklist", 8, all - 8},
 		// value/effort/body are presence fields too. They used to be "covered"
 		// by a `has + no == all` check below, which is the exact tautology this
