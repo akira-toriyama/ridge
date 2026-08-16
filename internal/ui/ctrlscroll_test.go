@@ -33,8 +33,8 @@ func TestCtrlScrollMovesTheOpenPeek(t *testing.T) {
 func TestCtrlScrollMovesTheFocusedColumnWhenThePeekIsClosed(t *testing.T) {
 	// A tall frame, so the column shows enough cards for the HALF to be a
 	// real number: at h=30 only 2-3 cards fit and the step degenerates to 1,
-	// which let step and relayout mutants survive (review of this PR,
-	// refutation 1 — the half-page claim was untested).
+	// which let step and relayout mutants survive — the half-page claim went
+	// untested.
 	m := New(memstore.NewWith(board.NewBoard(scaledTasks(60))), Options{})
 	m.Update(tea.WindowSizeMsg{Width: 240, Height: 60})
 
@@ -65,7 +65,7 @@ func TestCtrlScrollMovesTheFocusedColumnWhenThePeekIsClosed(t *testing.T) {
 
 	// And the BOTTOM must speak too: the Hidden>0 guard is what separates a
 	// real move from a clamped one, and dropping it revived the silent dead
-	// key at the bottom while every other assert stayed green (refutation 2).
+	// key at the bottom while every other assert stayed green.
 	for i := 0; i < 80; i++ {
 		m.Update(ctrlD())
 	}
@@ -81,8 +81,8 @@ func TestCtrlScrollMovesTheFocusedColumnWhenThePeekIsClosed(t *testing.T) {
 
 // The open peek outranks the table — and it is genuinely on screen there
 // (table.go renders peekLayer), so this is not an invisible scroll. The
-// precedence was untested: narrowing the peek case to board view survived the
-// suite (review of this PR, refutation 3).
+// precedence was otherwise untested: narrowing the peek case to board view
+// survived the rest of the suite.
 func TestCtrlScrollPrefersTheOpenPeekOverTheTable(t *testing.T) {
 	m := New(memstore.New(), Options{Table: true, Peek: true})
 	m.Update(tea.WindowSizeMsg{Width: 240, Height: 40})

@@ -20,7 +20,7 @@
 // is the whole boundary (furrow's non-goals doc).
 //
 // The fixture provider (-mock, internal/store/memstore) serves a hardcoded
-// in-memory copy of 23 real tasks plus their epic entity. Tests, -dump and
+// in-memory board with CJK-heavy titles and epic entities. Tests, -dump and
 // -demo always use it: their frames are deterministic and diffable, which is
 // the house verification style. The contract tests (furrowstore) cover the
 // real client against a throwaway store, and skip where no furrow binary is

@@ -221,8 +221,7 @@ func TestSortedTableRefusesQuickReorder(t *testing.T) {
 func TestTableRendersDueEpicUpdatedColumns(t *testing.T) {
 	// Pinned: the fixture's Updated stamps are fixed instants, so on a wall
 	// clock ago() would cross its 90-day line (2026-10-14) and stop saying
-	// "d ago" — a test that goes red by calendar (independent review,
-	// finding 2).
+	// "d ago" — a test that goes red by calendar.
 	fixedNow(t, day("2026-08-10T00:00:00Z"))
 	m := tableModel(t, 240, 40)
 	out := frame(m)
@@ -255,7 +254,7 @@ func TestTableRendersDueEpicUpdatedColumns(t *testing.T) {
 // Every sort state must stay READABLE somewhere persistent. Keys with a
 // column carry ▲▼ in the header; created and effort have no column, so the
 // filter bar names the sort — without it those four cycle stops rendered
-// identically to canonical (independent review, finding 1).
+// identically to canonical.
 func TestSortStateIsAlwaysVisible(t *testing.T) {
 	m := tableModel(t, 240, 40)
 	for i := 0; i < 10; i++ {
@@ -304,8 +303,7 @@ func TestOverdueDueRendersDanger(t *testing.T) {
 // time and only shows at the far edge. Cells are CUT OUT of the frame by
 // display column (ansi.Cut is grapheme-aware), so the header row AND every
 // body row are checked against the same measurement the hit-test uses; a
-// weaker version only followed the due dates and skipped 20 of 23 rows
-// (independent review, finding 4).
+// weaker version only followed the due dates and skipped most of the rows.
 func TestTableColumnsAlignUnderCJKTitles(t *testing.T) {
 	fixedNow(t, day("2026-08-10T00:00:00Z")) // ago() must never emit a date here
 	for _, w := range []int{240, 241, 259, 320, 399, 400} {
@@ -362,8 +360,8 @@ func TestTableColumnsAlignUnderCJKTitles(t *testing.T) {
 				t.Errorf("w=%d row %d (%s): due cell reads %q, want %q", w, i, task.ID, got, want)
 			}
 			// A cell AFTER due too: a body-side width divergence at due slides
-			// updated/deps right without moving due's own start (re-review
-			// mutation table — this cut is what catches it).
+			// updated/deps right without moving due's own start — this cut is
+			// what catches that mutant.
 			if got := cell(lines[y], updCol); got != ago(task.Updated) {
 				t.Errorf("w=%d row %d (%s): updated cell reads %q, want %q",
 					w, i, task.ID, got, ago(task.Updated))

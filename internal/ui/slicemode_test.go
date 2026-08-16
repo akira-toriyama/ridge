@@ -201,7 +201,7 @@ func TestSlicePanelScrollsAndClicksAgree(t *testing.T) {
 
 	// The indicator/chrome lines are inert — asserted on STATE, not on the
 	// returned Cmd: on the fixture a real slice also returns nil, which made
-	// the Cmd-shaped assertion vacuous (round-2 review, finding 5).
+	// the Cmd-shaped assertion vacuous.
 	for _, y := range []int{sliceRowTop, sliceRowTop + 2, m.h - footerH} {
 		before := m.sliceVal
 		if c := m.sliceClick(3, y); c != nil {
@@ -221,9 +221,9 @@ func TestSlicePanelScrollsAndClicksAgree(t *testing.T) {
 }
 
 // Every height from cramped to comfortable: a click maps to a value row ONLY
-// inside the rendered value region. Round 2 found h≤11 mapping the status
-// and help lines to rows (the region math was one off and had no floor for
-// the indicator shape).
+// inside the rendered value region. At h≤11 the status and help lines used
+// to map to rows — the region math was one off and had no floor for the
+// indicator shape.
 func TestSliceClickNeverMapsOutsideTheRenderedRegion(t *testing.T) {
 	for h := 8; h <= 30; h++ {
 		m := boardModel(t, 240, h)
@@ -333,7 +333,7 @@ func TestTogglingThePanelCancelsADragInFlight(t *testing.T) {
 	m.Update(tea.MouseMotionMsg{X: card.X + 12, Y: card.Y + 6, Button: tea.MouseLeft})
 	press(m, "s")
 	// The CANCEL must happen at toggle time, not lean on the release being
-	// swallowed elsewhere — round 2 proved the old assertion could not tell
+	// swallowed elsewhere — an assertion on the release alone cannot tell
 	// the two apart.
 	if !m.drag.cancelled {
 		t.Error("toggling the panel must cancel the drag itself")
@@ -348,7 +348,7 @@ func TestTogglingThePanelCancelsADragInFlight(t *testing.T) {
 }
 
 // A panel click while a modal owns the keyboard must not switch the mode out
-// from under it (round 2: a click during modeAdd stranded a half-typed title
+// from under it (observed: a click during modeAdd stranded a half-typed title
 // behind a broken "add non-nil exactly while modeAdd" invariant).
 func TestSliceClickIsRefusedUnderModals(t *testing.T) {
 	m := boardModel(t, 240, 50)
@@ -363,8 +363,8 @@ func TestSliceClickIsRefusedUnderModals(t *testing.T) {
 	}
 }
 
-// The panel's clicks work in the table view too — round 2 caught the round-1
-// merge making the render/keyboard live there while every click stayed dead.
+// The panel's clicks work in the table view too — the render and the
+// keyboard once went live there while every click stayed dead.
 func TestSliceClickWorksInTheTableView(t *testing.T) {
 	m := boardModel(t, 240, 50)
 	press(m, "v", "s")
@@ -415,7 +415,7 @@ func TestBoardWheelWorksWhileThePanelHoldsTheKeyboard(t *testing.T) {
 }
 
 // The inset must come out of the row budget, not push the rightmost columns
-// off the frame edge (round 2: repo/labels/deps were clipped by 27 cells).
+// off the frame edge (observed: repo/labels/deps were clipped by 27 cells).
 func TestTableRowsSurviveThePanelInset(t *testing.T) {
 	m := boardModel(t, 240, 50)
 	press(m, "v", "s")

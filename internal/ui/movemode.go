@@ -72,8 +72,7 @@ func (m *Model) onMoveKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
 	// `?` must work here: the move-mode title row advertises it, and the help
 	// overlay is the only listing of the K/J/H/L extremes. It used to be a dead
-	// key in exactly the mode its section documents (independent review of
-	// PR #23 and the t-8xk8 branch, both).
+	// key in exactly the mode its section documents.
 	case key.Matches(msg, m.keys.Help):
 		m.fullHelp = !m.fullHelp
 		return nil
@@ -204,7 +203,7 @@ func (m *Model) commitMove(id, from, to string, dispIdx int) (moved bool, cmd te
 		//
 		// A card the FILTER hid mid-gesture is deliberately not refused: it is
 		// still in the lane, and a cross-lane drop of it is exactly what the
-		// user asked for (independent review of this PR, refutation 1).
+		// user asked for.
 		return false, nil, fmt.Errorf("%s is no longer shown in %s — the board changed under the gesture, nothing moved", id, from)
 	}
 	// A hidden-but-present card also needs NO self-slot correction: the

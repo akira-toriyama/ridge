@@ -84,7 +84,7 @@ func quoteQVal(v string) string {
 // a side-effect of hiding the panel); open-but-unfocused → focus.
 func (m *Model) toggleSlice() {
 	// Opening the panel re-insets every column; a drag surviving that shift
-	// would drop 27 cells away from the pointer (reviewed live: the release
+	// would drop 27 cells away from the pointer (observed: the release
 	// committed into a lane the pointer never visited).
 	m.cancelDrag()
 	switch {
@@ -302,7 +302,7 @@ func (m *Model) sliceRowAt(y int, rowCount int) int {
 func (m *Model) sliceClick(_, y int) tea.Cmd {
 	// The axis line is a fixed row, but it must still be RENDERED to be
 	// clickable — at h ≤ 7 this y is the help line or past the frame
-	// (round-3 residual: the one click path not built on sliceViewport).
+	// (the one click path not built on sliceViewport).
 	if y == boardTop+1 && y < m.h-footerH { // the axis line
 		return m.cycleSliceField(+1)
 	}

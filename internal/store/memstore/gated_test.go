@@ -11,8 +11,7 @@ import (
 // closure in place: writable=false at startup, then writable=true and an
 // empty schema after one Reload. (NewWith would NOT have that bug — it
 // re-serves the same board — but it would silently replace New()'s documented
-// contract of rebuilding a pristine board. Corrected after the independent
-// review of PR #22 caught the original comment blaming the wrong spelling.)
+// contract of rebuilding a pristine board.)
 func TestGatedFixtureStaysReadOnlyAcrossReload(t *testing.T) {
 	p := NewGated("board-behind")
 

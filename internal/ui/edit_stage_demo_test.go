@@ -29,11 +29,11 @@ func TestEditPickDemoProvesThePicker(t *testing.T) {
 
 // The input assertions are LINE-scoped on purpose: the seeded title's tail
 // also appears in the peek header and on the selected card, so a whole-frame
-// Contains stayed green with the seed deleted, the input un-rendered, and the
-// cursor moved to the head (independent review of this PR, R1 — the same
-// class footer_test's sweep note records from PR #22). The one line carrying
-// the prompt is the input; it must hold the value's TAIL and not its head,
-// because the cursor sits at the end of a title wider than the window.
+// Contains stayed green with the seed deleted, the input un-rendered, and
+// the cursor moved to the head — the same class footer_test's sweep note
+// records. The one line carrying the prompt is the input; it must hold the
+// value's TAIL and not its head, because the cursor sits at the end of a
+// title wider than the window.
 func TestEditInputDemoSeedsTheFocusedInput(t *testing.T) {
 	m := New(memstore.New(), Options{})
 	frame, err := m.Dump(240, 60, "editinput", true)
@@ -63,7 +63,7 @@ func TestEditInputDemoSeedsTheFocusedInput(t *testing.T) {
 	}
 	// The frame cannot show focus (the compositor drops the cursor's SGR), so
 	// the name's "Focused" is pinned on the model itself — a Blur() slipped in
-	// after the seed passed every frame assert (review round 2, nit).
+	// after the seed would pass every frame assert.
 	if m.edit == nil || !m.edit.input.Focused() {
 		t.Error("the demo's input is not focused")
 	}

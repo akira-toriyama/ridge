@@ -192,7 +192,8 @@ func renderCard(t *board.Task, g *board.Graph, th *theme, outerW int, st cardSta
 // (len(lines)+2) is one lipgloss wrapping rule away from being wrong, and a
 // wrong height is not a cosmetic bug: the layout hands those y positions
 // straight to the mouse hit-test, so cards would take drops aimed at their
-// neighbours. Measuring costs one render per card per frame for 24 cards.
+// neighbours. The render cost is paid once per card and width — the measurer
+// (layout.go) memoises it across frames.
 func cardHeight(t *board.Task, g *board.Graph, th *theme, outerW int) int {
 	return lg.Height(renderCard(t, g, th, outerW, cardNormal))
 }

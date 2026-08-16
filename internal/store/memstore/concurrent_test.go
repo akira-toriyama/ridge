@@ -153,8 +153,8 @@ func TestGatedStoreStaysGatedAcrossReload(t *testing.T) {
 
 // A quick add is not a reload. The first attempt at the Reload contract built
 // the post-add board from the PRISTINE base, so adding a card in -mock threw
-// away every move and edit made in the session — caught by independent review,
-// reproduced here first.
+// away every move and edit made in the session — reproduced here before the
+// fix.
 func TestAddKeepsSessionEdits(t *testing.T) {
 	p := New()
 	b := p.Board()

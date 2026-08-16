@@ -50,8 +50,8 @@ func TestAdvWheelScrollsAColumnThatEntirelyFits(t *testing.T) {
 	// On m.scroll, the field the wheel WRITES — not on the laid-out column.
 	// buildLayout clamps every offset to maxScrollFor, which is 0 for a column
 	// that fits, so the rendered result is identical with or without the
-	// handler's guard and an assertion on it cannot fail. (Independent review
-	// caught exactly that: deleting `if c.Hidden > 0` left the suite green.)
+	// handler's guard and an assertion on it cannot fail (observed: deleting
+	// `if c.Hidden > 0` left the suite green).
 	if got := m.scroll["ready"]; got != 0 {
 		t.Errorf("wheel-down on a column with Hidden=0 advanced the stored offset to %d; "+
 			"the layout hides it today, but the model now disagrees with what is on screen", got)

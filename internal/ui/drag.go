@@ -120,7 +120,7 @@ func (m *Model) onMouseDown(msg tea.MouseClickMsg) tea.Cmd {
 	// The board's mouse surface exists only while the board IS the surface.
 	// m.lay describes board geometry, so hit-testing it under a modal overlay
 	// (filter, edit, add) or a non-board view (table, graph, full help) sends
-	// the click to a card nobody can see — reviewed live: a click on the edit
+	// the click to a card nobody can see — observed: a click on the edit
 	// overlay silently re-pointed the selection underneath it. The render
 	// path composites these layers; the hit path agrees by refusing here, not
 	// by growing a parallel hit-test.
@@ -134,8 +134,8 @@ func (m *Model) onMouseDown(msg tea.MouseClickMsg) tea.Cmd {
 	// inset strip is live wherever the panel is RENDERED (board and table,
 	// never the graph) — but only while the board or the panel itself holds
 	// the keyboard. A modal (add/edit/filter) or a lifted card must not have
-	// the mode switched out from under it by a panel click (review round 2:
-	// a click during modeAdd stranded a half-typed title behind an invariant
+	// the mode switched out from under it by a panel click (observed: a
+	// click during modeAdd stranded a half-typed title behind an invariant
 	// break).
 	if m.sliceOpen && msg.X < sliceInsetW && msg.Y >= boardTop && m.view != viewGraph &&
 		(m.mode == modeNormal || m.mode == modeSlice) {
@@ -346,9 +346,9 @@ func (m *Model) onWheel(msg tea.MouseWheelMsg) {
 		return
 	}
 	// The peek scrolls in EVERY mode it is visible in — the edit overlay
-	// deliberately opens it (enterEdit), and review confirmed the modality
-	// guard below made a long body unreadable while editing. Scrolling the
-	// peek commits nothing; it is not the board's hit surface.
+	// deliberately opens it (enterEdit), and a mode guard here once made a
+	// long body unreadable while editing. Scrolling the peek commits
+	// nothing; it is not the board's hit surface.
 	if m.view != viewGraph && m.inPeek(msg.X, msg.Y) {
 		switch msg.Button {
 		case tea.MouseWheelUp:

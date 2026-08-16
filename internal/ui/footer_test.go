@@ -33,15 +33,14 @@ func dumpFrame(t *testing.T, w, h int, demo string) []string {
 // the fixture has bulleted lists, so the peek renders single bullets as
 // content. A list of WithHelp texts was far too tight — of the four strings it
 // used, only "jump to blocker" was ever printed by a footer at all, so the
-// move, edit and graph subtests passed against `main` with all four footers
-// present (independent review of PR #21, blocker 2).
+// move, edit and graph subtests passed with all four footers present.
 //
 // Two or more separators on ONE line is the discriminator: every deleted footer
 // listed at least six bindings, and no markdown line in the fixture carries two
 // bullets.
 func TestNoKeyListOutsideTheHelpOverlay(t *testing.T) {
-	// Driven off DemoNames, not a hand-copied list: the hardcoded one predated
-	// PR #22 and quietly exempted `filter` and `fail` from this invariant. ""
+	// Driven off DemoNames, not a hand-copied list: a hardcoded copy once
+	// quietly exempted `filter` and `fail` from this invariant. ""
 	// is the plain board, which has no demo name.
 	demos := append([]string{""}, DemoNames...)
 	for _, demo := range demos {
@@ -125,7 +124,7 @@ func (m *Model) frameRows(t *testing.T, w, h int) []string {
 // so whatever the constructor writes over it is gone for the whole session —
 // and the startup note added here first overwrote it with "fixture · N tasks",
 // which is worse than a lost warning: "fixture" is the one word that means
-// nothing you do touches disk (independent review of PR #21, blocker 1).
+// nothing you do touches disk.
 func TestReadOnlyBoardKeepsItsWarningInTheOpeningFrame(t *testing.T) {
 	ro := memstore.New().Board()
 	gated := board.NewStoreBoard(ro.Lanes(), ro.Tasks(), ro.Epics(), false, "board-behind")
@@ -242,8 +241,7 @@ func TestGatedBoardRendersItsWarningAtEveryWidth(t *testing.T) {
 
 // Every -demo name in ui.DemoNames must render AND must actually change the
 // frame. An err==nil check alone passed with both new demo bodies deleted:
-// demoState returns nil for any name it has a case for, empty or not
-// (independent review of PR #22).
+// demoState returns nil for any name it has a case for, empty or not.
 func TestEveryAdvertisedDemoRenders(t *testing.T) {
 	plain := strings.Join(dumpFrame(t, 240, 50, ""), "\n")
 	for _, d := range DemoNames {

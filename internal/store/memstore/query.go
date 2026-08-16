@@ -198,8 +198,7 @@ func shortRepo(r string) string {
 // parser needs their positions, because furrow refuses the misplaced shapes
 // (a quote opening mid-token, a closing quote with text after it) rather
 // than guessing. Both quote characters work, and an unterminated one is a
-// refusal (furrow: exit 2 query-parse). All measured 2026-08-10, t-74y3
-// review round.
+// refusal (furrow: exit 2 query-parse). All measured 2026-08-10 (t-74y3).
 func tokenize(s string) ([]string, error) {
 	var (
 		toks  []string

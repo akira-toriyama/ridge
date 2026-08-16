@@ -152,8 +152,8 @@ func TestRefusalDoesNotStealANewerMode(t *testing.T) {
 // A gesture refused by the window must LEAVE the refusal on the status line:
 // the callers' own success notes run after commitMove returns, and papering
 // over the refusal tells the user the move worked right before the rollback
-// yanks it back (review F14-1). The gesture is refused before the optimistic
-// apply, so the board must not change either.
+// yanks it back. The gesture is refused before the optimistic apply, so the
+// board must not change either.
 func TestRefusedGestureKeepsTheRefusalOnTheStatusLine(t *testing.T) {
 	m, p := scriptedModel(t)
 	p.moveErr = errors.New("schema gate says no")
@@ -176,7 +176,7 @@ func TestRefusedGestureKeepsTheRefusalOnTheStatusLine(t *testing.T) {
 
 // A refusal landing while the user is in the graph view must not reopen the
 // modal: the graph shares modeNormal but never composites addLayer, so the
-// reopen would put the keyboard inside an invisible input (review F14-3).
+// reopen would put the keyboard inside an invisible input.
 func TestRefusalDoesNotReopenInTheGraphView(t *testing.T) {
 	m, p := scriptedModel(t)
 	p.addErr = errors.New("epic e-nope not found")
@@ -201,8 +201,8 @@ func TestRefusalDoesNotReopenInTheGraphView(t *testing.T) {
 // …and the help overlay is the OTHER layer that hides addLayer (zHelp sits
 // above it): a refusal landing under an open `?` must not reopen either, or
 // the keyboard ends up inside an invisible modal that `?` types into instead
-// of closing (independent review of t-8xk8, F1 — the last ungated mode
-// assignment in the package).
+// of closing — this was the last ungated mode assignment in the package
+// (t-8xk8).
 func TestRefusalDoesNotReopenUnderTheHelpOverlay(t *testing.T) {
 	m, p := scriptedModel(t)
 	p.addErr = errors.New("epic e-nope not found")
@@ -226,8 +226,7 @@ func TestRefusalDoesNotReopenUnderTheHelpOverlay(t *testing.T) {
 
 // A $EDITOR body landing inside the rollback window is the one write whose
 // payload cannot be re-typed from a note (the temp file is already deleted):
-// it must be HELD and replayed once the window closes, not refused
-// (review F14-2).
+// it must be HELD and replayed once the window closes, not refused.
 func TestEditorBodyIsHeldThroughTheRollbackWindow(t *testing.T) {
 	m, p := scriptedModel(t)
 	p.moveErr = errors.New("schema gate says no")

@@ -125,8 +125,8 @@ func labeledLane() *board.Board {
 
 // A card the filter hid is still IN its lane: a cross-lane drop of it is
 // exactly what the user asked for, and the slot arithmetic never consults the
-// source slot on a lane change. Refusing it regressed a gesture main handles
-// (independent review of this PR, refutation 1) — pin the commit.
+// source slot on a lane change. Refusing it would regress a working gesture
+// — pin the commit.
 func TestHiddenCardCrossLaneDropStillCommits(t *testing.T) {
 	m := New(memstore.NewWith(labeledLane()), Options{})
 	m.w, m.h = 140, 40

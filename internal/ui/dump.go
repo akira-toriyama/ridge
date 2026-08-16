@@ -12,7 +12,7 @@ import (
 // DemoNames is every -demo state, spelled once. The flag's usage string, the
 // unknown-name error and the tests all read this slice, because the list was
 // duplicated in three places and adding two states updated two of them —
-// `ridge -h` then advertised eight of ten (independent review of PR #22).
+// `ridge -h` then advertised eight of ten.
 var DemoNames = []string{"move", "drag", "add", "edit", "editpick", "editinput", "graph", "help", "slice", "sort", "filter", "filterchips", "fail"}
 
 // Options configures a freshly-constructed Model. The zero value is the
@@ -58,8 +58,7 @@ func New(p board.Provider, o Options) *Model {
 	// restores it later, so anything written over it is gone for good. An
 	// earlier revision of this function overwrote it with "fixture · N tasks",
 	// which was worse than losing it: on a live store gated by the schema
-	// check, "fixture" is the one word that means nothing you do touches disk
-	// (independent review of PR #21, blocker 1).
+	// check, "fixture" is the one word that means nothing you do touches disk.
 	switch {
 	case !m.b.Writable():
 	case p.Live():
