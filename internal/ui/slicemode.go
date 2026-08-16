@@ -215,6 +215,13 @@ func (m *Model) sliceRows() []sliceRow {
 			// Measure the composed pieces; never hard-code a cell budget
 			// around CJK text.
 			suffix := fmt.Sprintf(" %d/%d", e.Done, e.Total)
+			// The epic-dep readout: →N = this box waits on N still-open
+			// boxes ("open after those close"). Informational like the edge
+			// itself — furrow warns and proceeds — so it is dim data, not a
+			// red refusal; the peek resolves the ids.
+			if n := len(m.b.OpenEpicDeps(&e)); n > 0 {
+				suffix += fmt.Sprintf(" →%d", n)
+			}
 			if e.Stuck {
 				suffix += " !"
 			}

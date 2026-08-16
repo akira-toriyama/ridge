@@ -116,8 +116,9 @@ type taskJSON struct {
 
 // epicJSON is one `furrow epic ls --json` row.
 type epicJSON struct {
-	ID       string `json:"id"`
-	Title    string `json:"title"`
+	ID       string   `json:"id"`
+	Title    string   `json:"title"`
+	Deps     []string `json:"deps"`
 	Progress struct {
 		Done  int `json:"done"`
 		Total int `json:"total"`
@@ -218,7 +219,7 @@ func (p *Store) load() (*board.Board, error) {
 		epics = append(epics, board.EpicInfo{
 			ID: e.ID, Title: e.Title,
 			Done: e.Progress.Done, Total: e.Progress.Total,
-			Stuck: e.Stuck,
+			Stuck: e.Stuck, Deps: e.Deps,
 		})
 	}
 

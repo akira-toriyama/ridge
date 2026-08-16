@@ -85,11 +85,28 @@ func TestSliceEpicRowsCarryProgressAndClickSelects(t *testing.T) {
 	press(m, "s")
 	m.sliceField = sliceEpic
 	rows := m.sliceRows()
-	if len(rows) != 1 || rows[0].value != "e-fw2m" {
+	if len(rows) != 4 || rows[0].value != "e-fw2m" {
 		t.Fatalf("epic rows = %+v", rows)
 	}
 	if !strings.Contains(rows[0].display, "6/18") {
 		t.Errorf("the epic row must carry the store's progress: %q", rows[0].display)
+	}
+	// The dep readout: →N counts only the deps still OPEN on the board.
+	// e-fw2m waits on the open e-p3dx; e-c4mt declares two deps but one
+	// (e-2b7h) is absent from the open-epic read — a dep on a closed epic,
+	// satisfied per furrow — so both rows read →1, and the dep-less e-p3dx
+	// row carries no arrow at all.
+	for i, want := range map[int]string{0: "6/18 →1", 3: "0/1 →1"} {
+		if !strings.Contains(rows[i].display, want) {
+			t.Errorf("epic row %d = %q, want it to contain %q", i, rows[i].display, want)
+		}
+	}
+	if strings.Contains(rows[1].display, "→") {
+		t.Errorf("e-p3dx has no deps; its row must carry no arrow: %q", rows[1].display)
+	}
+	// The stuck epic keeps its marker alongside the new suffix grammar.
+	if !strings.Contains(rows[2].display, "0/2 !") {
+		t.Errorf("the stuck epic row must keep its marker: %q", rows[2].display)
 	}
 
 	// A click on the first value row selects it.

@@ -99,6 +99,23 @@ func (m *Model) peekContent(w int) string {
 		meta2 = append(meta2, "labels "+strings.Join(t.Labels, ","))
 	}
 	b.WriteString(th.muted.Render(wrapJoin(meta2, " · ", w)) + "\n")
+	// The epic's own dep edges, resolved — `furrow epic dep --list`'s "waits
+	// on", in its wording. A dep id the (open-only) epic read cannot resolve
+	// is a dep on a closed epic, which furrow treats as satisfied.
+	if e := m.b.Epic(t.Epic); e != nil && len(e.Deps) > 0 {
+		parts := []string{"epic waits on"}
+		for _, d := range e.Deps {
+			if de := m.b.Epic(d); de != nil {
+				// Progress BEFORE the title: a CJK epic title routinely
+				// overflows the box and truncates, and the numbers are the
+				// half that must survive the ellipsis.
+				parts = append(parts, fmt.Sprintf("%s (%d/%d) %s", d, de.Done, de.Total, de.Title))
+			} else {
+				parts = append(parts, d+" (closed)")
+			}
+		}
+		b.WriteString(th.muted.Render(wrapJoin(parts, " · ", w)) + "\n")
+	}
 	stamps := fmt.Sprintf("updated %s · created %s", ago(t.Updated), t.Created.Format("2006-01-02"))
 	if !t.Due.IsZero() {
 		// Local: the instant furrow stores is UTC, and an evening-local due

@@ -13,7 +13,7 @@ import (
 // unknown-name error and the tests all read this slice, because the list was
 // duplicated in three places and adding two states updated two of them —
 // `ridge -h` then advertised eight of ten.
-var DemoNames = []string{"move", "drag", "add", "edit", "editpick", "editinput", "graph", "help", "slice", "sort", "filter", "filterchips", "fail"}
+var DemoNames = []string{"move", "drag", "add", "edit", "editpick", "editinput", "graph", "help", "slice", "sort", "filter", "filterchips", "epicdeps", "fail"}
 
 // Options configures a freshly-constructed Model. The zero value is the
 // default TUI: dark palette, board view, no filter.
@@ -249,6 +249,18 @@ func (m *Model) demoState(kind string) error {
 		m.ti.SetValue("lane:backlog is:blocked")
 		m.ti.Focus()
 		_ = m.applyFilter(m.ti.Value())
+
+	case "epicdeps":
+		// The peek's epic-dep line, both resolutions at once: t-y4st's box
+		// waits on an OPEN box (resolved to id+title+progress) and on a
+		// CLOSED one (an id the open-only epic read cannot resolve —
+		// satisfied). The default -dump selection is an unfiled task, so no
+		// bare flag combination can reach this frame.
+		if !m.selectID("t-y4st", false) {
+			return fmt.Errorf("demo epicdeps: t-y4st is not on the fixture board")
+		}
+		m.peekOpen = true
+		m.syncPeek()
 
 	case "fail":
 		// A refused write. The ⚠ styling has its own colour and its own row,

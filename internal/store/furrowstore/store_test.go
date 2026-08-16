@@ -465,3 +465,49 @@ func TestContractAddMapsTheContext(t *testing.T) {
 		t.Error("an empty title must refuse")
 	}
 }
+
+// Epic deps travel `epic ls --json`'s deps array, and the read serves OPEN
+// epics only — so a dep on a closed epic arrives as an id the snapshot
+// cannot resolve, which is the satisfied shape (furrow: "a dep on a closed
+// epic is simply satisfied").
+//
+// bite-exempt: execs a real furrow binary and always skips where furrow is
+// not on PATH — which is CI, so the gate can never judge it there
+func TestContractEpicDepsReachTheSnapshot(t *testing.T) {
+	p, dir := newLabProvider(t)
+	labAdd(t, dir, "既存のタスク") // seeds lab/lab as a known repo
+
+	addEpic := func(title string) string {
+		out := lab(t, dir, "furrow", "epic", "add", title, "--json")
+		var e struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(out, &e); err != nil || e.ID == "" {
+			t.Fatalf("epic add: %v (%s)", err, out)
+		}
+		return e.ID
+	}
+	dep := addEpic("先に閉じる箱")
+	closedDep := addEpic("もう閉じた箱")
+	box := addEpic("待つ箱")
+	lab(t, dir, "furrow", "epic", "dep", box, dep, closedDep)
+	lab(t, dir, "furrow", "epic", "done", closedDep)
+
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	b := p.Board()
+	e := b.Epic(box)
+	if e == nil {
+		t.Fatalf("epic %s did not reach the snapshot", box)
+	}
+	if len(e.Deps) != 2 || !contains(e.Deps, dep) || !contains(e.Deps, closedDep) {
+		t.Errorf("Deps = %v, want both %s and %s", e.Deps, dep, closedDep)
+	}
+	if b.Epic(closedDep) != nil {
+		t.Errorf("%s is closed and must be absent from the open-epic read", closedDep)
+	}
+	if got := b.OpenEpicDeps(e); len(got) != 1 || got[0] != dep {
+		t.Errorf("OpenEpicDeps = %v, want [%s] — the closed dep is satisfied", got, dep)
+	}
+}

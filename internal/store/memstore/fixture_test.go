@@ -15,28 +15,48 @@ func fixtureGraph(t *testing.T) (*board.Board, *board.Graph) {
 func TestGraphAgreesWithFixtureFacts(t *testing.T) {
 	b, g := fixtureGraph(t)
 
-	// e-fw2m is the fixture's one epic ENTITY — no lane, no card — and the 18
-	// member tasks point at it. Done/Total mirror `furrow epic ls`, so they
-	// must agree with the member lanes the fixture actually holds.
-	e := b.Epic("e-fw2m")
-	if e == nil {
-		t.Fatal("e-fw2m is the fixture's epic entity")
-	}
-	var members, membersDone int
-	for _, task := range b.Tasks() {
-		if task.Epic != e.ID {
-			continue
+	// Epics are ENTITIES — no lane, no card — and their hand-written
+	// Done/Total mirror `furrow epic ls`, so EVERY epic's numbers must agree
+	// with the member lanes the fixture actually holds (a count edited on one
+	// side only is exactly how a hand-kept snapshot rots).
+	for _, e := range b.Epics() {
+		var members, membersDone int
+		for _, task := range b.Tasks() {
+			if task.Epic != e.ID {
+				continue
+			}
+			members++
+			if g.IsDone(task.ID) {
+				membersDone++
+			}
 		}
-		members++
-		if g.IsDone(task.ID) {
-			membersDone++
+		if members != e.Total || membersDone != e.Done {
+			t.Errorf("%s reports %d/%d, members measure %d/%d",
+				e.ID, e.Done, e.Total, membersDone, members)
 		}
 	}
-	if members != e.Total || membersDone != e.Done {
-		t.Errorf("epic reports %d/%d, members measure %d/%d", e.Done, e.Total, membersDone, members)
+	if e := b.Epic("e-fw2m"); e == nil || e.Total != 18 {
+		t.Errorf("e-fw2m must stay the 18-member main box: %+v", e)
 	}
-	if e.Total != 18 {
-		t.Errorf("e-fw2m has %d members, want 18", e.Total)
+
+	// The epic-dep edges cover every rendering state the UI distinguishes:
+	// a wait on an OPEN box, a dep on a CLOSED box (an id the open-only epic
+	// read cannot resolve — satisfied, per furrow), and a stuck epic.
+	if got := b.OpenEpicDeps(b.Epic("e-fw2m")); len(got) != 1 || got[0] != "e-p3dx" {
+		t.Errorf("OpenEpicDeps(e-fw2m) = %v, want [e-p3dx]", got)
+	}
+	if got := b.OpenEpicDeps(b.Epic("e-c4mt")); len(got) != 1 || got[0] != "e-fw2m" {
+		t.Errorf("OpenEpicDeps(e-c4mt) = %v, want [e-fw2m] — e-2b7h is the closed-dep shape", got)
+	}
+	if b.Epic("e-2b7h") != nil {
+		t.Error("e-2b7h must stay ABSENT from the epic set: it is the fixture's closed-dep shape")
+	}
+	stuck := false
+	for _, e := range b.Epics() {
+		stuck = stuck || e.Stuck
+	}
+	if !stuck {
+		t.Error("the fixture must keep one stuck epic — the warn glyph's only fixture site")
 	}
 
 	// t-jv3j depends on t-ehk7 (open) and t-t38k (done).
