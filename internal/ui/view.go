@@ -107,6 +107,11 @@ func (m *Model) renderBoard() string {
 	return m.fitFrame(lg.NewCompositor(layers...).Render())
 }
 
+// minFilterInputW is the floor under the filter input when the chips squeeze
+// it. Below this the input cannot show what is being typed; on the declared
+// 240-column floor the chips never get close to forcing it.
+const minFilterInputW = 20
+
 // chromeLayers draws the title bar, the filter bar and the status line.
 func (m *Model) chromeLayers() []*lg.Layer {
 	th := m.th
@@ -149,10 +154,53 @@ func (m *Model) chromeLayers() []*lg.Layer {
 	right := th.crumb.Render(tail)
 	title := joinEnds(left, right, m.w)
 
+	// The chips the input's own padding must not evict: the slice is part of
+	// what the board is filtered by, so it shows even while the panel is
+	// closed — state the panel set must never be invisible state. The table's
+	// sort, by the same rule: the header ▲▼ only exists for keys that HAVE a
+	// column — created and effort do not — and the status line is overwritten
+	// by the next keystroke, so this is the one place the sort stays readable
+	// (independent review, finding 1). Built BEFORE the input so the input
+	// can be sized to the space they leave. The qErr/pinned right-aligners
+	// below still outrank them — joinEnds truncates from the left, and the
+	// padded input reaches the chips first; that trade predates this sizing
+	// (identical on a fixed-width input) and an error beats a chip.
+	chips := ""
+	if t := m.sliceTerm(); t != "" {
+		chips += th.dim.Render("  slice ") + th.accent.Render(t)
+	}
+	if m.view == viewTable && m.tableSort > sortCanonical {
+		chips += th.dim.Render("  sort ") +
+			th.accent.Render(m.tableSort.String()+" "+sortArrow(m.tableSortAsc))
+	}
 	var filter string
 	switch {
 	case m.mode == modeFilter:
+		// The input pads to its whole width, so its width IS the layout: a
+		// fixed number here (w-30 for years) overran the row the moment the
+		// chips outgrew the remainder, and the sort readout fell off exactly
+		// while the user was typing a filter (t-a54p). Size it to the frame
+		// being drawn instead — render-time state derived from render-time
+		// measurement, the same rule the card measurer lives by.
+		avail := maxInt(minFilterInputW, m.w-lg.Width(chips))
+		m.ti.SetWidth(avail)
+		// SetWidth alone does not re-run the input's overflow bookkeeping
+		// (bubbles v2 recomputes the horizontal window only on cursor moves),
+		// so a value seeded at another width keeps that width's scroll window
+		// — entering the mode with an existing query showed only its tail in
+		// a 48-cell slice of a 237-cell input (independent review of this PR,
+		// R1). SetCursor to the position the cursor is already at is the
+		// documented no-op that forces the recompute.
+		m.ti.SetCursor(m.ti.Position())
 		filter = m.ti.View()
+		if over := lg.Width(filter) + lg.Width(chips) - m.w; over > 0 {
+			// SetWidth budgets the text area; the prompt and cursor cell ride
+			// on top of it. Measure the real render once and give the
+			// overhead back rather than hard-coding bubbles' chrome width.
+			m.ti.SetWidth(maxInt(minFilterInputW, avail-over))
+			m.ti.SetCursor(m.ti.Position())
+			filter = m.ti.View()
+		}
 	case m.qRaw == "":
 		// GitHub's literal placeholder. The old text spelled out a full example
 		// query, which read as an ACTIVE filter — in every dump the bar said
@@ -162,20 +210,7 @@ func (m *Model) chromeLayers() []*lg.Layer {
 	default:
 		filter = th.dim.Render("/ ") + th.chipAlt.Render(m.qRaw)
 	}
-	// The slice is part of what the board is filtered by, so it shows here
-	// even while the panel is closed — state the panel set must never be
-	// invisible state.
-	if t := m.sliceTerm(); t != "" {
-		filter += th.dim.Render("  slice ") + th.accent.Render(t)
-	}
-	// The table's sort, by the same rule. The header ▲▼ only exists for keys
-	// that HAVE a column — created and effort do not — and the status line is
-	// overwritten by the next keystroke, so this is the one place the sort
-	// stays readable in every state (independent review, finding 1).
-	if m.view == viewTable && m.tableSort > sortCanonical {
-		filter += th.dim.Render("  sort ") +
-			th.accent.Render(m.tableSort.String()+" "+sortArrow(m.tableSortAsc))
-	}
+	filter += chips
 	if m.qErr != "" {
 		filter = joinEnds(filter, th.errText.Render("⚠ "+m.qErr), m.w)
 	}

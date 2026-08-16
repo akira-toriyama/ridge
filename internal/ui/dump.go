@@ -13,7 +13,7 @@ import (
 // unknown-name error and the tests all read this slice, because the list was
 // duplicated in three places and adding two states updated two of them —
 // `ridge -h` then advertised eight of ten (independent review of PR #22).
-var DemoNames = []string{"move", "drag", "add", "edit", "graph", "help", "slice", "sort", "filter", "fail"}
+var DemoNames = []string{"move", "drag", "add", "edit", "graph", "help", "slice", "sort", "filter", "filterchips", "fail"}
 
 // Options configures a freshly-constructed Model. The zero value is the
 // default TUI: dark palette, board view, no filter.
@@ -183,6 +183,30 @@ func (m *Model) demoState(kind string) error {
 		// The modal filter input with text in it: the ⟨FILTER⟩ badge, the
 		// prompt holding the keyboard, and the board already narrowed behind
 		// it. Reachable only mid-keystroke otherwise.
+		m.mode = modeFilter
+		m.ti.SetValue("lane:backlog is:blocked")
+		m.ti.Focus()
+		_ = m.applyFilter(m.ti.Value())
+
+	case "filterchips":
+		// The filter row under maximum load: table view sorted, an epic slice
+		// active, and the input holding the keyboard. The fixed-width input
+		// used to push the sort readout off the row in exactly this state
+		// (t-a54p), and no other demo can produce it — the sort chip needs the
+		// table, the slice chip needs a selection, and the input only pads the
+		// row while it is focused mid-keystroke.
+		m.view = viewTable
+		m.setSort(sortUpdated, false)
+		m.toggleSlice()
+		m.sliceField = sliceEpic
+		for i, r := range m.sliceRows() {
+			if r.value == "e-fw2m" {
+				m.sliceIdx = i
+			}
+		}
+		if c := m.selectSlice(sliceEpic, "e-fw2m"); c != nil {
+			_ = c
+		}
 		m.mode = modeFilter
 		m.ti.SetValue("lane:backlog is:blocked")
 		m.ti.Focus()

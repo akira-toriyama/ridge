@@ -294,7 +294,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.w, m.h = msg.Width, msg.Height
 		m.help.SetWidth(msg.Width)
-		m.ti.SetWidth(maxInt(20, msg.Width-30))
+		// The filter input is deliberately NOT sized here: its width depends
+		// on the chips sharing its row, so chromeLayers derives it per frame.
+		// Sizing it in two places is how the fixed w-30 remainder shipped —
+		// and then starved the sort readout the moment a slice term joined it.
 		m.ensureVisible()
 		m.syncPeek()
 
