@@ -414,7 +414,10 @@ func (m *Model) editListRows(t *board.Task) []string {
 		}
 		return rows
 	case fieldDeps:
-		return t.Deps
+		// A copy, not the live slice: DepRm's removeStr shrinks the backing
+		// array in place, so a caller holding these rows across a removal
+		// would read duplicated tails.
+		return append([]string(nil), t.Deps...)
 	case fieldChecklist:
 		var rows []string
 		for _, c := range t.Checklist {
@@ -476,13 +479,21 @@ func (m *Model) onEditInputKey(msg tea.KeyPressMsg, t *board.Task) tea.Cmd {
 				m.noteEditStage()
 				return nil
 			}
-			return m.applyCheck("check add", func() error { return m.b.CheckAdd(t.ID, v) },
+			cmd := m.applyCheck("check add", func() error { return m.b.CheckAdd(t.ID, v) },
 				func() error { return m.prov.PersistCheckAdd(t.ID, v) })
+			// The apply lands back in stageList, where ⏎ TOGGLES — the input's
+			// "⏎ apply" note surviving here is the false-key-claim failure
+			// noteEditStage exists to prevent (a refusal survives: noteEditStage
+			// never over-writes an unread m.fail).
+			m.noteEditStage()
+			return cmd
 		case inputCheckReword:
 			e.stage = stageList
 			i := e.listIdx
-			return m.applyCheck("check reword", func() error { return m.b.CheckReword(t.ID, i, v) },
+			cmd := m.applyCheck("check reword", func() error { return m.b.CheckReword(t.ID, i, v) },
 				func() error { return m.prov.PersistCheckReword(t.ID, i, v) })
+			m.noteEditStage()
+			return cmd
 		case inputDepAdd:
 			e.stage = stageList
 			if v == "" {
@@ -492,8 +503,13 @@ func (m *Model) onEditInputKey(msg tea.KeyPressMsg, t *board.Task) tea.Cmd {
 				m.noteEditStage()
 				return nil
 			}
-			return m.applyCheck("dep add", func() error { return m.b.DepAdd(t.ID, v) },
+			// Re-note after the apply, or the surviving "⏎ apply" makes the
+			// NEXT ⏎ silently delete the dep under the cursor — in stageList
+			// ⏎ removes an edge, the one destructive key in the overlay.
+			cmd := m.applyCheck("dep add", func() error { return m.b.DepAdd(t.ID, v) },
 				func() error { return m.prov.PersistDepAdd(t.ID, v) })
+			m.noteEditStage()
+			return cmd
 		}
 		return nil
 	}

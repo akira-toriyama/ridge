@@ -262,9 +262,7 @@ func (m *Model) demoState(kind string) error {
 			return fmt.Errorf("demo editdeps: the edit menu did not open")
 		}
 		m.edit.menuIdx = int(fieldDeps)
-		if c := m.openField(fieldDeps, m.b.Task("t-jv3j")); c != nil {
-			_ = c
-		}
+		m.openField(fieldDeps, m.b.Task("t-jv3j"))
 
 	case "epicdeps":
 		// The peek's epic-dep line, both resolutions at once: t-y4st's box

@@ -294,9 +294,19 @@ func (p *Store) PersistDepAdd(id, dep string) error {
 	return nil
 }
 
-// PersistDepRm validates the ids and records nothing (board.Provider).
-func (p *Store) PersistDepRm(id, dep string) error {
-	return p.PersistDepAdd(id, dep) // same exists contract
+// PersistDepRm validates the TASK id only and records nothing
+// (board.Provider). The dep id is deliberately unchecked: an archived dep
+// leaves a dangling edge on the live board (the `?` row), and removing it is
+// exactly the write furrow allows — requiring the dep to exist would refuse
+// the one removal that matters.
+func (p *Store) PersistDepRm(id, _ string) error {
+	if err := p.gate(); err != nil {
+		return err
+	}
+	if p.snapshot().Task(id) == nil {
+		return fmt.Errorf("unknown task %q", id)
+	}
+	return nil
 }
 
 // Add records a task and swaps in a board that contains it (board.Provider).
