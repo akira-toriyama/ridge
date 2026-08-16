@@ -53,8 +53,12 @@ type dragState struct {
 	x, y           int
 	grabDX, grabDY int
 
+	// The hovered column, for the ghost's target and the auto-scroll hot
+	// zone. NOT consulted by the release or the status line — both resolve
+	// the pointer live through dropTarget/idxAtY, so a motion-time cache can
+	// never promise a slot the release refuses (rule 4; and the slot itself
+	// is not cached at all for the same staleness reason fromIdx is gone).
 	dropLane string
-	dropIdx  int
 
 	scrollDir int // -1 up, +1 down, 0 parked away from an edge
 	scrollSeq int
@@ -194,7 +198,7 @@ func (m *Model) onMouseDown(msg tea.MouseClickMsg) tea.Cmd {
 		armed: true, id: t.ID, from: lane, button: msg.Button,
 		pressX: msg.X, pressY: msg.Y, x: msg.X, y: msg.Y,
 		grabDX: msg.X - box.X, grabDY: msg.Y - box.Y,
-		dropLane: lane, dropIdx: idx,
+		dropLane: lane,
 	}
 	return nil
 }
@@ -225,7 +229,6 @@ func (m *Model) onMouseMove(msg tea.MouseMotionMsg) tea.Cmd {
 	// tracking one would aim the gesture at something invisible.
 	if lane, ok := m.lay.laneAtX(msg.X); ok && !m.inPeek(msg.X, msg.Y) {
 		m.drag.dropLane = lane
-		m.drag.dropIdx = m.lay.idxAtY(lane, msg.Y)
 	}
 
 	// Edge auto-scroll: arm a repeating tick while the pointer sits in the hot
@@ -248,8 +251,8 @@ func (m *Model) onMouseMove(msg tea.MouseMotionMsg) tea.Cmd {
 }
 
 // dragScrollStep scrolls the hovered column one card, reporting whether it
-// actually could. It re-measures immediately so the drop index the status line
-// shows matches the rows now under the pointer.
+// actually could. It re-measures immediately so the slot the status line
+// resolves under the parked pointer matches the rows now beneath it.
 func (m *Model) dragScrollStep() bool {
 	c := m.lay.Col(m.drag.dropLane)
 	if c == nil || m.drag.scrollDir == 0 {
@@ -264,7 +267,6 @@ func (m *Model) dragScrollStep() bool {
 		return false
 	}
 	m.relayout()
-	m.drag.dropIdx = m.lay.idxAtY(m.drag.dropLane, m.drag.y)
 	return true
 }
 

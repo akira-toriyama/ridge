@@ -90,13 +90,19 @@ func (m *Model) onMoveKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	case key.Matches(msg, m.keys.Commit):
 		id, from, to, di := m.moveID, m.moveFrom, m.dropLane, m.dropIdx
-		m.mode, m.moveID, m.moveCurIdx = modeNormal, "", nil
 		moved, cmd, err := m.commitMove(id, from, to, di)
-		m.releaseHeldVerdict() // only after the commit consumed its slot
 		if err != nil {
+			// The move state must still be intact here: a refused commit has
+			// to restore the lift-time SELECTION exactly as esc would, or the
+			// cursor stays wherever followDrop parked it — two lanes over,
+			// on a task the next keystroke silently acts on. cancelMove also
+			// skips its own note while statusErr shows the refusal.
 			m.fail("%v", err)
+			m.cancelMove()
 			return nil
 		}
+		m.mode, m.moveID, m.moveCurIdx = modeNormal, "", nil
+		m.releaseHeldVerdict() // only after the commit consumed its slot
 		switch {
 		case !moved:
 			m.note("%s did not move — that is where it already was", id)
@@ -190,16 +196,21 @@ func (m *Model) commitMove(id, from, to string, dispIdx int) (moved bool, cmd te
 		return false, nil, fmt.Errorf("move %s dropped — the store refused the last write, rolling back", id)
 	}
 	fromIdx := displayIndex(m.cols[from], id)
-	if fromIdx < 0 {
-		// The gesture grabbed the card in `from`, and a recompose has since
-		// removed it from that column — moved lanes, closed, or filtered out
-		// by a re-read. Its premise is gone; committing would address a board
-		// the user was not shown (the same class t-74y3 exists to prevent),
-		// so refuse and let them re-issue the gesture against what is now on
-		// screen.
+	if fromIdx < 0 && m.b.IndexIn(from, id) < 0 {
+		// The card LEFT the lane the gesture grabbed it in — moved or closed
+		// by a re-read. Committing would silently yank back a change the user
+		// was never shown (the class t-74y3 exists to prevent), so refuse and
+		// let them re-issue the gesture against what is now on screen.
+		//
+		// A card the FILTER hid mid-gesture is deliberately not refused: it is
+		// still in the lane, and a cross-lane drop of it is exactly what the
+		// user asked for (independent review of this PR, refutation 1).
 		return false, nil, fmt.Errorf("%s is no longer shown in %s — the board changed under the gesture, nothing moved", id, from)
 	}
-	adj := board.AdjustDropIndex(from == to, fromIdx, dispIdx)
+	// A hidden-but-present card also needs NO self-slot correction: the
+	// displayed column does not count it, so dispIdx was measured against a
+	// column without it — the exact post-removal shape MoveTo expects.
+	adj := board.AdjustDropIndex(from == to && fromIdx >= 0, fromIdx, dispIdx)
 
 	visNoSelf := withoutID(m.cols[to], id)
 	fullNoSelf := withoutID(m.b.LaneTasks(to), id)
