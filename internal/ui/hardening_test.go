@@ -53,7 +53,7 @@ func TestChecklistPersistCarriesTheGestureTimeValue(t *testing.T) {
 func TestQuickAddRidesThePersistQueue(t *testing.T) {
 	m, p := scriptedModel(t)
 
-	_, first, err := m.commitMove("a", "ready", "ready", 0, 3)
+	_, first, err := m.commitMove("a", "ready", "ready", 3)
 	if err != nil || first == nil {
 		t.Fatal(err)
 	}
@@ -157,7 +157,7 @@ func TestFilterVerdictIsDroppedWhileWritesAreInFlight(t *testing.T) {
 		t.Fatalf("visible = %d, want 3", m.countVisible())
 	}
 
-	if _, c, err := m.commitMove("a", "ready", "ready", 0, 3); err != nil || c == nil {
+	if _, c, err := m.commitMove("a", "ready", "ready", 3); err != nil || c == nil {
 		t.Fatal(err)
 	}
 	// This verdict predates the move; same seq, older truth.
@@ -262,7 +262,7 @@ func TestCtrlCQuitsFromEveryModal(t *testing.T) {
 // forever.
 func TestReloadKeyRefusesWhileWritesAreInFlight(t *testing.T) {
 	m, _ := scriptedModel(t)
-	if _, c, err := m.commitMove("a", "ready", "ready", 0, 3); err != nil || c == nil {
+	if _, c, err := m.commitMove("a", "ready", "ready", 3); err != nil || c == nil {
 		t.Fatal(err)
 	}
 	if c := m.onNormalKey(keyMsg("r")); c != nil {
@@ -303,7 +303,7 @@ func TestFlushedQueueTailIsNamedInTheFailure(t *testing.T) {
 	m, p := scriptedModel(t)
 	p.moveErr = errors.New("no")
 
-	_, cmd, err := m.commitMove("a", "ready", "ready", 0, 3)
+	_, cmd, err := m.commitMove("a", "ready", "ready", 3)
 	if err != nil || cmd == nil {
 		t.Fatal(err)
 	}

@@ -93,11 +93,10 @@ type Model struct {
 	// keyboard move mode. dropIdx is measured against the destination column
 	// AS DISPLAYED, so it needs AdjustDropIndex on commit — same convention as
 	// the mouse drag, one arithmetic path for both.
-	moveID      string
-	moveFrom    string
-	moveFromIdx int
-	dropLane    string
-	dropIdx     int
+	moveID   string
+	moveFrom string
+	dropLane string
+	dropIdx  int
 	// The cursor as it was when the card was lifted, so esc can restore the
 	// SELECTION and not just the board.
 	moveCurLane int
@@ -943,7 +942,7 @@ func (m *Model) quickReorder(d int) tea.Cmd {
 		m.note("%s is already at the %s of %s", t.ID, endName(d), t.Status)
 		return nil
 	}
-	moved, cmd, err := m.commitMove(t.ID, t.Status, t.Status, from, to+boolToInt(d > 0))
+	moved, cmd, err := m.commitMove(t.ID, t.Status, t.Status, to+boolToInt(d > 0))
 	if err != nil {
 		m.fail("%v", err)
 		return nil

@@ -45,10 +45,9 @@ type dragState struct {
 	moved     bool // the threshold was passed: this is a real drag
 	cancelled bool // Esc during the drag; the pending release is a no-op
 
-	id      string
-	from    string
-	fromIdx int
-	button  tea.MouseButton
+	id     string
+	from   string
+	button tea.MouseButton
 
 	pressX, pressY int
 	x, y           int
@@ -192,7 +191,7 @@ func (m *Model) onMouseDown(msg tea.MouseClickMsg) tea.Cmd {
 		}
 	}
 	m.drag = dragState{
-		armed: true, id: t.ID, from: lane, fromIdx: idx, button: msg.Button,
+		armed: true, id: t.ID, from: lane, button: msg.Button,
 		pressX: msg.X, pressY: msg.Y, x: msg.X, y: msg.Y,
 		grabDX: msg.X - box.X, grabDY: msg.Y - box.Y,
 		dropLane: lane, dropIdx: idx,
@@ -310,7 +309,7 @@ func (m *Model) onMouseUp(msg tea.MouseReleaseMsg) tea.Cmd {
 		return nil
 	}
 
-	id, from, fromIdx := m.drag.id, m.drag.from, m.drag.fromIdx
+	id, from := m.drag.id, m.drag.from
 	to, onBoard := m.dropTarget(msg.X, msg.Y)
 	if !onBoard {
 		m.drag.reset()
@@ -321,7 +320,7 @@ func (m *Model) onMouseUp(msg tea.MouseReleaseMsg) tea.Cmd {
 	dropIdx := m.lay.idxAtY(to, msg.Y)
 	m.drag.reset()
 
-	moved, cmd, err := m.commitMove(id, from, to, fromIdx, dropIdx)
+	moved, cmd, err := m.commitMove(id, from, to, dropIdx)
 	if err != nil {
 		m.fail("%v", err)
 		return nil

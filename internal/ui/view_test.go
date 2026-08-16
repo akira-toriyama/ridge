@@ -461,7 +461,7 @@ func TestEmptyLaneIsFocusableSoItCanReceiveADrop(t *testing.T) {
 	id := m.curTask().ID
 	m.enterMove()
 	m.shiftDropLane(-1)
-	if _, _, err := m.commitMove(id, "backlog", m.dropLane, m.moveFromIdx, m.dropIdx); err != nil {
+	if _, _, err := m.commitMove(id, "backlog", m.dropLane, m.dropIdx); err != nil {
 		t.Fatal(err)
 	}
 	if m.b.Task(id).Status != "inbox" {

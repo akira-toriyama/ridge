@@ -34,7 +34,7 @@ func (m *Model) enterMove() {
 		return
 	}
 	m.mode = modeMove
-	m.moveID, m.moveFrom, m.moveFromIdx = t.ID, t.Status, m.curPos()
+	m.moveID, m.moveFrom = t.ID, t.Status
 	m.dropLane, m.dropIdx = t.Status, m.curPos()
 	// followDrop() walks m.curLane/m.curIdx along with the drop target, so cancel
 	// has to be able to put them back. "esc restores" has to mean the SELECTION
@@ -89,9 +89,9 @@ func (m *Model) onMoveKey(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 
 	case key.Matches(msg, m.keys.Commit):
-		id, from, to, fi, di := m.moveID, m.moveFrom, m.dropLane, m.moveFromIdx, m.dropIdx
+		id, from, to, di := m.moveID, m.moveFrom, m.dropLane, m.dropIdx
 		m.mode, m.moveID, m.moveCurIdx = modeNormal, "", nil
-		moved, cmd, err := m.commitMove(id, from, to, fi, di)
+		moved, cmd, err := m.commitMove(id, from, to, di)
 		m.releaseHeldVerdict() // only after the commit consumed its slot
 		if err != nil {
 			m.fail("%v", err)
@@ -172,7 +172,15 @@ func (m *Model) followDrop() {
 // DISPLAYED: it still counts the moving card (nothing reflows under the cursor)
 // and it counts only tasks the filter lets through. Both facts have to be
 // undone before the board can be told anything.
-func (m *Model) commitMove(id, from, to string, fromIdx, dispIdx int) (moved bool, cmd tea.Cmd, err error) {
+//
+// The card's own slot is NOT a parameter: the board can recompose under a held
+// gesture — the post-persist reconcile and the rollback re-read both land as
+// async messages, and neither cancels a drag or a lifted card — so an index a
+// caller recorded at press/lift time can be stale by commit time, and a stale
+// index shifts AdjustDropIndex's boundary: a drop into the card's own slot
+// writes one slot off (t-raw1). The slot is therefore derived here, against
+// the same displayed columns dispIdx was just measured against.
+func (m *Model) commitMove(id, from, to string, dispIdx int) (moved bool, cmd tea.Cmd, err error) {
 	if m.rollingBack {
 		// Refuse the GESTURE, not just its enqueue: every caller follows a
 		// successful commit with its own note(), which would overwrite
@@ -180,6 +188,16 @@ func (m *Model) commitMove(id, from, to string, fromIdx, dispIdx int) (moved boo
 		// before the rollback re-read yanks it back (t-74y3). The error
 		// path is one every caller already handles first.
 		return false, nil, fmt.Errorf("move %s dropped — the store refused the last write, rolling back", id)
+	}
+	fromIdx := displayIndex(m.cols[from], id)
+	if fromIdx < 0 {
+		// The gesture grabbed the card in `from`, and a recompose has since
+		// removed it from that column — moved lanes, closed, or filtered out
+		// by a re-read. Its premise is gone; committing would address a board
+		// the user was not shown (the same class t-74y3 exists to prevent),
+		// so refuse and let them re-issue the gesture against what is now on
+		// screen.
+		return false, nil, fmt.Errorf("%s is no longer shown in %s — the board changed under the gesture, nothing moved", id, from)
 	}
 	adj := board.AdjustDropIndex(from == to, fromIdx, dispIdx)
 
@@ -205,6 +223,17 @@ func (m *Model) commitMove(id, from, to string, fromIdx, dispIdx int) (moved boo
 		m.note("respaced %s (%d neighbours renumbered)", to, len(renumbered))
 	}
 	return true, m.persistPlacement(id, to), nil
+}
+
+// displayIndex is the card's slot in a displayed (filtered) column, -1 when
+// the column does not currently show it.
+func displayIndex(ts []*board.Task, id string) int {
+	for i, t := range ts {
+		if t.ID == id {
+			return i
+		}
+	}
+	return -1
 }
 
 func withoutID(ts []*board.Task, id string) []*board.Task {

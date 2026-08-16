@@ -133,7 +133,7 @@ func scriptedModel(t *testing.T) (*Model, *scriptedProvider) {
 func TestPersistQueueSerializesInOrder(t *testing.T) {
 	m, p := scriptedModel(t)
 
-	moved, cmd1, err := m.commitMove("a", "ready", "ready", 0, 3)
+	moved, cmd1, err := m.commitMove("a", "ready", "ready", 3)
 	if err != nil || !moved || cmd1 == nil {
 		t.Fatalf("first move: moved=%v cmd=%v err=%v", moved, cmd1, err)
 	}
@@ -142,7 +142,7 @@ func TestPersistQueueSerializesInOrder(t *testing.T) {
 	}
 
 	// A second gesture while the first write is in flight: queued, no new Cmd.
-	moved, cmd2, err := m.commitMove("c", "ready", "ready", 1, 0)
+	moved, cmd2, err := m.commitMove("c", "ready", "ready", 0)
 	if err != nil || !moved {
 		t.Fatalf("second move: moved=%v err=%v", moved, err)
 	}
@@ -187,7 +187,7 @@ func TestPersistFailureRollsBackFromTheStore(t *testing.T) {
 	m, p := scriptedModel(t)
 	p.moveErr = errors.New("schema gate says no")
 
-	_, cmd, err := m.commitMove("a", "ready", "ready", 0, 3)
+	_, cmd, err := m.commitMove("a", "ready", "ready", 3)
 	if err != nil || cmd == nil {
 		t.Fatal(err)
 	}
@@ -196,7 +196,7 @@ func TestPersistFailureRollsBackFromTheStore(t *testing.T) {
 	}
 	// A second gesture, queued behind the doomed one: its anchors descend
 	// from a board state the store will refuse, so it must be flushed.
-	if _, queued, err := m.commitMove("c", "ready", "ready", 1, 0); err != nil || queued != nil {
+	if _, queued, err := m.commitMove("c", "ready", "ready", 0); err != nil || queued != nil {
 		t.Fatalf("second move must queue silently: cmd=%v err=%v", queued, err)
 	}
 
@@ -227,7 +227,7 @@ func TestPersistFailureRollsBackFromTheStore(t *testing.T) {
 func TestReloadIsDeferredWhileWritesArePending(t *testing.T) {
 	m, _ := scriptedModel(t)
 
-	_, cmd, err := m.commitMove("a", "ready", "ready", 0, 3)
+	_, cmd, err := m.commitMove("a", "ready", "ready", 3)
 	if err != nil || cmd == nil {
 		t.Fatal(err)
 	}
