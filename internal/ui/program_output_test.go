@@ -103,7 +103,7 @@ func TestProgramActuallyRendersTheBoardToItsOutput(t *testing.T) {
 	for _, want := range []string{
 		"furrow board",   // the title bar
 		"Board", "Table", // the view tab strip
-		"23 tasks", // the counter
+		"33 tasks", // the counter
 		// The lane headers, in their DISPLAY form. The model keeps the furrow
 		// slug (`in-progress`) — that is what the filter grammar and
 		// `furrow set --status` take — and only the header renders it the way a

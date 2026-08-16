@@ -272,7 +272,7 @@ func TestPeekResolvesDependenciesBothWays(t *testing.T) {
 		}
 	}
 	// Titles, not bare ids.
-	if !strings.Contains(out, "typed query") {
+	if !strings.Contains(out, "キャンプ献立") {
 		t.Error("dep lines must carry the blocker's title")
 	}
 }
@@ -309,7 +309,10 @@ func TestBlockedCardsAreMarkedNotHidden(t *testing.T) {
 }
 
 func TestActionableAndEpicChips(t *testing.T) {
-	m := boardModel(t, 140, 40)
+	// 240 is the app's declared floor — and the width the CJK epic title
+	// needs before the card chip has room for its first two glyphs (an
+	// ASCII-led title used to squeeze into 140).
+	m := boardModel(t, 240, 50)
 	out := frame(m)
 
 	// t-n2fc is the one actionable task.
@@ -327,7 +330,7 @@ func TestActionableAndEpicChips(t *testing.T) {
 	if !strings.Contains(out, glyphEpic) {
 		t.Errorf("the epic chip glyph (%q) is missing from the frame", glyphEpic)
 	}
-	if !strings.Contains(out, "vista: f") {
+	if !strings.Contains(out, "九州") {
 		t.Error("the epic chip must carry the epic's resolved title")
 	}
 }
@@ -383,8 +386,8 @@ func TestTableViewListsEveryVisibleTask(t *testing.T) {
 	m.view = viewTable
 	out := frame(m)
 	rows := m.tableRows()
-	if len(rows) != 23 {
-		t.Fatalf("expected all 23 tasks, got %d", len(rows))
+	if len(rows) != 33 {
+		t.Fatalf("expected all 33 tasks, got %d", len(rows))
 	}
 	// The cursor is a glyph, not only colour, so -plain can see it.
 	if !strings.Contains(out, "▌ "+rows[0].ID) {

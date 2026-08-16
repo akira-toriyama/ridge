@@ -74,11 +74,11 @@ func TestParseQueryShapes(t *testing.T) {
 				t.Errorf("comma is OR within a token, got %v", q.terms[0].vals)
 			}
 		}},
-		{in: "lane:ready repo:vista", terms: 2, check: func(t *testing.T, q parsedQuery) {
+		{in: "lane:ready repo:kyushu-trip", terms: 2, check: func(t *testing.T, q parsedQuery) {
 			// A short name resolves to the full repo AT PARSE TIME, the way
 			// furrow resolves -r / repo: before it filters.
-			if got := q.terms[1].vals[0]; got != "akira-toriyama/vista" {
-				t.Errorf("repo:vista must resolve to the full name, got %q", got)
+			if got := q.terms[1].vals[0]; got != "tomo/kyushu-trip" {
+				t.Errorf("repo:kyushu-trip must resolve to the full name, got %q", got)
 			}
 		}},
 		{in: "filter bar", terms: 2, check: func(t *testing.T, q parsedQuery) {
@@ -184,14 +184,14 @@ func TestQueryMatchesFixture(t *testing.T) {
 		min  int
 	}{
 		{q: "lane:ready", want: []string{"t-n2fc"}},
-		{q: "lane:in-progress", want: []string{}}, // the epic is an entity, not a card in a lane
-		{q: "is:actionable", want: []string{"t-n2fc"}},
+		{q: "lane:in-progress", want: []string{"t-c9dm", "t-e5hq", "t-kv82", "t-w3np"}}, // the prep line in flight
+		{q: "is:actionable", want: []string{"t-c9dm", "t-e5hq", "t-kv82", "t-n2fc", "t-w3np"}},
 		{q: "id:t-jv3j", want: []string{"t-jv3j"}},
 		{q: "epic:e-fw2m", min: 18},
 		{q: "has:epic", min: 18},
-		{q: "is:unfiled", min: 4}, // 23 tasks - 18 members - the epic entity itself is no task
-		{q: "repo:vista", min: 21},
-		{q: "label:ui", min: 9},
+		{q: "is:unfiled", min: 15}, // 33 tasks - 18 members - the epic entity itself is no task
+		{q: "repo:kyushu-trip", min: 27},
+		{q: "label:bbq", min: 9},
 		{q: "no:label", min: 1},
 		{q: "no:repo", want: []string{}}, // the fixture has no drafts
 		// Of the fixture's three dues, only t-jv3j (2026-07-31) is past the
@@ -292,17 +292,17 @@ func TestQueryAndOrNegation(t *testing.T) {
 }
 
 func TestQueryBareWordIsCaseInsensitiveSubstring(t *testing.T) {
-	if got := matched(t, "KANBAN"); len(got) == 0 {
+	if got := matched(t, "BBQ"); len(got) == 0 {
 		t.Error("bare word must be case-insensitive")
 	}
 	// A CJK bare word has to work: the whole fixture is Japanese titles.
-	got := matched(t, "依存")
+	got := matched(t, "天地返し")
 	if len(got) == 0 {
 		t.Fatal("CJK bare word matched nothing")
 	}
 	for _, id := range got {
 		b := New().Board()
-		if !strings.Contains(b.Task(id).Title, "依存") {
+		if !strings.Contains(b.Task(id).Title, "天地返し") {
 			t.Errorf("%s does not contain the needle", id)
 		}
 	}
@@ -318,23 +318,23 @@ func TestQueryBareWordIsCaseInsensitiveSubstring(t *testing.T) {
 // answers with none. Every expectation below was measured against a real
 // furrow store on 2026-08-10.
 func TestQueryLabelIsExactAndCaseSensitive(t *testing.T) {
-	full := matched(t, "label:ui")
+	full := matched(t, "label:bbq")
 	if len(full) < 9 {
-		t.Fatalf("label:ui matched %d, want the 9 ui-tagged cards", len(full))
+		t.Fatalf("label:bbq matched %d, want the 9 bbq-tagged cards", len(full))
 	}
 	// A prefix is NOT a match — this is the substring regression's tripwire.
-	if got := matched(t, "label:u"); len(got) != 0 {
-		t.Errorf("label:u must match nothing (furrow: exact), got %v", got)
+	if got := matched(t, "label:b"); len(got) != 0 {
+		t.Errorf("label:b must match nothing (furrow: exact), got %v", got)
 	}
-	if got := matched(t, "label:i"); len(got) != 0 {
-		t.Errorf("label:i must match nothing (furrow: exact), got %v", got)
+	if got := matched(t, "label:q"); len(got) != 0 {
+		t.Errorf("label:q must match nothing (furrow: exact), got %v", got)
 	}
 	// And the case must match byte-for-byte: the fixture tags are lowercase.
-	if got := matched(t, "label:UI"); len(got) != 0 {
-		t.Errorf("label:UI must match nothing (furrow: case-sensitive), got %v", got)
+	if got := matched(t, "label:BBQ"); len(got) != 0 {
+		t.Errorf("label:BBQ must match nothing (furrow: case-sensitive), got %v", got)
 	}
-	if got := matched(t, "label:Ui"); len(got) != 0 {
-		t.Errorf("label:Ui must match nothing (furrow: case-sensitive), got %v", got)
+	if got := matched(t, "label:Bbq"); len(got) != 0 {
+		t.Errorf("label:Bbq must match nothing (furrow: case-sensitive), got %v", got)
 	}
 	// An unknown label is an honest zero, not a refusal — furrow returns 0
 	// rows for a label nobody uses.
@@ -349,7 +349,7 @@ func TestQueryEpicAndIDMatching(t *testing.T) {
 		t.Fatalf("epic:e-fw2m matched %d, want 18", len(full))
 	}
 	// epic: is an exact, case-sensitive id — not a prefix and not a title.
-	for _, q := range []string{"epic:e-fw", "epic:E-FW2M", "epic:vista"} {
+	for _, q := range []string{"epic:e-fw", "epic:E-FW2M", "epic:kyushu"} {
 		if got := matched(t, q); len(got) != 0 {
 			t.Errorf("%s must match nothing (furrow: exact id), got %d", q, len(got))
 		}
@@ -368,33 +368,33 @@ func TestQueryEpicAndIDMatching(t *testing.T) {
 }
 
 func TestQueryRepoResolvesInsteadOfSubstringMatching(t *testing.T) {
-	full := matched(t, "repo:akira-toriyama/vista")
-	short := matched(t, "repo:vista")
-	if len(full) != 21 {
-		t.Fatalf("repo:akira-toriyama/vista matched %d, want 21", len(full))
+	full := matched(t, "repo:tomo/kyushu-trip")
+	short := matched(t, "repo:kyushu-trip")
+	if len(full) != 27 {
+		t.Fatalf("repo:tomo/kyushu-trip matched %d, want 27", len(full))
 	}
 	if strings.Join(short, ",") != strings.Join(full, ",") {
 		t.Errorf("the short name must resolve to the same set: %v vs %v", short, full)
 	}
 	// Resolution folds case (measured: repo:Vista matched), but it is
 	// resolution, NOT a substring search.
-	if got := matched(t, "repo:VISTA"); strings.Join(got, ",") != strings.Join(full, ",") {
-		t.Errorf("repo:VISTA = %v, want the vista set", got)
+	if got := matched(t, "repo:KYUSHU-TRIP"); strings.Join(got, ",") != strings.Join(full, ",") {
+		t.Errorf("repo:KYUSHU-TRIP = %v, want the kyushu-trip set", got)
 	}
 	// A prefix of a real repo resolves to nothing, so furrow refuses it with
 	// candidates rather than quietly filtering on a guess.
-	for _, q := range []string{"repo:vis", "repo:toriyama", "repo:akira-toriyama"} {
+	for _, q := range []string{"repo:kyushu", "repo:trip", "repo:tomo"} {
 		err := queryErr(t, q)
 		if !strings.Contains(err.Error(), "no known repo") {
 			t.Errorf("%s refusal should name the problem: %v", q, err)
 		}
-		if !strings.Contains(err.Error(), "akira-toriyama/vista") {
+		if !strings.Contains(err.Error(), "tomo/kyushu-trip") {
 			t.Errorf("%s refusal should list the candidates: %v", q, err)
 		}
 	}
 	// The other repo on the board is reachable the same two ways.
-	if got := matched(t, "repo:furrow"); len(got) != 3 {
-		t.Errorf("repo:furrow = %v, want the 3 furrow-tagged cards", got)
+	if got := matched(t, "repo:joubisai"); len(got) != 7 {
+		t.Errorf("repo:joubisai = %v, want the 7 joubisai-tagged cards", got)
 	}
 }
 
@@ -428,22 +428,22 @@ func TestQueryPresenceVocabularyIsFurrows(t *testing.T) {
 		field    string
 		has, not int
 	}{
-		{"deps", 12, 11},
+		{"deps", 12, 21},
 		{"refs", 0, all},
-		{"due", 3, all - 3},
+		{"due", 4, all - 4},
 		{"closed", 9, all - 9},
 		{"reviewed", 0, all},
-		{"label", 12, 11},
+		{"label", 18, 15},
 		{"repo", all, 0},
 		{"epic", 18, all - 18},
-		{"checklist", 7, all - 7},
+		{"checklist", 8, all - 8},
 		// value/effort/body are presence fields too. They used to be "covered"
 		// by a `has + no == all` check below, which is the exact tautology this
 		// file condemns elsewhere: `no:` is the literal negation of `has:`, so
 		// it holds for any predicate at all, including a broken one.
-		{"value", 22, 1},
-		{"effort", 22, 1},
-		{"body", 23, 0},
+		{"value", 32, 1},
+		{"effort", 32, 1},
+		{"body", 33, 0},
 	}
 	for _, tc := range cases {
 		t.Run(tc.field, func(t *testing.T) {
@@ -466,17 +466,17 @@ func TestQueryPresenceVocabularyIsFurrows(t *testing.T) {
 func TestQueryHonoursAQuotedPhrase(t *testing.T) {
 	// Measured: furrow answers the phrase; the fixture used to leave the
 	// quotes in the needle and answer 0.
-	phrase := matched(t, `"filter bar"`)
+	phrase := matched(t, `"行程表 v2"`)
 	if len(phrase) != 1 || phrase[0] != "t-jv3j" {
-		t.Errorf(`"filter bar" = %v, want [t-jv3j]`, phrase)
+		t.Errorf(`"行程表 v2" = %v, want [t-jv3j]`, phrase)
 	}
-	if got := matched(t, `'filter bar'`); strings.Join(got, ",") != "t-jv3j" {
+	if got := matched(t, `'行程表 v2'`); strings.Join(got, ",") != "t-jv3j" {
 		t.Errorf("single quotes must quote too, got %v", got)
 	}
 	// The phrase is STRICTLY narrower than the same words ANDed: two bare
 	// words each match a card the phrase does not.
-	loose := matched(t, "filter 構文")
-	tight := matched(t, `"filter 構文"`)
+	loose := matched(t, "BBQ サイト")
+	tight := matched(t, `"BBQ サイト"`)
 	if len(loose) != 2 || len(tight) != 1 {
 		t.Errorf("two ANDed words = %v, the phrase = %v; want 2 and 1", loose, tight)
 	}
@@ -485,21 +485,21 @@ func TestQueryHonoursAQuotedPhrase(t *testing.T) {
 		t.Errorf(`"lane:inbox" is a phrase nobody's title holds, got %v`, got)
 	}
 	// A quote inside a phrase-carrying query still ANDs with a qualifier.
-	if got := matched(t, `lane:backlog "filter bar"`); len(got) != 1 {
+	if got := matched(t, `lane:backlog "行程表 v2"`); len(got) != 1 {
 		t.Errorf("a phrase must AND with a qualifier, got %v", got)
 	}
 	// An unterminated quote is a refusal, not a silent half-token.
-	if err := queryErr(t, `"filter bar`); !strings.Contains(err.Error(), "unterminated quote") {
+	if err := queryErr(t, `"行程表 v2`); !strings.Contains(err.Error(), "unterminated quote") {
 		t.Errorf("an unterminated quote should say so: %v", err)
 	}
 }
 
 func TestQueryTitleAndBodyQualifiers(t *testing.T) {
 	// title: is a case-insensitive substring...
-	if got := matched(t, "title:kanban"); len(got) != 1 || got[0] != "t-t38k" {
-		t.Errorf("title:kanban = %v, want [t-t38k]", got)
+	if got := matched(t, "title:bbq"); len(got) != 2 {
+		t.Errorf("title:bbq = %v, want the two BBQ-titled cards", got)
 	}
-	if got := matched(t, "title:KANBAN"); len(got) != 1 {
+	if got := matched(t, "title:BBQ"); len(got) != 2 {
 		t.Errorf("title: must fold case, got %v", got)
 	}
 	// ...but QUOTED it means the whole title (measured: title:"filter"
@@ -509,21 +509,21 @@ func TestQueryTitleAndBodyQualifiers(t *testing.T) {
 	if got := matched(t, `title:"`+full+`"`); len(got) != 1 || got[0] != "t-t38k" {
 		t.Errorf("a quoted title must match the whole field, got %v", got)
 	}
-	if got := matched(t, `title:"kanban"`); len(got) != 0 {
-		t.Errorf(`title:"kanban" is not the whole title; got %v`, got)
+	if got := matched(t, `title:"bbq"`); len(got) != 0 {
+		t.Errorf(`title:"bbq" is not the whole title; got %v`, got)
 	}
 	// body: searches the body, and finds what title: cannot.
-	body := matched(t, "body:pragmatic-drag-and-drop")
+	body := matched(t, "body:dutch-oven")
 	if len(body) == 0 {
 		t.Fatal("body: matched nothing in a fixture whose bodies are real")
 	}
 	for _, id := range body {
-		if !strings.Contains(strings.ToLower(b.Task(id).Body), "pragmatic-drag-and-drop") {
+		if !strings.Contains(strings.ToLower(b.Task(id).Body), "dutch-oven") {
 			t.Errorf("%s body does not hold the needle", id)
 		}
 	}
 	// title: and body: are ANDable with everything else.
-	if got := matched(t, "lane:done title:kanban"); len(got) != 1 {
+	if got := matched(t, "lane:done title:bbq"); len(got) != 1 {
 		t.Errorf("title: must AND with a lane, got %v", got)
 	}
 }
@@ -585,13 +585,13 @@ func TestQuotedValuesEvaluateInsteadOfRefusing(t *testing.T) {
 	}
 	// Quoting must not change what an existing label matches: label: is
 	// exact either way.
-	quoted, err := s.Query(`label:"ui"`)
+	quoted, err := s.Query(`label:"bbq"`)
 	if err != nil {
-		t.Fatalf(`label:"ui": %v`, err)
+		t.Fatalf(`label:"bbq": %v`, err)
 	}
-	bare, err := s.Query("label:ui")
+	bare, err := s.Query("label:bbq")
 	if err != nil {
-		t.Fatalf("label:ui: %v", err)
+		t.Fatalf("label:bbq: %v", err)
 	}
 	if strings.Join(quoted, ",") != strings.Join(bare, ",") {
 		t.Errorf("quoted vs bare label diverged: %v vs %v", quoted, bare)
@@ -609,16 +609,16 @@ func TestQuoteCommaInteractionsMatchFurrow(t *testing.T) {
 
 	// label:"a,b" is ONE alternative holding a literal comma — no fixture
 	// label carries a comma, so an honest 0 rows; label:ui,cli is an OR.
-	if got := mustQuery(t, s, `label:"ui,cli"`); len(got) != 0 {
-		t.Errorf(`label:"ui,cli" must be one comma-holding label, got %v`, got)
+	if got := mustQuery(t, s, `label:"bbq,bento"`); len(got) != 0 {
+		t.Errorf(`label:"bbq,bento" must be one comma-holding label, got %v`, got)
 	}
-	orSet := mustQuery(t, s, "label:ui,cli")
+	orSet := mustQuery(t, s, "label:bbq,bento")
 	if len(orSet) == 0 {
-		t.Fatal("setup: label:ui,cli must match")
+		t.Fatal("setup: label:bbq,bento must match")
 	}
 	// The split runs outside quotes: label:"ui","cli" is the same OR.
-	if got := mustQuery(t, s, `label:"ui","cli"`); strings.Join(got, ",") != strings.Join(orSet, ",") {
-		t.Errorf(`label:"ui","cli" = %v, want the label:ui,cli set %v`, got, orSet)
+	if got := mustQuery(t, s, `label:"bbq","bento"`); strings.Join(got, ",") != strings.Join(orSet, ",") {
+		t.Errorf(`label:"bbq","bento" = %v, want the label:bbq,bento set %v`, got, orSet)
 	}
 	// A quoted comma matches nothing but refuses nothing.
 	if got := mustQuery(t, s, `label:","`); len(got) != 0 {
@@ -626,8 +626,8 @@ func TestQuoteCommaInteractionsMatchFurrow(t *testing.T) {
 	}
 	// A trailing empty alternative drops; the value must not become
 	// match-everything.
-	if got := mustQuery(t, s, "label:ui,"); len(got) == 0 || len(got) == all {
-		t.Errorf("label:ui, = %d rows, want the ui set (all=%d)", len(got), all)
+	if got := mustQuery(t, s, "label:bbq,"); len(got) == 0 || len(got) == all {
+		t.Errorf("label:bbq, = %d rows, want the bbq set (all=%d)", len(got), all)
 	}
 
 	// The refusal shapes, each exit 2 in furrow.

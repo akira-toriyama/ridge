@@ -16,10 +16,10 @@ func TestSliceIssuesAQTermAndComposesWithTheFilter(t *testing.T) {
 	if m.mode != modeSlice || !m.sliceOpen {
 		t.Fatal("s must open and focus the panel")
 	}
-	if c := m.selectSlice(sliceLabel, "ui"); c != nil {
+	if c := m.selectSlice(sliceLabel, "bbq"); c != nil {
 		t.Fatal("a mock slice must apply synchronously")
 	}
-	if m.effectiveQuery() != "label:ui" {
+	if m.effectiveQuery() != "label:bbq" {
 		t.Fatalf("effective query = %q", m.effectiveQuery())
 	}
 	sliced := m.countVisible()
@@ -32,7 +32,7 @@ func TestSliceIssuesAQTermAndComposesWithTheFilter(t *testing.T) {
 	if m.qRaw != "lane:backlog" {
 		t.Errorf("the slice must not edit the typed query: %q", m.qRaw)
 	}
-	if m.effectiveQuery() != "lane:backlog label:ui" {
+	if m.effectiveQuery() != "lane:backlog label:bbq" {
 		t.Errorf("effective = %q", m.effectiveQuery())
 	}
 	both := m.countVisible()
@@ -41,7 +41,7 @@ func TestSliceIssuesAQTermAndComposesWithTheFilter(t *testing.T) {
 	}
 
 	// Selecting the active value again un-slices (radio semantics).
-	m.selectSlice(sliceLabel, "ui")
+	m.selectSlice(sliceLabel, "bbq")
 	if m.sliceVal != "" || m.effectiveQuery() != "lane:backlog" {
 		t.Errorf("re-select must clear: val=%q eff=%q", m.sliceVal, m.effectiveQuery())
 	}
@@ -50,7 +50,7 @@ func TestSliceIssuesAQTermAndComposesWithTheFilter(t *testing.T) {
 func TestSliceAxisSwitchClearsTheSelection(t *testing.T) {
 	m := boardModel(t, 240, 50)
 	press(m, "s")
-	m.selectSlice(sliceLabel, "ui")
+	m.selectSlice(sliceLabel, "bbq")
 	m.cycleSliceField(+1)
 	if m.sliceVal != "" {
 		t.Error("a repo slice makes no claim about labels — switching the axis must clear")
@@ -107,7 +107,7 @@ func TestSliceEpicRowsCarryProgressAndClickSelects(t *testing.T) {
 func TestSliceSelectionSurvivesClosingThePanel(t *testing.T) {
 	m := boardModel(t, 240, 50)
 	press(m, "s")
-	m.selectSlice(sliceLabel, "ui")
+	m.selectSlice(sliceLabel, "bbq")
 	sliced := m.countVisible()
 
 	press(m, "esc") // leave the panel focused state; panel stays
@@ -118,11 +118,11 @@ func TestSliceSelectionSurvivesClosingThePanel(t *testing.T) {
 	if m.sliceOpen {
 		t.Fatal("s from the panel must close it")
 	}
-	if m.countVisible() != sliced || m.sliceVal != "ui" {
+	if m.countVisible() != sliced || m.sliceVal != "bbq" {
 		t.Error("closing the panel must not clear the slice — GH's No-slicing is explicit")
 	}
 	out := frame(m)
-	if !strings.Contains(out, "label:ui") {
+	if !strings.Contains(out, "label:bbq") {
 		t.Error("a slice filtering a panel-less board must be visible in the filter bar")
 	}
 }
@@ -133,7 +133,7 @@ func TestSlicePanelRendersInTheFrame(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := frame(m)
-	for _, want := range []string{"Slice by", "repo", "label", "epic", "● ui"} {
+	for _, want := range []string{"Slice by", "repo", "label", "epic", "● bbq"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the panel frame is missing %q", want)
 		}
@@ -262,7 +262,7 @@ func TestEscClearsASliceOnlyFilter(t *testing.T) {
 func TestSliceChangeClearsPins(t *testing.T) {
 	m := boardModel(t, 240, 50)
 	m.pinned["t-ghost"] = true
-	if c := m.selectSlice(sliceLabel, "ui"); c != nil {
+	if c := m.selectSlice(sliceLabel, "bbq"); c != nil {
 		m.Update(c())
 	}
 	if len(m.pinned) != 0 {
@@ -276,11 +276,11 @@ func TestSliceChangeClearsPins(t *testing.T) {
 // created task fell outside the very slice on screen.
 func TestQuickAddInheritsTheSliceTerm(t *testing.T) {
 	m := boardModel(t, 240, 50)
-	if c := m.selectSlice(sliceLabel, "ui"); c != nil {
+	if c := m.selectSlice(sliceLabel, "bbq"); c != nil {
 		m.Update(c())
 	}
 	press(m, "a")
-	if m.add == nil || m.add.opts.Label != "ui" {
+	if m.add == nil || m.add.opts.Label != "bbq" {
 		t.Fatalf("add opts = %+v, want the slice's label inherited", m.add)
 	}
 }
@@ -292,7 +292,7 @@ func TestGraphDimsNodesOutsideTheSlice(t *testing.T) {
 	if err := m.demoState("graph"); err != nil {
 		t.Fatal(err)
 	}
-	m.sliceField, m.sliceVal = sliceLabel, "ui"
+	m.sliceField, m.sliceVal = sliceLabel, "bbq"
 	m.qMatched = map[string]bool{m.graphFocus: true}
 	lay := m.buildGraph()
 	dimmed := 0

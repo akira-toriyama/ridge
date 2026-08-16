@@ -128,7 +128,7 @@ func TestQuickAddModalRendersChips(t *testing.T) {
 	if !strings.Contains(out, "add item") {
 		t.Error("the modal header is missing")
 	}
-	if !strings.Contains(out, "label ui") {
+	if !strings.Contains(out, "label bbq") {
 		t.Error("the inherited label chip is missing — inheritance must be visible, never silent")
 	}
 	if !strings.Contains(out, "盤面から起票するタスク") {

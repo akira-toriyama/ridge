@@ -244,7 +244,7 @@ func TestTableRendersDueEpicUpdatedColumns(t *testing.T) {
 	if want := m.b.Task("t-ehk7").Due.Local().Format("2006-01-02"); !strings.Contains(out, want) {
 		t.Errorf("t-ehk7's due day %s is not in the frame", want)
 	}
-	if !strings.Contains(out, "vista: furrow") || strings.Contains(out, "e-fw2m") {
+	if !strings.Contains(out, "九州キャンプ") || strings.Contains(out, "e-fw2m") {
 		t.Error("the epic column must resolve the id to its title")
 	}
 	if !strings.Contains(out, "d ago") {

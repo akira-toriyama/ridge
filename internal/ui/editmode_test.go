@@ -125,7 +125,7 @@ func TestEditLabelToggleRoundTrips(t *testing.T) {
 	rows := m.editListRows(m.b.Task("t-9sa6"))
 	idx := -1
 	for i, r := range rows {
-		if r == "ui" {
+		if r == "bbq" {
 			idx = i
 		}
 	}
@@ -134,11 +134,11 @@ func TestEditLabelToggleRoundTrips(t *testing.T) {
 	}
 	m.edit.listIdx = idx
 	press(m, "x")
-	if containsStrUI(m.b.Task("t-9sa6").Labels, "ui") {
+	if containsStrUI(m.b.Task("t-9sa6").Labels, "bbq") {
 		t.Error("toggling an owned label must remove it")
 	}
 	press(m, "x")
-	if !containsStrUI(m.b.Task("t-9sa6").Labels, "ui") {
+	if !containsStrUI(m.b.Task("t-9sa6").Labels, "bbq") {
 		t.Error("toggling again must add it back")
 	}
 	drainPersists(m, t)
