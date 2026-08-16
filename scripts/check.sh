@@ -2,10 +2,10 @@
 # The local mirror of CI (the hub go-ci reusable). Green here == green there.
 #
 # Two CI-only lint findings reached CI in one day (PR #8, #10) because a bare
-# `golangci-lint run` uses the smaller default linter set; independent review
-# of this script then caught the same class again as VERSION skew (local 2.6.2
-# vs CI v2.12.2 — six releases of rule additions). So the linter list below is
-# byte-identical to the CI invocation and the version is asserted, not assumed.
+# `golangci-lint run` uses the smaller default linter set; the same class then
+# recurred as VERSION skew (local 2.6.2 vs CI v2.12.2 — six releases of rule
+# additions). So the linter list below is byte-identical to the CI invocation
+# and the version is asserted, not assumed.
 #
 # Deliberate deltas from CI, named so "mirror" stays honest:
 #   + gofmt guard        (CI has no format step; false-red only, cheap)

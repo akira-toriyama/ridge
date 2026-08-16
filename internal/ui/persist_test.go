@@ -181,8 +181,8 @@ func TestPersistQueueSerializesInOrder(t *testing.T) {
 // A failed persist means the optimistic board lied: everything queued behind
 // it is dropped and the store re-read IS the rollback. The second queued
 // gesture is load-bearing: with only one write in the test, the flush line
-// (`m.pending = nil`) was never exercised, and review mutation M6 ("rollback
-// keeps the queued writes") survived the suite.
+// (`m.pending = nil`) was never exercised, and the "rollback keeps the queued
+// writes" mutation survived the suite.
 func TestPersistFailureRollsBackFromTheStore(t *testing.T) {
 	m, p := scriptedModel(t)
 	p.moveErr = errors.New("schema gate says no")

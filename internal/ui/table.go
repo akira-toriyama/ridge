@@ -29,8 +29,8 @@ type sortKey int
 const (
 	// sortNone is deliberately the ZERO value: a column added to tableGeom
 	// without an explicit sort stays inert instead of silently becoming a
-	// clickable reset-to-canonical target (independent review, finding 7).
-	// The price is that Model must initialise tableSort to sortCanonical.
+	// clickable reset-to-canonical target. The price is that Model must
+	// initialise tableSort to sortCanonical.
 	sortNone sortKey = iota
 
 	sortCanonical
@@ -369,7 +369,7 @@ func (m *Model) renderTable() string {
 	if m.sliceOpen {
 		// The slice narrows the table rows exactly as it narrows the board
 		// columns, and `s` reaches this view too — an invisible panel that
-		// still owned the keyboard ate every arrow key (reviewed live).
+		// still owned the keyboard ate every arrow key (observed).
 		layers = append(layers, m.sliceLayer())
 	}
 	if m.mode == modeEdit {

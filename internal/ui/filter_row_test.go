@@ -36,8 +36,8 @@ func TestFilterRowKeepsItsChipsWhileTheInputHasTheKeyboard(t *testing.T) {
 // A pathological chip pile must squeeze the input no further than its floor —
 // the row degrades by truncating chips, never by erasing what is being typed.
 // The width must make the floor actually engage: at 60 cells the chips left
-// 25 > 20 and the first cut of this test passed with the sizing deleted
-// (independent review of this PR, R2), so the floor is asserted directly.
+// 25 > 20 and the first cut of this test passed with the sizing deleted —
+// so the floor is asserted directly.
 func TestFilterInputKeepsItsFloorUnderWideChips(t *testing.T) {
 	m := New(memstore.New(), Options{Table: true})
 	m.Update(tea.WindowSizeMsg{Width: 50, Height: 50})
@@ -66,9 +66,7 @@ func TestFilterInputKeepsItsFloorUnderWideChips(t *testing.T) {
 // The value is seeded while the input still has some other width, and bubbles
 // v2 recomputes the horizontal scroll window only on cursor moves — without
 // the render-time SetCursor no-op, a 68-cell query showed only its tail in a
-// stale 48-cell window while the row had 237 cells of room (independent
-// review of this PR, R1: a main-relative regression of exactly the class this
-// PR fixes).
+// stale 48-cell window while the row had 237 cells of room.
 func TestEnteringFilterWithAQueryShowsItsHead(t *testing.T) {
 	q := "lane:backlog is:blocked label:ui label:board label:table label:graph"
 	m := New(memstore.New(), Options{Filter: q})
@@ -86,9 +84,8 @@ func TestEnteringFilterWithAQueryShowsItsHead(t *testing.T) {
 
 // Shrinking the terminal mid-edit must keep the chips. The give-back branch's
 // SECOND SetCursor is what re-runs the overflow window at the reduced width —
-// review round 2 (N1) measured that deleting it alone evicted both chips on
-// every 400→smaller resize while all other tests stayed green, so this is the
-// one test that owns it.
+// measured: deleting it alone evicted both chips on every 400→smaller resize
+// while all other tests stayed green, so this is the one test that owns it.
 func TestShrinkResizeMidEditKeepsTheChips(t *testing.T) {
 	m := New(memstore.New(), Options{Table: true})
 	m.Update(tea.WindowSizeMsg{Width: 400, Height: 50})

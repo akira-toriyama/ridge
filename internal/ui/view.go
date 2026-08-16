@@ -160,7 +160,7 @@ func (m *Model) chromeLayers() []*lg.Layer {
 	// sort, by the same rule: the header ▲▼ only exists for keys that HAVE a
 	// column — created and effort do not — and the status line is overwritten
 	// by the next keystroke, so this is the one place the sort stays readable
-	// (independent review, finding 1). Built BEFORE the input so the input
+	// Built BEFORE the input so the input
 	// can be sized to the space they leave. The qErr/pinned right-aligners
 	// below still outrank them — joinEnds truncates from the left, and the
 	// padded input reaches the chips first; that trade predates this sizing
@@ -188,9 +188,8 @@ func (m *Model) chromeLayers() []*lg.Layer {
 		// (bubbles v2 recomputes the horizontal window only on cursor moves),
 		// so a value seeded at another width keeps that width's scroll window
 		// — entering the mode with an existing query showed only its tail in
-		// a 48-cell slice of a 237-cell input (independent review of this PR,
-		// R1). SetCursor to the position the cursor is already at is the
-		// documented no-op that forces the recompute.
+		// a 48-cell slice of a 237-cell input. SetCursor to the position the
+		// cursor is already at is the documented no-op that forces the recompute.
 		m.ti.SetCursor(m.ti.Position())
 		filter = m.ti.View()
 		if over := lg.Width(filter) + lg.Width(chips) - m.w; over > 0 {
@@ -501,8 +500,7 @@ func (m *Model) helpLayer() *lg.Layer {
 	// vertically cost ~6 rows over the flat overlay and, at 240×24 — a stock
 	// terminal height on the repo's stated width floor — the centred box
 	// covered the title bar: the frame lost the very mode badge this overlay
-	// is sectioned around (independent review, B1). Width is the abundant
-	// dimension here; spend it.
+	// is sectioned around. Width is the abundant dimension here; spend it.
 	const shelfGap = "    "
 	gapW := lg.Width(shelfGap)
 	var shelves []string

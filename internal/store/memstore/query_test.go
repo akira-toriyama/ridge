@@ -293,8 +293,8 @@ func TestQueryAndOrNegation(t *testing.T) {
 
 func TestQueryBareWordIsCaseInsensitiveSubstring(t *testing.T) {
 	// Lowercase on purpose: the titles hold uppercase BBQ, so this match
-	// EXISTS only if the evaluator folds case (review of this PR, R1 — the
-	// uppercase needle matched literally and the fold mutant survived).
+	// EXISTS only if the evaluator folds case — an uppercase needle matches
+	// literally and lets the fold mutant survive.
 	if got := matched(t, "bbq"); len(got) == 0 {
 		t.Error("bare word must be case-insensitive")
 	}

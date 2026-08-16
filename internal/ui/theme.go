@@ -137,8 +137,8 @@ func newTheme(dark bool) *theme {
 	t.colBG = lg.NewStyle().Background(c("#1a1c24", "#f2f4f9"))
 	t.colBGOn = lg.NewStyle().Background(c("#1e2029", "#eaeef7"))
 
-	// Per-label hues. One flat grey chip for every label made `cli`, `ui` and
-	// `testing` visually identical, which reads as a tag LIST; GitHub's coloured
+	// Per-label hues. One flat grey chip for every label made them all
+	// visually identical, which reads as a tag LIST; GitHub's coloured
 	// labels are one of the two or three most recognisable things on a card.
 	// Hashed by name, so a label keeps its colour on every card and every run.
 	for _, h := range [][2]string{

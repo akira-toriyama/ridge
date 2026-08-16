@@ -96,8 +96,7 @@ func TestHelpOverlayIsSectionedByMode(t *testing.T) {
 
 // The overlay must not ride into a modal, and its marker must never contradict
 // the badge — `?` then a mode key was exactly the two-keystroke sequence that
-// shipped a frame saying ⟨FILTER⟩ and "normal mode — you are here" at once
-// (independent review, B2).
+// shipped a frame saying ⟨FILTER⟩ and "normal mode — you are here" at once.
 func TestHelpOverlayNeverRidesIntoAModal(t *testing.T) {
 	for _, tc := range []struct {
 		key  rune
@@ -126,7 +125,7 @@ func TestHelpOverlayNeverRidesIntoAModal(t *testing.T) {
 // At 240 columns — the repo's stated width floor — a stock 24-row (and even
 // 20-row) terminal must keep the title bar: it carries the mode badge this
 // overlay is sectioned around. The sectioned help once grew past it and
-// covered row 0 (independent review, B1).
+// covered row 0.
 func TestHelpOverlayLeavesTheTitleRowAtStockHeights(t *testing.T) {
 	// 12 and 16 sit where the h-1 cap + y floor are load-bearing on their own;
 	// 20-24 is the window the unshelved sections regressed. Both mutations die.
@@ -318,9 +317,9 @@ func TestActionableAndEpicChips(t *testing.T) {
 	// t-n2fc is the ready lane's one card; the glyph must sit on ITS title —
 	// as the adjacent "▸ <title>" pair, because a terminal ROW carries every
 	// column, so line-scoping still matched the neighbour column's glyph. A
-	// frame-wide Contains stopped meaning anything when the in-progress
-	// additions became actionable too (review of this PR, R2 — the
-	// ready-is-never-actionable mutant survived both loose forms).
+	// frame-wide Contains stopped meaning anything once the in-progress
+	// lane carried actionable cards too — the ready-is-never-actionable
+	// mutant survived both loose forms.
 	if !strings.Contains(out, "t-n2fc") {
 		t.Fatal("t-n2fc is not on the board")
 	}
