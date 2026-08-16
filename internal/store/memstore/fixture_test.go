@@ -39,14 +39,30 @@ func TestGraphAgreesWithFixtureFacts(t *testing.T) {
 		t.Errorf("e-fw2m must stay the 18-member main box: %+v", e)
 	}
 
-	// The epic-dep edges cover every rendering state the UI distinguishes:
-	// a wait on an OPEN box, a dep on a CLOSED box (an id the open-only epic
-	// read cannot resolve — satisfied, per furrow), and a stuck epic.
-	if got := b.OpenEpicDeps(b.Epic("e-fw2m")); len(got) != 1 || got[0] != "e-p3dx" {
-		t.Errorf("OpenEpicDeps(e-fw2m) = %v, want [e-p3dx]", got)
+	// OpenDeps is hand-written the way Done/Total is, so the same rot check
+	// applies: over THIS fixture's fully-listed population it must equal
+	// what furrow would derive — the deps that resolve to a served (open)
+	// epic. A mismatch means one side of the hand-kept pair was edited alone.
+	for _, e := range b.Epics() {
+		open := map[string]bool{}
+		for _, d := range e.OpenDeps {
+			open[d] = true
+			if !containsExact(e.Deps, d) {
+				t.Errorf("%s: open dep %s is not in Deps at all", e.ID, d)
+			}
+		}
+		for _, d := range e.Deps {
+			if (b.Epic(d) != nil) != open[d] {
+				t.Errorf("%s: dep %s — hand-written OpenDeps disagrees with the served epic set", e.ID, d)
+			}
+		}
 	}
-	if got := b.OpenEpicDeps(b.Epic("e-c4mt")); len(got) != 1 || got[0] != "e-fw2m" {
-		t.Errorf("OpenEpicDeps(e-c4mt) = %v, want [e-fw2m] — e-2b7h is the closed-dep shape", got)
+	// The edges cover every rendering state the UI distinguishes: a wait on
+	// an OPEN box, a dep furrow already resolved away (outside open_deps AND
+	// absent from the open-only read — the closed-dep shape), and a stuck
+	// epic below.
+	if e := b.Epic("e-c4mt"); len(e.OpenDeps) != 1 || e.OpenDeps[0] != "e-fw2m" {
+		t.Errorf("e-c4mt OpenDeps = %v, want [e-fw2m] — e-2b7h stays satisfied", e.OpenDeps)
 	}
 	if b.Epic("e-2b7h") != nil {
 		t.Error("e-2b7h must stay ABSENT from the epic set: it is the fixture's closed-dep shape")

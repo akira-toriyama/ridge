@@ -116,9 +116,13 @@ type taskJSON struct {
 
 // epicJSON is one `furrow epic ls --json` row.
 type epicJSON struct {
-	ID       string   `json:"id"`
-	Title    string   `json:"title"`
-	Deps     []string `json:"deps"`
+	ID    string   `json:"id"`
+	Title string   `json:"title"`
+	Deps  []string `json:"deps"`
+	// open_deps is furrow-derived, like progress and stuck: the deps still
+	// waiting, with deps on closed epics already resolved away (omitted
+	// entirely when none remain). ridge never recomputes it.
+	OpenDeps []string `json:"open_deps"`
 	Progress struct {
 		Done  int `json:"done"`
 		Total int `json:"total"`
@@ -219,7 +223,7 @@ func (p *Store) load() (*board.Board, error) {
 		epics = append(epics, board.EpicInfo{
 			ID: e.ID, Title: e.Title,
 			Done: e.Progress.Done, Total: e.Progress.Total,
-			Stuck: e.Stuck, Deps: e.Deps,
+			Stuck: e.Stuck, Deps: e.Deps, OpenDeps: e.OpenDeps,
 		})
 	}
 

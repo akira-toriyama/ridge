@@ -252,8 +252,8 @@ func (m *Model) demoState(kind string) error {
 
 	case "epicdeps":
 		// The peek's epic-dep line, both resolutions at once: t-y4st's box
-		// waits on an OPEN box (resolved to id+title+progress) and on a
-		// CLOSED one (an id the open-only epic read cannot resolve —
+		// waits on an OPEN box (resolved to id+progress+title) and carries
+		// a dep furrow already resolved away (outside open_deps —
 		// satisfied). The default -dump selection is an unfiled task, so no
 		// bare flag combination can reach this frame.
 		if !m.selectID("t-y4st", false) {

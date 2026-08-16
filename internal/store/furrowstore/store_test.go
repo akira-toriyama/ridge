@@ -466,10 +466,10 @@ func TestContractAddMapsTheContext(t *testing.T) {
 	}
 }
 
-// Epic deps travel `epic ls --json`'s deps array, and the read serves OPEN
-// epics only — so a dep on a closed epic arrives as an id the snapshot
-// cannot resolve, which is the satisfied shape (furrow: "a dep on a closed
-// epic is simply satisfied").
+// Epic deps travel `epic ls --json`'s deps array, and open_deps arrives
+// alongside as a furrow-DERIVED field (like progress and stuck): the deps
+// still waiting, with deps on closed epics already resolved away. ridge
+// consumes both verbatim and recomputes neither.
 //
 // bite-exempt: execs a real furrow binary and always skips where furrow is
 // not on PATH — which is CI, so the gate can never judge it there
@@ -507,7 +507,7 @@ func TestContractEpicDepsReachTheSnapshot(t *testing.T) {
 	if b.Epic(closedDep) != nil {
 		t.Errorf("%s is closed and must be absent from the open-epic read", closedDep)
 	}
-	if got := b.OpenEpicDeps(e); len(got) != 1 || got[0] != dep {
-		t.Errorf("OpenEpicDeps = %v, want [%s] — the closed dep is satisfied", got, dep)
+	if len(e.OpenDeps) != 1 || e.OpenDeps[0] != dep {
+		t.Errorf("OpenDeps = %v, want [%s] — furrow resolves the closed dep away", e.OpenDeps, dep)
 	}
 }

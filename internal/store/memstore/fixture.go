@@ -551,18 +551,24 @@ func fixtureTasks() []*board.Task {
 // only, the population that read serves. Done/Total agree with the member
 // lanes above (fixture_test pins that per epic).
 //
+// OpenDeps is hand-written the way Done/Total/Stuck are: all four arrive
+// DERIVED from furrow, and fixture_test pins that the hand-kept values agree
+// with the tasks and epics this file actually holds.
+//
 // The dep edges exercise every rendering state: e-fw2m waits on ONE open box,
-// e-c4mt waits on an open box AND on e-2b7h — an id deliberately absent from
-// this list, the shape a dep on a CLOSED epic arrives in (satisfied), and
-// e-9wtv is the stuck epic the warn glyph needs.
+// e-c4mt waits on an open box AND on e-2b7h — a dep furrow has already
+// resolved away (outside open_deps, absent from the open-only read: the
+// shape a dep on a closed epic arrives in), and e-9wtv is the stuck epic the
+// warn glyph needs.
 func fixtureEpics() []board.EpicInfo {
 	return []board.EpicInfo{
 		{
-			ID:    "e-fw2m",
-			Title: "九州キャンプ旅 2026 — 行程・予約・装備（阿蘇→高千穂 3泊）",
-			Done:  6,
-			Total: 18,
-			Deps:  []string{"e-p3dx"},
+			ID:       "e-fw2m",
+			Title:    "九州キャンプ旅 2026 — 行程・予約・装備（阿蘇→高千穂 3泊）",
+			Done:     6,
+			Total:    18,
+			Deps:     []string{"e-p3dx"},
+			OpenDeps: []string{"e-p3dx"},
 		},
 		{
 			ID:    "e-p3dx",
@@ -578,11 +584,12 @@ func fixtureEpics() []board.EpicInfo {
 			Stuck: true,
 		},
 		{
-			ID:    "e-c4mt",
-			Title: "冬キャンプ 2026-27 — 薪ストーブ泊まで",
-			Done:  0,
-			Total: 1,
-			Deps:  []string{"e-fw2m", "e-2b7h"},
+			ID:       "e-c4mt",
+			Title:    "冬キャンプ 2026-27 — 薪ストーブ泊まで",
+			Done:     0,
+			Total:    1,
+			Deps:     []string{"e-fw2m", "e-2b7h"},
+			OpenDeps: []string{"e-fw2m"},
 		},
 	}
 }

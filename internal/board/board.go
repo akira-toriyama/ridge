@@ -111,17 +111,21 @@ var boardLanes = []Lane{
 //
 // Deps is the epic-to-epic edge furrow's `epic dep` records: "open this box
 // after those close". It is INFORMATION, not enforcement — furrow itself
-// warns and proceeds — so ridge renders it and gates nothing on it. The read
-// (`epic ls --json`) serves OPEN epics only, and furrow treats a dep on a
-// closed epic as simply satisfied; a dep id absent from the board's epic set
-// therefore renders as satisfied, which is the same resolution furrow applies.
+// warns and proceeds — so ridge renders it and gates nothing on it.
+//
+// OpenDeps is the subset still waiting, and it arrives DERIVED, exactly like
+// Done/Total/Stuck: `epic ls --json` computes it (a dep on a closed epic is
+// simply satisfied) and ridge consumes it verbatim. Recomputing it here from
+// the served epic set would be the front-end logic this repo exists to not
+// have — and would silently break the day the epic read gains a scope.
 type EpicInfo struct {
-	ID    string
-	Title string
-	Done  int
-	Total int
-	Stuck bool
-	Deps  []string
+	ID       string
+	Title    string
+	Done     int
+	Total    int
+	Stuck    bool
+	Deps     []string
+	OpenDeps []string
 }
 
 // Board is the in-memory task set. Lane membership is Task.Status and lane
@@ -165,21 +169,6 @@ func NewStoreBoard(lanes []Lane, tasks []*Task, epics []EpicInfo, writable bool,
 // Epic resolves an e- id to its entity, nil when unknown (a stale membership
 // renders as the raw id rather than vanishing).
 func (b *Board) Epic(id string) *EpicInfo { return b.epicByID[id] }
-
-// OpenEpicDeps is the subset of an epic's deps still open on this board, in
-// dep order. The ONE definition of "this box still waits" — the slice panel
-// and the peek both read it, so they cannot disagree. A dep absent from the
-// board's (open-only) epic set is satisfied, exactly as furrow resolves a dep
-// on a closed epic.
-func (b *Board) OpenEpicDeps(e *EpicInfo) []string {
-	var out []string
-	for _, d := range e.Deps {
-		if b.epicByID[d] != nil {
-			out = append(out, d)
-		}
-	}
-	return out
-}
 
 // Writable reports the store's write pre-flight; a fixture board is always
 // writable. False means furrow will refuse ordinary writes (schema gate).

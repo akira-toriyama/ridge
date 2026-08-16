@@ -91,11 +91,10 @@ func TestSliceEpicRowsCarryProgressAndClickSelects(t *testing.T) {
 	if !strings.Contains(rows[0].display, "6/18") {
 		t.Errorf("the epic row must carry the store's progress: %q", rows[0].display)
 	}
-	// The dep readout: →N counts only the deps still OPEN on the board.
-	// e-fw2m waits on the open e-p3dx; e-c4mt declares two deps but one
-	// (e-2b7h) is absent from the open-epic read — a dep on a closed epic,
-	// satisfied per furrow — so both rows read →1, and the dep-less e-p3dx
-	// row carries no arrow at all.
+	// The dep readout: →N is furrow's derived open_deps, verbatim.
+	// e-fw2m waits on the open e-p3dx; e-c4mt declares two deps but furrow
+	// already resolved e-2b7h away (a dep on a closed epic is satisfied) —
+	// so both rows read →1, and the dep-less e-p3dx row carries no arrow.
 	for i, want := range map[int]string{0: "6/18 →1", 3: "0/1 →1"} {
 		if !strings.Contains(rows[i].display, want) {
 			t.Errorf("epic row %d = %q, want it to contain %q", i, rows[i].display, want)

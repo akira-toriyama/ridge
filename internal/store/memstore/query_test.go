@@ -188,7 +188,7 @@ func TestQueryMatchesFixture(t *testing.T) {
 		{q: "is:actionable", want: []string{"t-c9dm", "t-e5hq", "t-kv82", "t-n2fc", "t-w3np"}},
 		{q: "id:t-jv3j", want: []string{"t-jv3j"}},
 		{q: "epic:e-fw2m", min: 18},
-		{q: "has:epic", min: 18},
+		{q: "has:epic", min: 26},
 		{q: "is:unfiled", min: 7}, // 33 tasks - 26 filed under the four boxes; epics themselves are no tasks
 		{q: "repo:kyushu-trip", min: 27},
 		{q: "label:bbq", min: 9},
