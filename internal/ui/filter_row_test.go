@@ -83,3 +83,35 @@ func TestEnteringFilterWithAQueryShowsItsHead(t *testing.T) {
 		t.Errorf("the query is not shown whole while the row has room: %q", strings.TrimRight(row, " "))
 	}
 }
+
+// Shrinking the terminal mid-edit must keep the chips. The give-back branch's
+// SECOND SetCursor is what re-runs the overflow window at the reduced width —
+// review round 2 (N1) measured that deleting it alone evicted both chips on
+// every 400→smaller resize while all other tests stayed green, so this is the
+// one test that owns it.
+func TestShrinkResizeMidEditKeepsTheChips(t *testing.T) {
+	m := New(memstore.New(), Options{Table: true})
+	m.Update(tea.WindowSizeMsg{Width: 400, Height: 50})
+	m.view = viewTable
+	m.setSort(sortUpdated, false)
+	if c := m.selectSlice(sliceEpic, "e-fw2m"); c != nil {
+		_ = c
+	}
+	m.mode = modeFilter
+	m.ti.SetValue(strings.Repeat("label:board label:ui ", 20)) // ~420 cells, wider than any window
+	m.ti.Focus()
+	if _, err := m.Dump(400, 50, "", true); err != nil {
+		t.Fatal(err)
+	}
+	m.Update(tea.WindowSizeMsg{Width: 240, Height: 50})
+	frame, err := m.Dump(240, 50, "", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := strings.Split(frame, "\n")[rowFilter]
+	for _, want := range []string{"slice epic:e-fw2m", "sort updated"} {
+		if !strings.Contains(row, want) {
+			t.Errorf("%q fell off the row after the shrink: %q", want, strings.TrimRight(row, " "))
+		}
+	}
+}
