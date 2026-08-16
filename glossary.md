@@ -86,5 +86,5 @@
 | **re-root** | Graph 上のノードを新しい起点にすること（`Enter`）。「読む」ではなく「歩く」ための操作で、静止画にはできない。 |
 | **cluster** | 依存グラフの連結成分。実データでは未完了分で9個、中央値2ノード。 |
 | **`-dump`** | TTY 無しで1フレームを標準出力に書いて終了するフラグ。headless 検証の土台。 |
-| **`-demo`** | 手では捉えにくい一時状態（`move` / `drag` / `add` / `edit` / `graph` / `help` / `slice` / `sort` / `filter` / `filterchips` / `fail`）を1フレームに固定して `-dump` する。正本は `ui.DemoNames`。 |
+| **`-demo`** | 手では捉えにくい一時状態（`move` / `drag` / `add` / `edit` / `editpick` / `editinput` / `graph` / `help` / `slice` / `sort` / `filter` / `filterchips` / `fail`）を1フレームに固定して `-dump` する。正本は `ui.DemoNames`。 |
 | **`-readonly`** | fixture を schema gate で read-only にした盤面を出す。model の状態ではなく store の性質なので `-demo` ではなくフラグ。書き込みは全部拒否される。 |

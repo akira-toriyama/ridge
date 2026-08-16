@@ -125,18 +125,15 @@ go test ./...                      # 全テスト（furrow が PATH にあれば
 go run ./cmd/ridge -dump -plain -cols 240 -rows 60 # 1フレームを平文で出力
 go run ./cmd/ridge -dump -peek               # 詳細ペインを開いた状態
 go run ./cmd/ridge -dump -tree               # 依存ツリーを開いた状態
-go run ./cmd/ridge -demo graph -dump         # 依存グラフ
-go run ./cmd/ridge -demo move -dump          # move mode 中
-go run ./cmd/ridge -demo drag -dump          # ドラッグ中
-go run ./cmd/ridge -demo edit -dump          # フィールド編集メニュー
-go run ./cmd/ridge -demo add -dump           # quick add（filter 文脈チップつき）
-go run ./cmd/ridge -demo slice -dump         # slice パネル（label:ui 選択済み）
-go run ./cmd/ridge -demo sort -dump          # Table を due ▲ でソートした状態
-go run ./cmd/ridge -demo filter -dump        # フィルタ入力がキーボードを持っている状態
-go run ./cmd/ridge -demo fail -dump          # 書き込みが拒否された ⚠ 行
-go run ./cmd/ridge -demo help -dump          # `?` キー一覧オーバーレイ
+go run ./cmd/ridge -demo drag -dump          # 一時状態の例: ドラッグ中の1フレーム
+go run ./cmd/ridge -h                        # -demo 全状態の一覧（正本 = ui.DemoNames）
 go run ./cmd/ridge -readonly -dump           # schema gate で read-only の盤面
 ```
+
+`-demo` の名前をここに列挙しない: 写しは必ず古くなる（実際、この節の旧一覧は
+`edit` を「フィールド編集メニュー」と説明したまま checklist 直行に変わっていた）。
+一覧は `-h` が、各状態の1行説明は `internal/ui/dump.go` の `demoState`
+（各 case のコメント）が持つ。
 
 `-readonly` だけは model の状態ではなく **store の性質**なので `-demo` ではなく
 フラグにしてある。実物を出すには古い schema の board が要る = 手では作れないので、
