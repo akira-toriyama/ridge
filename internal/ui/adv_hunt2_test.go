@@ -84,7 +84,7 @@ func TestAdvMoveArithmeticAgainstAReference(t *testing.T) {
 						before[l] = advIDs(m.cols[l])
 					}
 					want := advReference(before, id, from, to, di)
-					if _, _, err := m.commitMove(id, from, to, fi, di); err != nil {
+					if _, _, err := m.commitMove(id, from, to, di); err != nil {
 						t.Fatalf("%s[%d] -> %s[%d]: %v", from, fi, to, di, err)
 					}
 					for _, l := range lanes {
@@ -264,7 +264,7 @@ func TestAdvMoveIntoAnEmptyFilteredLaneAppendsToTheRealEnd(t *testing.T) {
 		t.Fatal("need a populated backlog")
 	}
 	id := m.cols["ready"][0].ID
-	if _, _, err := m.commitMove(id, "ready", "backlog", 0, 0); err != nil {
+	if _, _, err := m.commitMove(id, "ready", "backlog", 0); err != nil {
 		t.Fatal(err)
 	}
 	got := advIDs(m.b.LaneTasks("backlog"))

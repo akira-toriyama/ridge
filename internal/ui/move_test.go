@@ -55,7 +55,7 @@ func TestCommitMoveRespectsHiddenTasks(t *testing.T) {
 	mover, anchor := vis[0].ID, vis[2].ID
 
 	// Drop the first visible card just before the third visible card.
-	if _, _, err := m.commitMove(mover, "backlog", "backlog", 0, 2); err != nil {
+	if _, _, err := m.commitMove(mover, "backlog", "backlog", 2); err != nil {
 		t.Fatal(err)
 	}
 	newVis := m.cols["backlog"]

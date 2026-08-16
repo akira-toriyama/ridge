@@ -273,7 +273,7 @@ func TestGatedBoardRollsBackAWrite(t *testing.T) {
 	m.recompute()
 	m.relayout()
 
-	moved, cmd, err := m.commitMove("t-ehk7", "backlog", "ready", 0, 0)
+	moved, cmd, err := m.commitMove("t-ehk7", "backlog", "ready", 0)
 	if err != nil || !moved || cmd == nil {
 		t.Fatalf("setup: moved=%v cmd=%v err=%v", moved, cmd != nil, err)
 	}

@@ -21,7 +21,7 @@ func TestFailedWriteRefusesGesturesUntilTheRollbackLands(t *testing.T) {
 	m, p := scriptedModel(t)
 	p.moveErr = errors.New("schema gate says no")
 
-	_, cmd, err := m.commitMove("a", "ready", "ready", 0, 3)
+	_, cmd, err := m.commitMove("a", "ready", "ready", 3)
 	if err != nil || cmd == nil {
 		t.Fatal(err)
 	}
@@ -31,7 +31,7 @@ func TestFailedWriteRefusesGesturesUntilTheRollbackLands(t *testing.T) {
 	}
 
 	p.moveErr = nil
-	moved, cmd2, _ := m.commitMove("c", "ready", "ready", 1, 0)
+	moved, cmd2, _ := m.commitMove("c", "ready", "ready", 0)
 	if cmd2 != nil || len(m.pending) != 0 {
 		t.Fatalf("a gesture inside the rollback window must be refused (moved=%v pending=%d)",
 			moved, len(m.pending))
@@ -42,7 +42,7 @@ func TestFailedWriteRefusesGesturesUntilTheRollbackLands(t *testing.T) {
 		t.Fatalf("rollback re-read must land: ready = %s, want a,b,c", got)
 	}
 
-	_, cmd3, err := m.commitMove("c", "ready", "ready", 2, 0)
+	_, cmd3, err := m.commitMove("c", "ready", "ready", 0)
 	if err != nil || cmd3 == nil {
 		t.Fatal("once the rollback lands, gestures must flow again")
 	}
@@ -55,7 +55,7 @@ func TestFailedRollbackReReadClosesTheWindow(t *testing.T) {
 	m, p := scriptedModel(t)
 	p.moveErr = errors.New("schema gate says no")
 
-	_, cmd, _ := m.commitMove("a", "ready", "ready", 0, 3)
+	_, cmd, _ := m.commitMove("a", "ready", "ready", 3)
 	m.onPersistDone(cmd().(persistDoneMsg)) // rollingBack armed
 	if !m.rollingBack {
 		t.Fatal("setup: the failed persist must arm the window")
@@ -70,7 +70,7 @@ func TestFailedRollbackReReadClosesTheWindow(t *testing.T) {
 	}
 
 	p.moveErr = nil
-	if _, cmd2, err := m.commitMove("c", "ready", "ready", 1, 0); err != nil || cmd2 == nil {
+	if _, cmd2, err := m.commitMove("c", "ready", "ready", 0); err != nil || cmd2 == nil {
 		t.Fatal("after the window closes, gestures must flow again")
 	}
 }
@@ -81,7 +81,7 @@ func TestAddInsideTheRollbackWindowKeepsItsModal(t *testing.T) {
 	m, p := scriptedModel(t)
 	p.moveErr = errors.New("schema gate says no")
 
-	_, cmd, _ := m.commitMove("a", "ready", "ready", 0, 3)
+	_, cmd, _ := m.commitMove("a", "ready", "ready", 3)
 	m.onPersistDone(cmd().(persistDoneMsg)) // rollingBack armed
 
 	press(m, "a")
@@ -158,7 +158,7 @@ func TestRefusedGestureKeepsTheRefusalOnTheStatusLine(t *testing.T) {
 	m, p := scriptedModel(t)
 	p.moveErr = errors.New("schema gate says no")
 
-	_, cmd, _ := m.commitMove("a", "ready", "ready", 0, 3)
+	_, cmd, _ := m.commitMove("a", "ready", "ready", 3)
 	m.onPersistDone(cmd().(persistDoneMsg)) // rollingBack armed
 	before := laneIDs(m.b, "ready")
 
@@ -232,7 +232,7 @@ func TestEditorBodyIsHeldThroughTheRollbackWindow(t *testing.T) {
 	m, p := scriptedModel(t)
 	p.moveErr = errors.New("schema gate says no")
 
-	_, cmd, _ := m.commitMove("a", "ready", "ready", 0, 3)
+	_, cmd, _ := m.commitMove("a", "ready", "ready", 3)
 	rb := m.onPersistDone(cmd().(persistDoneMsg)) // rollingBack armed
 
 	m.Update(editorDoneMsg{id: "b", body: "hand-typed prose"})

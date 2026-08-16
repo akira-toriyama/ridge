@@ -34,7 +34,7 @@ func (m *Model) enterMove() {
 		return
 	}
 	m.mode = modeMove
-	m.moveID, m.moveFrom, m.moveFromIdx = t.ID, t.Status, m.curPos()
+	m.moveID, m.moveFrom = t.ID, t.Status
 	m.dropLane, m.dropIdx = t.Status, m.curPos()
 	// followDrop() walks m.curLane/m.curIdx along with the drop target, so cancel
 	// has to be able to put them back. "esc restores" has to mean the SELECTION
@@ -89,14 +89,20 @@ func (m *Model) onMoveKey(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 
 	case key.Matches(msg, m.keys.Commit):
-		id, from, to, fi, di := m.moveID, m.moveFrom, m.dropLane, m.moveFromIdx, m.dropIdx
-		m.mode, m.moveID, m.moveCurIdx = modeNormal, "", nil
-		moved, cmd, err := m.commitMove(id, from, to, fi, di)
-		m.releaseHeldVerdict() // only after the commit consumed its slot
+		id, from, to, di := m.moveID, m.moveFrom, m.dropLane, m.dropIdx
+		moved, cmd, err := m.commitMove(id, from, to, di)
 		if err != nil {
+			// The move state must still be intact here: a refused commit has
+			// to restore the lift-time SELECTION exactly as esc would, or the
+			// cursor stays wherever followDrop parked it — two lanes over,
+			// on a task the next keystroke silently acts on. cancelMove also
+			// skips its own note while statusErr shows the refusal.
 			m.fail("%v", err)
+			m.cancelMove()
 			return nil
 		}
+		m.mode, m.moveID, m.moveCurIdx = modeNormal, "", nil
+		m.releaseHeldVerdict() // only after the commit consumed its slot
 		switch {
 		case !moved:
 			m.note("%s did not move — that is where it already was", id)
@@ -172,7 +178,15 @@ func (m *Model) followDrop() {
 // DISPLAYED: it still counts the moving card (nothing reflows under the cursor)
 // and it counts only tasks the filter lets through. Both facts have to be
 // undone before the board can be told anything.
-func (m *Model) commitMove(id, from, to string, fromIdx, dispIdx int) (moved bool, cmd tea.Cmd, err error) {
+//
+// The card's own slot is NOT a parameter: the board can recompose under a held
+// gesture — the post-persist reconcile and the rollback re-read both land as
+// async messages, and neither cancels a drag or a lifted card — so an index a
+// caller recorded at press/lift time can be stale by commit time, and a stale
+// index shifts AdjustDropIndex's boundary: a drop into the card's own slot
+// writes one slot off (t-raw1). The slot is therefore derived here, against
+// the same displayed columns dispIdx was just measured against.
+func (m *Model) commitMove(id, from, to string, dispIdx int) (moved bool, cmd tea.Cmd, err error) {
 	if m.rollingBack {
 		// Refuse the GESTURE, not just its enqueue: every caller follows a
 		// successful commit with its own note(), which would overwrite
@@ -181,7 +195,22 @@ func (m *Model) commitMove(id, from, to string, fromIdx, dispIdx int) (moved boo
 		// path is one every caller already handles first.
 		return false, nil, fmt.Errorf("move %s dropped — the store refused the last write, rolling back", id)
 	}
-	adj := board.AdjustDropIndex(from == to, fromIdx, dispIdx)
+	fromIdx := displayIndex(m.cols[from], id)
+	if fromIdx < 0 && m.b.IndexIn(from, id) < 0 {
+		// The card LEFT the lane the gesture grabbed it in — moved or closed
+		// by a re-read. Committing would silently yank back a change the user
+		// was never shown (the class t-74y3 exists to prevent), so refuse and
+		// let them re-issue the gesture against what is now on screen.
+		//
+		// A card the FILTER hid mid-gesture is deliberately not refused: it is
+		// still in the lane, and a cross-lane drop of it is exactly what the
+		// user asked for (independent review of this PR, refutation 1).
+		return false, nil, fmt.Errorf("%s is no longer shown in %s — the board changed under the gesture, nothing moved", id, from)
+	}
+	// A hidden-but-present card also needs NO self-slot correction: the
+	// displayed column does not count it, so dispIdx was measured against a
+	// column without it — the exact post-removal shape MoveTo expects.
+	adj := board.AdjustDropIndex(from == to && fromIdx >= 0, fromIdx, dispIdx)
 
 	visNoSelf := withoutID(m.cols[to], id)
 	fullNoSelf := withoutID(m.b.LaneTasks(to), id)
@@ -205,6 +234,17 @@ func (m *Model) commitMove(id, from, to string, fromIdx, dispIdx int) (moved boo
 		m.note("respaced %s (%d neighbours renumbered)", to, len(renumbered))
 	}
 	return true, m.persistPlacement(id, to), nil
+}
+
+// displayIndex is the card's slot in a displayed (filtered) column, -1 when
+// the column does not currently show it.
+func displayIndex(ts []*board.Task, id string) int {
+	for i, t := range ts {
+		if t.ID == id {
+			return i
+		}
+	}
+	return -1
 }
 
 func withoutID(ts []*board.Task, id string) []*board.Task {
