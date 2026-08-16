@@ -61,4 +61,10 @@ func TestEditInputDemoSeedsTheFocusedInput(t *testing.T) {
 			t.Errorf("-demo editinput: %q is missing from the frame", want)
 		}
 	}
+	// The frame cannot show focus (the compositor drops the cursor's SGR), so
+	// the name's "Focused" is pinned on the model itself — a Blur() slipped in
+	// after the seed passed every frame assert (review round 2, nit).
+	if m.edit == nil || !m.edit.input.Focused() {
+		t.Error("the demo's input is not focused")
+	}
 }

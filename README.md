@@ -132,7 +132,8 @@ go run ./cmd/ridge -readonly -dump           # schema gate で read-only の盤�
 
 `-demo` の名前をここに列挙しない: 写しは必ず古くなる（実際、この節の旧一覧は
 `edit` を「フィールド編集メニュー」と説明したまま checklist 直行に変わっていた）。
-一覧と1行説明は `-h` と `ui.DemoNames` 周辺のコメントが持つ。
+一覧は `-h` が、各状態の1行説明は `internal/ui/dump.go` の `demoState`
+（各 case のコメント）が持つ。
 
 `-readonly` だけは model の状態ではなく **store の性質**なので `-demo` ではなく
 フラグにしてある。実物を出すには古い schema の board が要る = 手では作れないので、

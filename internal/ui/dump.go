@@ -98,9 +98,11 @@ func (m *Model) demoState(kind string) error {
 		return nil
 
 	case "help":
+		// The `?` overlay: the app's one full key listing.
 		m.fullHelp = true
 
 	case "move":
+		// Keyboard move mode mid-gesture: the lifted card and its drop target.
 		m.curLane = m.b.LaneIndex("backlog")
 		m.setPos(1)
 		m.enterMove()
@@ -108,6 +110,8 @@ func (m *Model) demoState(kind string) error {
 		m.followDrop()
 
 	case "drag":
+		// A mouse drag mid-gesture: the ghost, the drop indicator, the source
+		// card's shadow.
 		src := m.lay.Col("backlog")
 		dst := m.lay.Col("ready")
 		if src == nil || dst == nil || len(src.Cards) < 2 {
