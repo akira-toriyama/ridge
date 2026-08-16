@@ -154,14 +154,17 @@ func (m *Model) chromeLayers() []*lg.Layer {
 	right := th.crumb.Render(tail)
 	title := joinEnds(left, right, m.w)
 
-	// The chips this row must never lose: the slice is part of what the board
-	// is filtered by, so it shows even while the panel is closed — state the
-	// panel set must never be invisible state. The table's sort, by the same
-	// rule: the header ▲▼ only exists for keys that HAVE a column — created
-	// and effort do not — and the status line is overwritten by the next
-	// keystroke, so this is the one place the sort stays readable in every
-	// state (independent review, finding 1). Built BEFORE the input so the
-	// input can be sized to the space they leave.
+	// The chips the input's own padding must not evict: the slice is part of
+	// what the board is filtered by, so it shows even while the panel is
+	// closed — state the panel set must never be invisible state. The table's
+	// sort, by the same rule: the header ▲▼ only exists for keys that HAVE a
+	// column — created and effort do not — and the status line is overwritten
+	// by the next keystroke, so this is the one place the sort stays readable
+	// (independent review, finding 1). Built BEFORE the input so the input
+	// can be sized to the space they leave. The qErr/pinned right-aligners
+	// below still outrank them — joinEnds truncates from the left, and the
+	// padded input reaches the chips first; that trade predates this sizing
+	// (identical on a fixed-width input) and an error beats a chip.
 	chips := ""
 	if t := m.sliceTerm(); t != "" {
 		chips += th.dim.Render("  slice ") + th.accent.Render(t)
@@ -181,12 +184,21 @@ func (m *Model) chromeLayers() []*lg.Layer {
 		// measurement, the same rule the card measurer lives by.
 		avail := maxInt(minFilterInputW, m.w-lg.Width(chips))
 		m.ti.SetWidth(avail)
+		// SetWidth alone does not re-run the input's overflow bookkeeping
+		// (bubbles v2 recomputes the horizontal window only on cursor moves),
+		// so a value seeded at another width keeps that width's scroll window
+		// — entering the mode with an existing query showed only its tail in
+		// a 48-cell slice of a 237-cell input (independent review of this PR,
+		// R1). SetCursor to the position the cursor is already at is the
+		// documented no-op that forces the recompute.
+		m.ti.SetCursor(m.ti.Position())
 		filter = m.ti.View()
 		if over := lg.Width(filter) + lg.Width(chips) - m.w; over > 0 {
 			// SetWidth budgets the text area; the prompt and cursor cell ride
 			// on top of it. Measure the real render once and give the
 			// overhead back rather than hard-coding bubbles' chrome width.
 			m.ti.SetWidth(maxInt(minFilterInputW, avail-over))
+			m.ti.SetCursor(m.ti.Position())
 			filter = m.ti.View()
 		}
 	case m.qRaw == "":
