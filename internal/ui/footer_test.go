@@ -205,7 +205,7 @@ func TestTitleRowPointsAtTheHelpOverlay(t *testing.T) {
 // widths this board is read at.
 func TestFrameStaysRectangularAfterTheFooterWent(t *testing.T) {
 	for _, w := range []int{240, 241, 259, 320, 399, 400} {
-		for _, demo := range []string{"", "graph", "edit"} {
+		for _, demo := range []string{"", "graph", "edit", "editdeps"} {
 			lines := dumpFrame(t, w, 50, demo)
 			for i, line := range lines {
 				if got := lipgloss.Width(line); got != w {

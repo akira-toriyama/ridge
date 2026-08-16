@@ -42,6 +42,7 @@ const (
 	fieldLabels
 	fieldEpic
 	fieldDue
+	fieldDeps
 	fieldRepos
 	fieldChecklist
 	fieldCount // one past the last menu row
@@ -63,6 +64,8 @@ func editFieldName(f editField) string {
 		return "epic"
 	case fieldDue:
 		return "due"
+	case fieldDeps:
+		return "deps"
 	case fieldRepos:
 		return "repos"
 	case fieldChecklist:
@@ -81,6 +84,7 @@ const (
 	inputNewRepo
 	inputCheckAdd
 	inputCheckReword
+	inputDepAdd
 )
 
 type editState struct {
@@ -139,7 +143,13 @@ func (m *Model) noteEditStage() {
 	case stagePick:
 		m.note("edit %s · %s — 1-5 sets · 0 clears · esc back", e.id, editFieldName(e.field))
 	case stageList:
-		m.note("edit %s · %s — ⏎/x toggle · esc back", e.id, editFieldName(e.field))
+		if e.field == fieldDeps {
+			// A dep row only points one way — selecting REMOVES the edge —
+			// so "toggle" would promise a re-add the list cannot do.
+			m.note("edit %s · deps — ⏎/x remove · a add · esc back", e.id)
+		} else {
+			m.note("edit %s · %s — ⏎/x toggle · esc back", e.id, editFieldName(e.field))
+		}
 	case stageInput:
 		m.note("edit %s · %s — ⏎ apply · esc back", e.id, inputTitleFor(e.inputFor))
 	default:
@@ -232,7 +242,7 @@ func (m *Model) openField(f editField, t *board.Task) tea.Cmd {
 			cur = t.Due.Local().Format("2006-01-02")
 		}
 		return m.startInput(inputDue, cur, "2026-08-04 · +1d · +2h · empty clears")
-	case fieldLabels, fieldEpic, fieldRepos, fieldChecklist:
+	case fieldLabels, fieldEpic, fieldDeps, fieldRepos, fieldChecklist:
 		e.stage = stageList
 		if f == fieldEpic {
 			// Epic is the one list whose row 0 DESTROYS a field: selecting
@@ -309,6 +319,8 @@ func (m *Model) onEditListKey(msg tea.KeyPressMsg, t *board.Task) tea.Cmd {
 		switch e.field {
 		case fieldLabels:
 			return m.startInput(inputNewLabel, "", "new label")
+		case fieldDeps:
+			return m.startInput(inputDepAdd, "", "t-… — the task this waits on")
 		case fieldRepos:
 			return m.startInput(inputNewRepo, "", "owner/repo")
 		case fieldChecklist:
@@ -362,6 +374,15 @@ func (m *Model) editListSelect(t *board.Task) tea.Cmd {
 		}
 		e.stage = stageMenu
 		return m.applyPatch("epic", board.FieldPatch{Epic: &id})
+	case fieldDeps:
+		// Every row IS a dep, so the toggle only points one way: selecting
+		// removes the edge. Re-adding is `a`, because the vocabulary of
+		// potential deps is the whole board, not a togglable list.
+		if e.listIdx >= len(t.Deps)-1 {
+			e.listIdx = maxInt(0, len(t.Deps)-2)
+		}
+		return m.applyCheck("dep rm", func() error { return m.b.DepRm(t.ID, val) },
+			func() error { return m.prov.PersistDepRm(t.ID, val) })
 	case fieldChecklist:
 		i := e.listIdx
 		if i >= len(t.Checklist) {
@@ -392,6 +413,11 @@ func (m *Model) editListRows(t *board.Task) []string {
 			rows = append(rows, e.ID+" "+e.Title)
 		}
 		return rows
+	case fieldDeps:
+		// A copy, not the live slice: DepRm's removeStr shrinks the backing
+		// array in place, so a caller holding these rows across a removal
+		// would read duplicated tails.
+		return append([]string(nil), t.Deps...)
 	case fieldChecklist:
 		var rows []string
 		for _, c := range t.Checklist {
@@ -453,13 +479,37 @@ func (m *Model) onEditInputKey(msg tea.KeyPressMsg, t *board.Task) tea.Cmd {
 				m.noteEditStage()
 				return nil
 			}
-			return m.applyCheck("check add", func() error { return m.b.CheckAdd(t.ID, v) },
+			cmd := m.applyCheck("check add", func() error { return m.b.CheckAdd(t.ID, v) },
 				func() error { return m.prov.PersistCheckAdd(t.ID, v) })
+			// The apply lands back in stageList, where ⏎ TOGGLES — the input's
+			// "⏎ apply" note surviving here is the false-key-claim failure
+			// noteEditStage exists to prevent (a refusal survives: noteEditStage
+			// never over-writes an unread m.fail).
+			m.noteEditStage()
+			return cmd
 		case inputCheckReword:
 			e.stage = stageList
 			i := e.listIdx
-			return m.applyCheck("check reword", func() error { return m.b.CheckReword(t.ID, i, v) },
+			cmd := m.applyCheck("check reword", func() error { return m.b.CheckReword(t.ID, i, v) },
 				func() error { return m.prov.PersistCheckReword(t.ID, i, v) })
+			m.noteEditStage()
+			return cmd
+		case inputDepAdd:
+			e.stage = stageList
+			if v == "" {
+				// An empty submission just backs out to the list, so the row
+				// has to stop advertising the input's keys — in stageList ⏎
+				// REMOVES, which is a board write, not an apply.
+				m.noteEditStage()
+				return nil
+			}
+			// Re-note after the apply, or the surviving "⏎ apply" makes the
+			// NEXT ⏎ silently delete the dep under the cursor — in stageList
+			// ⏎ removes an edge, the one destructive key in the overlay.
+			cmd := m.applyCheck("dep add", func() error { return m.b.DepAdd(t.ID, v) },
+				func() error { return m.prov.PersistDepAdd(t.ID, v) })
+			m.noteEditStage()
+			return cmd
 		}
 		return nil
 	}
@@ -484,8 +534,8 @@ func (m *Model) applyPatch(label string, p board.FieldPatch) tea.Cmd {
 	})
 }
 
-// applyCheck is applyPatch's twin for the checklist ops, whose local applies
-// are not FieldPatch-shaped.
+// applyCheck is applyPatch's twin for the checklist and dep ops, whose local
+// applies are not FieldPatch-shaped.
 func (m *Model) applyCheck(label string, local func() error, persist func() error) tea.Cmd {
 	id := m.edit.id
 	if err := local(); err != nil {
@@ -599,6 +649,8 @@ func inputTitleFor(k inputKind) string {
 		return "add checklist item"
 	case inputCheckReword:
 		return "reword checklist item"
+	case inputDepAdd:
+		return "add dep — this task will wait on it"
 	}
 	return ""
 }
@@ -630,6 +682,7 @@ func (m *Model) renderEditMenu(t *board.Task, inner int) string {
 		{editFieldName(fieldLabels), strings.Join(t.Labels, ",")},
 		{editFieldName(fieldEpic), epicLabel},
 		{editFieldName(fieldDue), due},
+		{editFieldName(fieldDeps), ansi.Truncate(strings.Join(t.Deps, ","), inner-14, "…")},
 		{editFieldName(fieldRepos), ansi.Truncate(strings.Join(t.Repos, ","), inner-14, "…")},
 		{editFieldName(fieldChecklist), fmt.Sprintf("%d/%d", cd, ct)},
 	}
@@ -715,6 +768,24 @@ func (m *Model) renderEditList(t *board.Task, inner, budget int) string {
 				box = "[x] "
 			}
 			return box + row
+		}
+	case fieldDeps:
+		hdr, foot = "deps — waits on", "⏎/x remove · a add · esc back"
+		mark = func(_ int, row string) string {
+			// The same state glyphs as the peek's dep lines: o open, v done,
+			// ? not on this board.
+			g := glyphOpen
+			switch {
+			case m.b.Task(row) == nil:
+				g = glyphUnknown
+			case m.g.IsDone(row):
+				g = glyphDone
+			}
+			label := row
+			if dep := m.b.Task(row); dep != nil {
+				label = row + " " + dep.Title
+			}
+			return g + " " + label
 		}
 	case fieldEpic:
 		hdr, foot = "file under epic", "⏎ select · esc back"

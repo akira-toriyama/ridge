@@ -13,7 +13,7 @@ import (
 // unknown-name error and the tests all read this slice, because the list was
 // duplicated in three places and adding two states updated two of them —
 // `ridge -h` then advertised eight of ten.
-var DemoNames = []string{"move", "drag", "add", "edit", "editpick", "editinput", "graph", "help", "slice", "sort", "filter", "filterchips", "epicdeps", "fail"}
+var DemoNames = []string{"move", "drag", "add", "edit", "editpick", "editinput", "editdeps", "graph", "help", "slice", "sort", "filter", "filterchips", "epicdeps", "fail"}
 
 // Options configures a freshly-constructed Model. The zero value is the
 // default TUI: dark palette, board view, no filter.
@@ -249,6 +249,20 @@ func (m *Model) demoState(kind string) error {
 		m.ti.SetValue("lane:backlog is:blocked")
 		m.ti.Focus()
 		_ = m.applyFilter(m.ti.Value())
+
+	case "editdeps":
+		// The deps sub-editor on a task whose two deps resolve differently —
+		// t-jv3j waits on an open task and a done one, so one frame proves
+		// both state glyphs, the resolved titles and the remove/add keys.
+		if !m.selectID("t-jv3j", false) {
+			return fmt.Errorf("demo editdeps: t-jv3j is not on the fixture board")
+		}
+		m.enterEdit()
+		if m.edit == nil {
+			return fmt.Errorf("demo editdeps: the edit menu did not open")
+		}
+		m.edit.menuIdx = int(fieldDeps)
+		m.openField(fieldDeps, m.b.Task("t-jv3j"))
 
 	case "epicdeps":
 		// The peek's epic-dep line, both resolutions at once: t-y4st's box

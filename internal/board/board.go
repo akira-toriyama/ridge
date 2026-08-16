@@ -531,6 +531,68 @@ func (b *Board) SetFields(id string, p FieldPatch) error {
 	return nil
 }
 
+// DepAdd makes id wait on dep and stamps Updated — the optimistic half of
+// Provider.PersistDepAdd. It mirrors `furrow dep`'s contract the way parseDue
+// mirrors --due: every dep must exist, adding is acyclic and idempotent. Keep
+// it a mirror — a form this refuses is a form the UI cannot reach at all, and
+// the acyclic walk here only has to hold until the persist's own verdict.
+func (b *Board) DepAdd(id, dep string) error {
+	t := b.Task(id)
+	if t == nil {
+		return fmt.Errorf("unknown task %q", id)
+	}
+	if b.Task(dep) == nil {
+		return fmt.Errorf("unknown dep %q — every dep must exist", dep)
+	}
+	if dep == id {
+		return fmt.Errorf("%s cannot depend on itself", id)
+	}
+	if containsStr(t.Deps, dep) {
+		return nil // idempotent, like furrow's own add
+	}
+	if b.depReaches(dep, id, map[string]bool{}) {
+		return fmt.Errorf("%s → %s would close a cycle — deps are acyclic", id, dep)
+	}
+	t.Deps = append(t.Deps, dep)
+	t.Updated = nowFn().UTC().Truncate(time.Second)
+	return nil
+}
+
+// depReaches reports whether goal is reachable from id along dep edges.
+func (b *Board) depReaches(id, goal string, seen map[string]bool) bool {
+	if id == goal {
+		return true
+	}
+	if seen[id] {
+		return false
+	}
+	seen[id] = true
+	t := b.Task(id)
+	if t == nil {
+		return false
+	}
+	for _, d := range t.Deps {
+		if b.depReaches(d, goal, seen) {
+			return true
+		}
+	}
+	return false
+}
+
+// DepRm removes id's dependency on dep and stamps Updated.
+func (b *Board) DepRm(id, dep string) error {
+	t := b.Task(id)
+	if t == nil {
+		return fmt.Errorf("unknown task %q", id)
+	}
+	if !containsStr(t.Deps, dep) {
+		return fmt.Errorf("%s does not depend on %q", id, dep)
+	}
+	t.Deps = removeStr(t.Deps, dep)
+	t.Updated = nowFn().UTC().Truncate(time.Second)
+	return nil
+}
+
 // CheckAdd appends a checklist item and stamps Updated.
 func (b *Board) CheckAdd(id, text string) error {
 	t := b.Task(id)

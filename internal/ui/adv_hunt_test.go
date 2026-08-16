@@ -91,6 +91,8 @@ func (p *emptyProvider) PersistFields(_ string, _ board.FieldPatch) error   { re
 func (p *emptyProvider) PersistCheckAdd(_, _ string) error                  { return nil }
 func (p *emptyProvider) PersistCheckRm(_ string, _ int) error               { return nil }
 func (p *emptyProvider) PersistCheckReword(_ string, _ int, _ string) error { return nil }
+func (p *emptyProvider) PersistDepAdd(_, _ string) error                    { return nil }
+func (p *emptyProvider) PersistDepRm(_, _ string) error                     { return nil }
 func (p *emptyProvider) Add(string, board.AddOptions) (string, error) {
 	return "", fmt.Errorf("no store")
 }

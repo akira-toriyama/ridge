@@ -207,3 +207,77 @@ func TestTreeOfStillMarksAGenuinelyRepeatedSubtree(t *testing.T) {
 		t.Errorf("want exactly one expanded sighting and one ↩seen; got expanded=%d repeat=%d", expanded, repeats)
 	}
 }
+
+// DepAdd mirrors `furrow dep`'s contract — every dep must exist, adding is
+// acyclic and idempotent — so a form it refuses is a form the UI cannot even
+// send. The persist's own verdict stays canonical; these only pin the mirror.
+func TestDepAddValidatesLikeFurrow(t *testing.T) {
+	b := NewBoard([]*Task{
+		mk("a", "backlog", "b"),
+		mk("b", "backlog", "c"),
+		mk("c", "backlog"),
+	})
+
+	if err := b.DepAdd("ghost", "c"); err == nil {
+		t.Error("adding a dep to an unknown task must refuse")
+	}
+	if err := b.DepAdd("a", "ghost"); err == nil {
+		t.Error("a dep on an id not on the board must refuse (every dep must exist)")
+	}
+	if err := b.DepAdd("a", "a"); err == nil {
+		t.Error("a self-dep must refuse")
+	}
+	if err := b.DepAdd("c", "a"); err == nil {
+		t.Error("c→a closes the a→b→c chain into a cycle; must refuse")
+	}
+	if err := b.DepAdd("a", "b"); err != nil {
+		t.Errorf("re-adding an existing dep is idempotent, got %v", err)
+	}
+	if got := strings.Join(b.Task("a").Deps, ","); got != "b" {
+		t.Errorf("idempotent re-add must not duplicate: deps = %q", got)
+	}
+
+	if err := b.DepAdd("a", "c"); err != nil {
+		t.Fatalf("a→c is a legal shortcut edge alongside a→b→c: %v", err)
+	}
+	if got := strings.Join(b.Task("a").Deps, ","); got != "b,c" {
+		t.Errorf("deps = %q, want b,c", got)
+	}
+	if b.Task("a").Updated.IsZero() {
+		t.Error("DepAdd must stamp Updated")
+	}
+}
+
+func TestDepRmRemovesTheEdge(t *testing.T) {
+	b := NewBoard([]*Task{
+		mk("a", "ready", "b", "c"),
+		mk("b", "backlog"),
+		mk("c", "done"),
+	})
+
+	if err := b.DepRm("a", "b"); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(b.Task("a").Deps, ","); got != "c" {
+		t.Errorf("deps = %q, want c", got)
+	}
+	if b.Task("a").Updated.IsZero() {
+		t.Error("DepRm must stamp Updated")
+	}
+	if err := b.DepRm("a", "b"); err == nil {
+		t.Error("removing an absent dep must refuse — the UI only offers rows that exist")
+	}
+	if err := b.DepRm("ghost", "b"); err == nil {
+		t.Error("removing from an unknown task must refuse")
+	}
+
+	// The graph rebuilt after the removal is what unblocks the card: a was
+	// waiting on open b, and c alone is done.
+	g := NewGraph(b)
+	if got := g.BlockedBy("a"); len(got) != 0 {
+		t.Errorf("after dropping the open dep, a is unblocked; BlockedBy = %v", got)
+	}
+	if !g.Actionable("a") {
+		t.Error("a sits in ready with every dep done — actionable")
+	}
+}

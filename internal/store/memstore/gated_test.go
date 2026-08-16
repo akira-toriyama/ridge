@@ -79,6 +79,12 @@ func TestGatedFixtureRefusesEveryWrite(t *testing.T) {
 	if err := p.PersistCheckReword(id, 0, "x"); err == nil {
 		t.Error("PersistCheckReword was accepted on a read-only board")
 	}
+	if err := p.PersistDepAdd(id, id); err == nil {
+		t.Error("PersistDepAdd was accepted on a read-only board")
+	}
+	if err := p.PersistDepRm(id, id); err == nil {
+		t.Error("PersistDepRm was accepted on a read-only board")
+	}
 	if newID, err := p.Add("新規", board.AddOptions{}); err == nil {
 		t.Errorf("Add was accepted on a read-only board (created %s)", newID)
 	}

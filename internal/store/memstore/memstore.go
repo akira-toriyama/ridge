@@ -277,6 +277,38 @@ func (p *Store) PersistCheckReword(id string, i int, _ string) error {
 	return p.PersistCheckRm(id, i) // same bounds contract
 }
 
+// PersistDepAdd validates the ids and records nothing (board.Provider) — the
+// local apply (Board.DepAdd) already enforced the acyclic/exists mirror
+// against the same board.
+func (p *Store) PersistDepAdd(id, dep string) error {
+	if err := p.gate(); err != nil {
+		return err
+	}
+	b := p.snapshot()
+	if b.Task(id) == nil {
+		return fmt.Errorf("unknown task %q", id)
+	}
+	if b.Task(dep) == nil {
+		return fmt.Errorf("unknown dep %q", dep)
+	}
+	return nil
+}
+
+// PersistDepRm validates the TASK id only and records nothing
+// (board.Provider). The dep id is deliberately unchecked: an archived dep
+// leaves a dangling edge on the live board (the `?` row), and removing it is
+// exactly the write furrow allows — requiring the dep to exist would refuse
+// the one removal that matters.
+func (p *Store) PersistDepRm(id, _ string) error {
+	if err := p.gate(); err != nil {
+		return err
+	}
+	if p.snapshot().Task(id) == nil {
+		return fmt.Errorf("unknown task %q", id)
+	}
+	return nil
+}
+
 // Add records a task and swaps in a board that contains it (board.Provider).
 //
 // It runs on the persist queue's goroutine while the UI thread renders the

@@ -404,3 +404,113 @@ func TestEditEpicOpensOnTheCurrentEpic(t *testing.T) {
 		t.Errorf("stale membership listIdx = %d, want 0", got)
 	}
 }
+
+func TestEditDepsRemovesAndAddsEdges(t *testing.T) {
+	m := editModel(t, "t-jv3j") // waits on t-ehk7 (open) and t-t38k (done)
+	m.edit.menuIdx = int(fieldDeps)
+	press(m, "enter") // into the deps list
+	if m.edit.stage != stageList || m.edit.field != fieldDeps {
+		t.Fatalf("the deps sub-editor did not open: stage=%d field=%d", m.edit.stage, m.edit.field)
+	}
+
+	// ⏎ on a row removes the edge — deps have no re-add toggle.
+	press(m, "enter")
+	if got := strings.Join(m.b.Task("t-jv3j").Deps, ","); got != "t-t38k" {
+		t.Errorf("deps = %q, want t-t38k (t-ehk7 removed)", got)
+	}
+	drainPersists(m, t)
+
+	// a + a task id re-adds it, and the rebuilt graph blocks on it again.
+	press(m, "a")
+	m.edit.input.SetValue("t-ehk7")
+	press(m, "enter")
+	if got := strings.Join(m.b.Task("t-jv3j").Deps, ","); got != "t-t38k,t-ehk7" {
+		t.Errorf("deps = %q, want t-t38k,t-ehk7", got)
+	}
+	if got := m.g.BlockedBy("t-jv3j"); len(got) != 1 || got[0] != "t-ehk7" {
+		t.Errorf("the graph must be recomputed after the add: BlockedBy = %v", got)
+	}
+	// The apply lands back in the LIST, where ⏎ removes — the input's
+	// "⏎ apply" note surviving past the add made the very next ⏎ silently
+	// delete the dep under the cursor.
+	if strings.Contains(m.status, "⏎ apply") {
+		t.Errorf("the status still advertises the input's keys after the add: %q", m.status)
+	}
+	drainPersists(m, t)
+
+	// Removing the LAST row must pull the cursor back inside the list — a
+	// cursor parked one past the end makes the next ⏎ an invisible no-op.
+	m.edit.listIdx = 1 // t-ehk7, the re-added tail
+	press(m, "enter")
+	if got := strings.Join(m.b.Task("t-jv3j").Deps, ","); got != "t-t38k" {
+		t.Errorf("deps = %q, want t-t38k", got)
+	}
+	if m.edit.listIdx != 0 {
+		t.Errorf("listIdx = %d after removing the last row, want 0", m.edit.listIdx)
+	}
+	drainPersists(m, t)
+}
+
+// A dep whose target is gone (archived, say) still renders — as the ? row —
+// and its removal must go through: real furrow accepts `dep --rm` on a
+// dangling edge, so a store adapter that validates the DEP id refuses the one
+// removal that matters and rolls the board back.
+func TestEditDepsRemovesADanglingDep(t *testing.T) {
+	b := board.NewBoard([]*board.Task{
+		{ID: "t-aaa", Title: "生きている方", Status: "backlog", Priority: 10, Deps: []string{"t-ghost"}},
+	})
+	m := New(memstore.NewWith(b), Options{})
+	m.w, m.h = 240, 50
+	m.recompute()
+	m.relayout()
+	if !m.selectID("t-aaa", false) {
+		t.Fatal("could not select t-aaa")
+	}
+	m.enterEdit()
+	m.edit.menuIdx = int(fieldDeps)
+	press(m, "enter")
+
+	if frame := ansiStrip(m.View().Content); !strings.Contains(frame, "? t-ghost") {
+		t.Error("the dangling dep must render as the ? row")
+	}
+
+	press(m, "enter") // remove the edge
+	if got := m.b.Task("t-aaa").Deps; len(got) != 0 {
+		t.Fatalf("the dangling edge survived: %v", got)
+	}
+	drainPersists(m, t)
+	if m.statusErr {
+		t.Errorf("removing a dangling dep must persist cleanly, got %q", m.status)
+	}
+}
+
+func TestEditDepsRefusesWhatFurrowWould(t *testing.T) {
+	m := editModel(t, "t-jv3j")
+	m.edit.menuIdx = int(fieldDeps)
+	press(m, "enter")
+
+	// An id not on the board: refused locally, nothing queued.
+	press(m, "a")
+	m.edit.input.SetValue("t-nope")
+	press(m, "enter")
+	if got := strings.Join(m.b.Task("t-jv3j").Deps, ","); got != "t-ehk7,t-t38k" {
+		t.Errorf("a refused add must leave deps untouched: %q", got)
+	}
+	if !m.statusErr {
+		t.Error("the refusal must land on the status row")
+	}
+	if m.inflight || len(m.pending) > 0 {
+		t.Error("a locally refused add must not reach the persist queue")
+	}
+
+	// A cycle: t-pk4f already waits on t-jv3j, so t-jv3j → t-pk4f closes it.
+	press(m, "a")
+	m.edit.input.SetValue("t-pk4f")
+	press(m, "enter")
+	if got := strings.Join(m.b.Task("t-jv3j").Deps, ","); got != "t-ehk7,t-t38k" {
+		t.Errorf("a cycle-closing add must refuse: %q", got)
+	}
+	if m.inflight || len(m.pending) > 0 {
+		t.Error("a cycle-closing add must not reach the persist queue")
+	}
+}
