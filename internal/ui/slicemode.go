@@ -91,14 +91,31 @@ func (m *Model) toggleSlice() {
 	case !m.sliceOpen:
 		m.sliceOpen = true
 		m.mode = modeSlice
-		m.note("slice by %s — tab switches the axis · ⏎ slices · esc leaves the panel", m.sliceField)
+		m.noteSliceAxis()
 	case m.mode == modeSlice:
 		m.sliceOpen = false
 		m.mode = modeNormal
 	default:
 		m.mode = modeSlice
+		m.noteSliceAxis()
 	}
 	m.relayout()
+}
+
+// noteSliceAxis states the panel's keys FOR THE CURRENT AXIS. The panel is a
+// modal, so `?` cannot be typed inside it and HelpSections deliberately omits
+// the modals — this note is the only surface that can advertise m/A, and the
+// epic axis is the only one where they mean anything. Called on open AND on
+// every axis switch: written once at open, it went stale on the first tab.
+func (m *Model) noteSliceAxis() {
+	if m.statusErr {
+		return // never over-write a refusal nobody has read yet
+	}
+	if m.sliceField == sliceEpic {
+		m.note("slice by epic — tab switches the axis · ⏎ slices · m manages the box · A new box · esc leaves")
+		return
+	}
+	m.note("slice by %s — tab switches the axis · ⏎ slices · esc leaves the panel", m.sliceField)
 }
 
 func (m *Model) onSliceKey(msg tea.KeyPressMsg) tea.Cmd {
@@ -131,6 +148,40 @@ func (m *Model) onSliceKey(msg tea.KeyPressMsg) tea.Cmd {
 	case key.Matches(msg, m.keys.PrevCol), key.Matches(msg, m.keys.Left):
 		return m.cycleSliceField(-1)
 
+	// 111 boxes on the real board, in a 26-cell column: without these the only
+	// way to the far end of the list is holding j.
+	case key.Matches(msg, m.keys.Top):
+		if len(rows) > 0 {
+			m.sliceIdx = 0
+			m.ensureSliceVisible()
+		}
+	case key.Matches(msg, m.keys.Bottom):
+		if len(rows) > 0 {
+			m.sliceIdx = len(rows) - 1
+			m.ensureSliceVisible()
+		}
+
+	// Both epic keys are answered on EVERY axis, not bound only on the epic
+	// one: onSliceKey has no default case, so an axis-conditional binding would
+	// be a silent dead key on repo/label — the failure the ^d/^u fix (t-84r1)
+	// wrote the rule about. A key that cannot act says why.
+	case key.Matches(msg, m.keys.EpicEdit):
+		if m.sliceField != sliceEpic {
+			m.note("m manages a BOX — switch to the epic axis with tab")
+			return nil
+		}
+		if m.sliceIdx >= len(rows) {
+			m.note("no box under the cursor")
+			return nil
+		}
+		m.enterEpic(rows[m.sliceIdx].value)
+	case key.Matches(msg, m.keys.EpicNew):
+		if m.sliceField != sliceEpic {
+			m.note("A creates a BOX — switch to the epic axis with tab")
+			return nil
+		}
+		return m.enterEpicNew()
+
 	case key.Matches(msg, m.keys.Commit), key.Matches(msg, m.keys.Check):
 		if m.sliceIdx < len(rows) {
 			return m.selectSlice(m.sliceField, rows[m.sliceIdx].value)
@@ -147,8 +198,11 @@ func (m *Model) cycleSliceField(d int) tea.Cmd {
 	if m.sliceVal != "" {
 		m.sliceVal = ""
 		m.pinned = map[string]bool{} // see selectSlice
-		return m.refire(m.curTask(), false)
+		cmd := m.refire(m.curTask(), false)
+		m.noteSliceAxis()
+		return cmd
 	}
+	m.noteSliceAxis()
 	return nil
 }
 
@@ -214,7 +268,18 @@ func (m *Model) sliceRows() []sliceRow {
 			// ("epic 行は store の progress/stuck つき").
 			// Measure the composed pieces; never hard-code a cell budget
 			// around CJK text.
-			suffix := fmt.Sprintf(" %d/%d", e.Done, e.Total)
+			// The lifecycle markers lead the suffix: they are the shortest
+			// pieces and the ones the epic overlay acts on, so they must
+			// survive the CJK title's ellipsis. ▶ = the box this repo is
+			// working out of (furrow's own brief marker), ◆ = pinned.
+			suffix := ""
+			if e.Active {
+				suffix += " " + glyphEpicActive
+			}
+			if e.Pinned {
+				suffix += " " + glyphEpicPinned
+			}
+			suffix += fmt.Sprintf(" %d/%d", e.Done, e.Total)
 			// The epic-dep readout: →N = this box waits on N still-open
 			// boxes ("open after those close"), straight off furrow's
 			// derived open_deps. Informational like the edge itself —

@@ -83,6 +83,106 @@ type Provider interface {
 	// owns id assignment, so the model waits for the id and re-reads instead
 	// of applying optimistically (a single add measures ~57ms).
 	Add(title string, o AddOptions) (id string, err error)
+
+	// --- epic writes: store-first, NOT the Persist* contract ---------------
+	//
+	// The Persist* family records a change the model already applied to the
+	// board on the UI thread. The epic family deliberately does not join it:
+	// what an epic write MEANS is furrow's, not ridge's — activate refuses a
+	// second box for a repo rather than stealing the slot, add invents the id,
+	// and Done/Total/Stuck/OpenDeps are all derived furrow-side. Mirroring any
+	// of that locally is the front-end logic this repo exists to not have.
+	//
+	// So these writes apply NOTHING locally: they ride the same strictly-serial
+	// queue (ordering and the quit-flush still hold), and the board converges
+	// on the re-read that follows the drain. A refusal therefore needs no
+	// rollback — there is no optimistic half to undo — but the queue must still
+	// re-read when an earlier store-first write in the same drain LANDED, or
+	// that write stays invisible until the next reload (persist.go).
+
+	// EpicAdd creates a box and returns its id. Never active on creation:
+	// opening one is a separate deliberate act (`epic activate`).
+	EpicAdd(title string, o EpicAddOptions) (id string, err error)
+
+	// EpicSet writes one metadata edit; everything in the patch lands in ONE
+	// `furrow epic set`. An empty patch is refused rather than sent: furrow
+	// answers exit 2 ("needs at least one change") and a no-op that reports a
+	// store error is worse than one that reports nothing.
+	EpicSet(id string, p EpicPatch) error
+
+	// EpicActivate makes the box active for every repo it names. reason is
+	// furrow's --reason: it is appended to the box's own body as an activation
+	// record, which is how a switch stays visible to the next session. "" omits
+	// the flag.
+	EpicActivate(id, reason string) error
+
+	// EpicDeactivate clears the active flag without closing the box, and
+	// returns furrow's suggestion of where to go back to — computed fresh from
+	// the activation log, never a stored pointer. The zero value means furrow
+	// had no record to decide it, which is a legitimate answer, not an error.
+	EpicDeactivate(id string) (EpicPrevious, error)
+
+	// EpicDepAdd makes id wait on dep ("open this box after that one closes").
+	// Acyclic and idempotent furrow-side.
+	EpicDepAdd(id, dep string) error
+
+	// EpicDepRm removes the edge. The dep need not resolve on this board — a
+	// closed or archived box leaves a removable edge behind, which is exactly
+	// the removal that matters.
+	EpicDepRm(id, dep string) error
+}
+
+// EpicAddOptions is a new box's inherited context — the same
+// filtered-metadata inheritance rule quick add follows. Repos matters most: a
+// box naming no repo cannot be activated at all (furrow refuses it, because a
+// repo-less box would bypass the one-active-per-repo rule).
+type EpicAddOptions struct {
+	Goal   string
+	Labels []string
+	Repos  []string
+}
+
+// EpicPatch is one `furrow epic set` write. nil/empty means "untouched"; a
+// pointed-to zero clears (--goal "" is furrow's clear, and --standing=false /
+// --pinned=false are its explicit negatives — an omitted flag never touches the
+// stored value).
+//
+// Title has no clearing form on purpose: `epic set --title ""` is exit 2
+// ("epic title must not be empty"), so an empty rename is refused upstream.
+type EpicPatch struct {
+	Title     *string
+	Goal      *string
+	AddLabels []string
+	RmLabels  []string
+	AddRepos  []string
+	RmRepos   []string
+	SetMeta   map[string]string
+	RmMeta    []string
+	Standing  *bool
+	Pinned    *bool
+}
+
+// Empty reports whether the patch would send `furrow epic set` with no change
+// flag, which furrow refuses (exit 2). The check lives here rather than in the
+// adapter so the UI can refuse the gesture before it queues a write.
+//
+// It counts Standing/Pinned even though furrow's own refusal message does not
+// list them: a standing-only set IS accepted, so deriving this from that
+// message would refuse a write furrow takes.
+func (p EpicPatch) Empty() bool {
+	return p.Title == nil && p.Goal == nil && p.Standing == nil && p.Pinned == nil &&
+		len(p.AddLabels) == 0 && len(p.RmLabels) == 0 &&
+		len(p.AddRepos) == 0 && len(p.RmRepos) == 0 &&
+		len(p.SetMeta) == 0 && len(p.RmMeta) == 0
+}
+
+// EpicPrevious is `epic deactivate`'s "where to return" suggestion: the open,
+// inactive box with the newest activation record. furrow computes it and never
+// acts on it — activating remains the human's call — so ridge shows it and
+// nothing more. The zero value means furrow named nobody.
+type EpicPrevious struct {
+	ID    string
+	Title string
 }
 
 // AddOptions is quick add's inherited context — the GitHub Projects rule

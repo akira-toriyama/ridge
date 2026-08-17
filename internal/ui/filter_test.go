@@ -48,6 +48,18 @@ func (p *liveQueryProvider) PersistCheckReword(_ string, _ int, _ string) error 
 func (p *liveQueryProvider) PersistDepAdd(_, _ string) error                    { return nil }
 func (p *liveQueryProvider) PersistDepRm(_, _ string) error                     { return nil }
 func (p *liveQueryProvider) Add(string, board.AddOptions) (string, error)       { return "", nil }
+func (p *liveQueryProvider) EpicSet(string, board.EpicPatch) error              { return nil }
+func (p *liveQueryProvider) EpicActivate(_, _ string) error                     { return nil }
+func (p *liveQueryProvider) EpicDepAdd(_, _ string) error                       { return nil }
+func (p *liveQueryProvider) EpicDepRm(_, _ string) error                        { return nil }
+
+func (p *liveQueryProvider) EpicAdd(string, board.EpicAddOptions) (string, error) {
+	return "e-new", nil
+}
+
+func (p *liveQueryProvider) EpicDeactivate(string) (board.EpicPrevious, error) {
+	return board.EpicPrevious{}, nil
+}
 
 func liveModel(t *testing.T) (*Model, *liveQueryProvider) {
 	t.Helper()

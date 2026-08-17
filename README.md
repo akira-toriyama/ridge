@@ -25,6 +25,9 @@ go run ./cmd/ridge -benchload # 実盤面の読み込みレイテンシを実測
 （実測 63-77ms / 914 tasks・cold 181ms）、書きは**楽観的キュー** — 盤面へ先に適用し、
 `furrow set/done/check` を裏で直列に流し、失敗したら store 再読で巻き戻す
 （書き実測 85-115ms・respace 時 280ms が根拠。`internal/ui/persist.go`）。
+例外は **store-first** の書き込み（quick add と epic 管理）: 何を意味するかが
+furrow 側にあるもの（id 発行・repo ごとの active 枠・導出値）は盤面に先取り適用せず、
+着地後の再読で収束させる。
 
 POC が答えを出した3つの問い:
 
@@ -112,7 +115,9 @@ due / repos / checklist（カーソルで項目選択・toggle/add/delete/reword
   xterm/Ghostty/tmux=`Shift`、iTerm2=`Option`）、`M` で切れる。
 - **楽観的 TUI**: 書き込みの完了を待たず先に画面を更新する。store への記録は
   直列キュー（同時 1 本 — 並べ替えの anchor が前の書き込みの結果に依存するため）。
-  quit は未完了の書き込みを flush してから終了する。
+  quit は未完了の書き込みを flush してから終了する。**意味が furrow 側にある書き込み
+  だけは先取りしない**（store-first）: 楽観適用するには ridge が furrow の規則を
+  写す必要があり、それは front-end に業務ロジックを溜めることになる。
 - **ロジックは furrow 側に置く**: 「仮に TUI を作るならロジックが冗長になるか」で
   迷ったら furrow へ。ridge と vista で同じものを二重に持たない。
 

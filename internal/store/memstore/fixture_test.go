@@ -75,6 +75,65 @@ func TestGraphAgreesWithFixtureFacts(t *testing.T) {
 		t.Error("the fixture must keep one stuck epic — the warn glyph's only fixture site")
 	}
 
+	// furrow allows at most ONE active box per repo, so a fixture with two for
+	// the same repo is a board furrow cannot produce — and it would make the
+	// epic overlay's "slot held by" line answer arbitrarily.
+	held := map[string]string{}
+	for _, e := range b.Epics() {
+		if !e.Active {
+			continue
+		}
+		if len(e.Repos) == 0 {
+			t.Errorf("%s is active with no repo; furrow refuses to activate one", e.ID)
+		}
+		for _, r := range e.Repos {
+			if other, dup := held[r]; dup {
+				t.Errorf("%s and %s are both active for %s — furrow allows one", other, e.ID, r)
+			}
+			held[r] = e.ID
+		}
+	}
+	if len(held) == 0 {
+		t.Error("the fixture must keep one active box — the ▶ marker's only site, " +
+			"and the only box `deactivate` is reachable on")
+	}
+
+	// The activate gesture needs a REFUSAL site too: a second box sharing an
+	// active box's repo. Without it the precondition line the overlay renders
+	// ("slot held by …") is unreachable headless.
+	clash := false
+	for _, e := range b.Epics() {
+		if e.Active {
+			continue
+		}
+		for _, r := range e.Repos {
+			if _, taken := held[r]; taken {
+				clash = true
+			}
+		}
+	}
+	if !clash {
+		t.Error("no inactive box shares an active box's repo — the activate-clash " +
+			"precondition has no fixture site")
+	}
+
+	// An epic's repos must be repos the board actually knows, or the overlay's
+	// repo toggle list (board vocab ∪ the box's own) would show a repo no task
+	// has and no slice can select.
+	vocab := map[string]bool{}
+	for _, task := range b.Tasks() {
+		for _, r := range task.Repos {
+			vocab[r] = true
+		}
+	}
+	for _, e := range b.Epics() {
+		for _, r := range e.Repos {
+			if !vocab[r] {
+				t.Errorf("%s names repo %q, which no fixture task carries", e.ID, r)
+			}
+		}
+	}
+
 	// t-jv3j depends on t-ehk7 (open) and t-t38k (done).
 	got := g.BlockedBy("t-jv3j")
 	if len(got) != 1 || got[0] != "t-ehk7" {

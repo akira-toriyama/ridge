@@ -93,6 +93,18 @@ func (p *emptyProvider) PersistCheckRm(_ string, _ int) error               { re
 func (p *emptyProvider) PersistCheckReword(_ string, _ int, _ string) error { return nil }
 func (p *emptyProvider) PersistDepAdd(_, _ string) error                    { return nil }
 func (p *emptyProvider) PersistDepRm(_, _ string) error                     { return nil }
+func (p *emptyProvider) EpicSet(string, board.EpicPatch) error              { return nil }
+func (p *emptyProvider) EpicActivate(_, _ string) error                     { return nil }
+func (p *emptyProvider) EpicDepAdd(_, _ string) error                       { return nil }
+func (p *emptyProvider) EpicDepRm(_, _ string) error                        { return nil }
+
+func (p *emptyProvider) EpicAdd(string, board.EpicAddOptions) (string, error) {
+	return "", fmt.Errorf("no store")
+}
+
+func (p *emptyProvider) EpicDeactivate(string) (board.EpicPrevious, error) {
+	return board.EpicPrevious{}, nil
+}
 func (p *emptyProvider) Add(string, board.AddOptions) (string, error) {
 	return "", fmt.Errorf("no store")
 }

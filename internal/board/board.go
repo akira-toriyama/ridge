@@ -109,23 +109,86 @@ var boardLanes = []Lane{
 // have no lane, so they are board-level metadata rather than tasks: cards
 // reference them by id (Task.Epic) and render the resolved title.
 //
+// The fields split three ways, and the split is the contract:
+//
+//   - Stored — Title, Goal, Labels, Repos, Meta, and the two PERMANENT-channel
+//     declarations Standing/Pinned. `furrow epic set` writes exactly these.
+//   - Active — at most ONE box per repo, and a box spanning several repos
+//     consumes a slot in each. furrow's to enforce, and it REFUSES a second
+//     box for a repo rather than stealing the slot, so ridge must never
+//     present the flag as a toggle that always lands.
+//   - Derived — Done, Total, Stuck, OpenDeps. furrow computes these and ridge
+//     consumes them verbatim; recomputing any of them here would be the
+//     front-end logic this repo exists to not have — and would silently break
+//     the day the epic read gains a scope.
+//
+// There is no Closed field because the read is OPEN-ONLY (`epic ls` without
+// --all): every box that reaches this struct is open. Serving closed boxes is
+// t-sq02's, together with the `epic done`/`reopen` pair that needs them.
+//
 // Deps is the epic-to-epic edge furrow's `epic dep` records: "open this box
 // after those close". It is INFORMATION, not enforcement — furrow itself
-// warns and proceeds — so ridge renders it and gates nothing on it.
-//
-// OpenDeps is the subset still waiting, and it arrives DERIVED, exactly like
-// Done/Total/Stuck: `epic ls --json` computes it (a dep on a closed epic is
-// simply satisfied) and ridge consumes it verbatim. Recomputing it here from
-// the served epic set would be the front-end logic this repo exists to not
-// have — and would silently break the day the epic read gains a scope.
+// warns and proceeds — so ridge renders it and gates nothing on it. OpenDeps
+// is the subset still waiting (a dep on a closed epic is simply satisfied),
+// and it is absent from the read entirely once nothing waits.
 type EpicInfo struct {
-	ID       string
-	Title    string
+	ID    string
+	Title string
+	Goal  string // the closing condition in one line; "" = none, and furrow does not lint that
+
+	Active   bool
+	Standing bool // permanent box: exempt from the finish-shaped nags
+	Pinned   bool // its actionable tasks lead next/brief regardless of the active scope
+
+	Labels []string
+	Repos  []string
+	Meta   map[string]string // free-form; furrow stores it and never interprets it
+
 	Done     int
 	Total    int
 	Stuck    bool
 	Deps     []string
 	OpenDeps []string
+}
+
+// MetaKeys is the box's meta keys in sorted order. Map iteration is random, so
+// every surface that renders or writes meta — the overlay's rows and the argv
+// the adapter composes — has to agree on one order or the frame and the write
+// both become nondeterministic.
+func (e *EpicInfo) MetaKeys() []string {
+	keys := make([]string, 0, len(e.Meta))
+	for k := range e.Meta {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// ActiveHolder names the box that already holds id's repo slots, "" when none
+// does. It reads the served Active/Repos fields — it does NOT re-derive
+// furrow's one-active-per-repo rule, which stays furrow's to enforce; the point
+// is only to show the incumbent BEFORE the user tries, instead of letting
+// furrow's refusal be the first news of it.
+func (b *Board) ActiveHolder(id string) string {
+	me := b.Epic(id)
+	if me == nil {
+		return ""
+	}
+	mine := make(map[string]bool, len(me.Repos))
+	for _, r := range me.Repos {
+		mine[r] = true
+	}
+	for _, e := range b.epics {
+		if e.ID == id || !e.Active {
+			continue
+		}
+		for _, r := range e.Repos {
+			if mine[r] {
+				return e.ID
+			}
+		}
+	}
+	return ""
 }
 
 // Board is the in-memory task set. Lane membership is Task.Status and lane

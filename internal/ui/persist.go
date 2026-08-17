@@ -24,6 +24,13 @@ import (
 type persistOp struct {
 	label string
 	run   func() (renumbered []string, err error)
+	// noLocal marks a STORE-FIRST write: nothing was applied to the board, so
+	// the store's answer is the only place the change exists. Two consequences,
+	// both handled in onPersistDone: a refusal needs no rollback (there is no
+	// optimistic half to undo), and a SUCCESS needs a re-read, because the
+	// board cannot show what it was never told. The quick add and the whole
+	// epic family are the members.
+	noLocal bool
 	// addedID is non-nil only for a quick add: the store invents the id, so
 	// run writes it here and onPersistDone lands the cursor on it. Everything
 	// else about an add rides the same strictly-serial queue as the other
@@ -34,6 +41,12 @@ type persistOp struct {
 	// typed text back (reopen the modal) instead of eating it (t-74y3).
 	addTitle string
 	addOpts  board.AddOptions
+	// note carries prose the WRITE computed — `epic deactivate`'s
+	// previous-active suggestion, which furrow derives from its activation log
+	// and ridge cannot. run fills it on the queue's goroutine and the UI thread
+	// reads it only after persistDoneMsg has crossed the channel back, the same
+	// handoff addedID uses.
+	note *string
 }
 
 type persistDoneMsg struct {
@@ -120,12 +133,12 @@ func (m *Model) onPersistDone(msg persistDoneMsg) tea.Cmd {
 			loss = fmt.Sprintf(" · dropped %d queued: %s", n, strings.Join(labels, ", "))
 		}
 
-		// Roll back only what was optimistically applied. Adds apply
-		// nothing, so a failure chain of adds alone needs no re-read — and
-		// claiming "unsaved edit" over one would be a lie.
-		needRollback := op.addedID == nil
+		// Roll back only what was optimistically applied. Store-first writes
+		// apply nothing, so a failure chain of those alone needs no re-read —
+		// and claiming "unsaved edit" over one would be a lie.
+		needRollback := !op.noLocal
 		for _, f := range flushed {
-			if f.addedID == nil {
+			if !f.noLocal {
 				needRollback = true
 			}
 		}
@@ -137,6 +150,19 @@ func (m *Model) onPersistDone(msg persistDoneMsg) tea.Cmd {
 			reopen = m.reopenRefusedAdd(op)
 		}
 		if !needRollback {
+			if m.unreadLanded {
+				// An earlier write LANDED and the board has not re-read it.
+				// Nothing was applied optimistically here, so no ROLLBACK
+				// re-read is coming — and without a plain one a store-first
+				// write stays invisible until the next `r`. Deliberately a
+				// plain reload, not rollbackReloadCmd: its failure message
+				// claims the board may show an unsaved edit, which would be a
+				// lie. The pending cursor jump is deliberately NOT cleared —
+				// a re-read is on its way, so the add it belongs to can still
+				// be delivered. The flag is cleared by that re-read, not here.
+				m.fail("%s: %v%s", msg.label, msg.err, loss)
+				return tea.Batch(m.reloadCmd(""), reopen)
+			}
 			// No re-read is coming, so a cursor jump parked by an earlier
 			// successful add would fire at some unrelated future reload.
 			m.selectAfterReload = ""
@@ -146,10 +172,37 @@ func (m *Model) onPersistDone(msg persistDoneMsg) tea.Cmd {
 		// Until the re-read lands the board keeps showing the refused state,
 		// so `rollingBack` refuses new writes — otherwise one keystroke in
 		// that window both preempts the re-read and can address the wrong
-		// store row (t-74y3).
+		// store row (t-74y3). The rollback re-read is a full one, so it also
+		// delivers whatever had landed — and clears unreadLanded when it applies.
 		m.rollingBack = true
 		m.fail("%s: %v%s — rolling back", msg.label, msg.err, loss)
 		return tea.Batch(m.rollbackReloadCmd(), reopen)
+	}
+	if m.prov.Live() {
+		// The store moved and the board has not re-read it (see
+		// Model.unreadLanded). Never set on the fixture: there the board IS the
+		// store, the store-first branch below re-reads synchronously, and
+		// prov.Reload() is the DISCARD operation — firing it later would throw
+		// the session's own epic edits away.
+		m.unreadLanded = true
+	}
+	if op.noLocal {
+		// The write landed and the board was never told. A live store converges
+		// on the reconcile at the end of the drain (or on the refusal path's
+		// re-read); the fixture has no reconcile there — it requeries instead —
+		// so it re-reads right here, the shape the quick add has always used.
+		if m.prov.Live() {
+			m.storeFirstUnread = true
+		} else {
+			m.reload()
+		}
+		// The gesture's own note said "waiting for furrow"; replace it now that
+		// the wait is over, and carry whatever prose the write computed.
+		if op.note != nil && *op.note != "" {
+			m.note("%s · %s", op.label, *op.note)
+		} else if op.addedID == nil {
+			m.note("%s", op.label)
+		}
 	}
 	if op.addedID != nil && *op.addedID != "" {
 		id := *op.addedID
@@ -158,7 +211,6 @@ func (m *Model) onPersistDone(msg persistDoneMsg) tea.Cmd {
 			// queued) delivers the card; land the cursor on it then.
 			m.selectAfterReload = id
 		} else {
-			m.reload()
 			m.selectID(id, true)
 		}
 		m.note("added %s", id)
@@ -210,6 +262,7 @@ func (m *Model) enqueueAdd(title string, opts board.AddOptions) tea.Cmd {
 	id := new(string)
 	m.pending = append(m.pending, persistOp{
 		label:    "add " + title,
+		noLocal:  true,
 		addedID:  id,
 		addTitle: title,
 		addOpts:  opts,
@@ -223,6 +276,53 @@ func (m *Model) enqueueAdd(title string, opts board.AddOptions) tea.Cmd {
 		return nil
 	}
 	return m.firePersist()
+}
+
+// enqueueStoreFirst queues a write whose effect exists ONLY in the store — the
+// epic family (board.Provider's epic methods) and nothing else. It shares the
+// queue with the optimistic writes so ordering and the quit-flush still hold;
+// what differs is that a refusal rolls nothing back and a success has to be
+// re-read before the board can show it (see persistOp.noLocal).
+func (m *Model) enqueueStoreFirst(label string, run func() error) tea.Cmd {
+	return m.enqueueStoreFirstNoting(label, nil, run)
+}
+
+// enqueueStoreFirstNoting is enqueueStoreFirst with a slot for prose the write
+// itself computes (persistOp.note).
+func (m *Model) enqueueStoreFirstNoting(label string, note *string, run func() error) tea.Cmd {
+	if m.rollingBack {
+		// The board is showing state the store refused. This write's SUBJECT
+		// (an epic id) survives a rollback, but letting it through would
+		// preempt the re-read that is the rollback — the t-74y3 window.
+		m.fail("%s dropped — the store refused the last write, rolling back", label)
+		return nil
+	}
+	m.pending = append(m.pending, persistOp{
+		label:   label,
+		noLocal: true,
+		note:    note,
+		run:     func() ([]string, error) { return nil, run() },
+	})
+	if m.inflight {
+		return nil
+	}
+	return m.firePersist()
+}
+
+// storeFirstInflight reports whether a store-first write is queued or running.
+// A store-first gesture shows nothing until the write lands (~85-115ms plus the
+// re-read), so the surface that issues one refuses a repeat rather than let an
+// impatient second keypress aim at values the board has not updated yet
+// (epicmode.go's refuseWhileWriting has the reasoning).
+// The in-flight op is still m.pending[0] — firePersist reads it without
+// popping and onPersistDone pops afterwards — so one loop covers both.
+func (m *Model) storeFirstInflight() bool {
+	for _, op := range m.pending {
+		if op.noLocal {
+			return true
+		}
+	}
+	return false
 }
 
 // persistPlacement queues the store write for id's already-applied placement,
@@ -304,8 +404,11 @@ func (m *Model) onReloadDone(msg reloadDoneMsg) tea.Cmd {
 	}
 	m.reload()
 	// The board now shows the store's own truth, whichever reload delivered
-	// it — the rollback window closes.
+	// it — the rollback window closes and nothing is left unread. Cleared HERE
+	// rather than where the reload was fired: a reload that never applies (the
+	// in-flight guard above, or an error) still owes the board a re-read.
 	m.rollingBack = false
+	m.unreadLanded, m.storeFirstUnread = false, false
 	if msg.label != "" {
 		m.note("%s · %dms", msg.label, msg.ms)
 	}
