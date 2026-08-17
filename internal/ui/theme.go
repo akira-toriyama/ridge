@@ -32,6 +32,11 @@ const (
 	glyphLaneDot    = "●"
 	glyphSortAsc    = "▲" // the table's active sort direction, in its header
 	glyphSortDesc   = "▼"
+	// glyphEpicActive is `furrow brief`'s own marker for the box a repo is
+	// currently working out of — the same character, so the two surfaces read as
+	// one vocabulary. glyphEpicPinned likewise for the PERMANENT channel.
+	glyphEpicActive = "▶"
+	glyphEpicPinned = "◆"
 
 	// glyphArrowDown terminates every graph edge. The graph draws upstream
 	// ABOVE and downstream BELOW, so every edge in the picture points the same

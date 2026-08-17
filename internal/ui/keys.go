@@ -54,6 +54,17 @@ type keyMap struct {
 	Graph       key.Binding
 	GraphRoot   key.Binding
 	GraphRadius key.Binding
+
+	// The slice panel's two epic-management keys (epicmode.go). EpicEdit is
+	// `m`-only on purpose: keys.Move is ("enter","m") and the panel's ⏎ SLICES,
+	// so reusing Move here would shadow the panel's own commit key. `e` was the
+	// obvious letter and is deliberately left alone — it means $EDITOR, and
+	// `furrow edit` takes an epic id, so that is the key epic body editing will
+	// want. EpicNew is uppercase for the same reason R/K/J/H/L are: the
+	// lowercase sibling (`a`) creates a TASK, and furrow has no `epic rm` to
+	// undo a slip with.
+	EpicEdit key.Binding
+	EpicNew  key.Binding
 }
 
 func defaultKeys() keyMap {
@@ -131,6 +142,9 @@ func defaultKeys() keyMap {
 		Graph:       key.NewBinding(key.WithKeys("shift+space", "S"), key.WithHelp("⇧space/S", "dep graph")),
 		GraphRoot:   key.NewBinding(key.WithKeys("enter"), key.WithHelp("⏎", "re-root here")),
 		GraphRadius: key.NewBinding(key.WithKeys("z", "1", "2", "3", "0"), key.WithHelp("z/1-3/0", "hop radius")),
+
+		EpicEdit: key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "manage box")),
+		EpicNew:  key.NewBinding(key.WithKeys("A"), key.WithHelp("A", "new box")),
 	}
 }
 

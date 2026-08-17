@@ -372,17 +372,10 @@ func (m *Model) renderTable() string {
 		// still owned the keyboard ate every arrow key (observed).
 		layers = append(layers, m.sliceLayer())
 	}
-	if m.mode == modeEdit {
-		if l := m.editLayer(); l != nil {
-			layers = append(layers, l)
-		}
-	}
-	if m.mode == modeAdd {
-		layers = append(layers, m.addLayer())
-	}
-	if m.fullHelp {
-		layers = append(layers, m.helpLayer())
-	}
+	// One list, shared with the board (view.go): a modal that owns the keyboard
+	// must render in BOTH views, and two hand-kept lists is how one of them
+	// ends up invisible.
+	layers = append(layers, m.modalLayers()...)
 	return m.fitFrame(lg.NewCompositor(layers...).Render())
 }
 
