@@ -25,13 +25,32 @@ func TestSetFieldsRefsAppendInOrderAndDedupe(t *testing.T) {
 		t.Errorf("refs after duplicate add = %q, want unchanged", got)
 	}
 
-	// An empty add is skipped, matching the other slice fields — furrow
-	// itself refuses `--add ""` (exit 2), so the value must never compose.
-	if err := b.SetFields("a", FieldPatch{AddRefs: []string{""}}); err != nil {
-		t.Fatal(err)
+	// An empty add is REFUSED, mirroring furrow's own `--add ""` exit 2 —
+	// silently skipping it would let the UI think an add landed.
+	if err := b.SetFields("a", FieldPatch{AddRefs: []string{""}}); err == nil {
+		t.Error("an empty ref add must refuse like furrow's exit 2")
 	}
 	if got := len(b.Task("a").Refs); got != 2 {
-		t.Errorf("an empty add appended: %d refs", got)
+		t.Errorf("a refused add mutated the refs: %d", got)
+	}
+}
+
+// furrow's --add/--rm are pflag CSV StringSlices (measured, t-pwrp): a comma
+// SPLITS the ref into two after the reconcile and a bare `"` is a flag-layer
+// exit 2 that arrives only after the optimistic apply — so both are
+// mirror-refused before anything mutates, until furrow takes refs verbatim.
+func TestSetFieldsRefsRefuseWhatFurrowsFlagLayerMangles(t *testing.T) {
+	b := NewBoard([]*Task{mk("a", "backlog")})
+	for _, ref := range []string{
+		"https://example.com/spec?rows=1,2",
+		`internal/x.go:1"weird`,
+	} {
+		if err := b.SetFields("a", FieldPatch{AddRefs: []string{ref}}); err == nil {
+			t.Errorf("SetFields must refuse %q — furrow's CSV flag parsing splits or rejects it", ref)
+		}
+	}
+	if got := len(b.Task("a").Refs); got != 0 {
+		t.Errorf("a refused add mutated the refs: %v", b.Task("a").Refs)
 	}
 }
 
@@ -90,10 +109,12 @@ func TestAppendNoteMirrorsFurrowsJoin(t *testing.T) {
 func TestAppendNoteRefusesWhatFurrowWould(t *testing.T) {
 	b := NewBoard([]*Task{{ID: "a", Title: "a", Status: "backlog", Body: "本文\n"}})
 
-	// furrow's "note text is empty" (exit 2), whitespace included.
-	for _, text := range []string{"", "   ", "\t"} {
+	// furrow's "note text is empty" (exit 2), whitespace included — and `-`,
+	// furrow's read-from-stdin marker, which `--` does not neutralize: with
+	// ridge's stdin on /dev/null it would refuse AFTER the optimistic apply.
+	for _, text := range []string{"", "   ", "\t", "-"} {
 		if err := b.AppendNote("a", text); err == nil {
-			t.Errorf("AppendNote(%q) must refuse like furrow's empty-text exit 2", text)
+			t.Errorf("AppendNote(%q) must refuse like furrow would", text)
 		}
 	}
 	if got := b.Task("a").Body; got != "本文\n" {

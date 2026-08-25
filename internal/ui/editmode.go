@@ -583,16 +583,28 @@ func (m *Model) onEditInputKey(msg tea.KeyPressMsg, t *board.Task) tea.Cmd {
 				m.note("note cancelled — nothing appended")
 				return nil
 			}
+			if m.rollingBack {
+				// Refused BEFORE the local apply, not by the queue behind it:
+				// applyCheck would land the paragraph on a board the store
+				// already refused, enqueuePersist would drop the write, and
+				// the re-focused input would invite a retry — each ⏎ stacking
+				// another unsaved copy of the same paragraph. The quick-add
+				// modal refuses this window the same way (onAddKey), keeping
+				// the typed text alive for after the rollback re-read.
+				m.fail("note dropped — the store refused the last write, rolling back; ⏎ again in a moment")
+				return e.input.Focus()
+			}
 			// One paragraph per open: the apply CLOSES the overlay (there is
 			// no list to land back in), and the peek left open behind it shows
 			// the paragraph at the body's tail.
 			cmd := m.applyCheck("note", func() error { return m.b.AppendNote(t.ID, v) },
 				func() error { return m.prov.PersistNote(t.ID, v) })
 			if cmd == nil {
-				// The local apply refused; the fail is on the status row and
-				// the typed text is still in the input — re-focus it (the
-				// Commit branch blurred it above) instead of closing over
-				// hand-typed prose.
+				// The LOCAL apply refused (the rollingBack refusal above never
+				// reaches applyCheck): the fail is on the status row and the
+				// typed text is still in the input — re-focus it (the Commit
+				// branch blurred it above) instead of closing over hand-typed
+				// prose.
 				return e.input.Focus()
 			}
 			m.exitEdit()

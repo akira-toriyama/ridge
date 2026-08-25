@@ -563,6 +563,14 @@ func TestEditRefsRenderInPeekAndMenu(t *testing.T) {
 	if !strings.Contains(out, "docs/積載図-2026.md:18") || !strings.Contains(out, "https://camp.example.com/loading-guide") {
 		t.Error("the refs rows are missing from the peek")
 	}
+	// The MENU half: its refs row joins the values with commas — a form the
+	// peek (one ref per line) never renders, so this bites on the menu row
+	// alone (the first version of this test asserted only the peek, and its
+	// name promised more than it checked — found by review).
+	m.enterEdit()
+	if got := frame(m); !strings.Contains(got, "docs/積載図-2026.md:18,http") {
+		t.Error("the edit menu's refs row is missing its comma-joined value")
+	}
 }
 
 func TestNoteAppendsAndPersists(t *testing.T) {
@@ -590,6 +598,34 @@ func TestNoteAppendsAndPersists(t *testing.T) {
 		t.Errorf("body = %q, want the appended paragraph %q", got, want)
 	}
 	drainPersists(m, t)
+}
+
+// The rollback window: a note ⏎ while the board is showing a refused write
+// must apply NOTHING — applyCheck would land the paragraph locally, the queue
+// would drop the write, and the re-focused input would invite a retry that
+// stacks unsaved copies (found by review).
+func TestNoteRefusesDuringRollback(t *testing.T) {
+	m := boardModel(t, 240, 50)
+	if !m.selectID("t-9sa6", false) {
+		t.Fatal("could not select t-9sa6")
+	}
+	before := m.b.Task("t-9sa6").Body
+	press(m, "n")
+	m.edit.input.SetValue("巻き戻し中の幽霊段落")
+	m.rollingBack = true
+	press(m, "enter", "enter") // an impatient retry must not stack either
+	if got := m.b.Task("t-9sa6").Body; got != before {
+		t.Errorf("the note landed on a rolling-back board: %q", got)
+	}
+	if m.inflight || len(m.pending) > 0 {
+		t.Error("nothing must reach the persist queue in the rollback window")
+	}
+	if !m.statusErr {
+		t.Error("the refusal must land on the status row")
+	}
+	if m.edit == nil || m.edit.input.Value() == "" {
+		t.Error("the typed text must survive the refusal — the input stays open")
+	}
 }
 
 func TestNoteEscAndEmptySubmitAppendNothing(t *testing.T) {

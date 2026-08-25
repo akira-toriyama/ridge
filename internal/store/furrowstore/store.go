@@ -500,8 +500,11 @@ func (p *Store) PersistFields(id string, patch board.FieldPatch) error {
 
 // PersistNote records an already-applied note append via `furrow note`
 // (board.Provider). The text is user free text behind `--`, like every other
-// positional this adapter passes; the empty-text refusal (exit 2) is already
-// unreachable — Board.AppendNote mirrors it before anything queues.
+// positional this adapter passes. Two furrow refusals are unreachable here
+// because Board.AppendNote mirrors them before anything queues: empty text
+// (exit 2), and a text of exactly `-` — furrow's read-from-stdin marker,
+// which `--` does NOT neutralize; with this process's stdin on /dev/null it
+// would come back "note text is empty" after the optimistic apply.
 func (p *Store) PersistNote(id, text string) error {
 	_, err := p.c.run("note", "note", id, "--", text)
 	return err

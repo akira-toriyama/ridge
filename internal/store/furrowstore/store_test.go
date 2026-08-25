@@ -579,9 +579,13 @@ func TestContractRefEditsAndNoteAppend(t *testing.T) {
 		t.Errorf("refs = %v, want %v", got.Refs, want)
 	}
 
-	// The note appends a paragraph AND advances updated, in one command.
+	// The note appends a paragraph AND advances updated, in one command. The
+	// stamps are second-precision, so the advance is only observable across a
+	// real second — hence the sleep; a same-instant write made the first
+	// version of this assertion vacuously green (found by review).
 	before := got.Updated
 	wantBody := got.Body
+	time.Sleep(1100 * time.Millisecond)
 	if err := p.PersistNote(id, "-先頭ダッシュでも一段落として載る"); err != nil {
 		t.Fatal(err)
 	}
@@ -596,7 +600,7 @@ func TestContractRefEditsAndNoteAppend(t *testing.T) {
 	if want := mirror.Task(id).Body; got.Body != want {
 		t.Errorf("body after note = %q, want the AppendNote mirror %q", got.Body, want)
 	}
-	if !got.Updated.After(before) && !got.Updated.Equal(before) || got.Updated.IsZero() {
-		t.Errorf("updated did not survive the note: %v (before %v)", got.Updated, before)
+	if !got.Updated.After(before) {
+		t.Errorf("updated did not advance across the note: %v (before %v)", got.Updated, before)
 	}
 }

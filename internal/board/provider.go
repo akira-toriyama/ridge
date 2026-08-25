@@ -215,6 +215,9 @@ type FieldPatch struct {
 	// Refs are a SEQUENCE, not a sorted set like labels: furrow appends adds
 	// at the end and keeps the order given. Add is idempotent, Rm is
 	// exact-match and a no-op on an absent ref (measured on dev 60074b8).
-	AddRefs []string // file:line or URL — free text; furrow does not validate the form
+	// The form is free text (file:line or URL) with one flag-layer caveat:
+	// furrow's --add/--rm are pflag CSV StringSlices, so SetFields refuses
+	// adds carrying `,` or `"` until furrow takes them verbatim (t-pwrp).
+	AddRefs []string
 	RmRefs  []string
 }
