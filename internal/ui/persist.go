@@ -41,6 +41,11 @@ type persistOp struct {
 	// typed text back (reopen the modal) instead of eating it (t-74y3).
 	addTitle string
 	addOpts  board.AddOptions
+	// The same contract for the new-box modal: an epic add is store-first, so
+	// a refused one leaves no trace on the board at all — the reopened modal
+	// is the only thing that keeps the typed title alive.
+	epicAddTitle string
+	epicAddRepo  string
 	// note carries prose the WRITE computed — `epic deactivate`'s
 	// previous-active suggestion, which furrow derives from its activation log
 	// and ridge cannot. run fills it on the queue's goroutine and the UI thread
@@ -153,6 +158,9 @@ func (m *Model) onPersistDone(msg persistDoneMsg) tea.Cmd {
 		var reopen tea.Cmd
 		if op.addedID != nil {
 			reopen = m.reopenRefusedAdd(op)
+		}
+		if op.epicAddTitle != "" {
+			reopen = m.reopenRefusedEpicAdd(op)
 		}
 		if !needRollback {
 			if m.unreadLanded {
@@ -286,33 +294,28 @@ func (m *Model) enqueueAdd(title string, opts board.AddOptions) tea.Cmd {
 	return m.firePersist()
 }
 
-// enqueueStoreFirst queues a write whose effect exists ONLY in the store — the
-// epic family (board.Provider's epic methods) and nothing else. It shares the
-// queue with the optimistic writes so ordering and the quit-flush still hold;
-// what differs is that a refusal rolls nothing back and a success has to be
-// re-read before the board can show it (see persistOp.noLocal).
-func (m *Model) enqueueStoreFirst(label string, run func() error) tea.Cmd {
-	return m.enqueueStoreFirstNoting(label, nil, run)
-}
-
-// enqueueStoreFirstNoting is enqueueStoreFirst with a slot for prose the write
-// itself computes (persistOp.note).
-func (m *Model) enqueueStoreFirstNoting(label string, note *string, run func() error) tea.Cmd {
+// enqueueStoreFirstOp queues a write whose effect exists ONLY in the store —
+// the epic family (board.Provider's epic methods) and nothing else. It shares
+// the queue with the optimistic writes so ordering and the quit-flush still
+// hold; what differs is that a refusal rolls nothing back and a success has
+// to be re-read before the board can show it (see persistOp.noLocal). The op
+// arrives pre-shaped so a write can carry its own payload — the epic add's
+// typed title (epicAddTitle) rides here.
+func (m *Model) enqueueStoreFirstOp(op persistOp) tea.Cmd {
+	// Stamped, never trusted from the caller: an op through this entrance is
+	// store-first by definition, and one that forgot the flag would be rolled
+	// back as if it had an optimistic half.
+	op.noLocal = true
 	if m.rollingBack {
 		// The board is showing state the store refused. This write's SUBJECT
 		// (an epic id) survives a rollback, but letting it through would
 		// preempt the re-read that is the rollback — the t-74y3 window.
-		m.dbg.event("apply", "refused", map[string]any{"label": label, "why": "rolling-back"})
-		m.fail("%s dropped — the store refused the last write, rolling back", label)
+		m.dbg.event("apply", "refused", map[string]any{"label": op.label, "why": "rolling-back"})
+		m.fail("%s dropped — the store refused the last write, rolling back", op.label)
 		return nil
 	}
-	m.dbg.event("apply", "enqueue", map[string]any{"label": label, "storeFirst": true})
-	m.pending = append(m.pending, persistOp{
-		label:   label,
-		noLocal: true,
-		note:    note,
-		run:     func() ([]string, error) { return nil, run() },
-	})
+	m.dbg.event("apply", "enqueue", map[string]any{"label": op.label, "storeFirst": true})
+	m.pending = append(m.pending, op)
 	if m.inflight {
 		return nil
 	}
