@@ -198,7 +198,12 @@ type Model struct {
 	dbg *DebugLog
 }
 
-func newModel(p board.Provider) *Model {
+// newModel takes the recorder up front, not via a setter: the constructor
+// itself emits status (the read-only warning below), and a recorder attached
+// after the fact missed it — the one status set exactly once per session, so
+// a -readonly -debuglog file could not explain its own status line (found by
+// review).
+func newModel(p board.Provider, dbg *DebugLog) *Model {
 	ti := textinput.New()
 	ti.Prompt = "/ "
 	ti.SetWidth(48)
@@ -207,6 +212,7 @@ func newModel(p board.Provider) *Model {
 
 	m := &Model{
 		prov:        p,
+		dbg:         dbg,
 		th:          newTheme(true),
 		ms:          newMeasurer(nil, nil),
 		keys:        defaultKeys(),

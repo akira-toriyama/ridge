@@ -196,6 +196,25 @@ func TestDebugLogEndToEndThroughARealProgram(t *testing.T) {
 	})
 }
 
+// The constructor's own status must reach the log: the read-only warning is
+// set exactly once per session and never restored, and a recorder attached
+// after newModel missed it — a -readonly -debuglog bug report could not
+// explain its own status line (found by review).
+func TestDebugLogRecordsTheReadOnlyWarning(t *testing.T) {
+	var buf bytes.Buffer
+	m := New(memstore.NewGated("board-behind"), Options{Debug: NewDebugLog(&buf)})
+	if !strings.Contains(m.status, "read-only") {
+		t.Fatalf("status = %q — the gated fixture did not warn", m.status)
+	}
+	for _, ev := range debugLines(t, &buf) {
+		if ev["layer"] == "status" && ev["kind"] == "fail" &&
+			strings.Contains(ev["text"].(string), "read-only") {
+			return
+		}
+	}
+	t.Error("the read-only warning never reached the status layer")
+}
+
 // The nil recorder is the OFF switch: every emit site calls through
 // unconditionally, so nil must be safe on both the type and the model.
 func TestNilDebugLogIsSafe(_ *testing.T) {
