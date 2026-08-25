@@ -175,8 +175,11 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 	if *debuglog != "" {
 		// Same contract as -perflog: the user chose where their own log goes
 		// (G304), append-open, and a log that cannot open is fatal — a debug
-		// run that silently records nothing is worse than no run.
-		f, err := os.OpenFile(*debuglog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644) //nolint:gosec
+		// run that silently records nothing is worse than no run. Unlike
+		// -perflog's op/ms pairs, this file carries every keystroke verbatim
+		// (titles, filter text), so it is created 0600 — sharing it is a copy
+		// the user makes on purpose, not a mode bit they forgot.
+		f, err := os.OpenFile(*debuglog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec
 		if err != nil {
 			_, _ = fmt.Fprintln(stderr, "error: -debuglog:", err)
 			return CodeUsage
