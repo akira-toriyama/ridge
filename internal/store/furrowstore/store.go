@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -555,11 +556,7 @@ func (p *Store) EpicAdd(title string, o board.EpicAddOptions) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	var row addRow
-	if err := json.Unmarshal(out, &row); err != nil || row.ID == "" {
-		return "", fmt.Errorf("furrow epic add: undecodable reply: %v", err)
-	}
-	return row.ID, nil
+	return decodeAddReply("furrow epic add", out)
 }
 
 // EpicSet writes one metadata edit via `furrow epic set` (board.Provider).
@@ -693,9 +690,35 @@ func (p *Store) Add(title string, o board.AddOptions) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	return decodeAddReply("furrow add", out)
+}
+
+// decodeAddReply extracts the invented id from an add's reply. The two
+// failures are kept apart because their causes are different sides of the
+// exec: undecodable bytes are furrow breaking JSON, while decodable JSON
+// without an id is a reply SHAPE ridge does not expect (an envelope, a
+// bulk array) — and folding them into one message printed the nil error
+// as the cause: "undecodable reply: <nil>" (found by review).
+func decodeAddReply(what string, out []byte) (string, error) {
 	var row addRow
-	if err := json.Unmarshal(out, &row); err != nil || row.ID == "" {
-		return "", fmt.Errorf("furrow add: undecodable reply: %v", err)
+	if err := json.Unmarshal(out, &row); err != nil {
+		return "", fmt.Errorf("%s: undecodable reply: %v", what, err)
+	}
+	if row.ID == "" {
+		return "", fmt.Errorf("%s: reply names no id: %s", what, trimReply(out, 120))
 	}
 	return row.ID, nil
+}
+
+// trimReply bounds raw exec output for an error message: first line only,
+// capped in runes (titles in a reply are CJK — never cut bytes).
+func trimReply(out []byte, limit int) string {
+	s := strings.TrimSpace(string(out))
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		s = s[:i] + " …"
+	}
+	if r := []rune(s); len(r) > limit {
+		s = string(r[:limit]) + "…"
+	}
+	return s
 }
