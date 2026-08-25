@@ -432,7 +432,7 @@ func TestQueryPresenceVocabularyIsFurrows(t *testing.T) {
 		has, not int
 	}{
 		{"deps", 12, 21},
-		{"refs", 0, all},
+		{"refs", 1, all - 1}, // t-9sa6 carries the two documented ref forms
 		{"due", 4, all - 4},
 		{"closed", 9, all - 9},
 		{"reviewed", 0, all},

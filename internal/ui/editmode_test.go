@@ -514,3 +514,111 @@ func TestEditDepsRefusesWhatFurrowWould(t *testing.T) {
 		t.Error("a cycle-closing add must not reach the persist queue")
 	}
 }
+
+func TestEditRefsRemovesAndAdds(t *testing.T) {
+	m := editModel(t, "t-9sa6") // carries a file:line and a URL, in that order
+	m.edit.menuIdx = int(fieldRefs)
+	press(m, "enter")
+	if m.edit.stage != stageList || m.edit.field != fieldRefs {
+		t.Fatalf("the refs sub-editor did not open: stage=%d field=%d", m.edit.stage, m.edit.field)
+	}
+
+	// ⏎ on a row removes it — refs have no re-add toggle.
+	press(m, "enter")
+	if got := strings.Join(m.b.Task("t-9sa6").Refs, ","); got != "https://camp.example.com/loading-guide" {
+		t.Errorf("refs = %q, want the URL alone (the file:line removed)", got)
+	}
+	drainPersists(m, t)
+
+	// a + free text appends AT THE END — refs are a sequence, and an add that
+	// sorted itself before the URL would lie about furrow's order.
+	press(m, "a")
+	m.edit.input.SetValue("internal/ui/peek.go:54")
+	press(m, "enter")
+	if got := strings.Join(m.b.Task("t-9sa6").Refs, ","); got != "https://camp.example.com/loading-guide,internal/ui/peek.go:54" {
+		t.Errorf("refs = %q, want the add appended after the URL", got)
+	}
+	drainPersists(m, t)
+
+	// Removing the LAST row must pull the cursor back inside the list, like
+	// the deps list — a cursor one past the end makes the next ⏎ a no-op.
+	m.edit.listIdx = 1
+	press(m, "enter")
+	if m.edit.listIdx != 0 {
+		t.Errorf("listIdx = %d after removing the last row, want 0", m.edit.listIdx)
+	}
+	drainPersists(m, t)
+}
+
+func TestEditRefsRenderInPeekAndMenu(t *testing.T) {
+	m := boardModel(t, 240, 50)
+	if err := m.demoState("refs"); err != nil {
+		t.Fatal(err)
+	}
+	out := frame(m)
+	// The section header counts, and both documented forms render.
+	if !strings.Contains(out, "refs 2") {
+		t.Error("the peek's refs section is missing")
+	}
+	if !strings.Contains(out, "docs/積載図-2026.md:18") || !strings.Contains(out, "https://camp.example.com/loading-guide") {
+		t.Error("the refs rows are missing from the peek")
+	}
+}
+
+func TestNoteAppendsAndPersists(t *testing.T) {
+	m := boardModel(t, 240, 50)
+	if !m.selectID("t-9sa6", false) {
+		t.Fatal("could not select t-9sa6")
+	}
+	before := m.b.Task("t-9sa6").Body
+
+	press(m, "n")
+	if m.mode != modeEdit || m.edit == nil || m.edit.stage != stageInput || m.edit.inputFor != inputNote {
+		t.Fatal("n must open the note input directly")
+	}
+	if !m.peekOpen {
+		t.Error("the peek must open with the note input, so the append is visible landing")
+	}
+	m.edit.input.SetValue("重量実測まで完了。次はレイアウト案。")
+	press(m, "enter")
+
+	if m.mode != modeNormal || m.edit != nil {
+		t.Error("a landed note must close the overlay — one paragraph per open")
+	}
+	want := before + "\n\n重量実測まで完了。次はレイアウト案。\n" // fixture body has no trailing newline
+	if got := m.b.Task("t-9sa6").Body; got != want {
+		t.Errorf("body = %q, want the appended paragraph %q", got, want)
+	}
+	drainPersists(m, t)
+}
+
+func TestNoteEscAndEmptySubmitAppendNothing(t *testing.T) {
+	m := boardModel(t, 240, 50)
+	if !m.selectID("t-9sa6", false) {
+		t.Fatal("could not select t-9sa6")
+	}
+	before := m.b.Task("t-9sa6").Body
+
+	press(m, "n")
+	m.edit.input.SetValue("捨てられる下書き")
+	press(m, "esc")
+	if m.mode != modeNormal || m.edit != nil {
+		t.Error("esc must close the note input entirely — there is no menu behind it")
+	}
+
+	press(m, "n")
+	press(m, "enter") // empty submit backs out, never furrow's empty-text refusal
+	if m.mode != modeNormal || m.edit != nil {
+		t.Error("an empty ⏎ must close the note input")
+	}
+	if m.statusErr {
+		t.Errorf("an empty back-out is not an error: %q", m.status)
+	}
+
+	if got := m.b.Task("t-9sa6").Body; got != before {
+		t.Errorf("body changed without an apply: %q", got)
+	}
+	if m.inflight || len(m.pending) > 0 {
+		t.Error("nothing must reach the persist queue")
+	}
+}

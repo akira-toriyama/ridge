@@ -55,11 +55,16 @@ type Provider interface {
 	PersistBody(id, body string) error
 
 	// PersistFields records id's already-applied metadata edit. Everything
-	// set-shaped in the patch lands in ONE `furrow set` write; Title and the
-	// repo edits are their own commands (retitle / repo), so a mixed patch
-	// may cost up to three writes — the UI edits one field per gesture, so
-	// in practice it is one.
+	// set-shaped in the patch lands in ONE `furrow set` write; Title, the
+	// repo edits and the ref edits are their own commands (retitle / repo /
+	// ref), so a mixed patch may cost up to four writes — the UI edits one
+	// field per gesture, so in practice it is one.
 	PersistFields(id string, p FieldPatch) error
+
+	// PersistNote records an already-applied note append: one paragraph added
+	// to the body with Updated stamped, `furrow note`'s contract. The local
+	// half is Board.AppendNote, which already refused an empty text.
+	PersistNote(id, text string) error
 
 	// PersistCheckAdd records an already-appended checklist item.
 	PersistCheckAdd(id, text string) error
@@ -207,4 +212,9 @@ type FieldPatch struct {
 	Title     *string
 	AddRepos  []string // full owner/repo
 	RmRepos   []string
+	// Refs are a SEQUENCE, not a sorted set like labels: furrow appends adds
+	// at the end and keeps the order given. Add is idempotent, Rm is
+	// exact-match and a no-op on an absent ref (measured on dev 60074b8).
+	AddRefs []string // file:line or URL — free text; furrow does not validate the form
+	RmRefs  []string
 }

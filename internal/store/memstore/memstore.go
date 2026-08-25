@@ -279,6 +279,19 @@ func (p *Store) PersistFields(id string, _ board.FieldPatch) error {
 	return nil
 }
 
+// PersistNote validates the id and records nothing (board.Provider) — the
+// local apply (Board.AppendNote) already refused an empty text against the
+// same board.
+func (p *Store) PersistNote(id, _ string) error {
+	if err := p.gate(); err != nil {
+		return err
+	}
+	if p.snapshot().Task(id) == nil {
+		return fmt.Errorf("unknown task %q", id)
+	}
+	return nil
+}
+
 // PersistCheckAdd validates the id and records nothing (board.Provider).
 func (p *Store) PersistCheckAdd(id, _ string) error {
 	if err := p.gate(); err != nil {

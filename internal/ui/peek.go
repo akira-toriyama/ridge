@@ -157,6 +157,16 @@ func (m *Model) peekContent(w int) string {
 	b.WriteString("\n" + sectionRule(th, "dependencies", w) + "\n")
 	b.WriteString(m.depSection(t, w))
 
+	// Refs in furrow's own order (a sequence, not a sorted set), one per line:
+	// a file:line or URL is an opaque token to jump to, so it is truncated as a
+	// whole rather than wrapped — a path broken across lines cannot be copied.
+	if len(t.Refs) > 0 {
+		b.WriteString("\n" + sectionRule(th, fmt.Sprintf("refs %d", len(t.Refs)), w) + "\n")
+		for _, r := range t.Refs {
+			b.WriteString("  " + th.base.Render(ansi.Truncate(r, w-2, "…")) + "\n")
+		}
+	}
+
 	if len(t.Checklist) > 0 {
 		d, tot := t.CheckProgress()
 		b.WriteString("\n" + sectionRule(th, fmt.Sprintf("checklist %d/%d", d, tot), w) + "\n")
