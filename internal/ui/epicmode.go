@@ -153,6 +153,28 @@ func newEpicInput() textinput.Model {
 	return ti
 }
 
+// reopenRefusedEpicAdd hands a refused new box's typed title back by reopening
+// the modal seeded with it — the quick add's contract (reopenRefusedAdd,
+// t-74y3), and it matters more here: the write is store-first, so nothing on
+// the board even hints the title existed. Reopened only where the modal is at
+// home — over the slice panel it was submitted from, or the bare board the
+// panel was closed back to; anywhere else (another modal, the graph, the help
+// overlay) the keyboard is already someone else's, and the failure note still
+// names the title.
+func (m *Model) reopenRefusedEpicAdd(op persistOp) tea.Cmd {
+	if (m.mode != modeSlice && m.mode != modeNormal) || m.view == viewGraph || m.fullHelp {
+		return nil
+	}
+	m.epic = &epicState{stage: epicInput, inputFor: epicInputNewBox,
+		creating: true, newRepo: op.epicAddRepo, input: newEpicInput()}
+	m.mode = modeEpic
+	m.epic.input.Placeholder = "new box — its title"
+	m.epic.input.SetValue(op.epicAddTitle)
+	// No noteEpicStage: the refusal that caused this reopen is on the status
+	// row and must stay there (it would decline to overwrite anyway).
+	return m.epic.input.Focus()
+}
+
 // exitEpic hands the keyboard back to the slice panel, not to the board: the
 // panel is still open and still where the cursor is, and dropping to modeNormal
 // would leave it rendered but unfocused.
@@ -293,10 +315,19 @@ func (m *Model) onEpicNewKey(msg tea.KeyPressMsg) tea.Cmd {
 			opts.Repos = []string{e.newRepo}
 		}
 		e.input.Blur()
+		newRepo := e.newRepo
 		m.exitEpic()
-		return m.epicWrite("epic add "+title, func(p board.Provider) error {
-			_, err := p.EpicAdd(title, opts)
-			return err
+		// A pre-shaped op, not epicWrite: the typed title rides the op so a
+		// store refusal can reopen this modal with it (reopenRefusedEpicAdd)
+		// instead of eating it — the quick add's t-74y3 contract.
+		prov := m.prov
+		return m.epicWriteOp(persistOp{
+			label: "epic add " + title, noLocal: true,
+			epicAddTitle: title, epicAddRepo: newRepo,
+			run: func() ([]string, error) {
+				_, err := prov.EpicAdd(title, opts)
+				return nil, err
+			},
 		})
 	}
 	var c tea.Cmd
@@ -566,12 +597,21 @@ func (m *Model) epicWrite(label string, run func(board.Provider) error) tea.Cmd 
 // epicWriteNoting is epicWrite with a place for prose the write itself computes
 // (see persistOp.note).
 func (m *Model) epicWriteNoting(label string, note *string, run func(board.Provider) error) tea.Cmd {
-	if m.refuseWhileWriting(label) {
+	prov := m.prov
+	return m.epicWriteOp(persistOp{
+		label: label, noLocal: true, note: note,
+		run: func() ([]string, error) { return nil, run(prov) },
+	})
+}
+
+// epicWriteOp queues one pre-shaped store-first epic op and says what it is
+// waiting for.
+func (m *Model) epicWriteOp(op persistOp) tea.Cmd {
+	if m.refuseWhileWriting(op.label) {
 		return nil
 	}
-	prov := m.prov
 	queued := len(m.pending)
-	cmd := m.enqueueStoreFirstNoting(label, note, func() error { return run(prov) })
+	cmd := m.enqueueStoreFirstOp(op)
 	if len(m.pending) == queued {
 		// Refused inside the rollback window, which already said why. A nil cmd
 		// alone does NOT mean refused — an epic write queued behind an
@@ -580,7 +620,7 @@ func (m *Model) epicWriteNoting(label string, note *string, run func(board.Provi
 		// refusal the user has not read yet.
 		return nil
 	}
-	m.note("%s — waiting for furrow", label)
+	m.note("%s — waiting for furrow", op.label)
 	return cmd
 }
 

@@ -41,6 +41,11 @@ type persistOp struct {
 	// typed text back (reopen the modal) instead of eating it (t-74y3).
 	addTitle string
 	addOpts  board.AddOptions
+	// The same contract for the new-box modal: an epic add is store-first, so
+	// a refused one leaves no trace on the board at all — the reopened modal
+	// is the only thing that keeps the typed title alive.
+	epicAddTitle string
+	epicAddRepo  string
 	// note carries prose the WRITE computed — `epic deactivate`'s
 	// previous-active suggestion, which furrow derives from its activation log
 	// and ridge cannot. run fills it on the queue's goroutine and the UI thread
@@ -153,6 +158,9 @@ func (m *Model) onPersistDone(msg persistDoneMsg) tea.Cmd {
 		var reopen tea.Cmd
 		if op.addedID != nil {
 			reopen = m.reopenRefusedAdd(op)
+		}
+		if op.epicAddTitle != "" {
+			reopen = m.reopenRefusedEpicAdd(op)
 		}
 		if !needRollback {
 			if m.unreadLanded {
@@ -298,21 +306,27 @@ func (m *Model) enqueueStoreFirst(label string, run func() error) tea.Cmd {
 // enqueueStoreFirstNoting is enqueueStoreFirst with a slot for prose the write
 // itself computes (persistOp.note).
 func (m *Model) enqueueStoreFirstNoting(label string, note *string, run func() error) tea.Cmd {
-	if m.rollingBack {
-		// The board is showing state the store refused. This write's SUBJECT
-		// (an epic id) survives a rollback, but letting it through would
-		// preempt the re-read that is the rollback — the t-74y3 window.
-		m.dbg.event("apply", "refused", map[string]any{"label": label, "why": "rolling-back"})
-		m.fail("%s dropped — the store refused the last write, rolling back", label)
-		return nil
-	}
-	m.dbg.event("apply", "enqueue", map[string]any{"label": label, "storeFirst": true})
-	m.pending = append(m.pending, persistOp{
+	return m.enqueueStoreFirstOp(persistOp{
 		label:   label,
 		noLocal: true,
 		note:    note,
 		run:     func() ([]string, error) { return nil, run() },
 	})
+}
+
+// enqueueStoreFirstOp is the queue entrance for a pre-shaped store-first op —
+// the epic add rides it to keep its typed title on the op (see epicAddTitle).
+func (m *Model) enqueueStoreFirstOp(op persistOp) tea.Cmd {
+	if m.rollingBack {
+		// The board is showing state the store refused. This write's SUBJECT
+		// (an epic id) survives a rollback, but letting it through would
+		// preempt the re-read that is the rollback — the t-74y3 window.
+		m.dbg.event("apply", "refused", map[string]any{"label": op.label, "why": "rolling-back"})
+		m.fail("%s dropped — the store refused the last write, rolling back", op.label)
+		return nil
+	}
+	m.dbg.event("apply", "enqueue", map[string]any{"label": op.label, "storeFirst": true})
+	m.pending = append(m.pending, op)
 	if m.inflight {
 		return nil
 	}

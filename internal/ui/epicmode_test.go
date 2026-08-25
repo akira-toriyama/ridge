@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -738,6 +739,68 @@ func TestEpicNewDoesNotResurrectAClearedRepoSlice(t *testing.T) {
 		}
 	}
 	t.Fatal("the created box is not on the board after the write landed")
+}
+
+// A refused epic add must hand the typed title back by reopening the modal —
+// the write is store-first, so nothing on the board even hints the title
+// existed. The quick add has kept this contract since t-74y3; the epic add
+// closed the modal before queueing and ate the title (found by review).
+func TestARefusedEpicAddReopensTheModalWithTheTitle(t *testing.T) {
+	m, p := storeFirstModel(t)
+	p.epicErr, p.epicFailAt = errors.New("board is read-only"), 1
+	sliceOnEpicAxis(t, m, "e-one")
+	if cmd := m.onSliceKey(keyMsg("A")); cmd == nil {
+		t.Fatal("A on the epic axis did not focus the new-box input")
+	}
+	m.epic.input.SetValue("薪ストーブ導入")
+	cmd := m.onEpicNewKey(keyMsg("enter"))
+	if cmd == nil {
+		t.Fatal("the new box queued no write")
+	}
+	if m.epic != nil {
+		t.Fatal("the modal closes while the write is in flight — store-first shows nothing early")
+	}
+	if c := m.onPersistDone(cmd().(persistDoneMsg)); c != nil {
+		_ = c
+	}
+
+	if m.mode != modeEpic || m.epic == nil || !m.epic.creating {
+		t.Fatal("the refusal must reopen the new-box modal")
+	}
+	if got := m.epic.input.Value(); got != "薪ストーブ導入" {
+		t.Fatalf("reopened title = %q, want the typed text back", got)
+	}
+	if !m.statusErr {
+		t.Error("the refusal must surface as an error")
+	}
+}
+
+// A refusal landing after the user moved on must not steal the newer mode —
+// the reopen arrives ~100ms after the ⏎, and by then another overlay may own
+// the keyboard (the quick add pins the same rule).
+func TestARefusedEpicAddDoesNotStealANewerMode(t *testing.T) {
+	m, p := storeFirstModel(t)
+	p.epicErr, p.epicFailAt = errors.New("board is read-only"), 1
+	sliceOnEpicAxis(t, m, "e-one")
+	if cmd := m.onSliceKey(keyMsg("A")); cmd == nil {
+		t.Fatal("A on the epic axis did not focus the new-box input")
+	}
+	m.epic.input.SetValue("薪ストーブ導入")
+	cmd := m.onEpicNewKey(keyMsg("enter"))
+	if cmd == nil {
+		t.Fatal("the new box queued no write")
+	}
+	// Before the refusal lands, the user reopens the box overlay on a row.
+	press(m, "m")
+	if m.epic == nil || m.epic.creating {
+		t.Fatal("m did not open the box overlay")
+	}
+	if c := m.onPersistDone(cmd().(persistDoneMsg)); c != nil {
+		_ = c
+	}
+	if m.epic == nil || m.epic.creating || m.mode != modeEpic {
+		t.Error("the reopen stole the overlay the user had moved into")
+	}
 }
 
 // A reload (or another machine's sync) can drop the box the overlay is holding.
