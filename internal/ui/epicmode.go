@@ -400,28 +400,20 @@ func (m *Model) epicListSelect(box *board.EpicInfo, rows []string) tea.Cmd {
 		// removes. Re-adding is `a`, because the vocabulary of potential deps
 		// is every other box.
 		dep := val
-		m.clampEpicListIdx(len(box.Deps))
 		id := e.id
 		return m.epicWrite("epic dep rm "+id, func(p board.Provider) error {
 			return p.EpicDepRm(id, dep)
 		})
 	case epicFieldMeta:
-		k := metaKeyOf(val)
-		m.clampEpicListIdx(len(box.Meta))
-		return m.epicPatch("meta rm", board.EpicPatch{RmMeta: []string{k}})
+		return m.epicPatch("meta rm", board.EpicPatch{RmMeta: []string{metaKeyOf(val)}})
 	}
 	return nil
 }
 
-// clampEpicListIdx pulls the cursor back when the row it sits on is about to
-// leave the list. The rows come from the STORE, which answers ~150ms later, so
-// without this the cursor spends that window past the end of a list it is still
-// rendering.
-func (m *Model) clampEpicListIdx(rowCount int) {
-	if m.epic.listIdx >= rowCount-1 {
-		m.epic.listIdx = maxInt(0, rowCount-2)
-	}
-}
+// No cursor clamp here: the rows only shrink when the store's re-read lands
+// (~150ms later — until then the overlay still renders the old list), so
+// recompute is where the cursor is pulled back in. Clamping at the gesture
+// moved it even when the write was refused.
 
 func (m *Model) onEpicInputKey(msg tea.KeyPressMsg) tea.Cmd {
 	e := m.epic

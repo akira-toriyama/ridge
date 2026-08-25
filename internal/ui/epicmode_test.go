@@ -244,7 +244,14 @@ func TestEpicListSubEditorTogglesAndParses(t *testing.T) {
 
 // The list cursor must not be left past the end of a list the store is about to
 // shrink — the rows only change when the re-read lands, ~150ms later.
-func TestEpicListCursorPullsBackBeforeTheRowLeaves(t *testing.T) {
+// Removing a row is STORE-FIRST: the overlay renders the old rows for the
+// whole round trip, so the cursor must hold its row until the re-read
+// actually shrinks the list — recompute owns the pull-back. The old
+// gesture-time clamp got both halves wrong: it moved the cursor while both
+// rows were still on screen, and it ran before refuseWhileWriting, so a
+// refused gesture still re-aimed the next ⏎ at a different row (found by
+// review).
+func TestEpicListCursorPullsBackWhenTheReReadShrinksTheRows(t *testing.T) {
 	m, _ := storeFirstModel(t)
 	sliceOnEpicAxis(t, m, "e-one")
 	press(m, "m")
@@ -254,15 +261,75 @@ func TestEpicListCursorPullsBackBeforeTheRowLeaves(t *testing.T) {
 		_ = c
 	}
 
-	// Cursor on the LAST row, which is the one about to go.
+	// Cursor on the LAST row, the one being removed.
 	m.epic.listIdx = 1
 	rows := m.epicListRows(m.b.Epic("e-one"))
 	if c := m.epicListSelect(m.b.Epic("e-one"), rows); c == nil {
 		t.Fatal("the removal queued no write")
 	}
-	if m.epic.listIdx > 0 {
-		t.Errorf("listIdx = %d — the cursor stayed on a row the list is losing, so it "+
-			"points past the end for the whole store round trip", m.epic.listIdx)
+	if m.epic.listIdx != 1 {
+		t.Errorf("listIdx = %d — the cursor moved while the overlay still renders both rows", m.epic.listIdx)
+	}
+
+	// The re-read lands: the edge is gone and recompute pulls the cursor in.
+	m.b.Epic("e-one").Deps = []string{"e-two"}
+	m.recompute()
+	if m.epic.listIdx != 0 {
+		t.Errorf("listIdx = %d after the re-read shrank the rows, want 0", m.epic.listIdx)
+	}
+}
+
+// The arm the review actually caught: labels rows are vocabUnion(task vocab,
+// box labels), so a box label no open task carries IS its own row — removing
+// it shrinks the list exactly like a dep, and this arm had no clamp at all.
+// The cursor sat past the end after the re-read: no ▌ on any row, ⏎/x
+// silently dead until ↑/↓.
+func TestEpicLabelRemovalPullsTheCursorBackOnReRead(t *testing.T) {
+	m, _ := storeFirstModel(t)
+	sliceOnEpicAxis(t, m, "e-one")
+	press(m, "m")
+	box := m.b.Epic("e-one")
+	box.Labels = append(box.Labels, "zzz-box-only")
+	m.epic.menuIdx = int(epicFieldLabels)
+	if c := m.openEpicField(epicFieldLabels); c != nil {
+		_ = c
+	}
+	rows := m.epicListRows(box)
+	if rows[len(rows)-1] != "zzz-box-only" {
+		t.Fatalf("rows = %v — the box-only label is not the last row", rows)
+	}
+	m.epic.listIdx = len(rows) - 1
+	if c := m.epicListSelect(box, rows); c == nil {
+		t.Fatal("the removal queued no write")
+	}
+
+	// The re-read lands: the label is gone from the box, so its row is gone.
+	box.Labels = box.Labels[:len(box.Labels)-1]
+	m.recompute()
+	if want := maxInt(0, len(m.epicListRows(box))-1); m.epic.listIdx != want {
+		t.Errorf("listIdx = %d after the re-read shrank the rows, want %d", m.epic.listIdx, want)
+	}
+}
+
+// A refused gesture must leave the cursor exactly where it was — "nothing
+// happened" has to be the whole truth of it.
+func TestARefusedEpicListRemovalDoesNotMoveTheCursor(t *testing.T) {
+	m, _ := storeFirstModel(t)
+	sliceOnEpicAxis(t, m, "e-one")
+	press(m, "m")
+	m.b.Epic("e-one").Deps = []string{"e-two", "e-three"}
+	m.epic.menuIdx = int(epicFieldDeps)
+	if c := m.openEpicField(epicFieldDeps); c != nil {
+		_ = c
+	}
+	m.epic.listIdx = 1
+	m.storeFirstUnread = true
+	rows := m.epicListRows(m.b.Epic("e-one"))
+	if c := m.epicListSelect(m.b.Epic("e-one"), rows); c != nil {
+		t.Fatal("a refused removal must queue nothing")
+	}
+	if m.epic.listIdx != 1 {
+		t.Errorf("listIdx = %d — the refused gesture moved the cursor", m.epic.listIdx)
 	}
 }
 

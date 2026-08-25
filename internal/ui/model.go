@@ -289,6 +289,17 @@ func (m *Model) recompute() {
 	// unclamped cursor pushes the panel window past the end and it renders
 	// zero rows under a "↑ N more" line.
 	m.sliceIdx = clamp(m.sliceIdx, 0, maxInt(0, len(m.sliceRows())-1))
+	// Same shrink, epic overlay's list stage: a removed label/repo leaves the
+	// rows when no task carries it, and a removed dep/meta row IS the row.
+	// Clamped here — where the re-read lands — and nowhere else: clamping at
+	// the gesture moved the cursor even when the write was refused, and the
+	// labels/repos arms had no clamp at all, so removing their last row left
+	// ⏎/x silently dead on a cursor past the end.
+	if m.epic != nil && m.epic.stage == epicList {
+		if box := m.b.Epic(m.epic.id); box != nil {
+			m.epic.listIdx = clamp(m.epic.listIdx, 0, maxInt(0, len(m.epicListRows(box))-1))
+		}
+	}
 	m.ensureVisible()
 	m.syncPeek()
 }
