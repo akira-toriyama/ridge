@@ -179,6 +179,11 @@ func TestDebuglogWiringSurvivesToTheModel(t *testing.T) {
 			t.Errorf("log lacks %s:\n%s", want, b)
 		}
 	}
+	// The file carries every keystroke verbatim, so it must be private to
+	// its owner — unlike -perflog's op/ms pairs.
+	if fi, err := os.Stat(log); err == nil && fi.Mode().Perm() != 0o600 {
+		t.Errorf("-debuglog created %v, want -rw-------", fi.Mode().Perm())
+	}
 }
 
 // A refusal that happens AFTER another flag already failed must not leave a
