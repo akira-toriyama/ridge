@@ -13,7 +13,7 @@
 | **vista** | furrow の GUI front-end（Tauri v2 + React）。ridge の兄弟。 |
 | **front-end** | furrow を **CLI/JSON 経由で**駆動するもの。furrow の Go パッケージは import しない。 |
 | **Provider** | ridge がタスクを読み書きする唯一の口（interface）。port は `internal/board` が宣言し、adapter は `internal/store/furrowstore`（`furrow` を exec する実装）と `internal/store/memstore`（fixture）の 2 つ。mutation は Persist 契約 — **Model がローカル適用済みの変更を store に記録するだけ**で、適用そのものはしない。例外は **store-first** の族（下）。 |
-| **store-first**（書き込み） | 楽観適用を**しない**書き込み。quick add と epic 族（`EpicAdd`/`EpicSet`/`EpicActivate`/`EpicDeactivate`/`EpicDepAdd`/`EpicDepRm`）が該当。理由は「その書き込みが何を意味するかが furrow 側にある」こと — activate は repo ごとの枠を**奪わず拒否**する・add は id を発行する・progress/stuck/open_deps は furrow 導出。よって盤面は何も変えず、persist キューに載せて**着地後の再読で収束**する。拒否時のロールバックは不要（適用していない）が、**同じ排出内で先に着地した store-first 書き込みがあるなら再読は必要** — でないとその変更は次の `r` まで盤面に出ない（`persistOp.noLocal` / `storeFirstLanded`）。 |
+| **store-first**（書き込み） | 楽観適用を**しない**書き込み。quick add と epic 族（`EpicAdd`/`EpicSet`/`EpicActivate`/`EpicDeactivate`/`EpicDepAdd`/`EpicDepRm`）が該当。理由は「その書き込みが何を意味するかが furrow 側にある」こと — activate は repo ごとの枠を**奪わず拒否**する・add は id を発行する・progress/stuck/open_deps は furrow 導出。よって盤面は何も変えず、persist キューに載せて**着地後の再読で収束**する。拒否時のロールバックは不要（適用していない）が、**同じ排出内で先に着地した store-first 書き込みがあるなら再読は必要** — でないとその変更は次の `r` まで盤面に出ない（`persistOp.noLocal` / `unreadLanded`）。 |
 | **persist キュー** | 楽観的書き込みの直列キュー（`internal/ui/persist.go`）。同時 in-flight は 1 本 — 並べ替えの anchor（`--before <id>`）が直前の書き込みの結果に依存するため。失敗したら残りを破棄して store 再読 = ロールバック。quit は排出を待つ。 |
 | **reconcile** | persist キュー排出後の無言の store 再読。respace された priority・closed 刻印など store 側の真実に盤面を収束させる。 |
 
