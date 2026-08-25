@@ -79,11 +79,13 @@ func TestDebugLogRecordsAllFourLayers(t *testing.T) {
 
 	evs := debugLines(t, &buf)
 	assertSubsequence(t, kinds(evs), []string{
-		"session/start",
+		"session/start", // NewDebugLog's own first line
+		"session/board", // the model exists and got the recorder
 		"input/resize",
 		"input/key", "mode/mode", // m → normal→move
 		"input/key", "mode/mode", // esc → move→normal
-		"input/key", "apply/enqueue", // d → done t-x queued
+		"input/key", "status/note", // d → "closed t-x" via the status funnel
+		"apply/enqueue", // …then the write is queued
 		"persist/done",
 		"input/click",
 		"input/release",
@@ -119,9 +121,10 @@ func TestDebugLogRecordsFailureAndRollbackRefusal(t *testing.T) {
 	m.Update(tea.KeyPressMsg{Code: 'd', Text: "d"})
 
 	evs := debugLines(t, &buf)
-	assertSubsequence(t, kinds(evs), []string{"apply/enqueue", "persist/fail", "apply/refused"})
+	assertSubsequence(t, kinds(evs),
+		[]string{"apply/enqueue", "persist/fail", "status/fail", "apply/refused"})
 	for _, ev := range evs {
-		if ev["kind"] == "fail" && ev["err"] != "boom" {
+		if ev["layer"] == "persist" && ev["kind"] == "fail" && ev["err"] != "boom" {
 			t.Fatalf("persist/fail err = %v, want boom", ev["err"])
 		}
 		if ev["kind"] == "refused" && ev["why"] != "rolling-back" {
@@ -131,16 +134,40 @@ func TestDebugLogRecordsFailureAndRollbackRefusal(t *testing.T) {
 }
 
 // Exec is the store-hook entry: the -perflog pair, as a persist/exec event.
+// It lands AFTER the session marker even though the load execs fire before
+// the ui exists — NewDebugLog writes the marker at construction, which is
+// what keeps an appended file's sessions splittable on session/start.
 func TestDebugLogExecCarriesOpAndMillis(t *testing.T) {
 	var buf bytes.Buffer
 	NewDebugLog(&buf).Exec("set", 42*time.Millisecond)
 	evs := debugLines(t, &buf)
-	if len(evs) != 1 || evs[0]["layer"] != "persist" || evs[0]["kind"] != "exec" {
-		t.Fatalf("got %v, want one persist/exec event", evs)
+	if len(evs) != 2 || evs[0]["kind"] != "start" {
+		t.Fatalf("got %v, want session/start then persist/exec", evs)
 	}
-	if evs[0]["op"] != "set" || evs[0]["ms"] != float64(42) {
-		t.Fatalf("exec fields = %v, want op=set ms=42", evs[0])
+	ex := evs[1]
+	if ex["layer"] != "persist" || ex["kind"] != "exec" || ex["op"] != "set" || ex["ms"] != float64(42) {
+		t.Fatalf("exec event = %v, want persist/exec op=set ms=42", ex)
 	}
+}
+
+// The reload family: a landing, a failure, and — the one with no on-screen
+// counterpart at all — a snapshot skipped because a write was queued behind
+// it. That skip is the ghost a "the board didn't update" report hinges on.
+func TestDebugLogRecordsReloadFamily(t *testing.T) {
+	var buf bytes.Buffer
+	m := New(memstore.New(), Options{Debug: NewDebugLog(&buf)})
+	m.Update(tea.WindowSizeMsg{Width: 240, Height: 60})
+
+	m.Update(reloadDoneMsg{label: "synced", ms: 3})
+	m.Update(reloadDoneMsg{label: "reloaded", ms: 4, err: errors.New("nope")})
+	if _, cmd := m.Update(tea.KeyPressMsg{Code: 'd', Text: "d"}); cmd == nil {
+		t.Fatal("d returned no persist cmd")
+	}
+	m.Update(reloadDoneMsg{label: "late", ms: 5}) // queued write behind it → skip
+
+	assertSubsequence(t, kinds(debugLines(t, &buf)), []string{
+		"persist/reload", "persist/reloadfail", "apply/enqueue", "persist/reloadskip",
+	})
 }
 
 // The whole pipe — terminal bytes → parser → Update → recorder — through a

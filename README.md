@@ -152,14 +152,21 @@ go run ./cmd/ridge -debuglog session.jsonl        # 実盤面 + 全イベント�
 go run ./cmd/ridge -mock -debuglog session.jsonl  # fixture でも記録できる
 ```
 
-1 イベント 1 行の JSONL。層は 4 つ — **input**（key/mouse の生イベント）/
-**mode**（mode・view の遷移）/ **apply**（どの gesture が何を enqueue/refuse
-したか）/ **persist**（furrow exec・書き込みの成否と所要 ms・reload の
-着地/skip）。「操作したら盤面がこうなった」系のバグ報告にはこのファイルを
-添付する — 本文は記録しない（label の task id 参照のみ）。追記 open なので
-1 ファイルに複数セッションを重ねられる（区切りは `session/start`）。
-`-perflog` は別物として残る: あちらは latency 計測の素材（TSV 2 列・
-`-benchload` 対応）、こちらは時系列の再構成用。
+1 イベント 1 行の JSONL。層は 5 つ — **input**（key/mouse の生イベント）/
+**mode**（mode・view の遷移）/ **apply**（gesture が queue に enqueue/refuse
+したもの）/ **persist**（furrow exec・書き込みの成否と所要 ms・reload の
+着地/skip）/ **status**（status line に出した note/fail の全文 — queue に
+届かない拒否はここにしか現れない）。「操作したら盤面がこうなった」系の
+バグ報告にはこのファイルを添付する。
+
+**打鍵は 1 文字ずつそのまま記録される**（modal に打った title や filter 文も
+含む）。入らないのは task の body 本文だけ — body は `$EDITOR` 側で編集され
+event loop を通らない。他人に渡す前に中身を確認すること。
+
+追記 open なので 1 ファイルに複数セッションを重ねられる（区切りは
+`session/start` — 構築時に書くので必ず各セッションの先頭行）。`-perflog` は
+別物として残る: あちらは latency 計測の素材（TSV 2 列・`-benchload` 対応）、
+こちらは時系列の再構成用。
 
 ## 既知の課題
 

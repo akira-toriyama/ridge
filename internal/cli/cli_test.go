@@ -158,6 +158,47 @@ func TestDebuglogIsRefusedWhereNoSessionExists(t *testing.T) {
 	}
 }
 
+// The one test that pins the cli→ui wiring. A test process has no TTY, so
+// the program itself cannot start (CodeRun) — but by then the recorder was
+// built (session/start is NewDebugLog's own first line) AND handed through
+// Options.Debug (session/board is emitted by ui.New). Review found that
+// without this, `Debug: nil` — a -debuglog that records nothing — passed the
+// entire suite.
+func TestDebuglogWiringSurvivesToTheModel(t *testing.T) {
+	log := filepath.Join(t.TempDir(), "debug.jsonl")
+	code, _, errb := runArgs(t, "-mock", "-debuglog", log)
+	if code != CodeRun {
+		t.Fatalf("-mock -debuglog in a no-TTY test exited %d, want %d: %s", code, CodeRun, errb)
+	}
+	b, err := os.ReadFile(log) //nolint:gosec // the t.TempDir path built above
+	if err != nil {
+		t.Fatalf("no log written: %v", err)
+	}
+	for _, want := range []string{`"kind":"start"`, `"kind":"board"`} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("log lacks %s:\n%s", want, b)
+		}
+	}
+}
+
+// A refusal that happens AFTER another flag already failed must not leave a
+// created -debuglog behind: -perflog opens first precisely so its failure
+// precedes the first file the invocation would create.
+func TestFailedPerflogCreatesNoDebuglog(t *testing.T) {
+	bad := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(bad, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	log := filepath.Join(t.TempDir(), "debug.jsonl")
+	code, _, _ := runArgs(t, "-perflog", filepath.Join(bad, "p.tsv"), "-debuglog", log)
+	if code != CodeUsage {
+		t.Fatalf("unopenable -perflog exited %d, want %d", code, CodeUsage)
+	}
+	if _, err := os.Stat(log); err == nil {
+		t.Error("the refused invocation still created the -debuglog file")
+	}
+}
+
 // An unopenable -debuglog is fatal before the TUI ever starts, same contract
 // as -perflog: a debug run that silently records nothing is worse than none.
 // -mock keeps the check off the real store; run() returns before NewProgram.
