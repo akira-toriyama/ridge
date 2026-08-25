@@ -31,8 +31,7 @@ type Options struct {
 
 // New builds the Model the program runs.
 func New(p board.Provider, o Options) *Model {
-	m := newModel(p)
-	m.dbg = o.Debug
+	m := newModel(p, o.Debug)
 	if o.Light {
 		m.th = newTheme(false)
 	}
