@@ -28,6 +28,26 @@ const (
 	modeEpic        // the epic overlay has the keyboard (epicmode.go)
 )
 
+func (md mode) String() string {
+	switch md {
+	case modeNormal:
+		return "normal"
+	case modeMove:
+		return "move"
+	case modeFilter:
+		return "filter"
+	case modeEdit:
+		return "edit"
+	case modeAdd:
+		return "add"
+	case modeSlice:
+		return "slice"
+	case modeEpic:
+		return "epic"
+	}
+	return "unknown"
+}
+
 type viewKind int
 
 const (
@@ -38,6 +58,18 @@ const (
 	// terminal instead of a cramped panel floating over the columns.
 	viewGraph
 )
+
+func (v viewKind) String() string {
+	switch v {
+	case viewBoard:
+		return "board"
+	case viewTable:
+		return "table"
+	case viewGraph:
+		return "graph"
+	}
+	return "unknown"
+}
 
 // Model is the whole application state.
 type Model struct {
@@ -160,6 +192,10 @@ type Model struct {
 	lay       *layout
 	status    string
 	statusErr bool
+
+	// The -debuglog recorder (debuglog.go). nil = off; every emit site calls
+	// through anyway, because the nil *DebugLog is the disabled recorder.
+	dbg *DebugLog
 }
 
 func newModel(p board.Provider) *Model {
@@ -309,6 +345,11 @@ func (m *Model) ensureVisible() {
 
 // Update is the whole event loop.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// The debug layers hook HERE, the single funnel, and nowhere deeper:
+	// input is recorded before dispatch, mode/view as a diff after it.
+	m.dbgInput(msg)
+	preMode, preView := m.mode, m.view
+
 	var cmds []tea.Cmd
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -389,6 +430,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	m.dbgTransitions(preMode, preView)
 	m.relayout()
 	return m, tea.Batch(cmds...)
 }

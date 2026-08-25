@@ -24,11 +24,18 @@ type Options struct {
 	Peek   bool   // open with the detail side-peek
 	Tree   bool   // open with the dep-tree overlay (implies Peek)
 	LoadMS int    // real-store load time, for the startup note
+	// Debug is the -debuglog recorder over an already-open sink (nil = off).
+	// The caller opens the file: this package never touches the filesystem.
+	Debug *DebugLog
 }
 
 // New builds the Model the program runs.
 func New(p board.Provider, o Options) *Model {
 	m := newModel(p)
+	m.dbg = o.Debug
+	// The session marker delimits appended sessions in one file — the flag's
+	// contract is append-open, so a bug report may carry several runs.
+	m.dbg.event("session", "start", map[string]any{"live": p.Live(), "tasks": len(m.b.Tasks())})
 	if o.Light {
 		m.th = newTheme(false)
 	}
