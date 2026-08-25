@@ -70,7 +70,7 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 		mock      = fs.Bool("mock", false, "serve the built-in fixture instead of the real furrow store")
 		readonly  = fs.Bool("readonly", false, "serve the fixture as a schema-gated read-only board (implies -mock)")
 		perflog   = fs.String("perflog", "", "append one 'op\\tms' line per furrow command to this file")
-		debuglog  = fs.String("debuglog", "", "append one JSONL event per input/mode-transition/apply/persist to this file (attach it to a bug report)")
+		debuglog  = fs.String("debuglog", "", "append one JSONL event per input/mode-transition/apply/persist/status to this file (attach it to a bug report; keystrokes are recorded verbatim)")
 		benchload = fs.Bool("benchload", false, "load the real board once, print the latency breakdown, exit (read-only)")
 		// Both spellings are DEFINED rather than left to flag's built-in
 		// handler, which writes the usage block to stderr — explicitly asked-for
