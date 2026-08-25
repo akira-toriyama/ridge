@@ -12,7 +12,8 @@
 | **ridge** | furrow の TUI front-end。この repo。 |
 | **vista** | furrow の GUI front-end（Tauri v2 + React）。ridge の兄弟。 |
 | **front-end** | furrow を **CLI/JSON 経由で**駆動するもの。furrow の Go パッケージは import しない。 |
-| **Provider** | ridge がタスクを読み書きする唯一の口（interface）。port は `internal/board` が宣言し、adapter は `internal/store/furrowstore`（`furrow` を exec する実装）と `internal/store/memstore`（fixture）の 2 つ。mutation は Persist 契約 — **Model がローカル適用済みの変更を store に記録するだけ**で、適用そのものはしない。 |
+| **Provider** | ridge がタスクを読み書きする唯一の口（interface）。port は `internal/board` が宣言し、adapter は `internal/store/furrowstore`（`furrow` を exec する実装）と `internal/store/memstore`（fixture）の 2 つ。mutation は Persist 契約 — **Model がローカル適用済みの変更を store に記録するだけ**で、適用そのものはしない。例外は **store-first** の族（下）。 |
+| **store-first**（書き込み） | 楽観適用を**しない**書き込み。quick add と epic 族（`EpicAdd`/`EpicSet`/`EpicActivate`/`EpicDeactivate`/`EpicDepAdd`/`EpicDepRm`）が該当。理由は「その書き込みが何を意味するかが furrow 側にある」こと — activate は repo ごとの枠を**奪わず拒否**する・add は id を発行する・progress/stuck/open_deps は furrow 導出。よって盤面は何も変えず、persist キューに載せて**着地後の再読で収束**する。拒否時のロールバックは不要（適用していない）が、**同じ排出内で先に着地した store-first 書き込みがあるなら再読は必要** — でないとその変更は次の `r` まで盤面に出ない（`persistOp.noLocal` / `storeFirstLanded`）。 |
 | **persist キュー** | 楽観的書き込みの直列キュー（`internal/ui/persist.go`）。同時 in-flight は 1 本 — 並べ替えの anchor（`--before <id>`）が直前の書き込みの結果に依存するため。失敗したら残りを破棄して store 再読 = ロールバック。quit は排出を待つ。 |
 | **reconcile** | persist キュー排出後の無言の store 再読。respace された priority・closed 刻印など store 側の真実に盤面を収束させる。 |
 
@@ -40,7 +41,8 @@
 | **edit mode** | ⟨EDIT⟩ | 編集メニュー（edit overlay）が専有。 |
 | **add mode** | ⟨ADD⟩ | quick add modal が専有。 |
 | **slice mode** | ⟨SLICE⟩ | slice パネルが専有。 |
-| **graph** | ⟨GRAPH⟩ | mode enum 外だがキーボードを専有する full-screen view — 実質 7 つ目。 |
+| **epic mode** | ⟨EPIC⟩ | epic オーバーレイが専有（`epicmode.go`）。slice パネルの epic 軸から入り、`esc` はパネルに戻る。 |
+| **graph** | ⟨GRAPH⟩ | mode enum 外だがキーボードを専有する full-screen view — 実質 8 つ目。 |
 | **drag** | ⟨DRAG⟩ | mode ではない（`dragState`）が、gesture 中はトークンが出る。 |
 
 ## 操作
@@ -56,7 +58,8 @@
 | **sync（`R`）** | `furrow sync`（git の commit/pull/push）→ store 再読。自動では走らない — v1 の決定（t-s86r）。`r` は再読のみ。 |
 | **filter（-q パススルー）** | filter bar は furrow `-q` への素通し。ridge は raw 文字列と store の返した id 集合（verdict）だけを持ち、文法は furrow 一本（t-ehk7）。タイプ中・拒否時は直前の verdict を保持して ⚠ を出す（盤面を空にしない）。memstore は -dump/テスト用の evaluator。語彙（`furrow vocab query-is`/`query-presence`）と一致規則は実 furrow で実測して合わせてあり、honour できない構文（ordinal/date 比較・graph qualifier）は furrow 同様に**拒否**する — 黙って 0 件を返さない。 |
 | **編集メニュー（edit overlay）** | peek/Table の `Enter`／`m` で開く field 編集 modal（`editmode.go`）。menu → sub-editor（1..5 picker / toggle list / deps list / text input / checklist カーソル）の2段。適用は楽観的 + persist キュー、`furrow set` 相当は 1 write に合成。deps は一方通行の list（⏎/x で外す・`a` + task id で張る。acyclic/存在検査は furrow が正本で、ridge はミラー検証のみ）。 |
-| **slice パネル** | `s` で開く左パネル（`slicemode.go`）。軸は repo / label / epic（epic 行は store の progress/stuck つき。epic dep が open な box を待つ間は `→N` — furrow 導出の `open_deps` をそのまま数える。「open after those close」の情報エッジで、強制ではない）。選択 = -q term の発行で、typed filter と AND 合成（GH の slice 仕様）。radio 動作（再選択で解除・軸切替で解除）。パネルを閉じても選択は残り、filter bar に `slice <term>` として見える。 |
+| **slice パネル** | `s` で開く左パネル（`slicemode.go`）。軸は repo / label / epic（epic 行は store の progress/stuck つき + `▶` active / `◆` pinned。epic dep が open な box を待つ間は `→N` — furrow 導出の `open_deps` をそのまま数える。「open after those close」の情報エッジで、強制ではない）。選択 = -q term の発行で、typed filter と AND 合成（GH の slice 仕様）。radio 動作（再選択で解除・軸切替で解除）。パネルを閉じても選択は残り、filter bar に `slice <term>` として見える。`g`/`G` で端へ。epic 軸では `m` で epic オーバーレイ・`A` で新規 box（他の軸では**理由を述べて断る** — dead key を作らない）。キーの告知はパネルの note が唯一の場所（modal なので `?` が打てず HelpSections も modal を載せない）なので、軸切替のたびに書き直す。 |
+| **epic オーバーレイ** | slice パネルの epic 軸から `m` で開く box 管理 modal（`epicmode.go`）。`furrow epic add/set/activate/deactivate/dep` 相当。行は title / goal / active / standing / pinned / labels / repos / deps / meta で、上に furrow 導出の `d/t done` と STUCK（編集不能なので行にしない）。書き込みは全部 **store-first** — 盤面は着地まで古い値のまま見せ、note が「何を待っているか」を言う。in-flight 中の二度押しは拒否する（行がまだ書き込み前の値なので、二度目は見えていない盤面を狙うことになる。furrow 側は同じ box の再 activate を exit 0・`changed:[]` で受けるので、拒否の理由は furrow ではなく画面）。`active` 行は押す**前**に前提条件を出す（`no — slot held by <id>` / `no — attach a repo first`）— furrow は repo ごとの枠を奪わず拒否するので、exit 2 が初耳になってはいけない。activate は `--reason` の入力が確認も兼ね（本文の activation log に残る）、deactivate は確認ステージ + furrow の `previous` 提案を note に出す。**`done`/`reopen` は無い** — `reopen` が pin 済み furrow release（v4.0.0）に存在せず、`done` だけ出すと epic 読みが open-only なので片道扉になる。両方 t-sq02（closed 母集団を持つ側）へ。 |
 | **sort（Table）** | `o` で canonical → updated → created → value → effort → due を循環（各キーは自然な向きで入り、再押しで昇降反転）。現在地は対応列ヘッダの `▲▼` + フィルタバーの `sort <key> ▲▼` 常時表示（created / effort は列が無いので後者のみ）。ソート可能なヘッダセルのクリックでも同じ（同一セル再クリックで反転・`lane` で canonical へ復帰）。並びは同一スナップショットへのローカル安定ソートで、未設定値（due 無し等）は**両方向とも末尾**。ソート中は `K`/`J` の並べ替えを拒否（GH 同）。task 起票時の指定は `s` だったが slice パネルと衝突するため `o`。 |
 | **canonical（順）** | Table の既定並び = 盤面そのもの（lane 順 → lane 内 priority 順）。field ソートの不在であり、方向を持たない。 |
 | **quick add** | `a` で開く起票 modal（`addmode.go`）。`furrow add -s <フォーカス列>` に写像し、適用中 filter の単一値 `label:`/`epic:`/`repo:` を継承（チップ表示 — 黙って付けない。GH の filtered-metadata 継承則）。確定後は再読 → 新カードを選択（filter が隠すなら pin）。 |
@@ -68,6 +71,7 @@
 |---|---|
 | `▸` | **actionable** — next レーンにあり、すべての依存が完了済み（＝今すぐ着手できる）。 |
 | `x` / `x1` | **blocked** — 未完了の blocker がある（数字はその件数）。**隠さず印を付ける**（隠すのは `furrow next` の役目）。 |
+| `▶` / `◆` | slice パネルの epic 行の lifecycle 印。`▶` = その repo が今それで作業している box（`furrow brief` と同じ字）、`◆` = pinned。どちらも `epic ls --json` の `active`/`pinned` をそのまま出す。 |
 | `▤` | **epic チップ**。epic は lane を持たない別エンティティ（`EpicInfo`）で、カードには所属 epic のタイトルを解決して表示する。epic が stuck なら warn 色。peek には `(done/total)` と STUCK、epic が open な dep を待つ間は resolved な `epic waits on` 行（open は `id (d/t) title`・stuck なら `id (d/t) STUCK title`（warn 色）・furrow が `open_deps` から解決済みの dep は `(satisfied)`。open/満了の判定は furrow 導出値で、ridge は再計算しない）。 |
 | `v` | done。 |
 | `[0/7]` | チェックリストの進捗。 |

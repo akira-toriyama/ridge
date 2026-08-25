@@ -13,7 +13,7 @@ import (
 // unknown-name error and the tests all read this slice, because the list was
 // duplicated in three places and adding two states updated two of them —
 // `ridge -h` then advertised eight of ten.
-var DemoNames = []string{"move", "drag", "add", "edit", "editpick", "editinput", "editdeps", "graph", "help", "slice", "sort", "filter", "filterchips", "epicdeps", "fail"}
+var DemoNames = []string{"move", "drag", "add", "edit", "editpick", "editinput", "editdeps", "graph", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicnew", "fail"}
 
 // Options configures a freshly-constructed Model. The zero value is the
 // default TUI: dark palette, board view, no filter.
@@ -276,6 +276,83 @@ func (m *Model) demoState(kind string) error {
 		m.peekOpen = true
 		m.syncPeek()
 
+	case "sliceepic":
+		// The panel holding the keyboard on the EPIC axis — the state every
+		// epic gesture starts from, and the only frame that shows the ▶/◆
+		// lifecycle markers and the note advertising m/A. No bare flag
+		// combination reaches it: the `slice` demo forces the label axis and
+		// `filterchips` hands the keyboard to the filter input.
+		m.toggleSlice()
+		m.sliceField = sliceEpic
+		m.noteSliceAxis()
+
+	case "epic":
+		// The overlay's menu on the one fully-populated box, cursor parked on
+		// `active` — so the frame proves every row's value AND the activate
+		// precondition ("slot held by e-fw2m"), which is what stops furrow's
+		// exit 2 from being the user's first news of the one-active-per-repo
+		// rule. `-table -demo epic` composes, which is the frame that covers the
+		// overlay over the table view — a modal that owns the keyboard must be
+		// visible in both, and it was not.
+		if err := m.demoEpicPanel("e-c4mt"); err != nil {
+			return err
+		}
+		m.epic.menuIdx = int(epicFieldActive)
+
+	case "epiclist":
+		// The deps sub-editor, both resolutions in one frame: e-c4mt waits on
+		// an OPEN box and carries a dep furrow already resolved away.
+		if err := m.demoEpicPanel("e-c4mt"); err != nil {
+			return err
+		}
+		m.epic.menuIdx = int(epicFieldDeps)
+		if c := m.openEpicField(epicFieldDeps); c != nil {
+			_ = c
+		}
+
+	case "epicreason":
+		// The activate input. It is the confirm step AND the collection of
+		// furrow's --reason, which is appended to the box's body as the
+		// activation record — a stage that exists only between two keystrokes.
+		if err := m.demoEpicPanel("e-c4mt"); err != nil {
+			return err
+		}
+		m.epic.menuIdx = int(epicFieldActive)
+		if c := m.openEpicField(epicFieldActive); c != nil {
+			_ = c
+		}
+		m.epic.input.SetValue("ユーザー依頼: 冬支度を先に回す")
+
+	case "epicconfirm":
+		// The deactivate gate, reachable only on the ACTIVE box.
+		if err := m.demoEpicPanel("e-fw2m"); err != nil {
+			return err
+		}
+		m.epic.menuIdx = int(epicFieldActive)
+		if c := m.openEpicField(epicFieldActive); c != nil {
+			_ = c
+		}
+
+	case "epicnew":
+		// The new-box modal with a repo slice active, so the frame PROVES the
+		// inheritance: the sliced repo lands in the chip, not silently on the
+		// box. Without a repo a new box cannot be activated at all, which is
+		// why this one is worth a frame of its own.
+		m.toggleSlice()
+		m.sliceField = sliceRepo
+		for i, r := range m.sliceRows() {
+			if r.value == "tomo/kyushu-trip" {
+				m.sliceIdx = i
+			}
+		}
+		if c := m.selectSlice(sliceRepo, "tomo/kyushu-trip"); c != nil {
+			_ = c
+		}
+		if c := m.enterEpicNew(); c != nil {
+			_ = c
+		}
+		m.epic.input.SetValue("薪ストーブ導入")
+
 	case "fail":
 		// A refused write. The ⚠ styling has its own colour and its own row,
 		// and nothing else in the demo set renders an error at all.
@@ -290,5 +367,29 @@ func (m *Model) demoState(kind string) error {
 		return fmt.Errorf("unknown -demo %q (want %s)", kind, strings.Join(DemoNames, "|"))
 	}
 	m.relayout()
+	return nil
+}
+
+// demoEpicPanel reaches the epic overlay the way a user does — through the
+// panel, on the epic axis, with the cursor on the box — so the frame behind the
+// overlay is the real one and `esc` in the resulting state would land back in
+// modeSlice rather than on a bare board.
+func (m *Model) demoEpicPanel(id string) error {
+	m.toggleSlice()
+	m.sliceField = sliceEpic
+	rows := m.sliceRows()
+	found := false
+	for i, r := range rows {
+		if r.value == id {
+			m.sliceIdx, found = i, true
+		}
+	}
+	if !found {
+		return fmt.Errorf("demo epic: %s is not a box on the fixture board", id)
+	}
+	m.enterEpic(id)
+	if m.epic == nil {
+		return fmt.Errorf("demo epic: the overlay did not open on %s", id)
+	}
 	return nil
 }

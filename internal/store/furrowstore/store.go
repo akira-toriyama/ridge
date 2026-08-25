@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -114,11 +115,21 @@ type taskJSON struct {
 	Due      *time.Time `json:"due"`
 }
 
-// epicJSON is one `furrow epic ls --json` row.
+// epicJSON is one `furrow epic ls --json` row. `epic add`/`set`/`activate`/… all
+// answer with the same row shape inside a {before,after,changed} envelope, so
+// this type doubles as the mutation reply's payload — minus progress/stuck,
+// which the add reply does not carry.
 type epicJSON struct {
-	ID    string   `json:"id"`
-	Title string   `json:"title"`
-	Deps  []string `json:"deps"`
+	ID       string            `json:"id"`
+	Title    string            `json:"title"`
+	Goal     string            `json:"goal"`
+	Active   bool              `json:"active"`
+	Standing bool              `json:"standing"`
+	Pinned   bool              `json:"pinned"`
+	Labels   []string          `json:"labels"`
+	Repos    []string          `json:"repos"`
+	Meta     map[string]string `json:"meta"`
+	Deps     []string          `json:"deps"`
 	// open_deps is furrow-derived, like progress and stuck: the deps still
 	// waiting, with deps on closed epics already resolved away (omitted
 	// entirely when none remain). ridge never recomputes it.
@@ -128,6 +139,17 @@ type epicJSON struct {
 		Total int `json:"total"`
 	} `json:"progress"`
 	Stuck bool `json:"stuck"`
+}
+
+// toEpicInfo maps one row onto the port's entity.
+func (e epicJSON) toEpicInfo() board.EpicInfo {
+	return board.EpicInfo{
+		ID: e.ID, Title: e.Title, Goal: e.Goal,
+		Active: e.Active, Standing: e.Standing, Pinned: e.Pinned,
+		Labels: e.Labels, Repos: e.Repos, Meta: e.Meta,
+		Done: e.Progress.Done, Total: e.Progress.Total,
+		Stuck: e.Stuck, Deps: e.Deps, OpenDeps: e.OpenDeps,
+	}
 }
 
 // wipDefaults renders the WIP budget on the lanes that have one — Projects #5
@@ -220,11 +242,7 @@ func (p *Store) load() (*board.Board, error) {
 
 	epics := make([]board.EpicInfo, 0, len(boxes))
 	for _, e := range boxes {
-		epics = append(epics, board.EpicInfo{
-			ID: e.ID, Title: e.Title,
-			Done: e.Progress.Done, Total: e.Progress.Total,
-			Stuck: e.Stuck, Deps: e.Deps, OpenDeps: e.OpenDeps,
-		})
+		epics = append(epics, e.toEpicInfo())
 	}
 
 	return board.NewStoreBoard(lanes, tasks, epics, cfg.Writable, cfg.SchemaState), nil
@@ -497,8 +515,157 @@ func (p *Store) PersistDepRm(id, dep string) error {
 	return err
 }
 
+// --- epic writes -----------------------------------------------------------
+//
+// Store-first (board.Provider's epic family): nothing is applied locally, so
+// these compose argv, run one furrow command and report its verdict. Every
+// argv fact below was measured against furrow v4.0.0 — the release
+// .github/workflows/build.yml pins for the contract job — because the dev
+// binary on a workstation runs ahead of it (`epic reopen` exists there and not
+// in v4.0.0, which is why `epic done`/`reopen` are absent from this family).
+
+// epicEnvelope is the {before,after,changed} reply every epic mutation answers
+// with. Only `previous` is read: `after` would be a second, narrower source of
+// truth for a board the next reload re-reads in full anyway.
+type epicEnvelope struct {
+	Previous *struct {
+		ID    string `json:"id"`
+		Title string `json:"title"`
+	} `json:"previous"`
+}
+
+// EpicAdd creates a box via `furrow epic add` (board.Provider). The reply is
+// ONE object shaped like an `epic ls` row, minus progress/stuck.
+func (p *Store) EpicAdd(title string, o board.EpicAddOptions) (string, error) {
+	args := []string{"epic", "add", "--json"}
+	if o.Goal != "" {
+		args = append(args, "--goal", o.Goal)
+	}
+	for _, l := range o.Labels {
+		args = append(args, "-l", l)
+	}
+	for _, r := range o.Repos {
+		args = append(args, "-r", r)
+	}
+	// `--` before the title, for the same reason `add` and `retitle` need it:
+	// a leading dash is read as a shorthand flag and refused (measured on
+	// v4.0.0: exit 2, kind validation).
+	args = append(args, "--", title)
+	out, err := p.c.run("epic-add", args...)
+	if err != nil {
+		return "", err
+	}
+	var row addRow
+	if err := json.Unmarshal(out, &row); err != nil || row.ID == "" {
+		return "", fmt.Errorf("furrow epic add: undecodable reply: %v", err)
+	}
+	return row.ID, nil
+}
+
+// EpicSet writes one metadata edit via `furrow epic set` (board.Provider).
+func (p *Store) EpicSet(id string, patch board.EpicPatch) error {
+	if patch.Empty() {
+		return fmt.Errorf("nothing to set on %s", id)
+	}
+	args := []string{"epic", "set", id}
+	if patch.Title != nil {
+		args = append(args, "--title", *patch.Title)
+	}
+	if patch.Goal != nil {
+		args = append(args, "--goal", *patch.Goal) // "" clears
+	}
+	for _, l := range patch.AddLabels {
+		args = append(args, "--add-label", l)
+	}
+	for _, l := range patch.RmLabels {
+		args = append(args, "--rm-label", l)
+	}
+	for _, r := range patch.AddRepos {
+		args = append(args, "--add-repo", r)
+	}
+	for _, r := range patch.RmRepos {
+		args = append(args, "--rm-repo", r)
+	}
+	// Sorted: map iteration is random, and a nondeterministic argv is a
+	// nondeterministic golden test.
+	for _, k := range sortedMetaKeys(patch.SetMeta) {
+		args = append(args, "--meta", k+"="+patch.SetMeta[k])
+	}
+	for _, k := range patch.RmMeta {
+		args = append(args, "--rm-meta", k)
+	}
+	// ONE token, not two: `--standing false` is exit 2 ("accepts 1 arg(s),
+	// received 2") because the flag is a bool.
+	if patch.Standing != nil {
+		args = append(args, "--standing="+strconv.FormatBool(*patch.Standing))
+	}
+	if patch.Pinned != nil {
+		args = append(args, "--pinned="+strconv.FormatBool(*patch.Pinned))
+	}
+	_, err := p.c.run("epic-set", args...)
+	return err
+}
+
+// EpicActivate opens the box for work via `furrow epic activate`
+// (board.Provider).
+func (p *Store) EpicActivate(id, reason string) error {
+	args := []string{"epic", "activate", id}
+	if reason != "" {
+		args = append(args, "--reason", reason)
+	}
+	_, err := p.c.run("epic-activate", args...)
+	return err
+}
+
+// EpicDeactivate steps away from the box via `furrow epic deactivate` and
+// returns furrow's previous-active suggestion (board.Provider).
+func (p *Store) EpicDeactivate(id string) (board.EpicPrevious, error) {
+	out, err := p.c.run("epic-deactivate", "epic", "deactivate", id, "--json")
+	if err != nil {
+		return board.EpicPrevious{}, err
+	}
+	var env epicEnvelope
+	if err := json.Unmarshal(out, &env); err != nil {
+		return board.EpicPrevious{}, fmt.Errorf("furrow epic deactivate: undecodable envelope: %v", err)
+	}
+	if env.Previous == nil {
+		return board.EpicPrevious{}, nil
+	}
+	return board.EpicPrevious{ID: env.Previous.ID, Title: env.Previous.Title}, nil
+}
+
+// EpicDepAdd makes id wait on dep via `furrow epic dep` (board.Provider).
+//
+// The dep ref is user free text — furrow resolves an id, a unique prefix or a
+// unique title substring — so it goes behind `--`, like every other positional
+// this adapter passes. Without it a ref beginning with a dash is parsed as a
+// flag: measured on v4.0.0, `epic dep <id> --rm` is "requires at least 2 arg(s)"
+// rather than a refusal naming the ref. The guard goes AFTER the flags, never
+// before: everything past `--` is positional, so `epic dep <id> -- <dep> --json`
+// hands furrow "--json" as a second dep ref.
+func (p *Store) EpicDepAdd(id, dep string) error {
+	_, err := p.c.run("epic-dep", "epic", "dep", id, "--", dep)
+	return err
+}
+
+// EpicDepRm removes the edge via `furrow epic dep --rm` (board.Provider).
+func (p *Store) EpicDepRm(id, dep string) error {
+	_, err := p.c.run("epic-dep-rm", "epic", "dep", id, "--rm", "--", dep)
+	return err
+}
+
+func sortedMetaKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
 // addRow is the one field Add needs back from `furrow add --json` (a single
 // add answers with ONE object; only --stdin bulk answers with an array).
+// `epic add --json` answers the same way, so it decodes with this too.
 type addRow struct {
 	ID string `json:"id"`
 }

@@ -560,32 +560,64 @@ func fixtureTasks() []*board.Task {
 // resolved away (outside open_deps, absent from the open-only read: the
 // shape a dep on a closed epic arrives in), and e-9wtv is the stuck epic the
 // warn glyph needs.
+//
+// The Repos/Active shape is load-bearing for the epic overlay, not decoration:
+//   - EXACTLY ONE box is Active (e-fw2m), because furrow allows at most one per
+//     repo and a fixture with two for tomo/kyushu-trip would be a board furrow
+//     cannot produce.
+//   - e-c4mt and e-9wtv share that repo while inactive, so "activating this
+//     clashes with the box that already holds the slot" has a site — the
+//     precondition line and the refusal it warns about are both unreachable
+//     headless without one.
+//   - e-p3dx is the only box whose repo is FREE, so it is the one `activate`
+//     lands on without first deactivating e-fw2m. A box naming no repo cannot be
+//     activated at all (it would bypass the one-active-per-repo rule), so a
+//     fixture where every box was repo-less could only ever demo refusals.
+//   - e-p3dx carries Standing+Pinned, the mandate-shaped pair, so the two
+//     PERMANENT-channel rows have a non-default value to render somewhere.
 func fixtureEpics() []board.EpicInfo {
 	return []board.EpicInfo{
 		{
 			ID:       "e-fw2m",
 			Title:    "九州キャンプ旅 2026 — 行程・予約・装備（阿蘇→高千穂 3泊）",
+			Goal:     "阿蘇→高千穂 3泊の行程が確定し、予約と装備が揃っている",
+			Active:   true,
+			Repos:    []string{"tomo/kyushu-trip"},
+			Meta:     map[string]string{"origin": "2026-06 家族会議"},
 			Done:     6,
 			Total:    18,
 			Deps:     []string{"e-p3dx"},
 			OpenDeps: []string{"e-p3dx"},
 		},
 		{
-			ID:    "e-p3dx",
-			Title: "常備菜ライン 2026 夏→秋 — 平日を回しつつキャンプへ供給する",
-			Done:  1,
-			Total: 5,
+			ID:       "e-p3dx",
+			Title:    "常備菜ライン 2026 夏→秋 — 平日を回しつつキャンプへ供給する",
+			Goal:     "平日の作り置きが週2回で回り、キャンプ前の仕込みに転用できている",
+			Standing: true,
+			Pinned:   true,
+			Repos:    []string{"tomo/joubisai"},
+			Labels:   []string{"bento"},
+			Done:     1,
+			Total:    5,
 		},
 		{
 			ID:    "e-9wtv",
 			Title: "夏休み自由研究 — 火起こしと星の観察記録",
+			Repos: []string{"tomo/kyushu-trip"},
 			Done:  0,
 			Total: 2,
 			Stuck: true,
 		},
 		{
+			// The overlay's one fully-populated box: every editable row has a
+			// value AND `active` reads "slot held by e-fw2m", so a single menu
+			// frame proves the row layout and the activate precondition at once.
 			ID:       "e-c4mt",
 			Title:    "冬キャンプ 2026-27 — 薪ストーブ泊まで",
+			Goal:     "薪ストーブで一泊できる装備と練習が揃っている",
+			Repos:    []string{"tomo/kyushu-trip"},
+			Labels:   []string{"gear"},
+			Meta:     map[string]string{"origin": "夏の反省", "season": "2026-27"},
 			Done:     0,
 			Total:    1,
 			Deps:     []string{"e-fw2m", "e-2b7h"},

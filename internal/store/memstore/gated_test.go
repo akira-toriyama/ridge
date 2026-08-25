@@ -89,6 +89,65 @@ func TestGatedFixtureRefusesEveryWrite(t *testing.T) {
 		t.Errorf("Add was accepted on a read-only board (created %s)", newID)
 	}
 
+	// The epic family too. These are STORE-FIRST, so the fixture really applies
+	// them — which makes the gate the only thing standing between a read-only
+	// board and an epic edit that lands. A gated board that accepted them would
+	// be lying in exactly the direction the gate exists to describe.
+	// An INACTIVE box, so the activate assertion below cannot pass just because
+	// the fixture already had the flag set.
+	box := ""
+	for _, e := range p.Board().Epics() {
+		if !e.Active {
+			box = e.ID
+			break
+		}
+	}
+	if box == "" {
+		t.Fatal("the fixture has no inactive box to test the activate gate with")
+	}
+	before := *p.Board().Epic(box)
+	goal := "読み取り専用でも通ってしまうゴール"
+	if newID, err := p.EpicAdd("新しい箱", board.EpicAddOptions{}); err == nil {
+		t.Errorf("EpicAdd was accepted on a read-only board (created %s)", newID)
+	}
+	if err := p.EpicSet(box, board.EpicPatch{Goal: &goal}); err == nil {
+		t.Error("EpicSet was accepted on a read-only board")
+	}
+	if err := p.EpicActivate(box, ""); err == nil {
+		t.Error("EpicActivate was accepted on a read-only board")
+	}
+	if _, err := p.EpicDeactivate(box); err == nil {
+		t.Error("EpicDeactivate was accepted on a read-only board")
+	}
+	// A VALID pair, and an edge that really exists: `EpicDepAdd(box, box)` is
+	// refused for waiting on itself and `EpicDepRm(box, box)` for not being an
+	// edge, both regardless of the gate — so those spellings pass while the gate
+	// is missing.
+	other, depBox, edge := "", "", ""
+	for _, e := range p.Board().Epics() {
+		if e.ID != box && other == "" {
+			other = e.ID
+		}
+		if len(e.Deps) > 0 && edge == "" {
+			depBox, edge = e.ID, e.Deps[0]
+		}
+	}
+	if other == "" || edge == "" {
+		t.Fatalf("setup: need a second box (%q) and a box carrying an edge (%q → %q)", other, depBox, edge)
+	}
+	if err := p.EpicDepAdd(box, other); err == nil {
+		t.Error("EpicDepAdd was accepted on a read-only board")
+	}
+	if err := p.EpicDepRm(depBox, edge); err == nil {
+		t.Error("EpicDepRm was accepted on a read-only board")
+	}
+	// And none of them left a mark: a refusal that half-applied would be worse
+	// than one that lands.
+	if got := p.Board().Epic(box); got.Goal != before.Goal || got.Active != before.Active ||
+		len(got.Deps) != len(before.Deps) {
+		t.Errorf("a refused epic write still changed the box:\n got %+v\nwant %+v", *got, before)
+	}
+
 	// Reads keep working — a gate refuses writes, it does not blind the board.
 	if _, err := p.Query("lane:backlog"); err != nil {
 		t.Errorf("a read-only board refused a read: %v", err)

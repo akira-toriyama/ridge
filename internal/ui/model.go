@@ -25,6 +25,7 @@ const (
 	modeEdit        // the field-edit overlay has the keyboard (editmode.go)
 	modeAdd         // the quick-add modal has the keyboard (addmode.go)
 	modeSlice       // the slice panel has the keyboard (slicemode.go)
+	modeEpic        // the epic overlay has the keyboard (epicmode.go)
 )
 
 type viewKind int
@@ -67,6 +68,7 @@ type Model struct {
 
 	edit *editState // non-nil exactly while mode == modeEdit
 	add  *addState  // non-nil exactly while mode == modeAdd
+	epic *epicState // non-nil exactly while mode == modeEpic
 
 	selectAfterReload string // id to select once the next re-read lands
 
@@ -121,6 +123,24 @@ type Model struct {
 	// the wrong-checklist-item write, and the rollback that any keystroke
 	// could preempt).
 	rollingBack bool
+	// A write has LANDED in a live store and the board has not re-read since.
+	// Two things are stale until it does: a store-first write (persistOp.noLocal)
+	// has no local half at all, so its effect is invisible; and furrow's derived
+	// values (epic progress, close stamps, respaced priorities) lag even for an
+	// optimistic one. The refusal path that rolls nothing back therefore has to
+	// re-read anyway.
+	//
+	// Cleared when a re-read actually APPLIES, never at drain end: the drain's
+	// own reconcile can be dropped by onReloadDone's in-flight guard (a keypress
+	// landing behind it), and clearing early would let the next refusal skip the
+	// re-read that the dropped one still owed.
+	unreadLanded bool
+	// The same window, narrowed to the STORE-FIRST writes: the overlay that
+	// issued one is still showing pre-write values until the re-read lands, so it
+	// refuses another gesture. Separate from unreadLanded because that one is set
+	// by ordinary optimistic writes too, and refusing an epic gesture with "a box
+	// write is in flight" after a card move would name the wrong write.
+	storeFirstUnread bool
 	// A $EDITOR result that arrived inside the rollback window. Every other
 	// refused write is a gesture the user can repeat; this one's payload is
 	// hand-typed text whose temp file is already deleted, so it is held and
@@ -405,6 +425,11 @@ func (m *Model) onKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 	if m.mode == modeSlice {
 		return m.onSliceKey(msg)
+	}
+	// The epic overlay is modal like the others, and it is reached FROM the
+	// slice panel, so it must be routed before it.
+	if m.mode == modeEpic {
+		return m.onEpicKey(msg)
 	}
 	// Esc while a mouse button is down cancels the drag before anything else
 	// gets to interpret it — and leaves the drag armed so the release that
