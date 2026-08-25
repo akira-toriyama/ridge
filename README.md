@@ -145,6 +145,22 @@ go run ./cmd/ridge -readonly -dump           # schema gate で read-only の盤�
 この経路が無いと read-only の1フレームは誰も目視できない（実際、その状態の警告を
 消す退行を1度通した）。`-mock -readonly` で TUI としても触れる。
 
+### `-debuglog` — 操作履歴の構造化ログ
+
+```sh
+go run ./cmd/ridge -debuglog session.jsonl        # 実盤面 + 全イベント記録
+go run ./cmd/ridge -mock -debuglog session.jsonl  # fixture でも記録できる
+```
+
+1 イベント 1 行の JSONL。層は 4 つ — **input**（key/mouse の生イベント）/
+**mode**（mode・view の遷移）/ **apply**（どの gesture が何を enqueue/refuse
+したか）/ **persist**（furrow exec・書き込みの成否と所要 ms・reload の
+着地/skip）。「操作したら盤面がこうなった」系のバグ報告にはこのファイルを
+添付する — 本文は記録しない（label の task id 参照のみ）。追記 open なので
+1 ファイルに複数セッションを重ねられる（区切りは `session/start`）。
+`-perflog` は別物として残る: あちらは latency 計測の素材（TSV 2 列・
+`-benchload` 対応）、こちらは時系列の再構成用。
+
 ## 既知の課題
 
 - 本文編集はファイル直書きなので shard の `updated` が進まない。furrow 側の
