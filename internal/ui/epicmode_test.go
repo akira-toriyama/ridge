@@ -537,19 +537,24 @@ func TestEpicTitleRefusesEmptyWhileGoalClears(t *testing.T) {
 	}
 }
 
-// The new-box modal inherits the sliced repo — and it matters more here than in
-// quick add, because a box naming no repo cannot be activated at all.
-func TestEpicNewInheritsTheSlicedRepo(t *testing.T) {
+// The new-box modal inherits the FILTER's repo — it matters more here than in
+// quick add, because a box naming no repo cannot be activated at all. Driven
+// through onSliceKey, not enterEpicNew directly: `A` only answers on the epic
+// axis, where any repo-axis pick has already been cleared by the axis switch,
+// so the typed repo: term is the one route a repo can still arrive by. The
+// old slice-derived inheritance was exactly the branch this path can never
+// reach — and its test called enterEpicNew() by hand, passing for the wrong
+// reason (found by review).
+func TestEpicNewInheritsTheFilterRepo(t *testing.T) {
 	m := New(memstore.New(), Options{})
 	m.w, m.h = 240, 50
 	m.recompute()
+	m.ti.SetValue("repo:tomo/kyushu-trip")
+	m.applyFilter("repo:tomo/kyushu-trip")
 	m.toggleSlice()
-	m.sliceField = sliceRepo
-	if c := m.selectSlice(sliceRepo, "tomo/kyushu-trip"); c != nil {
-		_ = c
-	}
-	if c := m.enterEpicNew(); c != nil {
-		_ = c
+	m.sliceField = sliceEpic
+	if cmd := m.onSliceKey(keyMsg("A")); cmd == nil {
+		t.Fatal("A on the epic axis did not focus the new-box input")
 	}
 	if m.epic == nil || !m.epic.creating {
 		t.Fatal("A did not open the new-box modal")
@@ -579,11 +584,53 @@ func TestEpicNewInheritsTheSlicedRepo(t *testing.T) {
 		t.Fatal("the created box is not on the board after the write landed")
 	}
 	if len(got.Repos) != 1 || got.Repos[0] != "tomo/kyushu-trip" {
-		t.Errorf("repos = %v, want the sliced repo inherited", got.Repos)
+		t.Errorf("repos = %v, want the filter's repo inherited", got.Repos)
 	}
 	if got.Active {
 		t.Error("a new box must never be active")
 	}
+}
+
+// A repo-axis pick must NOT leak into a box created after tabbing to the epic
+// axis: cycleSliceField cleared it, and the modal's chip said "no repo" — a
+// write carrying the dead pick would disagree with the frame the user read.
+func TestEpicNewDoesNotResurrectAClearedRepoSlice(t *testing.T) {
+	m := New(memstore.New(), Options{})
+	m.w, m.h = 240, 50
+	m.recompute()
+	m.toggleSlice()
+	m.sliceField = sliceRepo
+	if c := m.selectSlice(sliceRepo, "tomo/kyushu-trip"); c != nil {
+		_ = c
+	}
+	// tab · tab — the real axis walk repo → label → epic, clearing the pick.
+	_ = m.cycleSliceField(+1)
+	_ = m.cycleSliceField(+1)
+	if m.sliceField != sliceEpic {
+		t.Fatalf("two tabs from repo landed on %v, want the epic axis", m.sliceField)
+	}
+	if cmd := m.onSliceKey(keyMsg("A")); cmd == nil {
+		t.Fatal("A on the epic axis did not focus the new-box input")
+	}
+	m.epic.input.SetValue("素の箱")
+	cmd := m.onEpicNewKey(keyMsg("enter"))
+	if cmd == nil {
+		t.Fatal("the new box queued no write")
+	}
+	msg, ok := cmd().(persistDoneMsg)
+	if !ok || msg.err != nil {
+		t.Fatalf("the fixture refused the box: %v", msg.err)
+	}
+	m.onPersistDone(msg)
+	for _, e := range m.b.Epics() {
+		if e.Title == "素の箱" {
+			if len(e.Repos) != 0 {
+				t.Errorf("repos = %v, want none — the cleared pick must stay dead", e.Repos)
+			}
+			return
+		}
+	}
+	t.Fatal("the created box is not on the board after the write landed")
 }
 
 // A reload (or another machine's sync) can drop the box the overlay is holding.

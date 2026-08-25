@@ -345,20 +345,18 @@ func (m *Model) demoState(kind string) error {
 		}
 
 	case "epicnew":
-		// The new-box modal with a repo slice active, so the frame PROVES the
-		// inheritance: the sliced repo lands in the chip, not silently on the
-		// box. Without a repo a new box cannot be activated at all, which is
-		// why this one is worth a frame of its own.
+		// The new-box modal under a typed repo: filter, so the frame PROVES
+		// the inheritance: the filter's repo lands in the chip, not silently
+		// on the box. The filter, not a repo slice — `A` only answers on the
+		// epic axis and the axis switch clears a repo-axis pick, so a typed
+		// repo: is the one form that can still be in force when `A` fires.
+		// Without a repo a new box cannot be activated at all, which is why
+		// this one is worth a frame of its own.
+		m.ti.SetValue("repo:tomo/kyushu-trip")
+		m.applyFilter("repo:tomo/kyushu-trip")
+		m.relayout()
 		m.toggleSlice()
-		m.sliceField = sliceRepo
-		for i, r := range m.sliceRows() {
-			if r.value == "tomo/kyushu-trip" {
-				m.sliceIdx = i
-			}
-		}
-		if c := m.selectSlice(sliceRepo, "tomo/kyushu-trip"); c != nil {
-			_ = c
-		}
+		m.sliceField = sliceEpic
 		if c := m.enterEpicNew(); c != nil {
 			_ = c
 		}

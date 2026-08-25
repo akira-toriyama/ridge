@@ -113,6 +113,10 @@ type epicState struct {
 	// creating is the new-box modal: there is no id yet, so the overlay is one
 	// title input and nothing else until the store answers.
 	creating bool
+	// newRepo is the repo the new box will name, captured at open. Snapshotted
+	// rather than re-derived at commit so the chip the user read and the write
+	// they confirmed cannot disagree.
+	newRepo string
 }
 
 // enterEpic opens the overlay on a box.
@@ -126,12 +130,17 @@ func (m *Model) enterEpic(id string) {
 	m.noteEpicStage()
 }
 
-// enterEpicNew opens the new-box modal. The repo comes from an active repo
-// slice, the way quick add inherits a filter's single-valued metadata — and it
-// matters more here than there: a box naming no repo cannot be activated at all.
+// enterEpicNew opens the new-box modal. The repo comes from the filter
+// context's single-valued repo:, exactly quick add's inheritance — and it
+// matters more here than there: a box naming no repo cannot be activated at
+// all. NOT from the slice: `A` is only answered on the epic axis, and the
+// axis switch that got the panel there already cleared any repo-axis pick, so
+// a slice-derived repo was a branch no key sequence could reach (found by
+// review — the effective query is what survives the axis switch).
 func (m *Model) enterEpicNew() tea.Cmd {
+	_, _, repo := inheritContext(m.effectiveQuery())
 	m.epic = &epicState{stage: epicInput, inputFor: epicInputNewBox,
-		creating: true, input: newEpicInput()}
+		creating: true, newRepo: repo, input: newEpicInput()}
 	m.mode = modeEpic
 	m.epic.input.Placeholder = "new box — its title"
 	m.noteEpicStage()
@@ -280,8 +289,8 @@ func (m *Model) onEpicNewKey(msg tea.KeyPressMsg) tea.Cmd {
 			return nil
 		}
 		opts := board.EpicAddOptions{}
-		if m.sliceField == sliceRepo && m.sliceVal != "" {
-			opts.Repos = []string{m.sliceVal}
+		if e.newRepo != "" {
+			opts.Repos = []string{e.newRepo}
 		}
 		e.input.Blur()
 		m.exitEpic()
@@ -697,8 +706,8 @@ func (m *Model) epicLayer() *lg.Layer {
 	case e.creating:
 		head = "new box"
 		inherit := th.dim.Render("no repo — attach one before activating")
-		if m.sliceField == sliceRepo && m.sliceVal != "" {
-			inherit = th.chipAlt.Render(" repo " + m.sliceVal + " ")
+		if e.newRepo != "" {
+			inherit = th.chipAlt.Render(" repo " + e.newRepo + " ")
 		}
 		body = th.peekHdr.Render("title") + "\n\n" + e.input.View() + "\n" +
 			pad(inherit, inner) + "\n" +
