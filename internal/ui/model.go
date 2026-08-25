@@ -447,8 +447,20 @@ func (m *Model) relayout() {
 	m.laneOff = m.lay.LaneOff
 }
 
-func (m *Model) note(f string, a ...any) { m.status, m.statusErr = fmt.Sprintf(f, a...), false }
-func (m *Model) fail(f string, a ...any) { m.status, m.statusErr = fmt.Sprintf(f, a...), true }
+// note/fail are the status funnel, and the debug status layer rides it: the
+// board's refusals that never reach the persist queue (a double-press while a
+// store-first write is in flight, a local validation) surface ONLY here, and
+// without them a log of "I pressed it and nothing happened" shows an
+// input/key followed by silence (found in review).
+func (m *Model) note(f string, a ...any) {
+	m.status, m.statusErr = fmt.Sprintf(f, a...), false
+	m.dbg.event("status", "note", map[string]any{"text": m.status})
+}
+
+func (m *Model) fail(f string, a ...any) {
+	m.status, m.statusErr = fmt.Sprintf(f, a...), true
+	m.dbg.event("status", "fail", map[string]any{"text": m.status})
+}
 
 func (m *Model) onKey(msg tea.KeyPressMsg) tea.Cmd {
 	// A modal text input owns Esc, full stop. Checking cancelDrag() first let a

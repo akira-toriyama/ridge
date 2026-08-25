@@ -160,6 +160,17 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 			"error: -debuglog records the interactive session; -dump renders one frame and exits")
 		return CodeUsage
 	}
+
+	// -perflog opens BEFORE -debuglog: openings after the first cannot be
+	// un-refused, so every refusal that can still happen must precede the
+	// first file the invocation creates. (perfHook on the fixture is the ""
+	// no-op — a typed -perflog was already refused above.)
+	perf, err := perfHook(*perflog)
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, "error: -perflog:", err)
+		return CodeUsage
+	}
+
 	var dbg *ui.DebugLog
 	if *debuglog != "" {
 		// Same contract as -perflog: the user chose where their own log goes
@@ -171,6 +182,16 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 			return CodeUsage
 		}
 		dbg = ui.NewDebugLog(f)
+		// The debug timeline records the same exec pair -perflog persists
+		// (as persist/exec events), so both flags may be set — they feed
+		// different consumers, see perfHook.
+		inner := perf
+		perf = func(op string, d time.Duration) {
+			if inner != nil {
+				inner(op, d)
+			}
+			dbg.Exec(op, d)
+		}
 	}
 
 	var (
@@ -188,23 +209,6 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 	case useMock:
 		prov = memstore.New()
 	default:
-		perf, err := perfHook(*perflog)
-		if err != nil {
-			_, _ = fmt.Fprintln(stderr, "error: -perflog:", err)
-			return CodeUsage
-		}
-		if dbg != nil {
-			// The debug timeline records the same exec pair -perflog persists
-			// (as persist/exec events), so both flags may be set — they feed
-			// different consumers, see perfHook.
-			inner := perf
-			perf = func(op string, d time.Duration) {
-				if inner != nil {
-					inner(op, d)
-				}
-				dbg.Exec(op, d)
-			}
-		}
 		start := time.Now()
 		p, err := furrowstore.New(perf)
 		if err != nil {
