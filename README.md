@@ -82,8 +82,8 @@ POC が答えを出した3つの問い:
 `Space` で開く。解決済みの双方向依存リスト（`blocked by` / `blocks` を
 ID+タイトル+レーンまで解決）、チェックリスト、本文。`t` で推移的ツリー。
 `Enter` で**フィールド編集メニュー**: title / value / effort / labels / epic /
-due / repos / checklist（カーソルで項目選択・toggle/add/delete/reword）を
-`furrow set / retitle / repo / check` 相当の1書き込みで編集する（楽観的適用・
+due / deps / repos / checklist（カーソルで項目選択・toggle/add/delete/reword）を
+`furrow set / retitle / repo / check / dep` 相当の1書き込みで編集する（楽観的適用・
 失敗時は store 再読でロールバック）。
 
 ## キー
