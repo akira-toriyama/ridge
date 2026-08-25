@@ -289,16 +289,20 @@ func TestEpicLabelRemovalPullsTheCursorBackOnReRead(t *testing.T) {
 	sliceOnEpicAxis(t, m, "e-one")
 	press(m, "m")
 	box := m.b.Epic("e-one")
-	box.Labels = append(box.Labels, "zzz-box-only")
+	// TWO box-only labels: the scripted board has no task labels at all, so a
+	// single row would leave the cursor at 0 and the clamp unexercised — the
+	// first version of this test passed with the fix deleted (found by
+	// review). Two rows put the cursor at 1 and the shrink leaves 1 row.
+	box.Labels = append(box.Labels, "yyy-box-only", "zzz-box-only")
 	m.epic.menuIdx = int(epicFieldLabels)
 	if c := m.openEpicField(epicFieldLabels); c != nil {
 		_ = c
 	}
 	rows := m.epicListRows(box)
-	if rows[len(rows)-1] != "zzz-box-only" {
-		t.Fatalf("rows = %v — the box-only label is not the last row", rows)
+	if len(rows) != 2 || rows[1] != "zzz-box-only" {
+		t.Fatalf("rows = %v — want exactly the two box-only labels", rows)
 	}
-	m.epic.listIdx = len(rows) - 1
+	m.epic.listIdx = 1
 	if c := m.epicListSelect(box, rows); c == nil {
 		t.Fatal("the removal queued no write")
 	}
@@ -306,8 +310,44 @@ func TestEpicLabelRemovalPullsTheCursorBackOnReRead(t *testing.T) {
 	// The re-read lands: the label is gone from the box, so its row is gone.
 	box.Labels = box.Labels[:len(box.Labels)-1]
 	m.recompute()
-	if want := maxInt(0, len(m.epicListRows(box))-1); m.epic.listIdx != want {
-		t.Errorf("listIdx = %d after the re-read shrank the rows, want %d", m.epic.listIdx, want)
+	if m.epic.listIdx != 0 {
+		t.Errorf("listIdx = %d after the re-read shrank the rows to one, want 0", m.epic.listIdx)
+	}
+}
+
+// The re-read can land while the overlay is parked in the `a` input; esc
+// walks back into the list with the index untouched, so the clamp must not
+// be gated on the list stage (found by review — the gated version regressed
+// the deps arm the old gesture-time clamp happened to cover).
+func TestEpicListCursorClampsEvenWhenTheReReadLandsMidInput(t *testing.T) {
+	m, _ := storeFirstModel(t)
+	sliceOnEpicAxis(t, m, "e-one")
+	press(m, "m")
+	m.b.Epic("e-one").Deps = []string{"e-two", "e-three"}
+	m.epic.menuIdx = int(epicFieldDeps)
+	if c := m.openEpicField(epicFieldDeps); c != nil {
+		_ = c
+	}
+	m.epic.listIdx = 1
+	rows := m.epicListRows(m.b.Epic("e-one"))
+	if c := m.epicListSelect(m.b.Epic("e-one"), rows); c == nil {
+		t.Fatal("the removal queued no write")
+	}
+	// `a` opens the add-input; the re-read lands while it is focused.
+	if c := m.onEpicListKey(keyMsg("a")); c == nil {
+		t.Fatal("a did not open the add-input")
+	}
+	m.b.Epic("e-one").Deps = []string{"e-two"}
+	m.recompute()
+	// esc restores the list; the cursor must already be back in range.
+	if c := m.onEpicInputKey(keyMsg("esc")); c != nil {
+		_ = c
+	}
+	if m.epic.stage != epicList {
+		t.Fatalf("esc did not return to the list stage")
+	}
+	if m.epic.listIdx != 0 {
+		t.Errorf("listIdx = %d after a mid-input re-read, want 0", m.epic.listIdx)
 	}
 }
 
