@@ -170,8 +170,8 @@ func (m *Model) reopenRefusedEpicAdd(op persistOp) tea.Cmd {
 	m.mode = modeEpic
 	m.epic.input.Placeholder = "new box — its title"
 	m.epic.input.SetValue(op.epicAddTitle)
-	// No noteEpicStage: the refusal that caused this reopen is on the status
-	// row and must stay there (it would decline to overwrite anyway).
+	// No noteEpicStage: onPersistDone's fail() runs after this returns and
+	// owns the status row — the refusal must be what the user reads.
 	return m.epic.input.Focus()
 }
 
@@ -308,6 +308,16 @@ func (m *Model) onEpicNewKey(msg tea.KeyPressMsg) tea.Cmd {
 			return nil
 		}
 		if m.refuseWhileWriting("new box") {
+			return nil
+		}
+		if m.rollingBack {
+			// The store refused the last write and the board is rolling back;
+			// every write path refuses until the re-read. Checked BEFORE the
+			// modal closes — the queue's own refusal comes after exitEpic, so
+			// reaching it would eat the typed title all over again, exactly on
+			// the reopened-after-refusal retry (found by review; the quick
+			// add's onAddKey keeps the same guard for the same reason).
+			m.fail("the store refused the last write — rolling back; press ⏎ again in a moment")
 			return nil
 		}
 		opts := board.EpicAddOptions{}

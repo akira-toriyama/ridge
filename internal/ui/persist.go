@@ -294,29 +294,18 @@ func (m *Model) enqueueAdd(title string, opts board.AddOptions) tea.Cmd {
 	return m.firePersist()
 }
 
-// enqueueStoreFirst queues a write whose effect exists ONLY in the store — the
-// epic family (board.Provider's epic methods) and nothing else. It shares the
-// queue with the optimistic writes so ordering and the quit-flush still hold;
-// what differs is that a refusal rolls nothing back and a success has to be
-// re-read before the board can show it (see persistOp.noLocal).
-func (m *Model) enqueueStoreFirst(label string, run func() error) tea.Cmd {
-	return m.enqueueStoreFirstNoting(label, nil, run)
-}
-
-// enqueueStoreFirstNoting is enqueueStoreFirst with a slot for prose the write
-// itself computes (persistOp.note).
-func (m *Model) enqueueStoreFirstNoting(label string, note *string, run func() error) tea.Cmd {
-	return m.enqueueStoreFirstOp(persistOp{
-		label:   label,
-		noLocal: true,
-		note:    note,
-		run:     func() ([]string, error) { return nil, run() },
-	})
-}
-
-// enqueueStoreFirstOp is the queue entrance for a pre-shaped store-first op —
-// the epic add rides it to keep its typed title on the op (see epicAddTitle).
+// enqueueStoreFirstOp queues a write whose effect exists ONLY in the store —
+// the epic family (board.Provider's epic methods) and nothing else. It shares
+// the queue with the optimistic writes so ordering and the quit-flush still
+// hold; what differs is that a refusal rolls nothing back and a success has
+// to be re-read before the board can show it (see persistOp.noLocal). The op
+// arrives pre-shaped so a write can carry its own payload — the epic add's
+// typed title (epicAddTitle) rides here.
 func (m *Model) enqueueStoreFirstOp(op persistOp) tea.Cmd {
+	// Stamped, never trusted from the caller: an op through this entrance is
+	// store-first by definition, and one that forgot the flag would be rolled
+	// back as if it had an optimistic half.
+	op.noLocal = true
 	if m.rollingBack {
 		// The board is showing state the store refused. This write's SUBJECT
 		// (an epic id) survives a rollback, but letting it through would

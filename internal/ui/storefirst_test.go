@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/akira-toriyama/ridge/internal/board"
 )
 
@@ -18,6 +20,14 @@ import (
 // reachable with two quick adds long before, where the cost was a created card
 // that never appeared. Store-first epic writes make it the normal path, so the
 // fix belongs here.
+
+// storeFirst shapes the minimal op the way epicWriteNoting does, minus the
+// refusal gate — these tests aim at the queue itself. noLocal is stamped by
+// the entrance.
+func storeFirst(m *Model, label string, run func() error) tea.Cmd {
+	return m.enqueueStoreFirstOp(persistOp{label: label,
+		run: func() ([]string, error) { return nil, run() }})
+}
 
 func storeFirstModel(t *testing.T) (*Model, *scriptedProvider) {
 	t.Helper()
@@ -36,10 +46,10 @@ func TestStoreFirstLandedWriteIsReReadWhenALaterOneIsRefused(t *testing.T) {
 	p.epicErr, p.epicFailAt = errors.New("epic-active-clash"), 2
 
 	goal := "先に着地するゴール"
-	cmd1 := m.enqueueStoreFirst("epic set e-one", func() error {
+	cmd1 := storeFirst(m, "epic set e-one", func() error {
 		return p.EpicSet("e-one", board.EpicPatch{Goal: &goal})
 	})
-	cmd2 := m.enqueueStoreFirst("epic activate e-two", func() error {
+	cmd2 := storeFirst(m, "epic activate e-two", func() error {
 		return p.EpicActivate("e-two", "")
 	})
 	if cmd1 == nil {
@@ -106,7 +116,7 @@ func TestALandedWriteSurvivesADroppedReconcile(t *testing.T) {
 	m, p := storeFirstModel(t)
 
 	goal := "着地するゴール"
-	cmd := m.enqueueStoreFirst("epic set e-one", func() error {
+	cmd := storeFirst(m, "epic set e-one", func() error {
 		return p.EpicSet("e-one", board.EpicPatch{Goal: &goal})
 	})
 	reconcile := m.onPersistDone(cmd().(persistDoneMsg))
@@ -117,7 +127,7 @@ func TestALandedWriteSurvivesADroppedReconcile(t *testing.T) {
 	// A new write is queued before the reconcile lands, so onReloadDone drops it.
 	p.epicErr, p.epicFailAt = errors.New("epic-not-found"), 1
 	p.epicCalls = 0
-	next := m.enqueueStoreFirst("epic activate e-two", func() error {
+	next := storeFirst(m, "epic activate e-two", func() error {
 		return p.EpicActivate("e-two", "")
 	})
 	m.onReloadDone(reconcile().(reloadDoneMsg))

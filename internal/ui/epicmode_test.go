@@ -753,6 +753,7 @@ func TestARefusedEpicAddReopensTheModalWithTheTitle(t *testing.T) {
 		t.Fatal("A on the epic axis did not focus the new-box input")
 	}
 	m.epic.input.SetValue("薪ストーブ導入")
+	m.epic.newRepo = "tomo/kyushu-trip" // as a repo: filter would have seeded it
 	cmd := m.onEpicNewKey(keyMsg("enter"))
 	if cmd == nil {
 		t.Fatal("the new box queued no write")
@@ -770,8 +771,42 @@ func TestARefusedEpicAddReopensTheModalWithTheTitle(t *testing.T) {
 	if got := m.epic.input.Value(); got != "薪ストーブ導入" {
 		t.Fatalf("reopened title = %q, want the typed text back", got)
 	}
+	if m.epic.newRepo != "tomo/kyushu-trip" {
+		t.Errorf("reopened newRepo = %q — the inherited repo was silently lost", m.epic.newRepo)
+	}
 	if !m.statusErr {
 		t.Error("the refusal must surface as an error")
+	}
+}
+
+// The reopened modal's own ⏎ must survive the rollback window: the guard has
+// to fire BEFORE the modal closes, or the queue's refusal lands with m.epic
+// already nil and the title is eaten a second time — exactly on the
+// reopened-after-refusal retry (found by review).
+func TestEpicAddRetryInsideTheRollbackWindowKeepsTheModal(t *testing.T) {
+	m, _ := storeFirstModel(t)
+	sliceOnEpicAxis(t, m, "e-one")
+	if cmd := m.onSliceKey(keyMsg("A")); cmd == nil {
+		t.Fatal("A on the epic axis did not focus the new-box input")
+	}
+	m.epic.input.SetValue("薪ストーブ導入")
+	m.rollingBack = true
+	if cmd := m.onEpicNewKey(keyMsg("enter")); cmd != nil {
+		t.Fatal("⏎ inside the rollback window must queue nothing")
+	}
+	if m.mode != modeEpic || m.epic == nil || !m.epic.creating {
+		t.Fatal("the refused ⏎ closed the modal")
+	}
+	if got := m.epic.input.Value(); got != "薪ストーブ導入" {
+		t.Fatalf("title = %q — the typed text did not survive the refusal", got)
+	}
+	if len(m.pending) != 0 {
+		t.Fatal("nothing may queue inside the window")
+	}
+	// The window closes; the same ⏎ now goes through.
+	m.rollingBack = false
+	if cmd := m.onEpicNewKey(keyMsg("enter")); cmd == nil {
+		t.Fatal("⏎ after the window closed did not queue the add")
 	}
 }
 
