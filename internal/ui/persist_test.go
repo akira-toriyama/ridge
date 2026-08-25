@@ -121,6 +121,13 @@ func (p *scriptedProvider) PersistBody(id, _ string) error {
 	return nil
 }
 
+func (p *scriptedProvider) PersistNote(id, _ string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.calls = append(p.calls, "note "+id)
+	return nil
+}
+
 // The epic family is store-first: it records the call and, when the scenario
 // asks for it, refuses. epicFailAt is 1-based, so a test can script "the first
 // lands, the second is refused" — the drain shape the landed re-read exists for.

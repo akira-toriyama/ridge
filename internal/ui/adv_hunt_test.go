@@ -87,6 +87,7 @@ func (p *emptyProvider) PersistMove(_, _, _, _ string) ([]string, error) {
 func (p *emptyProvider) PersistDone(_ string) error                         { return nil }
 func (p *emptyProvider) PersistCheck(_ string, _ int, _ bool) error         { return nil }
 func (p *emptyProvider) PersistBody(_, _ string) error                      { return nil }
+func (p *emptyProvider) PersistNote(_, _ string) error                      { return nil }
 func (p *emptyProvider) PersistFields(_ string, _ board.FieldPatch) error   { return nil }
 func (p *emptyProvider) PersistCheckAdd(_, _ string) error                  { return nil }
 func (p *emptyProvider) PersistCheckRm(_ string, _ int) error               { return nil }

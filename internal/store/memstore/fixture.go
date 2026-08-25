@@ -93,7 +93,13 @@ func fixtureTasks() []*board.Task {
 			Created: ts("2026-07-16T15:27:16Z"),
 			Updated: ts("2026-07-16T15:27:16Z"),
 			Due:     ts("2026-09-30T14:59:59Z"), // see t-jv3j's Due note
-			Body:    "# 持ち物リスト最終版\n\nリスト自体は前回の使い回しで 8 割できている。今回の本題は積載で、後部座席に子どもが2人いる状態でルーフボックス無しに収めるのが制約。重いものを下・低頻度を奥・雨で最初に要るもの（タープ・レイン）を最後に積む。\n\n積載図はA4一枚。設営順と逆順に積むと現地で上から順に降ろせる。",
+			// NOT from the snapshot, like the Due values: one file:line and one
+			// URL so the peek's refs section and the refs sub-editor render both
+			// forms furrow documents (`furrow ref` — file:line or URL) in one
+			// frame. Order is load-bearing: refs are a sequence, and the tests
+			// pin that an add appends AFTER the URL.
+			Refs: []string{"docs/積載図-2026.md:18", "https://camp.example.com/loading-guide"},
+			Body: "# 持ち物リスト最終版\n\nリスト自体は前回の使い回しで 8 割できている。今回の本題は積載で、後部座席に子どもが2人いる状態でルーフボックス無しに収めるのが制約。重いものを下・低頻度を奥・雨で最初に要るもの（タープ・レイン）を最後に積む。\n\n積載図はA4一枚。設営順と逆順に積むと現地で上から順に降ろせる。",
 		},
 		{
 			ID:       "t-7wdg",

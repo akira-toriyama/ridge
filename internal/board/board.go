@@ -550,6 +550,20 @@ func (b *Board) SetFields(id string, p FieldPatch) error {
 	if p.Title != nil && strings.TrimSpace(*p.Title) == "" {
 		return fmt.Errorf("a title cannot be empty")
 	}
+	for _, r := range p.AddRefs {
+		// Measured on v4.0.0 (cmd_mutate.go newRefCmd): --add/--rm are pflag
+		// StringSlice, i.e. a CSV field — a ref carrying a comma lands SPLIT
+		// into two refs after the reconcile, and a bare `"` is a flag-layer
+		// parse error (exit 2) that arrives only after the optimistic apply.
+		// Mirror-refused here until furrow takes refs verbatim (requests:
+		// t-pwrp); an empty --add is furrow's own exit 2.
+		if r == "" {
+			return fmt.Errorf("a ref cannot be empty")
+		}
+		if strings.ContainsAny(r, `,"`) {
+			return fmt.Errorf("ref %q: `,` and `\"` cannot ride furrow's CSV flag parsing — it would split or refuse the ref", r)
+		}
+	}
 	var due time.Time
 	if p.Due != nil && *p.Due != "" {
 		d, err := parseDue(*p.Due)
@@ -590,6 +604,58 @@ func (b *Board) SetFields(id string, p FieldPatch) error {
 	for _, r := range p.RmRepos {
 		t.Repos = removeStr(t.Repos, r)
 	}
+	// Append order preserved, add idempotent, rm exact-match — `furrow ref`'s
+	// contract (refs are a sequence, not a sorted set). Every add already
+	// passed the CSV-safety validation above, so nothing here narrows.
+	for _, r := range p.AddRefs {
+		if !containsStr(t.Refs, r) {
+			t.Refs = append(t.Refs, r)
+		}
+	}
+	for _, r := range p.RmRefs {
+		t.Refs = removeStr(t.Refs, r)
+	}
+	t.Updated = nowFn().UTC().Truncate(time.Second)
+	return nil
+}
+
+// AppendNote adds text as a new paragraph at the end of the body and stamps
+// Updated — the optimistic half of Provider.PersistNote. It mirrors `furrow
+// note` (v4.0.0 appendBody/normalizeNote, re-measured on dev 60074b8): the
+// text loses its own trailing newlines, an empty body becomes the text alone,
+// and any other body is padded up to AT LEAST one blank line before the text —
+// existing trailing newlines are kept, never collapsed ("本文\n\n\n" + note is
+// "本文\n\n\n追記\n"). An empty or whitespace-only text is furrow's "note text
+// is empty" refusal (exit 2), so the same gesture is unreachable here.
+func (b *Board) AppendNote(id, text string) error {
+	t := b.Task(id)
+	if t == nil {
+		return fmt.Errorf("unknown task %q", id)
+	}
+	text = strings.TrimRight(text, "\n")
+	if strings.TrimSpace(text) == "" {
+		return fmt.Errorf("note text is empty")
+	}
+	if text == "-" {
+		// furrow's readTextArg reads `-` as "take the note from stdin" — a
+		// convention `--` does not stop, and ridge execs furrow with stdin on
+		// /dev/null, so the write would land as exit 2 AFTER the optimistic
+		// apply showed the paragraph (measured on v4.0.0 cmd_mutate.go).
+		return fmt.Errorf("a note of just %q is furrow's read-from-stdin marker", text)
+	}
+	var s strings.Builder
+	s.WriteString(t.Body)
+	if t.Body != "" {
+		if !strings.HasSuffix(t.Body, "\n") {
+			s.WriteString("\n")
+		}
+		if !strings.HasSuffix(t.Body, "\n\n") {
+			s.WriteString("\n")
+		}
+	}
+	s.WriteString(text)
+	s.WriteString("\n")
+	t.Body = s.String()
 	t.Updated = nowFn().UTC().Truncate(time.Second)
 	return nil
 }

@@ -421,8 +421,8 @@ func (p *Store) Query(q string) ([]string, error) {
 }
 
 // PersistFields records an already-applied metadata edit (board.Provider).
-// The set-shaped fields compose into ONE `furrow set` write; Title and repo
-// edits are their own commands, so a mixed patch costs up to three writes.
+// The set-shaped fields compose into ONE `furrow set` write; Title, repo and
+// ref edits are their own commands, so a mixed patch costs up to four writes.
 func (p *Store) PersistFields(id string, patch board.FieldPatch) error {
 	args := []string{"set", id}
 	switch {
@@ -481,7 +481,33 @@ func (p *Store) PersistFields(id string, patch board.FieldPatch) error {
 			return err
 		}
 	}
+	if len(patch.AddRefs) > 0 || len(patch.RmRefs) > 0 {
+		// No `--` guard needed: a ref rides as a flag VALUE (`--add <ref>`),
+		// never as a positional, so a leading dash cannot be read as a flag.
+		args := []string{"ref", id}
+		for _, r := range patch.AddRefs {
+			args = append(args, "--add", r)
+		}
+		for _, r := range patch.RmRefs {
+			args = append(args, "--rm", r)
+		}
+		if _, err := p.c.run("ref", args...); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// PersistNote records an already-applied note append via `furrow note`
+// (board.Provider). The text is user free text behind `--`, like every other
+// positional this adapter passes. Two furrow refusals are unreachable here
+// because Board.AppendNote mirrors them before anything queues: empty text
+// (exit 2), and a text of exactly `-` — furrow's read-from-stdin marker,
+// which `--` does NOT neutralize; with this process's stdin on /dev/null it
+// would come back "note text is empty" after the optimistic apply.
+func (p *Store) PersistNote(id, text string) error {
+	_, err := p.c.run("note", "note", id, "--", text)
+	return err
 }
 
 // PersistCheckAdd records an already-appended checklist item via `furrow

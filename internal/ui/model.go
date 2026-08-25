@@ -854,6 +854,10 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 			return m.editCmd(t)
 		}
 
+	case key.Matches(msg, m.keys.Note):
+		m.fullHelp = false // same rule as Filter: a modal never inherits the overlay
+		return m.enterNote()
+
 	case key.Matches(msg, m.keys.Move):
 		// GitHub's Enter is cell EDITING; move mode is the board-only lift.
 		// With the peek open (or on a table row) Enter edits the fields — the

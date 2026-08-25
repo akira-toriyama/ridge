@@ -44,6 +44,7 @@ const (
 	fieldDue
 	fieldDeps
 	fieldRepos
+	fieldRefs
 	fieldChecklist
 	fieldCount // one past the last menu row
 )
@@ -68,6 +69,8 @@ func editFieldName(f editField) string {
 		return "deps"
 	case fieldRepos:
 		return "repos"
+	case fieldRefs:
+		return "refs"
 	case fieldChecklist:
 		return "checklist"
 	}
@@ -82,9 +85,14 @@ const (
 	inputDue
 	inputNewLabel
 	inputNewRepo
+	inputNewRef
 	inputCheckAdd
 	inputCheckReword
 	inputDepAdd
+	// inputNote is the one input the overlay opens DIRECTLY (enterNote): there
+	// is no list or menu behind it, so both esc and a landed apply close the
+	// whole overlay instead of walking back a stage.
+	inputNote
 )
 
 type editState struct {
@@ -115,6 +123,29 @@ func (m *Model) enterEdit() {
 	m.noteEditStage()
 }
 
+// enterNote opens the note input directly on the current selection — the
+// light path for one paragraph of progress, next to `e`'s full $EDITOR. It
+// reuses the edit overlay's input stage rather than growing a mode: the
+// overlay already owns the keyboard, the esc route and the apply funnel.
+// The peek opens with it so the appended paragraph is visibly landing in the
+// body, the same reason enterEdit opens it.
+func (m *Model) enterNote() tea.Cmd {
+	t := m.curTask()
+	if t == nil {
+		m.note("nothing selected — a note appends to a task")
+		return nil
+	}
+	m.cancelDrag()
+	ti := textinput.New()
+	ti.SetWidth(48)
+	m.edit = &editState{id: t.ID, stage: stageInput}
+	m.edit.input = ti
+	m.mode = modeEdit
+	m.peekOpen = true
+	m.syncPeek()
+	return m.startInput(inputNote, "", "progress in one paragraph — appended to the body")
+}
+
 func (m *Model) exitEdit() {
 	m.mode = modeNormal
 	m.edit = nil
@@ -143,10 +174,11 @@ func (m *Model) noteEditStage() {
 	case stagePick:
 		m.note("edit %s · %s — 1-5 sets · 0 clears · esc back", e.id, editFieldName(e.field))
 	case stageList:
-		if e.field == fieldDeps {
-			// A dep row only points one way — selecting REMOVES the edge —
-			// so "toggle" would promise a re-add the list cannot do.
-			m.note("edit %s · deps — ⏎/x remove · a add · esc back", e.id)
+		if e.field == fieldDeps || e.field == fieldRefs {
+			// A dep or ref row only points one way — selecting REMOVES it —
+			// so "toggle" would promise a re-add the list cannot do (the
+			// vocabulary of potential deps/refs is not a togglable list).
+			m.note("edit %s · %s — ⏎/x remove · a add · esc back", e.id, editFieldName(e.field))
 		} else {
 			m.note("edit %s · %s — ⏎/x toggle · esc back", e.id, editFieldName(e.field))
 		}
@@ -242,7 +274,7 @@ func (m *Model) openField(f editField, t *board.Task) tea.Cmd {
 			cur = t.Due.Local().Format("2006-01-02")
 		}
 		return m.startInput(inputDue, cur, "2026-08-04 · +1d · +2h · empty clears")
-	case fieldLabels, fieldEpic, fieldDeps, fieldRepos, fieldChecklist:
+	case fieldLabels, fieldEpic, fieldDeps, fieldRepos, fieldRefs, fieldChecklist:
 		e.stage = stageList
 		if f == fieldEpic {
 			// Epic is the one list whose row 0 DESTROYS a field: selecting
@@ -323,6 +355,8 @@ func (m *Model) onEditListKey(msg tea.KeyPressMsg, t *board.Task) tea.Cmd {
 			return m.startInput(inputDepAdd, "", "t-… — the task this waits on")
 		case fieldRepos:
 			return m.startInput(inputNewRepo, "", "owner/repo")
+		case fieldRefs:
+			return m.startInput(inputNewRef, "", "file:line or URL")
 		case fieldChecklist:
 			return m.startInput(inputCheckAdd, "", "new checklist item")
 		}
@@ -383,6 +417,13 @@ func (m *Model) editListSelect(t *board.Task) tea.Cmd {
 		}
 		return m.applyCheck("dep rm", func() error { return m.b.DepRm(t.ID, val) },
 			func() error { return m.prov.PersistDepRm(t.ID, val) })
+	case fieldRefs:
+		// Same one-way list as deps: every row IS a ref, selecting removes it,
+		// `a` adds — a ref is free text, not a togglable vocabulary.
+		if e.listIdx >= len(t.Refs)-1 {
+			e.listIdx = maxInt(0, len(t.Refs)-2)
+		}
+		return m.applyPatch("ref rm", board.FieldPatch{RmRefs: []string{val}})
 	case fieldChecklist:
 		i := e.listIdx
 		if i >= len(t.Checklist) {
@@ -418,6 +459,9 @@ func (m *Model) editListRows(t *board.Task) []string {
 		// array in place, so a caller holding these rows across a removal
 		// would read duplicated tails.
 		return append([]string(nil), t.Deps...)
+	case fieldRefs:
+		// A copy for the same reason: SetFields' RmRefs shrinks in place.
+		return append([]string(nil), t.Refs...)
 	case fieldChecklist:
 		var rows []string
 		for _, c := range t.Checklist {
@@ -433,9 +477,17 @@ func (m *Model) onEditInputKey(msg tea.KeyPressMsg, t *board.Task) tea.Cmd {
 	switch {
 	case key.Matches(msg, m.keys.Cancel):
 		e.input.Blur()
-		if e.inputFor == inputTitle || e.inputFor == inputDue {
+		switch e.inputFor {
+		case inputNote:
+			// There is no stage behind this input — enterNote opened the
+			// overlay straight onto it — so esc closes the overlay, not a
+			// menu the user never saw.
+			m.exitEdit()
+			m.note("note cancelled — nothing appended")
+			return nil
+		case inputTitle, inputDue:
 			e.stage = stageMenu
-		} else {
+		default:
 			e.stage = stageList
 		}
 		m.noteEditStage()
@@ -470,6 +522,18 @@ func (m *Model) onEditInputKey(msg tea.KeyPressMsg, t *board.Task) tea.Cmd {
 				return nil
 			}
 			return m.applyPatch("repo", board.FieldPatch{AddRepos: []string{v}})
+		case inputNewRef:
+			e.stage = stageList
+			if v == "" {
+				// An empty submission just backs out to the list, so the row
+				// has to stop advertising the input's keys — in stageList ⏎
+				// REMOVES, which is a board write, not an apply.
+				m.noteEditStage()
+				return nil
+			}
+			// No re-note needed, unlike inputDepAdd: applyPatch writes its own
+			// "ref <id>" status, so the input's "⏎ apply" claim never survives.
+			return m.applyPatch("ref", board.FieldPatch{AddRefs: []string{v}})
 		case inputCheckAdd:
 			e.stage = stageList
 			if v == "" {
@@ -509,6 +573,42 @@ func (m *Model) onEditInputKey(msg tea.KeyPressMsg, t *board.Task) tea.Cmd {
 			cmd := m.applyCheck("dep add", func() error { return m.b.DepAdd(t.ID, v) },
 				func() error { return m.prov.PersistDepAdd(t.ID, v) })
 			m.noteEditStage()
+			return cmd
+		case inputNote:
+			if v == "" {
+				// Nothing to append; leave like esc does. AppendNote would
+				// refuse it anyway (furrow's "note text is empty"), but an
+				// empty ⏎ is a back-out, not a mistake to report as one.
+				m.exitEdit()
+				m.note("note cancelled — nothing appended")
+				return nil
+			}
+			if m.rollingBack {
+				// Refused BEFORE the local apply, not by the queue behind it:
+				// applyCheck would land the paragraph on a board the store
+				// already refused, enqueuePersist would drop the write, and
+				// the re-focused input would invite a retry — each ⏎ stacking
+				// another unsaved copy of the same paragraph. The quick-add
+				// modal refuses this window the same way (onAddKey), keeping
+				// the typed text alive for after the rollback re-read.
+				m.fail("note dropped — the store refused the last write, rolling back; ⏎ again in a moment")
+				return e.input.Focus()
+			}
+			// One paragraph per open: the apply CLOSES the overlay (there is
+			// no list to land back in), and the peek left open behind it shows
+			// the paragraph at the body's tail.
+			cmd := m.applyCheck("note", func() error { return m.b.AppendNote(t.ID, v) },
+				func() error { return m.prov.PersistNote(t.ID, v) })
+			if cmd == nil {
+				// The LOCAL apply refused (the rollingBack refusal above never
+				// reaches applyCheck): the fail is on the status row and the
+				// typed text is still in the input — re-focus it (the Commit
+				// branch blurred it above) instead of closing over hand-typed
+				// prose.
+				return e.input.Focus()
+			}
+			m.exitEdit()
+			m.note("note appended to %s", t.ID)
 			return cmd
 		}
 		return nil
@@ -645,12 +745,16 @@ func inputTitleFor(k inputKind) string {
 		return "add label"
 	case inputNewRepo:
 		return "attach repo"
+	case inputNewRef:
+		return "add ref — file:line or URL"
 	case inputCheckAdd:
 		return "add checklist item"
 	case inputCheckReword:
 		return "reword checklist item"
 	case inputDepAdd:
 		return "add dep — this task will wait on it"
+	case inputNote:
+		return "append note — one paragraph onto the body"
 	}
 	return ""
 }
@@ -684,6 +788,7 @@ func (m *Model) renderEditMenu(t *board.Task, inner int) string {
 		{editFieldName(fieldDue), due},
 		{editFieldName(fieldDeps), ansi.Truncate(strings.Join(t.Deps, ","), inner-14, "…")},
 		{editFieldName(fieldRepos), ansi.Truncate(strings.Join(t.Repos, ","), inner-14, "…")},
+		{editFieldName(fieldRefs), ansi.Truncate(strings.Join(t.Refs, ","), inner-14, "…")},
 		{editFieldName(fieldChecklist), fmt.Sprintf("%d/%d", cd, ct)},
 	}
 	var b strings.Builder
@@ -787,6 +892,10 @@ func (m *Model) renderEditList(t *board.Task, inner, budget int) string {
 			}
 			return g + " " + label
 		}
+	case fieldRefs:
+		// Plain rows: a ref is free text (file:line or URL) with no state to
+		// glyph and no vocabulary to check off.
+		hdr, foot = "refs", "⏎/x remove · a add · esc back"
 	case fieldEpic:
 		hdr, foot = "file under epic", "⏎ select · esc back"
 		mark = func(i int, row string) string {

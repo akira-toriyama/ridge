@@ -36,6 +36,7 @@ type keyMap struct {
 	Sort       key.Binding
 	Done       key.Binding
 	Edit       key.Binding
+	Note       key.Binding
 	Reload     key.Binding
 	Sync       key.Binding
 	Tree       key.Binding
@@ -115,9 +116,12 @@ func defaultKeys() keyMap {
 		// `o` (order), not the `s` t-qve3 sketched: `s` is the slice panel, and
 		// the panel deliberately reaches the table view too — two owners for
 		// one key, and the panel got there first.
-		Sort:      key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "sort (table)")),
-		Done:      key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "done")),
-		Edit:      key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "$EDITOR")),
+		Sort: key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "sort (table)")),
+		Done: key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "done")),
+		Edit: key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "$EDITOR")),
+		// `n` next to `e`: the light body path (one appended paragraph,
+		// `furrow note`'s contract) beside the heavy one ($EDITOR full open).
+		Note:      key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "append note")),
 		Check:     key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "toggle")),
 		Add:       key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add item")),
 		Slice:     key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "slice panel")),
@@ -177,7 +181,7 @@ func (k keyMap) HelpSections(enterEdits bool) []helpSection {
 	return []helpSection{
 		{"normal mode", [][]key.Binding{
 			{k.Up, k.Down, k.Left, k.Right, k.NextCol, k.PrevCol, k.Top, k.Bottom},
-			{open, k.QuickUp, k.QuickDown, k.LaneBack, k.LaneFwd, k.Done, k.Edit, k.Add},
+			{open, k.QuickUp, k.QuickDown, k.LaneBack, k.LaneFwd, k.Done, k.Edit, k.Note, k.Add},
 			{k.Peek, k.Tree, k.PeekScroll, k.Filter, k.OnlyBlock, k.Slice, k.View, k.Sort},
 			{k.Graph, k.JumpBlock, k.JumpBack, k.Reload, k.Sync, k.Mouse, k.Cancel, k.Help, k.Quit},
 		}},

@@ -41,6 +41,7 @@ func (p *liveQueryProvider) PersistMove(_, _, _, _ string) ([]string, error)    
 func (p *liveQueryProvider) PersistDone(_ string) error                         { return nil }
 func (p *liveQueryProvider) PersistCheck(_ string, _ int, _ bool) error         { return nil }
 func (p *liveQueryProvider) PersistBody(_, _ string) error                      { return nil }
+func (p *liveQueryProvider) PersistNote(_, _ string) error                      { return nil }
 func (p *liveQueryProvider) PersistFields(_ string, _ board.FieldPatch) error   { return nil }
 func (p *liveQueryProvider) PersistCheckAdd(_, _ string) error                  { return nil }
 func (p *liveQueryProvider) PersistCheckRm(_ string, _ int) error               { return nil }

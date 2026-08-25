@@ -13,7 +13,7 @@ import (
 // unknown-name error and the tests all read this slice, because the list was
 // duplicated in three places and adding two states updated two of them —
 // `ridge -h` then advertised eight of ten.
-var DemoNames = []string{"move", "drag", "add", "edit", "editpick", "editinput", "editdeps", "graph", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicnew", "fail"}
+var DemoNames = []string{"move", "drag", "add", "edit", "editpick", "editinput", "editdeps", "editrefs", "note", "refs", "graph", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicnew", "fail"}
 
 // Options configures a freshly-constructed Model. The zero value is the
 // default TUI: dark palette, board view, no filter.
@@ -273,6 +273,41 @@ func (m *Model) demoState(kind string) error {
 		}
 		m.edit.menuIdx = int(fieldDeps)
 		m.openField(fieldDeps, m.b.Task("t-jv3j"))
+
+	case "editrefs":
+		// The refs sub-editor on the task whose two refs are the two forms
+		// furrow documents — a file:line and a URL — so one frame proves the
+		// rows, the cursor and the remove/add keys.
+		if !m.selectID("t-9sa6", false) {
+			return fmt.Errorf("demo editrefs: t-9sa6 is not on the fixture board")
+		}
+		m.enterEdit()
+		if m.edit == nil {
+			return fmt.Errorf("demo editrefs: the edit menu did not open")
+		}
+		m.edit.menuIdx = int(fieldRefs)
+		m.openField(fieldRefs, m.b.Task("t-9sa6"))
+
+	case "note":
+		// The note input, focused and holding a typed CJK paragraph — the
+		// state between `n` and ⏎ that no bare flag combination can reach.
+		if !m.selectID("t-9sa6", false) {
+			return fmt.Errorf("demo note: t-9sa6 is not on the fixture board")
+		}
+		if c := m.enterNote(); c == nil {
+			return fmt.Errorf("demo note: the note input did not open")
+		}
+		m.edit.input.SetValue("重量実測まで完了。次は車載レイアウト案の2案目から。")
+
+	case "refs":
+		// The peek's refs section, both documented forms (file:line and URL)
+		// in furrow's own order. The default -dump selection has no refs, so
+		// no bare flag combination reaches this frame.
+		if !m.selectID("t-9sa6", false) {
+			return fmt.Errorf("demo refs: t-9sa6 is not on the fixture board")
+		}
+		m.peekOpen = true
+		m.syncPeek()
 
 	case "epicdeps":
 		// The peek's epic-dep line, both resolutions at once: t-y4st's box
