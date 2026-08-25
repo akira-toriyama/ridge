@@ -15,8 +15,10 @@ func TestDecodeAddReplySeparatesShapeFromSyntax(t *testing.T) {
 		t.Errorf("syntax failure = %v, want an undecodable-reply error", err)
 	}
 
-	// Decodes cleanly into an empty addRow — the envelope shape epicJSON's
-	// comment claims every epic mutation answers with.
+	// Decodes cleanly into an empty addRow. Defensive, not a live furrow
+	// shape: measured on dev (60074b8), `epic add --json` answers a bare row
+	// with a top-level id — the envelope here stands in for any id-less
+	// object a future furrow might answer.
 	_, err := decodeAddReply("furrow epic add", []byte(`{"before":null,"after":{},"changed":[]}`))
 	if err == nil || strings.Contains(err.Error(), "<nil>") {
 		t.Errorf("shape failure = %v — the nil cause leaked into the message", err)
@@ -39,5 +41,8 @@ func TestTrimReplyCutsRunesNotBytes(t *testing.T) {
 	}
 	if got := trimReply([]byte("one\ntwo"), 120); got != "one …" {
 		t.Errorf("multi-line reply = %q, want the first line marked elided", got)
+	}
+	if got := trimReply([]byte("one\r\ntwo"), 120); got != "one …" {
+		t.Errorf("CRLF reply = %q — a stray CR must not reach the terminal", got)
 	}
 }

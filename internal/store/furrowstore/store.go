@@ -116,10 +116,13 @@ type taskJSON struct {
 	Due      *time.Time `json:"due"`
 }
 
-// epicJSON is one `furrow epic ls --json` row. `epic add`/`set`/`activate`/… all
-// answer with the same row shape inside a {before,after,changed} envelope, so
-// this type doubles as the mutation reply's payload — minus progress/stuck,
-// which the add reply does not carry.
+// epicJSON is one `furrow epic ls --json` row, and it doubles as the epic
+// mutation replies' payload — minus progress/stuck, which the add reply does
+// not carry. The reply shapes differ per verb (measured on furrow dev
+// 60074b8): `epic add` answers ONE bare row with a top-level id, while
+// `set`/`deactivate` wrap the row in a {before,after,…} envelope. An earlier
+// revision of this comment claimed the envelope for all of them, and the
+// wrong half got cited as proof elsewhere — hence the measurement note.
 type epicJSON struct {
 	ID       string            `json:"id"`
 	Title    string            `json:"title"`
@@ -696,9 +699,11 @@ func (p *Store) Add(title string, o board.AddOptions) (string, error) {
 // decodeAddReply extracts the invented id from an add's reply. The two
 // failures are kept apart because their causes are different sides of the
 // exec: undecodable bytes are furrow breaking JSON, while decodable JSON
-// without an id is a reply SHAPE ridge does not expect (an envelope, a
-// bulk array) — and folding them into one message printed the nil error
-// as the cause: "undecodable reply: <nil>" (found by review).
+// without an id (null, {}, an id-less envelope) is a reply SHAPE ridge does
+// not expect — and folding them into one message printed the nil error as
+// the cause: "undecodable reply: <nil>" (found by review). The shape branch
+// is defensive: measured on furrow dev (60074b8), both adds answer a bare
+// row with an id on exit 0, and a non-zero exit never reaches this decode.
 func decodeAddReply(what string, out []byte) (string, error) {
 	var row addRow
 	if err := json.Unmarshal(out, &row); err != nil {
@@ -710,12 +715,13 @@ func decodeAddReply(what string, out []byte) (string, error) {
 	return row.ID, nil
 }
 
-// trimReply bounds raw exec output for an error message: first line only,
-// capped in runes (titles in a reply are CJK — never cut bytes).
+// trimReply bounds raw exec output for an error message: first line only
+// (a stray CR must not reach the terminal), capped in runes (titles in a
+// reply are CJK — never cut bytes).
 func trimReply(out []byte, limit int) string {
 	s := strings.TrimSpace(string(out))
 	if i := strings.IndexByte(s, '\n'); i >= 0 {
-		s = s[:i] + " …"
+		s = strings.TrimRight(s[:i], "\r") + " …"
 	}
 	if r := []rune(s); len(r) > limit {
 		s = string(r[:limit]) + "…"
