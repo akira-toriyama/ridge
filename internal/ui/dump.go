@@ -24,11 +24,15 @@ type Options struct {
 	Peek   bool   // open with the detail side-peek
 	Tree   bool   // open with the dep-tree overlay (implies Peek)
 	LoadMS int    // real-store load time, for the startup note
+	// Debug is the -debuglog recorder over an already-open sink (nil = off).
+	// The caller opens the file: this package never touches the filesystem.
+	Debug *DebugLog
 }
 
 // New builds the Model the program runs.
 func New(p board.Provider, o Options) *Model {
 	m := newModel(p)
+	m.dbg = o.Debug
 	if o.Light {
 		m.th = newTheme(false)
 	}
@@ -48,6 +52,13 @@ func New(p board.Provider, o Options) *Model {
 		m.peekOpen = true
 		m.treeOpen = o.Tree
 	}
+	// The board snapshot, after the flags above shaped it, so the log states
+	// its own baseline (-table starts on the table). Not the session marker:
+	// that is NewDebugLog's first line, because on a live store the load execs
+	// fire before this constructor runs.
+	m.dbg.event("session", "board", map[string]any{
+		"live": p.Live(), "tasks": len(m.b.Tasks()), "view": m.view.String(),
+	})
 	// What the read cost is the one thing the opening frame knows and the
 	// screen does not show anywhere else. The keys that used to be tacked on
 	// here (`r reload · R sync · ? help`) were a third partial key list.

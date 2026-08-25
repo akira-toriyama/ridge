@@ -137,6 +137,85 @@ func TestUnopenablePerflogIsAUsageError(t *testing.T) {
 	}
 }
 
+// -debuglog records the interactive event loop; the two loop-less modes must
+// refuse it rather than accept a flag that would record nothing.
+func TestDebuglogIsRefusedWhereNoSessionExists(t *testing.T) {
+	log := filepath.Join(t.TempDir(), "debug.jsonl")
+	for _, argv := range [][]string{
+		{"-dump", "-debuglog", log},
+		{"-benchload", "-debuglog", log},
+	} {
+		code, _, errb := runArgs(t, argv...)
+		if code != CodeUsage {
+			t.Errorf("%v exited %d, want %d", argv, code, CodeUsage)
+		}
+		if !strings.Contains(errb, "debuglog") {
+			t.Errorf("%v did not name -debuglog: %q", argv, errb)
+		}
+	}
+	if _, err := os.Stat(log); err == nil {
+		t.Error("a refused -debuglog still created the file")
+	}
+}
+
+// The one test that pins the cli→ui wiring. A test process has no TTY, so
+// the program itself cannot start (CodeRun) — but by then the recorder was
+// built (session/start is NewDebugLog's own first line) AND handed through
+// Options.Debug (session/board is emitted by ui.New). Review found that
+// without this, `Debug: nil` — a -debuglog that records nothing — passed the
+// entire suite.
+func TestDebuglogWiringSurvivesToTheModel(t *testing.T) {
+	log := filepath.Join(t.TempDir(), "debug.jsonl")
+	code, _, errb := runArgs(t, "-mock", "-debuglog", log)
+	if code != CodeRun {
+		t.Fatalf("-mock -debuglog in a no-TTY test exited %d, want %d: %s", code, CodeRun, errb)
+	}
+	b, err := os.ReadFile(log) //nolint:gosec // the t.TempDir path built above
+	if err != nil {
+		t.Fatalf("no log written: %v", err)
+	}
+	for _, want := range []string{`"kind":"start"`, `"kind":"board"`} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("log lacks %s:\n%s", want, b)
+		}
+	}
+}
+
+// A refusal that happens AFTER another flag already failed must not leave a
+// created -debuglog behind: -perflog opens first precisely so its failure
+// precedes the first file the invocation would create.
+func TestFailedPerflogCreatesNoDebuglog(t *testing.T) {
+	bad := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(bad, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	log := filepath.Join(t.TempDir(), "debug.jsonl")
+	code, _, _ := runArgs(t, "-perflog", filepath.Join(bad, "p.tsv"), "-debuglog", log)
+	if code != CodeUsage {
+		t.Fatalf("unopenable -perflog exited %d, want %d", code, CodeUsage)
+	}
+	if _, err := os.Stat(log); err == nil {
+		t.Error("the refused invocation still created the -debuglog file")
+	}
+}
+
+// An unopenable -debuglog is fatal before the TUI ever starts, same contract
+// as -perflog: a debug run that silently records nothing is worse than none.
+// -mock keeps the check off the real store; run() returns before NewProgram.
+func TestUnopenableDebuglogIsAUsageError(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(f, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, _, errb := runArgs(t, "-mock", "-debuglog", filepath.Join(f, "log.jsonl"))
+	if code != CodeUsage {
+		t.Errorf("an unopenable -debuglog exited %d, want %d", code, CodeUsage)
+	}
+	if !strings.Contains(errb, "debuglog") {
+		t.Errorf("the refusal did not name -debuglog: %q", errb)
+	}
+}
+
 // -readonly is wired to the gated provider ONLY here, so deleting that arm
 // survives every other test in the repo.
 func TestReadonlyServesTheSchemaGatedBoard(t *testing.T) {

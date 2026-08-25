@@ -92,3 +92,4 @@
 | **`-dump`** | TTY 無しで1フレームを標準出力に書いて終了するフラグ。headless 検証の土台。 |
 | **`-demo`** | 手では捉えにくい一時状態（drag 中・edit の sub-editor・失敗表示など）を1フレームに固定して `-dump` する。名前一覧の正本は `ui.DemoNames`（`ridge -h` もそこから出る。ここに写しを置いたら2度古くなった）。 |
 | **`-readonly`** | fixture を schema gate で read-only にした盤面を出す。model の状態ではなく store の性質なので `-demo` ではなくフラグ。書き込みは全部拒否される。 |
+| **`-debuglog`** | 操作履歴の JSONL 記録（1 イベント 1 行・追記 open・各セッションの先頭は `session/start`）。層は input / mode / apply / persist / status の 5 つ。hook 点は 3 つ — `Update` の単一経路（input・mode・apply・persist の queue イベント）/ store の perf hook（exec。goroutine 跨ぎ、mutex で直列化）/ `note`/`fail` の funnel（status）。打鍵は全文残る — 記録しないのは body 本文のみ。`-perflog`（latency 計測の TSV）とは役割が別で併用可。`-dump`/`-benchload` とは組めない（記録すべきセッションが無い）。 |

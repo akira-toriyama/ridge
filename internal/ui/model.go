@@ -28,6 +28,26 @@ const (
 	modeEpic        // the epic overlay has the keyboard (epicmode.go)
 )
 
+func (md mode) String() string {
+	switch md {
+	case modeNormal:
+		return "normal"
+	case modeMove:
+		return "move"
+	case modeFilter:
+		return "filter"
+	case modeEdit:
+		return "edit"
+	case modeAdd:
+		return "add"
+	case modeSlice:
+		return "slice"
+	case modeEpic:
+		return "epic"
+	}
+	return "unknown"
+}
+
 type viewKind int
 
 const (
@@ -38,6 +58,18 @@ const (
 	// terminal instead of a cramped panel floating over the columns.
 	viewGraph
 )
+
+func (v viewKind) String() string {
+	switch v {
+	case viewBoard:
+		return "board"
+	case viewTable:
+		return "table"
+	case viewGraph:
+		return "graph"
+	}
+	return "unknown"
+}
 
 // Model is the whole application state.
 type Model struct {
@@ -160,6 +192,10 @@ type Model struct {
 	lay       *layout
 	status    string
 	statusErr bool
+
+	// The -debuglog recorder (debuglog.go). nil = off; every emit site calls
+	// through anyway, because the nil *DebugLog is the disabled recorder.
+	dbg *DebugLog
 }
 
 func newModel(p board.Provider) *Model {
@@ -309,6 +345,11 @@ func (m *Model) ensureVisible() {
 
 // Update is the whole event loop.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// The debug layers hook HERE, the single funnel, and nowhere deeper:
+	// input is recorded before dispatch, mode/view as a diff after it.
+	m.dbgInput(msg)
+	preMode, preView := m.mode, m.view
+
 	var cmds []tea.Cmd
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -389,6 +430,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	m.dbgTransitions(preMode, preView)
 	m.relayout()
 	return m, tea.Batch(cmds...)
 }
@@ -405,8 +447,20 @@ func (m *Model) relayout() {
 	m.laneOff = m.lay.LaneOff
 }
 
-func (m *Model) note(f string, a ...any) { m.status, m.statusErr = fmt.Sprintf(f, a...), false }
-func (m *Model) fail(f string, a ...any) { m.status, m.statusErr = fmt.Sprintf(f, a...), true }
+// note/fail are the status funnel, and the debug status layer rides it: the
+// board's refusals that never reach the persist queue (a double-press while a
+// store-first write is in flight, a local validation) surface ONLY here, and
+// without them a log of "I pressed it and nothing happened" shows an
+// input/key followed by silence (found in review).
+func (m *Model) note(f string, a ...any) {
+	m.status, m.statusErr = fmt.Sprintf(f, a...), false
+	m.dbg.event("status", "note", map[string]any{"text": m.status})
+}
+
+func (m *Model) fail(f string, a ...any) {
+	m.status, m.statusErr = fmt.Sprintf(f, a...), true
+	m.dbg.event("status", "fail", map[string]any{"text": m.status})
+}
 
 func (m *Model) onKey(msg tea.KeyPressMsg) tea.Cmd {
 	// A modal text input owns Esc, full stop. Checking cancelDrag() first let a
