@@ -357,8 +357,11 @@ func (m *Model) demoState(kind string) error {
 		m.relayout()
 		m.toggleSlice()
 		m.sliceField = sliceEpic
-		if c := m.enterEpicNew(); c != nil {
-			_ = c
+		// Fed through the panel's own key handler, not enterEpicNew directly:
+		// this frame is also the proof that `A` is BOUND — a staged call would
+		// keep rendering after the binding was deleted (found by review).
+		if c := m.onSliceKey(tea.KeyPressMsg{Code: 'A', Text: "A"}); c == nil {
+			return fmt.Errorf("demo epicnew: A did not open the new-box modal")
 		}
 		m.epic.input.SetValue("薪ストーブ導入")
 
