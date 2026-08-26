@@ -115,14 +115,16 @@ func (m *Model) onAddKey(msg tea.KeyPressMsg) tea.Cmd {
 	case key.Matches(msg, m.keys.Commit):
 		raw := a.input.Value()
 		title, tk := parseAddLine(raw)
-		if title == "" {
-			m.fail("a title cannot be empty")
-			return nil
-		}
 		if len(tk.bad) > 0 {
 			// Refuse in-modal, naming the first offender — the same
-			// keep-the-typed-line contract as the empty title.
+			// keep-the-typed-line contract as the empty title. Checked
+			// FIRST: a tokens-only line is a token problem, and "a title
+			// cannot be empty" would name the wrong cause (found by review).
 			m.fail("%s", tk.bad[0])
+			return nil
+		}
+		if title == "" {
+			m.fail("a title cannot be empty")
 			return nil
 		}
 		opts := tk.apply(a.opts)
@@ -213,10 +215,10 @@ func (m *Model) addLayer() *lg.Layer {
 		chips = append(chips, "effort "+strconv.Itoa(tk.effort))
 	}
 	if tk.due != "" {
-		chips = append(chips, "due "+tk.due)
+		chips = append(chips, "due "+chipTrunc(tk.due))
 	}
 	for _, d := range tk.deps {
-		chips = append(chips, "dep "+d)
+		chips = append(chips, "dep "+chipTrunc(d))
 	}
 	for _, c := range tk.checks {
 		chips = append(chips, "check "+chipTrunc(c))

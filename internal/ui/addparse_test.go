@@ -39,21 +39,44 @@ func TestParseAddLineSplitsTokensFromTheTitle(t *testing.T) {
 			raw: "t check:'foo bar'", title: "t", tk: addTokens{checks: []string{"foo bar"}}},
 		{name: "an unclosed quote runs to the end while typing",
 			raw: `t check:"書きかけ`, title: "t", tk: addTokens{checks: []string{"書きかけ"}}},
+		// Found by review: quotes were consumed ANYWHERE in a field, so an
+		// apostrophe silently rewrote the title and swallowed every token
+		// behind it. Mid-word quotes are literal runes now.
+		{name: "an apostrophe is a literal rune, and tokens behind it still parse",
+			raw: "Don't stop value:4", title: "Don't stop", tk: addTokens{value: 4}},
+		{name: "mid-word quotes reach the store verbatim",
+			raw: `彼は"これ"と言った`, title: `彼は"これ"と言った`},
+		{name: "a quote mid-value is literal too",
+			raw: `t ref:a"b`, title: "t",
+			tk: addTokens{bad: []string{"ref:a\"b — `,` and `\"` cannot ride furrow's CSV flag parsing"}}},
 		{name: "unknown colon words stay title",
 			raw: "cifail: wait の修正", title: "cifail: wait の修正"},
 		{name: "value must be a number",
 			raw: "t value:高", title: "t",
 			tk: addTokens{bad: []string{"value:高 — not a number"}}},
-		{name: "empty values are named, not dropped",
-			raw: "t due: dep:, check: ref:", title: "t",
+		// Found by review: value:0 parsed into the "absent" sentinel and
+		// vanished without a chip, a flag, or a warning.
+		{name: "out-of-range estimates are refused live, not clamped or dropped",
+			raw: "t value:0 effort:9", title: "t",
+			tk: addTokens{bad: []string{"value:0 — want 1..5", "effort:9 — want 1..5"}}},
+		{name: "a bad due form is named live, before Enter",
+			raw: "t due:someday", title: "t",
+			tk: addTokens{bad: []string{"due:someday — not a date (YYYY-MM-DD / +1d …)"}}},
+		{name: "empty values are named as typed, not dropped",
+			raw: `t due: dep:, check:"" ref:`, title: "t",
 			tk: addTokens{bad: []string{
 				"due: — needs a date",
 				"dep:, — needs a task id",
-				"check: — needs text",
+				`check:"" — needs text`,
 				"ref: — needs a file:line or URL"}}},
 		{name: "inherited keys are refused with guidance",
 			raw: "t epic:e-x", title: "t",
 			tk: addTokens{bad: []string{"epic:e-x — inherited from the filter; filter first, or quote it to keep it in the title"}}},
+		// status:/lane: are NOT the filter's — the add lands in the focused
+		// column — so their guidance must not say "filter first" (review).
+		{name: "status and lane name the focused column instead",
+			raw: "t lane:ready", title: "t",
+			tk: addTokens{bad: []string{"lane:ready — the add lands in the focused column; focus it first, or quote it to keep it in the title"}}},
 		{name: "last value/effort/due wins",
 			raw: "t value:1 value:5 due:+1d due:+2d", title: "t",
 			tk: addTokens{value: 5, due: "+2d"}},
@@ -103,7 +126,7 @@ func TestQuickAddRefusesBadTokensAndKeepsTheLine(t *testing.T) {
 	m := boardModel(t, 240, 50)
 	before := len(m.b.Tasks())
 
-	// Syntax: a non-numeric estimate is refused in-modal, line intact.
+	// A non-numeric estimate is refused in-modal, line intact.
 	press(m, "a")
 	const raw = "t value:高"
 	m.add.input.SetValue(raw)
@@ -115,8 +138,16 @@ func TestQuickAddRefusesBadTokensAndKeepsTheLine(t *testing.T) {
 		t.Errorf("status = %q, want it to name the offender", m.status)
 	}
 
-	// Semantics: board-side validation (estimate range, due grammar, ref CSV)
-	// refuses before the store round trip.
+	// A tokens-only line is a TOKEN problem: the refusal must name the bad
+	// token, not "a title cannot be empty" (review found the order flipped).
+	m.add.input.SetValue("value:高")
+	commitAdd(t, m)
+	if !strings.Contains(m.status, "not a number") {
+		t.Errorf("status = %q, want the token named, not the empty title", m.status)
+	}
+
+	// Range, due grammar and the ref CSV caveat refuse before the store
+	// round trip.
 	for _, bad := range []string{"t value:9", "t due:someday", `t ref:'a,b'`} {
 		m.add.input.SetValue(bad)
 		commitAdd(t, m)
@@ -144,7 +175,7 @@ func TestQuickAddModalEchoesTokensAsChips(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := frame(m)
-	for _, want := range []string{"value 4", "due +1d", "dep t-jv3j", "check 再現手順を書く",
+	for _, want := range []string{"value 4", "due +1d", "dep t-jv3j", "check 再現",
 		"effort:高 — not a number"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the modal frame is missing %q — the live echo must show what will be stamped", want)

@@ -131,10 +131,10 @@ func TestQuickAddModalRendersChips(t *testing.T) {
 	if !strings.Contains(out, "label bbq") {
 		t.Error("the inherited label chip is missing — inheritance must be visible, never silent")
 	}
-	// The demo line is longer than the input's window, which scrolls to the
-	// cursor — so the frame proves the TAIL of the typed line, not its head.
-	if !strings.Contains(out, "effort:高") {
-		t.Error("the typed line is missing from the modal")
+	// The demo line fits the input window on purpose, so the frame proves
+	// the typed TITLE is visible, not just the scrolled-to tail (review).
+	if !strings.Contains(out, "盤面起票") {
+		t.Error("the typed title is missing from the modal")
 	}
 }
 

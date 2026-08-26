@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -14,21 +15,29 @@ import (
 //
 //	盤面から起票 value:4 effort:2 due:+1d dep:t-x check:"再現手順を書く" ref:ui/addmode.go
 //
-// Splitting is on spaces; a `"` or `'` opens a run in which spaces do not
-// split, which is how a checklist item carries prose. A field that OPENS with
-// a quote is always title text — the escape hatch for a title that itself
-// contains `value:`. Unknown keys (and anything after the first `:` of a
-// known one) stay verbatim, so `ref:ui/addmode.go:42` and a bare URL both
-// survive. label:/epic:/repo:/status:/lane: are deliberately refused rather
-// than silently titled: those are the INHERITED half (filter first), and a
-// user typing them expects them to land.
+// Splitting is on spaces. A `"` or `'` is significant in exactly TWO spots —
+// opening a field (the whole field is literal title text: the escape hatch
+// for a title that itself contains `value:`) and immediately after a token
+// key's colon (`check:"…"` carries prose) — and a LITERAL RUNE everywhere
+// else, so `Don't stop` and `彼は"これ"と言った` reach the store verbatim
+// (found by review: consuming quotes anywhere silently rewrote such titles
+// AND swallowed every token behind the odd quote). Unknown keys (and
+// anything after the first `:` of a known one) stay verbatim, so
+// `ref:ui/addmode.go:42` and a bare URL both survive. The inherited keys
+// (label:/epic:/repo:) and the focus-derived ones (status:/lane:) are
+// refused with their own guidance rather than silently titled: a user typing
+// them expects them to land.
+//
+// The parse itself never fails — the chips row renders it live on every
+// keystroke, mid-word and all — so everything uncommittable lands in bad,
+// with the reason the ⚠ row and the refusal note quote. Semantic checks that
+// need no board (estimate range, the due grammar, the ref CSV caveat) run
+// HERE so the ⚠ row shows them before Enter does; board.AddOptions.Validate
+// stays the backstop on the store path.
 
-// addTokens is one parse of the modal line. bad collects the tokens that
-// cannot commit, each with the reason the refusal note will quote — the parse
-// itself never fails, because the chips row renders it live on every
-// keystroke, mid-word and all.
+// addTokens is one parse of the modal line.
 type addTokens struct {
-	value, effort int // 0 = absent; range is Validate's (board-side)
+	value, effort int // 0 = absent (value:0 itself is refused into bad)
 	due           string
 	deps          []string
 	checks        []string
@@ -44,50 +53,61 @@ func (tk addTokens) apply(o board.AddOptions) board.AddOptions {
 	return o
 }
 
-// addField is one space-delimited field of the modal line, quotes already
-// stripped. quoted marks a field that OPENED with a quote — literal title
-// text, never a token.
+// addField is one space-delimited field of the modal line. text has value
+// quotes stripped; raw is the field as typed, which is what an error message
+// must quote (`check:"" — needs text`, not `check: — needs text`). quoted
+// marks a field that OPENED with a quote — literal title text, never a token.
 type addField struct {
 	text   string
+	raw    string
 	quoted bool
 }
 
-// splitAddFields splits the line the way a shell would with only quoting: a
-// `"` or `'` opens a run to its partner in which spaces keep the field whole.
-// An unclosed quote runs to the end of the line rather than erroring — the
-// parse renders live while the closing quote is not typed yet.
+// tokenKeyColon matches a field buffer that has just spelled a token key and
+// its colon — the one mid-field position where a quote opens a value run.
+var tokenKeyColon = regexp.MustCompile(`(?i)^(value|effort|due|dep|check|ref):$`)
+
+// splitAddFields splits the line on spaces with the two-position quote rule
+// above. An unclosed quote runs to the end of the line rather than erroring —
+// the parse renders live while the closing quote is not typed yet.
 func splitAddFields(raw string) []addField {
 	var out []addField
-	var cur strings.Builder
-	var quote rune   // the open quote character, 0 = none
-	started := false // cur has consumed at least one rune (even into "")
+	var text, orig strings.Builder
+	var quote rune // the open quote character, 0 = none
+	started := false
 	openedQuoted := false
 	flush := func() {
 		if started {
-			out = append(out, addField{text: cur.String(), quoted: openedQuoted})
+			out = append(out, addField{text: text.String(), raw: orig.String(), quoted: openedQuoted})
 		}
-		cur.Reset()
+		text.Reset()
+		orig.Reset()
 		started, openedQuoted = false, false
 	}
 	for _, r := range raw {
 		switch {
 		case quote != 0:
+			orig.WriteRune(r)
 			if r == quote {
 				quote = 0
 			} else {
-				cur.WriteRune(r)
+				text.WriteRune(r)
 			}
-			started = true
-		case r == '"' || r == '\'':
-			if !started {
-				openedQuoted = true
-			}
-			quote = r
-			started = true
 		case r == ' ' || r == '\t':
 			flush()
+		case r == '"' || r == '\'':
+			orig.WriteRune(r)
+			switch {
+			case !started:
+				openedQuoted, quote, started = true, r, true
+			case tokenKeyColon.MatchString(text.String()):
+				quote = r
+			default:
+				text.WriteRune(r) // a literal rune mid-word: Don't, 彼は"これ"
+			}
 		default:
-			cur.WriteRune(r)
+			text.WriteRune(r)
+			orig.WriteRune(r)
 			started = true
 		}
 	}
@@ -100,21 +120,33 @@ func splitAddFields(raw string) []addField {
 // form the splitter can give back.
 func parseAddLine(raw string) (title string, tk addTokens) {
 	var words []string
+	word := func(f addField) {
+		if f.text != "" {
+			words = append(words, f.text)
+		}
+	}
 	for _, f := range splitAddFields(raw) {
 		if f.quoted {
-			words = append(words, f.text)
+			word(f)
 			continue
 		}
 		k, v, ok := strings.Cut(f.text, ":")
 		if !ok {
-			words = append(words, f.text)
+			word(f)
 			continue
 		}
 		switch strings.ToLower(k) {
 		case "value", "effort":
 			n, err := strconv.Atoi(v)
 			if err != nil {
-				tk.bad = append(tk.bad, f.text+" — not a number")
+				tk.bad = append(tk.bad, f.raw+" — not a number")
+				continue
+			}
+			if n < 1 || n > 5 {
+				// Deliberately stricter than furrow's silent clamp (measured:
+				// --value 9 exits 0, stored as 5): a clamp would stamp an
+				// estimate the user did not type.
+				tk.bad = append(tk.bad, f.raw+" — want 1..5")
 				continue
 			}
 			if strings.EqualFold(k, "value") {
@@ -124,10 +156,14 @@ func parseAddLine(raw string) (title string, tk addTokens) {
 			}
 		case "due":
 			if v == "" {
-				tk.bad = append(tk.bad, f.text+" — needs a date")
+				tk.bad = append(tk.bad, f.raw+" — needs a date")
 				continue
 			}
-			tk.due = v // last one wins; the grammar itself stays board.ParseDue's
+			if _, err := board.ParseDue(v); err != nil {
+				tk.bad = append(tk.bad, f.raw+" — not a date (YYYY-MM-DD / +1d …)")
+				continue
+			}
+			tk.due = v // last one wins; the grammar's one spelling is ParseDue's
 		case "dep":
 			// Comma = several ids, the -q list form (and pflag's own CSV read
 			// of --dep would split it there anyway — splitting here keeps the
@@ -140,24 +176,33 @@ func parseAddLine(raw string) (title string, tk addTokens) {
 				}
 			}
 			if !got {
-				tk.bad = append(tk.bad, f.text+" — needs a task id")
+				tk.bad = append(tk.bad, f.raw+" — needs a task id")
 			}
 		case "check":
 			if strings.TrimSpace(v) == "" {
-				tk.bad = append(tk.bad, f.text+" — needs text")
+				tk.bad = append(tk.bad, f.raw+" — needs text")
 				continue
 			}
 			tk.checks = append(tk.checks, v)
 		case "ref":
 			if v == "" {
-				tk.bad = append(tk.bad, f.text+" — needs a file:line or URL")
+				tk.bad = append(tk.bad, f.raw+" — needs a file:line or URL")
+				continue
+			}
+			if strings.ContainsAny(v, `,"`) {
+				// The t-pwrp caveat, surfaced live instead of on Enter.
+				tk.bad = append(tk.bad, f.raw+" — `,` and `\"` cannot ride furrow's CSV flag parsing")
 				continue
 			}
 			tk.refs = append(tk.refs, v)
-		case "label", "epic", "repo", "status", "lane":
-			tk.bad = append(tk.bad, f.text+" — inherited from the filter; filter first, or quote it to keep it in the title")
+		case "label", "epic", "repo":
+			tk.bad = append(tk.bad, f.raw+" — inherited from the filter; filter first, or quote it to keep it in the title")
+		case "status", "lane":
+			// NOT the filter's: the add lands in the focused column
+			// (enterAdd), and inheritContext never reads these keys.
+			tk.bad = append(tk.bad, f.raw+" — the add lands in the focused column; focus it first, or quote it to keep it in the title")
 		default:
-			words = append(words, f.text)
+			word(f)
 		}
 	}
 	return strings.TrimSpace(strings.Join(words, " ")), tk

@@ -156,7 +156,10 @@ func (m *Model) demoState(kind string) error {
 		if c := m.enterAdd(); c != nil {
 			_ = c
 		}
-		m.add.input.SetValue(`盤面から起票するタスク value:4 due:+1d dep:t-jv3j check:"再現手順を書く" effort:高`)
+		// Short enough for the 56-cell input window (cursor included): the
+		// frame must show the typed TITLE too, not just the scrolled-to
+		// tail. Quoted values are unit-tested; the frame's job is the echo.
+		m.add.input.SetValue("盤面起票 value:4 due:+1d dep:t-jv3j check:再現 effort:高")
 
 	case "edit":
 		// Open the field-edit overlay on a task with a checklist AND labels

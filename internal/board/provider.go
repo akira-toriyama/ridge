@@ -91,7 +91,10 @@ type Provider interface {
 	// Add creates a task in the store and returns its id. Unlike the
 	// Persist* family this is NOT the record of an applied edit: the store
 	// owns id assignment, so the model waits for the id and re-reads instead
-	// of applying optimistically (a single add measures ~57ms).
+	// of applying optimistically (a single add measures ~57ms). Both
+	// adapters run o.Validate() themselves — the UI refuses first for the
+	// modal's sake, but a future caller must not be able to slip a comma'd
+	// ref past the CSV flag layer by skipping the modal.
 	Add(title string, o AddOptions) (id string, err error)
 
 	// --- epic writes: store-first, NOT the Persist* contract ---------------
@@ -216,10 +219,13 @@ type AddOptions struct {
 	Refs   []string // free text; `,` and `"` refused (the t-pwrp CSV caveat)
 }
 
-// Validate refuses an AddOptions furrow would refuse — BEFORE the modal
-// closes, so the typed line survives as a still-open modal instead of a
-// refusal round trip. Grammar stays furrow's: due goes through the same
-// ParseDue mirror SetFields uses, and refs through the same CSV caveat.
+// Validate refuses an AddOptions the flag layer would mangle or furrow would
+// refuse — BEFORE the modal closes, so the typed line survives as a
+// still-open modal instead of a refusal round trip. Due goes through the same
+// ParseDue mirror SetFields uses and refs through the same CSV caveat; the
+// estimate check is deliberately STRICTER than furrow, which clamps instead
+// of refusing (measured on dev 60074b8: `--value 9` exits 0 and stores 5) —
+// a silent clamp would stamp an estimate the user did not type.
 func (o AddOptions) Validate() error {
 	for _, v := range []int{o.Value, o.Effort} {
 		if v < 0 || v > 5 {

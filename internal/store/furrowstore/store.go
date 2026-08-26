@@ -697,8 +697,12 @@ type addRow struct {
 }
 
 // Add creates a task via `furrow add` (board.Provider), mapping the
-// inherited context onto -s/-l/-e/-r.
+// inherited context onto -s/-l/-e/-r and the inline-token details onto
+// --value/--effort/--due/--dep/--check/--ref.
 func (p *Store) Add(title string, o board.AddOptions) (string, error) {
+	if err := o.Validate(); err != nil {
+		return "", err
+	}
 	args := []string{"add", "--json"}
 	if o.Lane != "" {
 		args = append(args, "-s", o.Lane)
@@ -727,8 +731,8 @@ func (p *Store) Add(title string, o board.AddOptions) (string, error) {
 	for _, c := range o.Checks {
 		args = append(args, "--check", c)
 	}
-	// --ref is pflag CSV (the t-pwrp caveat); AddOptions.Validate refused
-	// `,`/`"` upstream, so what reaches the flag survives it verbatim.
+	// --ref is pflag CSV (the t-pwrp caveat); Validate refused `,`/`"`
+	// above, so what reaches the flag survives it verbatim.
 	for _, r := range o.Refs {
 		args = append(args, "--ref", r)
 	}
