@@ -211,11 +211,13 @@ func parseAddLine(raw string) (title string, tk addTokens) {
 			tk.refs = append(tk.refs, v)
 		case "is":
 			// The one is: value an ADD can mean: born without a repo
-			// (furrow `add --draft`), same spelling as the -q filter term.
-			// Every other is: value describes a state the store derives
-			// (blocked, overdue, …) — nothing an add could stamp — so it is
-			// refused with its own guidance rather than silently titled.
-			if v == "draft" {
+			// (furrow `add --draft`), same spelling as the -q filter term —
+			// EqualFold like -q itself, which matches the value
+			// case-insensitively (measured). Every other is: value describes
+			// a state the store derives (blocked, overdue, …) — nothing an
+			// add could stamp — so it is refused with its own guidance rather
+			// than silently titled.
+			if strings.EqualFold(v, "draft") {
 				tk.draft = true
 				continue
 			}

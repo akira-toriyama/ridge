@@ -154,8 +154,8 @@ func TestARefusedAddStillReReadsTheOneThatLanded(t *testing.T) {
 	// would refuse both: the Cmd runs long after the enqueue.
 	p.addErr, p.addFailAt = errors.New("furrow add: exit 2"), 2
 
-	cmd1 := m.enqueueAdd("先に通る起票", "先に通る起票", board.AddOptions{})
-	cmd2 := m.enqueueAdd("拒否される起票", "拒否される起票", board.AddOptions{})
+	cmd1 := m.enqueueAdd("先に通る起票", "先に通る起票", board.AddOptions{}, board.AddOptions{})
+	cmd2 := m.enqueueAdd("拒否される起票", "拒否される起票", board.AddOptions{}, board.AddOptions{})
 	if cmd1 == nil || cmd2 != nil {
 		t.Fatalf("queue setup: cmd1=%v cmd2=%v", cmd1 != nil, cmd2 != nil)
 	}
@@ -184,7 +184,7 @@ func TestARefusedAddAloneNeitherReReadsNorKeepsAParkedJump(t *testing.T) {
 	m, p := storeFirstModel(t)
 	p.addErr = errors.New("furrow add: exit 2")
 
-	cmd := m.enqueueAdd("拒否される起票", "拒否される起票", board.AddOptions{})
+	cmd := m.enqueueAdd("拒否される起票", "拒否される起票", board.AddOptions{}, board.AddOptions{})
 	if cmd == nil {
 		t.Fatal("the add did not fire")
 	}

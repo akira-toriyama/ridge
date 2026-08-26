@@ -38,7 +38,10 @@ func TestInheritContextLiftsOnlySingleValuedTokens(t *testing.T) {
 		{q: "is:blocked 自由語 label:ui", label: "ui"},
 		// is:draft is the one is: state an add can stamp — under a draft view
 		// a plain add would vanish from the very view it was added into.
+		// EqualFold on the value, because -q itself matches it that way
+		// (measured: is:DRAFT narrows identically).
 		{q: "is:draft", draft: true},
+		{q: "is:DRAFT", draft: true},
 		{q: "is:draft label:ui", label: "ui", draft: true},
 		{q: "-is:draft"},
 		{q: "is:draft,open"},

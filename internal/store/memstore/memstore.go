@@ -655,8 +655,15 @@ func (p *Store) Add(title string, o board.AddOptions) (string, error) {
 	if o.Label != "" {
 		t.Labels = []string{o.Label}
 	}
-	if o.Repo != "" {
+	// The board auto-attach, mirroring furrow's `default_repo`: an explicit
+	// repo wins, a draft suppresses it, and everything else inherits the
+	// board's own repo — exactly the three rows measured against the real
+	// binary. Skipping the mirror made every mock add a de-facto draft.
+	switch {
+	case o.Repo != "":
 		t.Repos = []string{o.Repo}
+	case !o.Draft:
+		t.Repos = []string{fixtureDefaultRepo}
 	}
 	last := cur.LaneTasks(lane)
 	if len(last) > 0 {

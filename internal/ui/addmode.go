@@ -100,7 +100,11 @@ func inheritContext(raw string) (label, epic, repo string, draft bool) {
 		case "repo":
 			repo = v
 		case "is":
-			if v == "draft" {
+			// EqualFold: furrow's -q matches the value case-insensitively
+			// (measured — is:DRAFT answers the same rows), so a case-exact
+			// check here would narrow the view and then silently repo-attach
+			// the add (found by review).
+			if strings.EqualFold(v, "draft") {
 				draft = true
 			}
 		}
@@ -150,7 +154,7 @@ func (m *Model) onAddKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		m.mode, m.add = modeNormal, nil
 		m.note("adding…")
-		return m.enqueueAdd(title, raw, opts)
+		return m.enqueueAdd(title, raw, a.opts, opts)
 	}
 	var c tea.Cmd
 	a.input, c = a.input.Update(msg)
@@ -177,7 +181,9 @@ func (m *Model) reopenRefusedAdd(op persistOp) tea.Cmd {
 	ti.Placeholder = "task title"
 	ti.SetWidth(56)
 	// The RAW line, tokens and all — a due form furrow refused must come back
-	// editable, not silently shorn down to the parsed title.
+	// editable, not silently shorn down to the parsed title. op.addOpts is
+	// the inherited half only, so the tokens live in this line ALONE and
+	// deleting one really clears it.
 	ti.SetValue(op.addRaw)
 	m.add = &addState{input: ti, opts: op.addOpts}
 	m.mode = modeAdd
@@ -187,9 +193,10 @@ func (m *Model) reopenRefusedAdd(op persistOp) tea.Cmd {
 // addLayer draws the quick-add modal: the input, the inherited-context chips,
 // and the inline tokens echoed back as chips of their own — parsed live on
 // every keystroke, so nothing is stamped silently and a typo shows up before
-// Enter does. Only Lane/Label/Epic/Repo are read off a.opts here: the detail
-// fields come from the live parse, and a reopened refusal carries both, which
-// would double every chip.
+// Enter does. a.opts is the INHERITED context only — enqueueAdd stores the
+// pre-apply half for exactly this reason — so the detail fields all come from
+// the live parse; reading composed opts here would double every chip on a
+// reopened refusal, and make its Draft unclearable.
 func (m *Model) addLayer() *lg.Layer {
 	th := m.th
 	a := m.add
@@ -247,7 +254,14 @@ func (m *Model) addLayer() *lg.Layer {
 	// inside a chip ("dep\nt-x" reads as two chips).
 	bad := tk.bad
 	if draft && a.opts.Repo != "" {
-		bad = append(bad, "draft conflicts with repo "+a.opts.Repo+" — clear repo: from the filter, or drop is:draft")
+		// The guidance names an act the user can actually perform: a typed
+		// token can be dropped, but an inherited draft has no token in the
+		// line — only the filter can clear it (found by review).
+		if tk.draft {
+			bad = append(bad, "is:draft conflicts with repo "+a.opts.Repo+" — drop it, or clear repo: from the filter")
+		} else {
+			bad = append(bad, "the filter inherits both is:draft and repo "+a.opts.Repo+" — clear one from the filter")
+		}
 	}
 
 	var rows []string

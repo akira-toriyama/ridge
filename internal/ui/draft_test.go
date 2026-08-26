@@ -45,3 +45,14 @@ func TestDraftPeekSaysNoRepo(t *testing.T) {
 		t.Error("the peek must name the draft state, not render an absent repos line")
 	}
 }
+
+func TestDraftGraphSaysNoRepo(t *testing.T) {
+	m := boardModel(t, 240, 50)
+	if !m.selectID("t-dg7k", false) {
+		t.Fatal("t-dg7k is not on the fixture board")
+	}
+	m.openGraph()
+	if !strings.Contains(frame(m), "draft (no repo)") {
+		t.Error("the graph's meta line must name the draft state")
+	}
+}

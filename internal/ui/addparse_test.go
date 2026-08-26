@@ -85,6 +85,8 @@ func TestParseAddLineSplitsTokensFromTheTitle(t *testing.T) {
 			tk: addTokens{value: 5, due: "+2d"}},
 		{name: "is:draft marks the add a draft (t-v4pp)",
 			raw: "t is:draft", title: "t", tk: addTokens{draft: true}},
+		{name: "the value folds case, like -q's own match",
+			raw: "t is:Draft", title: "t", tk: addTokens{draft: true}},
 		{name: "every other is: value is refused with guidance",
 			raw: "t is:blocked", title: "t",
 			tk: addTokens{bad: []string{"is:blocked — only is:draft applies to an add; filter the view instead, or quote it to keep it in the title"}}},
@@ -212,6 +214,33 @@ func TestQuickAddInheritsDraftFromTheFilter(t *testing.T) {
 	cur := m.curTask()
 	if cur == nil || cur.Title != "控えを一枚" || len(cur.Repos) != 0 {
 		t.Fatalf("task = %+v, want a repo-less draft selected under the still-matching filter", cur)
+	}
+}
+
+// A refused draft must come back CLEARABLE: the reopened modal carries the
+// inherited context only, so the typed is:draft lives in the line alone and
+// deleting it really clears it. The first cut stored the composed opts, whose
+// OR'd Draft no edit could undo (found by review).
+func TestReopenedRefusalDoesNotPinTheTypedDraft(t *testing.T) {
+	m := boardModel(t, 240, 50)
+	m.curLane = m.b.LaneIndex("backlog")
+	press(m, "a")
+	m.add.input.SetValue("控え is:draft dep:t-nope") // the unknown dep is the store's refusal
+	commitAdd(t, m)
+	if m.mode != modeAdd || m.add == nil {
+		t.Fatal("the refusal must reopen the modal")
+	}
+	if m.add.opts.Draft {
+		t.Fatal("the reopened opts must carry the inherited context only — a typed is:draft pinned here cannot be cleared")
+	}
+	m.add.input.SetValue("控え") // the user deletes both tokens
+	commitAdd(t, m)
+	cur := m.curTask()
+	if cur == nil || cur.Title != "控え" {
+		t.Fatalf("selection = %+v, want the re-committed task", cur)
+	}
+	if len(cur.Repos) == 0 {
+		t.Error("the deleted is:draft still stuck — the task landed as a draft")
 	}
 }
 
