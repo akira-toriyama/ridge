@@ -241,6 +241,11 @@ func (o AddOptions) Validate() error {
 		if d == "" {
 			return fmt.Errorf("dep: needs a task id")
 		}
+		// --dep is the same pflag CSV field as --ref: a comma'd id would
+		// SPLIT silently and a bare `"` is pflag's own exit-2 parse error.
+		if strings.ContainsAny(d, `,"`) {
+			return fmt.Errorf("dep %q: `,` and `\"` cannot ride furrow's CSV flag parsing", d)
+		}
 	}
 	for _, c := range o.Checks {
 		if strings.TrimSpace(c) == "" {

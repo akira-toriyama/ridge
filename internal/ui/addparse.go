@@ -170,10 +170,19 @@ func parseAddLine(raw string) (title string, tk addTokens) {
 			// chips honest about it).
 			got := false
 			for _, d := range strings.Split(v, ",") {
-				if d != "" {
-					tk.deps = append(tk.deps, d)
-					got = true
+				if d == "" {
+					continue
 				}
+				if strings.Contains(d, `"`) {
+					// --dep is the same pflag CSV field as --ref; without
+					// this mirror the refusal would be pflag's own parse
+					// error after the round trip (re-review, finding A).
+					tk.bad = append(tk.bad, f.raw+" — `\"` cannot ride furrow's CSV flag parsing")
+					got = true
+					continue
+				}
+				tk.deps = append(tk.deps, d)
+				got = true
 			}
 			if !got {
 				tk.bad = append(tk.bad, f.raw+" — needs a task id")

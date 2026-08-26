@@ -27,6 +27,10 @@ func TestAddOptionsValidate(t *testing.T) {
 		{AddOptions{Effort: -1}, "want 1..5"},
 		{AddOptions{Due: "someday"}, "not a date"},
 		{AddOptions{Deps: []string{""}}, "needs a task id"},
+		// --dep is the same pflag CSV field as --ref (re-review, finding A):
+		// a comma'd id would split silently, a bare `"` is pflag's exit 2.
+		{AddOptions{Deps: []string{`t-a"b`}}, "CSV"},
+		{AddOptions{Deps: []string{"t-a,t-b"}}, "CSV"},
 		{AddOptions{Checks: []string{"  "}}, "needs text"},
 		{AddOptions{Refs: []string{""}}, "cannot be empty"},
 		// The t-pwrp CSV caveat: a comma'd ref would land SPLIT after the
