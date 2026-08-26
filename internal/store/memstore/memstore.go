@@ -606,6 +606,9 @@ func (p *Store) Add(title string, o board.AddOptions) (string, error) {
 	if strings.TrimSpace(title) == "" {
 		return "", fmt.Errorf("a title cannot be empty")
 	}
+	if err := o.Validate(); err != nil {
+		return "", err
+	}
 
 	p.mu.Lock()
 	cur := p.b
@@ -617,12 +620,37 @@ func (p *Store) Add(title string, o board.AddOptions) (string, error) {
 		p.mu.Unlock()
 		return "", fmt.Errorf("unknown lane %q", lane)
 	}
+	// Mirror of furrow's dep existence check. A cycle cannot involve a task
+	// that does not exist yet, so existence is the whole rule here.
+	for _, d := range o.Deps {
+		if cur.Task(d) == nil {
+			p.mu.Unlock()
+			return "", fmt.Errorf("unknown dep %q", d)
+		}
+	}
 	p.addSeq++
 	t := board.Task{
 		ID:     fmt.Sprintf("t-new%d", p.addSeq),
 		Title:  title,
 		Status: lane,
 		Epic:   o.Epic,
+		Value:  o.Value,
+		Effort: o.Effort,
+		Deps:   append([]string(nil), o.Deps...),
+		Refs:   append([]string(nil), o.Refs...),
+	}
+	if o.Due != "" {
+		// Validate accepted it above; the parsed instant only has to hold the
+		// way the optimistic writes' do — the fixture IS the store here.
+		d, err := board.ParseDue(o.Due)
+		if err != nil {
+			p.mu.Unlock()
+			return "", err
+		}
+		t.Due = d
+	}
+	for _, c := range o.Checks {
+		t.Checklist = append(t.Checklist, board.ChecklistItem{Text: c})
 	}
 	if o.Label != "" {
 		t.Labels = []string{o.Label}

@@ -50,12 +50,12 @@ func TestParseDueMatchesFurrowsOffsetGrammar(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.in, func(t *testing.T) {
-			got, err := parseDue(tc.in)
+			got, err := ParseDue(tc.in)
 			if err != nil {
-				t.Fatalf("parseDue(%q) refused a form furrow accepts: %v", tc.in, err)
+				t.Fatalf("ParseDue(%q) refused a form furrow accepts: %v", tc.in, err)
 			}
 			if want := tc.want.Truncate(time.Second); !got.Equal(want) {
-				t.Errorf("parseDue(%q) = %s, want %s", tc.in, got.Format(time.RFC3339), want.Format(time.RFC3339))
+				t.Errorf("ParseDue(%q) = %s, want %s", tc.in, got.Format(time.RFC3339), want.Format(time.RFC3339))
 			}
 		})
 	}
@@ -67,13 +67,13 @@ func TestParseDueMatchesFurrowsOffsetGrammar(t *testing.T) {
 // was promised for.
 func TestParseDueBareDayIsEndOfDayLocal(t *testing.T) {
 	fixedZone(t, "TEST", 9)
-	got, err := parseDue("2026-09-01")
+	got, err := ParseDue("2026-09-01")
 	if err != nil {
 		t.Fatalf("parseDue: %v", err)
 	}
 	want := time.Date(2026, 9, 1, 23, 59, 59, 0, time.Local)
 	if !got.Equal(want) {
-		t.Errorf("parseDue(bare day) = %s, want %s (end of that day, local)",
+		t.Errorf("ParseDue(bare day) = %s, want %s (end of that day, local)",
 			got.Format(time.RFC3339), want.Format(time.RFC3339))
 	}
 }
@@ -82,22 +82,22 @@ func TestParseDueBareDayIsEndOfDayLocal(t *testing.T) {
 // zone-less time.Parse would read it as UTC — nine hours off, the other way.
 func TestParseDueDayTimeIsLocalNotUTC(t *testing.T) {
 	fixedZone(t, "TEST", 9)
-	got, err := parseDue("2026-09-01T10:30")
+	got, err := ParseDue("2026-09-01T10:30")
 	if err != nil {
 		t.Fatalf("parseDue: %v", err)
 	}
 	want := time.Date(2026, 9, 1, 10, 30, 0, 0, time.Local)
 	if !got.Equal(want) {
-		t.Errorf("parseDue(day+time) = %s, want %s (local)",
+		t.Errorf("ParseDue(day+time) = %s, want %s (local)",
 			got.Format(time.RFC3339), want.Format(time.RFC3339))
 	}
 	// An RFC3339 instant carries its own zone and passes straight through.
-	got, err = parseDue("2026-09-01T10:30:00+09:00")
+	got, err = ParseDue("2026-09-01T10:30:00+09:00")
 	if err != nil {
-		t.Fatalf("parseDue(RFC3339): %v", err)
+		t.Fatalf("ParseDue(RFC3339): %v", err)
 	}
 	if !got.Equal(want) {
-		t.Errorf("parseDue(RFC3339) = %s, want %s", got.Format(time.RFC3339), want.Format(time.RFC3339))
+		t.Errorf("ParseDue(RFC3339) = %s, want %s", got.Format(time.RFC3339), want.Format(time.RFC3339))
 	}
 }
 
@@ -105,13 +105,13 @@ func TestParseDueDayTimeIsLocalNotUTC(t *testing.T) {
 // error that names the same four forms furrow's own message names.
 func TestParseDueRefusesWhatFurrowRefuses(t *testing.T) {
 	for _, in := range []string{"1d", "+d", "+1D", "+1s", "+1.5d", "2026-9-1", "tomorrow", "someday", ""} {
-		if got, err := parseDue(in); err == nil {
-			t.Errorf("parseDue(%q) = %s, want a refusal", in, got.Format(time.RFC3339))
+		if got, err := ParseDue(in); err == nil {
+			t.Errorf("ParseDue(%q) = %s, want a refusal", in, got.Format(time.RFC3339))
 		}
 	}
-	_, err := parseDue("+1x")
+	_, err := ParseDue("+1x")
 	if err == nil {
-		t.Fatal("parseDue(+1x) must refuse")
+		t.Fatal("ParseDue(+1x) must refuse")
 	}
 	for _, want := range []string{"YYYY-MM-DD", "YYYY-MM-DDTHH:MM", "RFC3339", "+1d"} {
 		if !strings.Contains(err.Error(), want) {

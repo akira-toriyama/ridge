@@ -131,7 +131,9 @@ func TestQuickAddModalRendersChips(t *testing.T) {
 	if !strings.Contains(out, "label bbq") {
 		t.Error("the inherited label chip is missing — inheritance must be visible, never silent")
 	}
-	if !strings.Contains(out, "盤面から起票するタスク") {
+	// The demo line fits the input window on purpose, so the frame proves
+	// the typed TITLE is visible, not just the scrolled-to tail (review).
+	if !strings.Contains(out, "盤面起票") {
 		t.Error("the typed title is missing from the modal")
 	}
 }
