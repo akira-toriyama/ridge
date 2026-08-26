@@ -70,7 +70,7 @@ func (m *Model) enterAdd() tea.Cmd {
 	// effectiveQuery, not qRaw: the slice term IS part of the applied filter
 	// (glossary), so slicing to epic:e-x and adding must stamp e-x exactly as
 	// typing the same term would — the chips row shows whatever is stamped.
-	o.Label, o.Epic, o.Repo = inheritContext(m.effectiveQuery())
+	o.Label, o.Epic, o.Repo, o.Draft = inheritContext(m.effectiveQuery())
 	m.add = &addState{input: ti, opts: o}
 	m.mode = modeAdd
 	return m.add.input.Focus()
@@ -78,9 +78,11 @@ func (m *Model) enterAdd() tea.Cmd {
 
 // inheritContext lifts the single-valued, un-negated label:/epic:/repo:
 // tokens out of the active query — exactly the values GH would stamp onto an
-// item added under that filter. Comma'd (OR) and negated tokens inherit
-// nothing: "one of these" is not a value to stamp.
-func inheritContext(raw string) (label, epic, repo string) {
+// item added under that filter — plus is:draft, the one is: state an add can
+// stamp: under a draft view a plain add would be born repo-attached and
+// vanish from the very view it was added into. Comma'd (OR) and negated
+// tokens inherit nothing: "one of these" is not a value to stamp.
+func inheritContext(raw string) (label, epic, repo string, draft bool) {
 	for _, tok := range strings.Fields(raw) {
 		k, v, ok := strings.Cut(tok, ":")
 		// Quoted values (label:"needs review", either quote character) split
@@ -97,9 +99,13 @@ func inheritContext(raw string) (label, epic, repo string) {
 			epic = v
 		case "repo":
 			repo = v
+		case "is":
+			if v == "draft" {
+				draft = true
+			}
 		}
 	}
-	return label, epic, repo
+	return label, epic, repo, draft
 }
 
 func (m *Model) onAddKey(msg tea.KeyPressMsg) tea.Cmd {
@@ -189,6 +195,8 @@ func (m *Model) addLayer() *lg.Layer {
 	a := m.add
 	inner := clamp(m.w/3, 44, 72)
 
+	_, tk := parseAddLine(a.input.Value())
+
 	var chips []string
 	if a.opts.Lane != "" {
 		chips = append(chips, "lane "+a.opts.Lane)
@@ -201,13 +209,19 @@ func (m *Model) addLayer() *lg.Layer {
 	if a.opts.Epic != "" {
 		chips = append(chips, "epic "+a.opts.Epic)
 	}
-	if a.opts.Repo != "" {
+	// The repo slot: an inherited repo, or the draft declaration (either
+	// source — the filter or the typed is:draft), or the board's auto-attach.
+	// A repo AND a draft at once is the conflict Validate refuses; the chip
+	// keeps showing the repo and the ⚠ row below names the clash before ⏎.
+	draft := a.opts.Draft || tk.draft
+	switch {
+	case a.opts.Repo != "":
 		chips = append(chips, "repo "+a.opts.Repo)
-	} else {
+	case draft:
+		chips = append(chips, "draft (no repo)")
+	default:
 		chips = append(chips, "repo (board auto)")
 	}
-
-	_, tk := parseAddLine(a.input.Value())
 	if tk.value != 0 {
 		chips = append(chips, "value "+strconv.Itoa(tk.value))
 	}
@@ -231,11 +245,16 @@ func (m *Model) addLayer() *lg.Layer {
 	// prose overflow one line, MaxWidth clipping would silently eat exactly
 	// the chips this row exists to show, and lipgloss's own word wrap breaks
 	// inside a chip ("dep\nt-x" reads as two chips).
+	bad := tk.bad
+	if draft && a.opts.Repo != "" {
+		bad = append(bad, "draft conflicts with repo "+a.opts.Repo+" — clear repo: from the filter, or drop is:draft")
+	}
+
 	var rows []string
 	for _, l := range chipWrap("→ ", chips, inner) {
 		rows = append(rows, th.accent.Render(l))
 	}
-	for _, l := range chipWrap("⚠ ", tk.bad, inner) {
+	for _, l := range chipWrap("⚠ ", bad, inner) {
 		rows = append(rows, th.danger.Render(l))
 	}
 
@@ -244,7 +263,7 @@ func (m *Model) addLayer() *lg.Layer {
 			a.input.View() + "\n\n" +
 			strings.Join(rows, "\n") + "\n" +
 			th.dim.Render(pad("⏎ create · esc cancel · ^c quit · more via the edit menu", inner)) + "\n" +
-			th.dim.Render(pad("inline: value:4 effort:2 due:+1d dep:t-x check:\"…\" ref:…", inner)))
+			th.dim.Render(pad("inline: value:4 effort:2 due:+1d dep:t-x check:\"…\" ref:… is:draft", inner)))
 	box = lg.NewStyle().MaxWidth(m.w).MaxHeight(m.h).Render(box)
 	x := maxInt(0, (m.w-lg.Width(box))/2)
 	y := maxInt(0, (m.h-lg.Height(box))/3)

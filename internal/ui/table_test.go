@@ -345,7 +345,7 @@ func TestTableColumnsAlignUnderCJKTitles(t *testing.T) {
 		}
 		rows := m.tableRows()
 		for i, task := range rows {
-			y := rowRule + i // 33 fixture rows fit h=40's 35-row budget (2 spare), so top is 0
+			y := rowRule + i // 34 fixture rows fit h=40's 35-row budget (1 spare), so top is 0
 			if y >= len(lines) || y >= 40-footerH {
 				t.Fatalf("w=%d: row %d fell off the frame — the test premise broke", w, i)
 			}

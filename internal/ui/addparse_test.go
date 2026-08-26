@@ -83,6 +83,13 @@ func TestParseAddLineSplitsTokensFromTheTitle(t *testing.T) {
 		{name: "last value/effort/due wins",
 			raw: "t value:1 value:5 due:+1d due:+2d", title: "t",
 			tk: addTokens{value: 5, due: "+2d"}},
+		{name: "is:draft marks the add a draft (t-v4pp)",
+			raw: "t is:draft", title: "t", tk: addTokens{draft: true}},
+		{name: "every other is: value is refused with guidance",
+			raw: "t is:blocked", title: "t",
+			tk: addTokens{bad: []string{"is:blocked — only is:draft applies to an add; filter the view instead, or quote it to keep it in the title"}}},
+		{name: "a quoted is:draft stays title text",
+			raw: `"is:draft" の説明`, title: "is:draft の説明"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -168,6 +175,62 @@ func TestQuickAddRefusesBadTokensAndKeepsTheLine(t *testing.T) {
 	commitAdd(t, m)
 	if m.mode != modeAdd || m.add == nil || m.add.input.Value() != "t dep:t-nope" {
 		t.Fatalf("a store-refused add must reopen with the raw line; mode=%v", m.mode)
+	}
+	press(m, "esc")
+}
+
+// The draft trio (t-v4pp): the token creates a repo-less task, the filter
+// inherits the draft, and the repo+draft clash is refused in-modal.
+func TestQuickAddCreatesADraft(t *testing.T) {
+	m := boardModel(t, 240, 50)
+	m.curLane = m.b.LaneIndex("backlog")
+	press(m, "a")
+	m.add.input.SetValue("思いつきの控え is:draft")
+	commitAdd(t, m)
+
+	cur := m.curTask()
+	if cur == nil || cur.Title != "思いつきの控え" {
+		t.Fatalf("selection = %+v, want the new draft with the token parsed out", cur)
+	}
+	if len(cur.Repos) != 0 {
+		t.Errorf("repos = %v, want none — a draft attaches no repo", cur.Repos)
+	}
+}
+
+func TestQuickAddInheritsDraftFromTheFilter(t *testing.T) {
+	m := boardModel(t, 240, 50)
+	m.applyFilter("is:draft")
+	press(m, "a")
+	if m.add == nil || !m.add.opts.Draft {
+		t.Fatal("adding under is:draft must inherit the draft — a repo-attached add would vanish from the very view it was added into")
+	}
+	if out := frame(m); !strings.Contains(out, "draft (no repo)") {
+		t.Error("the chips row must declare the draft, never stamp it silently")
+	}
+	m.add.input.SetValue("控えを一枚")
+	commitAdd(t, m)
+	cur := m.curTask()
+	if cur == nil || cur.Title != "控えを一枚" || len(cur.Repos) != 0 {
+		t.Fatalf("task = %+v, want a repo-less draft selected under the still-matching filter", cur)
+	}
+}
+
+func TestQuickAddRefusesDraftWithAnInheritedRepo(t *testing.T) {
+	m := boardModel(t, 240, 50)
+	m.applyFilter("repo:tomo/kyushu-trip")
+	press(m, "a")
+	const raw = "t is:draft"
+	m.add.input.SetValue(raw)
+	// The clash is on the ⚠ row BEFORE Enter, like every other live refusal.
+	if out := frame(m); !strings.Contains(out, "draft conflicts with repo") {
+		t.Error("the modal must name the repo/draft clash before Enter does")
+	}
+	commitAdd(t, m)
+	if m.mode != modeAdd || m.add.input.Value() != raw {
+		t.Fatal("the clash must be refused in-modal with the typed line intact")
+	}
+	if !strings.Contains(m.status, "conflicts with repo") {
+		t.Errorf("status = %q, want the clash named", m.status)
 	}
 	press(m, "esc")
 }

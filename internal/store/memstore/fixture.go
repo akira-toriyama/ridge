@@ -1,4 +1,4 @@
-// A synthetic 33-task board: a family's Kyushu camping trip (an 18-member
+// A synthetic 34-task board: a family's Kyushu camping trip (an 18-member
 // epic), three smaller boxes wired to it by epic deps (t-vfm9), and unfiled
 // kitchen and trip-support tasks. It began as a
 // snapshot of a real work board; t-862b re-themed the SURFACE (titles,
@@ -8,6 +8,12 @@
 // (the width bugs this app guards against live there). Epics are not tasks
 // and hold no lane. This is a static in-memory copy; the mock provider
 // never reads or writes a real .furrow store.
+//
+// t-dg7k is NOT from the snapshot, like the Due values and t-9sa6's refs: it
+// is the board's one DRAFT (no repo attached — furrow's `add --draft` shape),
+// so the draft marker on cards/table, the peek's "draft (no repo)" line and
+// the is:draft filter all have a headless frame to land in (t-v4pp). Keep it
+// the only repo-less task: `no:repo`/`is:draft` tests pin exactly it.
 
 package memstore
 
@@ -549,6 +555,15 @@ func fixtureTasks() []*board.Task {
 			Created:  ts("2026-08-08T13:00:00Z"),
 			Updated:  ts("2026-08-09T13:05:00Z"),
 			Body:     "# 燻製チャレンジ\n\nダッチオーブン（[[t-ecfm]]）で温燻ができるらしい。ただしベランダの煙は近所問題になるので、熱源と煙の少ないチップの組合せを調べてから。キャンプ場でやる案が先かもしれない。",
+		},
+		{
+			ID:       "t-dg7k",
+			Title:    "来季の装備メモ — ポータブル冷蔵庫か大型クーラー増設か（どの計画に載せるか未定）",
+			Status:   "icebox",
+			Priority: 5020,
+			Created:  ts("2026-08-09T09:30:00Z"),
+			Updated:  ts("2026-08-09T09:30:00Z"),
+			Body:     "# 来季の装備メモ\n\n電源の実測（[[t-p7xw]]）の結果次第で、来季は冷蔵庫化するか保冷力の高いクーラーを足すかが分かれる。旅の計画に載せるか台所側に載せるかも未定なので、決まるまで draft のまま置く。",
 		},
 	}
 }

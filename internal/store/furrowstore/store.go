@@ -716,6 +716,11 @@ func (p *Store) Add(title string, o board.AddOptions) (string, error) {
 	if o.Repo != "" {
 		args = append(args, "-r", o.Repo)
 	}
+	if o.Draft {
+		// Validate refused the Repo+Draft combination above, so this flag
+		// never rides next to -r (furrow's own conflict refusal, exit 2).
+		args = append(args, "--draft")
+	}
 	if o.Value != 0 {
 		args = append(args, "--value", strconv.Itoa(o.Value))
 	}

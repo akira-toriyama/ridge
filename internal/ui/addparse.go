@@ -13,7 +13,7 @@ import (
 // overlap (value:4 due:+1d). One line stays the modal's shape — a second stage
 // per field would make six fields cost six prompts.
 //
-//	盤面から起票 value:4 effort:2 due:+1d dep:t-x check:"再現手順を書く" ref:ui/addmode.go
+//	盤面から起票 value:4 effort:2 due:+1d dep:t-x check:"再現手順を書く" ref:ui/addmode.go is:draft
 //
 // Splitting is on spaces. A `"` or `'` is significant in exactly TWO spots —
 // opening a field (the whole field is literal title text: the escape hatch
@@ -42,14 +42,19 @@ type addTokens struct {
 	deps          []string
 	checks        []string
 	refs          []string
+	draft         bool     // is:draft — furrow's `add --draft` (t-v4pp)
 	bad           []string // "value:abc — not a number"
 }
 
 // apply copies the parsed details onto an inherited-context AddOptions. The
-// two halves are disjoint fields, so there is no override rule to invent.
+// two halves are disjoint fields except draft, which the filter can also
+// inherit (is:draft) — either source makes the task a draft, so it ORs.
 func (tk addTokens) apply(o board.AddOptions) board.AddOptions {
 	o.Value, o.Effort, o.Due = tk.value, tk.effort, tk.due
 	o.Deps, o.Checks, o.Refs = tk.deps, tk.checks, tk.refs
+	if tk.draft {
+		o.Draft = true
+	}
 	return o
 }
 
@@ -204,6 +209,17 @@ func parseAddLine(raw string) (title string, tk addTokens) {
 				continue
 			}
 			tk.refs = append(tk.refs, v)
+		case "is":
+			// The one is: value an ADD can mean: born without a repo
+			// (furrow `add --draft`), same spelling as the -q filter term.
+			// Every other is: value describes a state the store derives
+			// (blocked, overdue, …) — nothing an add could stamp — so it is
+			// refused with its own guidance rather than silently titled.
+			if v == "draft" {
+				tk.draft = true
+				continue
+			}
+			tk.bad = append(tk.bad, f.raw+" — only is:draft applies to an add; filter the view instead, or quote it to keep it in the title")
 		case "label", "epic", "repo":
 			tk.bad = append(tk.bad, f.raw+" — inherited from the filter; filter first, or quote it to keep it in the title")
 		case "status", "lane":

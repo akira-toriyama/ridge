@@ -160,7 +160,7 @@ func TestLastRowIsTheStatusLine(t *testing.T) {
 		t.Fatalf("frame is %d rows, want 50", len(lines))
 	}
 	last := strings.TrimSpace(lines[len(lines)-1])
-	if last != "fixture · 33 tasks" {
+	if last != "fixture · 34 tasks" {
 		t.Errorf("last row = %q, want the startup status line", last)
 	}
 

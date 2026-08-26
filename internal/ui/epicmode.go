@@ -138,7 +138,7 @@ func (m *Model) enterEpic(id string) {
 // a slice-derived repo was a branch no key sequence could reach (found by
 // review — the effective query is what survives the axis switch).
 func (m *Model) enterEpicNew() tea.Cmd {
-	_, _, repo := inheritContext(m.effectiveQuery())
+	_, _, repo, _ := inheritContext(m.effectiveQuery())
 	m.epic = &epicState{stage: epicInput, inputFor: epicInputNewBox,
 		creating: true, newRepo: repo, input: newEpicInput()}
 	m.mode = modeEpic

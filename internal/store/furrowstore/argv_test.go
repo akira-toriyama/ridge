@@ -79,6 +79,55 @@ func TestAddMapsTheDetailFlags(t *testing.T) {
 	}
 }
 
+// The draft add and its promotion (t-v4pp), against furrow's own re-read:
+// `--draft` lands a repo-less task, the empty-`-r` load still serves it (the
+// default `furrow ls` hides drafts), `is:draft` passes through -q, and the
+// promote gesture is nothing draft-specific — the existing repo attach.
+//
+// bite-exempt: execs a real furrow binary and always skips where furrow is not
+func TestAddDraftAndPromoteByRepoAttach(t *testing.T) {
+	p, _ := newLabProvider(t)
+
+	id, err := p.Add("draft の思いつき", board.AddOptions{Draft: true})
+	if err != nil {
+		t.Fatalf("add --draft: %v", err)
+	}
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	got := p.Board().Task(id)
+	if got == nil {
+		t.Fatalf("%s is not on the board after the draft add — load must read drafts (empty -r)", id)
+	}
+	if len(got.Repos) != 0 {
+		t.Errorf("repos = %v, want none — --draft attaches no repo", got.Repos)
+	}
+
+	ids, err := p.Query("is:draft")
+	if err != nil {
+		t.Fatalf("is:draft: %v", err)
+	}
+	found := false
+	for _, x := range ids {
+		found = found || x == id
+	}
+	if !found {
+		t.Errorf("is:draft = %v, want it to serve %s", ids, id)
+	}
+
+	// Promotion: the repo attach the edit overlay already issues.
+	if err := p.PersistFields(id, board.FieldPatch{AddRepos: []string{"lab/lab"}}); err != nil {
+		t.Fatalf("promote via repo attach: %v", err)
+	}
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	got = p.Board().Task(id)
+	if got == nil || len(got.Repos) != 1 || got.Repos[0] != "lab/lab" {
+		t.Errorf("after the promote, task = %+v, want repos [lab/lab]", got)
+	}
+}
+
 // The retitle half is the damaging one: the board applies the rename
 // optimistically, so a refusal here is watched to land and then get yanked.
 //
