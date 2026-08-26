@@ -64,6 +64,7 @@
 | **canonical（順）** | Table の既定並び = 盤面そのもの（lane 順 → lane 内 priority 順）。field ソートの不在であり、方向を持たない。 |
 | **note 追記（`n`）** | 選択タスクの body に1段落追記する入力（`furrow note` 相当 — 追記 + `updated` 前進を1コマンドで）。edit overlay の input stage を直接開く軽経路で、`e` の $EDITOR 全開はそのまま別に残る。esc/空 ⏎ は何も足さずに閉じ、適用も1段落ごとに閉じる。 |
 | **quick add** | `a` で開く起票 modal（`addmode.go`）。`furrow add -s <フォーカス列>` に写像し、適用中 filter の単一値 `label:`/`epic:`/`repo:` を継承（チップ表示 — 黙って付けない。GH の filtered-metadata 継承則）。確定後は再読 → 新カードを選択（filter が隠すなら pin）。 |
+| **inline トークン（quick add）** | タイトル行に混ぜて打つ詳細指定（`addparse.go`）。`value:4 effort:2 due:+1d dep:t-x check:"…" ref:…` = `furrow add` の同名 flag に写像し、-q と重なる語彙（value/due）は同綴り。`"`/`'` で空白入り check を運び、**引用で始まる語は常にタイトル文字列**（`value:` を含むタイトルの逃げ道）。継承側キー（`label:`/`epic:`/`repo:`/`status:`/`lane:`）は黙殺せず**理由つきで拒否**。チップ行に毎キー live echo し、不正トークンは ⚠ 行 + modal 内拒否（行は生存）。複数行貼り付け起票（`--stdin` 相当）は対象外 — CLI が適切。 |
 | **pin** | フィルタで隠れている blocker へジャンプしたとき、そのカードだけ一時的に盤面へ差し込むこと。飛んだ先が空振りにならないようにする。 |
 
 ## 表示要素

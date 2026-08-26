@@ -39,6 +39,10 @@ type persistOp struct {
 	addedID *string
 	// The submission the add carried, kept so a store refusal can hand the
 	// typed text back (reopen the modal) instead of eating it (t-74y3).
+	// addRaw is the line as TYPED, inline tokens and all — the reopened modal
+	// restores it, so a due form furrow refused comes back editable; addTitle
+	// is the parsed title, which is what labels and failure notes quote.
+	addRaw   string
 	addTitle string
 	addOpts  board.AddOptions
 	// The same contract for the new-box modal: an epic add is store-first, so
@@ -264,7 +268,7 @@ func (m *Model) quitOrFlush() tea.Cmd {
 // write (never a bare Cmd racing the queue's own furrow process), but unlike
 // them it applies nothing optimistically — the store invents the id, so the
 // card appears at the reconcile that follows the drain.
-func (m *Model) enqueueAdd(title string, opts board.AddOptions) tea.Cmd {
+func (m *Model) enqueueAdd(title, raw string, opts board.AddOptions) tea.Cmd {
 	if m.rollingBack {
 		// Backstop only — onAddKey refuses first and keeps the modal (and
 		// the typed title) open. A future caller must not be able to slip a
@@ -280,6 +284,7 @@ func (m *Model) enqueueAdd(title string, opts board.AddOptions) tea.Cmd {
 		label:    "add " + title,
 		noLocal:  true,
 		addedID:  id,
+		addRaw:   raw,
 		addTitle: title,
 		addOpts:  opts,
 		run: func() ([]string, error) {

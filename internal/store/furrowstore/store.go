@@ -712,6 +712,26 @@ func (p *Store) Add(title string, o board.AddOptions) (string, error) {
 	if o.Repo != "" {
 		args = append(args, "-r", o.Repo)
 	}
+	if o.Value != 0 {
+		args = append(args, "--value", strconv.Itoa(o.Value))
+	}
+	if o.Effort != 0 {
+		args = append(args, "--effort", strconv.Itoa(o.Effort))
+	}
+	if o.Due != "" {
+		args = append(args, "--due", o.Due)
+	}
+	for _, d := range o.Deps {
+		args = append(args, "--dep", d)
+	}
+	for _, c := range o.Checks {
+		args = append(args, "--check", c)
+	}
+	// --ref is pflag CSV (the t-pwrp caveat); AddOptions.Validate refused
+	// `,`/`"` upstream, so what reaches the flag survives it verbatim.
+	for _, r := range o.Refs {
+		args = append(args, "--ref", r)
+	}
 	// The title goes LAST, behind `--`: it is user free text and a leading
 	// dash would otherwise be parsed as a flag and refused.
 	args = append(args, "--", title)

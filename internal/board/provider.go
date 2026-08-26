@@ -1,5 +1,10 @@
 package board
 
+import (
+	"fmt"
+	"strings"
+)
+
 // Provider is the seam between the UI and the task store — the port; the
 // adapters live in internal/store (furrowstore for the real CLI/JSON store,
 // memstore for the fixture).
@@ -191,12 +196,57 @@ type EpicPrevious struct {
 }
 
 // AddOptions is quick add's inherited context — the GitHub Projects rule
-// that a filtered view's metadata applies to the item it creates.
+// that a filtered view's metadata applies to the item it creates — plus the
+// detail fields the modal's inline tokens carry (t-69v9), furrow add's
+// --value/--effort/--due/--dep/--check/--ref. The zero value of every detail
+// field means "omitted": an add has no clearing form, so 0/"" never reaches
+// the flag. Bulk creation (--stdin) is deliberately NOT here — pasting many
+// titles is the CLI's job, not a modal's.
 type AddOptions struct {
 	Lane  string // "" = the store's default lane
 	Label string // one inherited label
 	Epic  string // e- id
 	Repo  string // owner/repo or unique short name; "" = the board's auto-attach
+
+	Value  int      // 1..5; 0 = unset
+	Effort int      // 1..5; 0 = unset
+	Due    string   // furrow date form incl. the +1d offset; "" = no promise
+	Deps   []string // t- ids; existence/acyclicity stay furrow's rules
+	Checks []string // unchecked checklist items, text verbatim
+	Refs   []string // free text; `,` and `"` refused (the t-pwrp CSV caveat)
+}
+
+// Validate refuses an AddOptions furrow would refuse — BEFORE the modal
+// closes, so the typed line survives as a still-open modal instead of a
+// refusal round trip. Grammar stays furrow's: due goes through the same
+// ParseDue mirror SetFields uses, and refs through the same CSV caveat.
+func (o AddOptions) Validate() error {
+	for _, v := range []int{o.Value, o.Effort} {
+		if v < 0 || v > 5 {
+			return fmt.Errorf("estimate %d: want 1..5", v)
+		}
+	}
+	if o.Due != "" {
+		if _, err := ParseDue(o.Due); err != nil {
+			return err
+		}
+	}
+	for _, d := range o.Deps {
+		if d == "" {
+			return fmt.Errorf("dep: needs a task id")
+		}
+	}
+	for _, c := range o.Checks {
+		if strings.TrimSpace(c) == "" {
+			return fmt.Errorf("check: needs text")
+		}
+	}
+	for _, r := range o.Refs {
+		if err := validateRef(r); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // FieldPatch is one already-applied metadata edit. nil means "untouched";

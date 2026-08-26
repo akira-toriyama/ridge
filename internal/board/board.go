@@ -498,14 +498,15 @@ func (b *Board) SetBody(id, body string) error {
 // (`-1d` back-dates, `+0d` means "now").
 var dueOffset = regexp.MustCompile(`^[+-][0-9]+[mhdw]$`)
 
-// parseDue mirrors furrow's `--due` grammar so the TUI can validate a keystroke
+// ParseDue mirrors furrow's `--due` grammar so the TUI can validate a keystroke
 // without a round trip: a bare day (which furrow reads as the WHOLE day, i.e.
 // end of that day LOCAL), a day+time read as LOCAL, an RFC3339 instant, or a
 // signed offset from now. The grammar itself stays furrow's — ridge sends the
 // raw string on to `furrow set --due` and this value only has to hold until the
 // post-persist reconcile re-reads furrow's own truth. Keep it a mirror: a form
-// this refuses is a form the UI cannot reach at all.
-func parseDue(s string) (time.Time, error) {
+// this refuses is a form the UI cannot reach at all. Exported for the add
+// paths (AddOptions.Validate, memstore's fixture add) — same mirror, one spelling.
+func ParseDue(s string) (time.Time, error) {
 	s = strings.TrimSpace(s)
 	if dueOffset.MatchString(s) {
 		n, err := strconv.Atoi(s[:len(s)-1]) // Atoi keeps the sign
@@ -534,6 +535,23 @@ func parseDue(s string) (time.Time, error) {
 		"YYYY-MM-DDTHH:MM, an RFC3339 instant, or a signed offset like +1d/+2h", s)
 }
 
+// validateRef refuses a ref the flag layer would mangle. Measured on v4.0.0
+// (cmd_mutate.go newRefCmd): --add/--rm are pflag StringSlice, i.e. a CSV
+// field — a ref carrying a comma lands SPLIT into two refs after the
+// reconcile, and a bare `"` is a flag-layer parse error (exit 2) that arrives
+// only after the optimistic apply. Mirror-refused here until furrow takes
+// refs verbatim (requests: t-pwrp); an empty --add is furrow's own exit 2.
+// `furrow add --ref` is the same pflag type, so the add path shares this.
+func validateRef(r string) error {
+	if r == "" {
+		return fmt.Errorf("a ref cannot be empty")
+	}
+	if strings.ContainsAny(r, `,"`) {
+		return fmt.Errorf("ref %q: `,` and `\"` cannot ride furrow's CSV flag parsing — it would split or refuse the ref", r)
+	}
+	return nil
+}
+
 // SetFields applies a metadata patch locally and stamps Updated — the
 // optimistic half of Provider.PersistFields. It validates BEFORE mutating,
 // so a refused gesture leaves the task untouched.
@@ -551,22 +569,13 @@ func (b *Board) SetFields(id string, p FieldPatch) error {
 		return fmt.Errorf("a title cannot be empty")
 	}
 	for _, r := range p.AddRefs {
-		// Measured on v4.0.0 (cmd_mutate.go newRefCmd): --add/--rm are pflag
-		// StringSlice, i.e. a CSV field — a ref carrying a comma lands SPLIT
-		// into two refs after the reconcile, and a bare `"` is a flag-layer
-		// parse error (exit 2) that arrives only after the optimistic apply.
-		// Mirror-refused here until furrow takes refs verbatim (requests:
-		// t-pwrp); an empty --add is furrow's own exit 2.
-		if r == "" {
-			return fmt.Errorf("a ref cannot be empty")
-		}
-		if strings.ContainsAny(r, `,"`) {
-			return fmt.Errorf("ref %q: `,` and `\"` cannot ride furrow's CSV flag parsing — it would split or refuse the ref", r)
+		if err := validateRef(r); err != nil {
+			return err
 		}
 	}
 	var due time.Time
 	if p.Due != nil && *p.Due != "" {
-		d, err := parseDue(*p.Due)
+		d, err := ParseDue(*p.Due)
 		if err != nil {
 			return err
 		}
@@ -661,7 +670,7 @@ func (b *Board) AppendNote(id, text string) error {
 }
 
 // DepAdd makes id wait on dep and stamps Updated — the optimistic half of
-// Provider.PersistDepAdd. It mirrors `furrow dep`'s contract the way parseDue
+// Provider.PersistDepAdd. It mirrors `furrow dep`'s contract the way ParseDue
 // mirrors --due: every dep must exist, adding is acyclic and idempotent. Keep
 // it a mirror — a form this refuses is a form the UI cannot reach at all, and
 // the acyclic walk here only has to hold until the persist's own verdict.

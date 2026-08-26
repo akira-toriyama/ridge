@@ -147,14 +147,16 @@ func (m *Model) demoState(kind string) error {
 
 	case "add":
 		// A filtered board, so the modal PROVES the context inheritance: the
-		// filter's label lands in the chips, not silently on the task.
+		// filter's label lands in the chips, not silently on the task. The
+		// typed line carries the inline tokens (t-69v9) plus one bad one, so
+		// this single frame also proves the live echo AND the warning row.
 		m.ti.SetValue("label:bbq")
 		m.applyFilter("label:bbq")
 		m.relayout()
 		if c := m.enterAdd(); c != nil {
 			_ = c
 		}
-		m.add.input.SetValue("盤面から起票するタスク")
+		m.add.input.SetValue(`盤面から起票するタスク value:4 due:+1d dep:t-jv3j check:"再現手順を書く" effort:高`)
 
 	case "edit":
 		// Open the field-edit overlay on a task with a checklist AND labels
