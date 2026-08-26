@@ -13,11 +13,16 @@ import (
 
 // A title is user free text and furrow's parser reads a leading `-` as a
 // shorthand flag, so every command that takes one as a positional needs `--`.
-// Both of these ran a real `furrow` against a throwaway store; they skip where
-// the binary is absent, like the rest of the contract suite.
+// These run a real `furrow` against a throwaway store; they skip where the
+// binary is absent, like the rest of the contract suite. TestContract* is not
+// decoration: build.yml's contract job runs `-run TestContract` against the
+// pinned release, and a lab test outside that name never executes in CI at
+// all — the ci job has no furrow and this package is bite-exempt (found by
+// review: the draft test's first name left `--draft` with zero CI coverage,
+// and three pre-existing tests here had the same hole).
 
 // bite-exempt: execs a real furrow binary and always skips where furrow is not
-func TestAddAcceptsATitleStartingWithADash(t *testing.T) {
+func TestContractAddAcceptsATitleStartingWithADash(t *testing.T) {
 	p, _ := newLabProvider(t)
 
 	const title = "-t は flag ではなくタイトル"
@@ -42,7 +47,7 @@ func TestAddAcceptsATitleStartingWithADash(t *testing.T) {
 // contract under test, so this runs the real binary.
 //
 // bite-exempt: execs a real furrow binary and always skips where furrow is not
-func TestAddMapsTheDetailFlags(t *testing.T) {
+func TestContractAddMapsTheDetailFlags(t *testing.T) {
 	p, dir := newLabProvider(t)
 	dep := labAdd(t, dir, "依存先")
 
@@ -98,7 +103,7 @@ func TestAddMapsTheDetailFlags(t *testing.T) {
 // existing repo attach.
 //
 // bite-exempt: execs a real furrow binary and always skips where furrow is not
-func TestAddDraftAndPromoteByRepoAttach(t *testing.T) {
+func TestContractAddDraftAndPromoteByRepoAttach(t *testing.T) {
 	p, dir := newLabProvider(t)
 
 	// `furrow config set` is not in the pinned release, so the key is written
@@ -192,7 +197,7 @@ func TestAddDraftAndPromoteByRepoAttach(t *testing.T) {
 // optimistically, so a refusal here is watched to land and then get yanked.
 //
 // bite-exempt: execs a real furrow binary and always skips where furrow is not
-func TestRetitleAcceptsATitleStartingWithADash(t *testing.T) {
+func TestContractRetitleAcceptsATitleStartingWithADash(t *testing.T) {
 	p, dir := newLabProvider(t)
 
 	id := labAdd(t, dir, "ordinary title")
