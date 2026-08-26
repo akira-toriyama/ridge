@@ -24,13 +24,15 @@
 | **Board** | カンバン。レーンが列、カードがタスク。既定のビュー。 |
 | **Table** | 平坦な表形式のビュー。`v` で Board と切り替え。列は id/lane/印/v-e/title/repo/epic/labels/due/updated/deps。 |
 | **Graph** | **依存グラフ**。1タスクを起点に、上が blocker・下が「閉じると動き出すもの」の階層図。`S` / `Shift+Space`。 |
+| **Map**（依存マップ） | **全依存クラスタを一画面で俯瞰するビュー**。Graph が「1タスク起点」なのに対し、こちらは起点を持たない。`T`（`t` = そのタスクの依存ツリー、の全体版）。線は引かず、**インデント = 深さ・`←` = blocker の名指し**で表す。 |
 | **peek**（詳細ペイン） | 選択中タスクの詳細を横に出すオーバーレイ。`Space`。 |
-| **依存マップ** | *(未実装)* 全依存クラスタを一画面で俯瞰するビュー。Graph が「1タスク起点」なのに対し、こちらは「全体」。 |
+| **cluster**（依存クラスタ） | 依存辺で繋がったタスクの連結成分。Map のパネル 1 枚 = 1 クラスタ。実データでは未完了分で 9 個・中央値 2 ノード。正本は `internal/board/cluster.go`（`Graph.Clusters`）— furrow に同形の口が無いので ridge が topology だけ自前で出す。 |
+| **scope**（Map の） | Map が何を数えるか。`open` = done を辺ごと落とす（既定 — 終わった依存は blocker ではない）/ `all` = 全部。`z` で切替。 |
 
 ## mode（キーボードの所有者）
 
-現在 mode はタイトル行右端の ⟨…⟩ トークンで**常時**表示される（graph だけは自前のタイトル行
-— Graph タブ + ⟨GRAPH⟩）。`?` help はこの mode 名で節分けされ、今いる mode の節に
+現在 mode はタイトル行右端の ⟨…⟩ トークンで**常時**表示される（full-screen の 2 つ —
+graph と Map — だけは自前のタイトル行 = Graph/Map タブ + ⟨GRAPH⟩ / ⟨MAP⟩）。`?` help はこの mode 名で節分けされ、今いる mode の節に
 「you are here」が付く。トークンの正式語はこの表が正本。
 
 | 用語 | トークン | 意味 |
@@ -43,6 +45,7 @@
 | **slice mode** | ⟨SLICE⟩ | slice パネルが専有。 |
 | **epic mode** | ⟨EPIC⟩ | epic オーバーレイが専有（`epicmode.go`）。slice パネルの epic 軸から入り、`esc` はパネルに戻る。 |
 | **graph** | ⟨GRAPH⟩ | mode enum 外だがキーボードを専有する full-screen view — 実質 8 つ目。 |
+| **dep map** | ⟨MAP⟩ | 同じく mode enum 外の full-screen view（`T`）。`?` の節名はこの行の語**そのまま**（`keys.go` の `helpSection.title`）。 |
 | **drag** | ⟨DRAG⟩ | mode ではない（`dragState`）が、gesture 中はトークンが出る。 |
 
 ## 操作
@@ -91,7 +94,6 @@
 | **ego-graph**（起点グラフ） | あるタスクから N ホップ以内の依存部分グラフ。実データでは最大12ノード・最大5段・1段の最大幅4。 |
 | **hop radius** | ego-graph を何ホップまで辿るか。`z` / `1` `2` `3` `0` で切替。 |
 | **re-root** | Graph 上のノードを新しい起点にすること（`Enter`）。「読む」ではなく「歩く」ための操作で、静止画にはできない。 |
-| **cluster** | 依存グラフの連結成分。実データでは未完了分で9個、中央値2ノード。 |
 | **`-dump`** | TTY 無しで1フレームを標準出力に書いて終了するフラグ。headless 検証の土台。 |
 | **`-demo`** | 手では捉えにくい一時状態（drag 中・edit の sub-editor・失敗表示など）を1フレームに固定して `-dump` する。名前一覧の正本は `ui.DemoNames`（`ridge -h` もそこから出る。ここに写しを置いたら2度古くなった）。 |
 | **`-readonly`** | fixture を schema gate で read-only にした盤面を出す。model の状態ではなく store の性質なので `-demo` ではなくフラグ。書き込みは全部拒否される。 |

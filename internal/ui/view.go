@@ -35,6 +35,8 @@ func (m *Model) View() tea.View {
 		content = m.renderTable()
 	case viewGraph:
 		content = m.renderGraph()
+	case viewMap:
+		content = m.renderMap()
 	default:
 		content = m.renderBoard()
 	}
@@ -476,8 +478,8 @@ func (m *Model) helpLayer() *lg.Layer {
 
 	// One titled block per mode section, so a key is read under the mode that
 	// answers it. The current mode's heading is lit — the overlay opens from
-	// normal mode, move mode and the graph, so "which of these blocks is mine
-	// right now" is a real question with three answers. Mode outranks view:
+	// normal mode, move mode, the graph and the dep map, so "which of these
+	// blocks is mine right now" is a real question. Mode outranks view:
 	// a lift is a lift on whatever screen it started from.
 	now := "normal mode"
 	switch {
@@ -485,6 +487,8 @@ func (m *Model) helpLayer() *lg.Layer {
 		now = "move mode"
 	case m.view == viewGraph:
 		now = "graph"
+	case m.view == viewMap:
+		now = "dep map"
 	}
 
 	// Render each section as its own block first…

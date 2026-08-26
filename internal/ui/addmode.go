@@ -168,7 +168,7 @@ func (m *Model) onAddKey(msg tea.KeyPressMsg) tea.Cmd {
 // anywhere else the title survives only in the failure note (whose label
 // names it).
 func (m *Model) reopenRefusedAdd(op persistOp) tea.Cmd {
-	if m.mode != modeNormal || m.view == viewGraph || m.fullHelp {
+	if m.mode != modeNormal || m.fullScreen() || m.fullHelp {
 		// The graph shares modeNormal but never composites addLayer — a
 		// reopen there would put the keyboard inside an invisible modal
 		// (t-74y3). The help overlay hides addLayer the same way (zHelp is

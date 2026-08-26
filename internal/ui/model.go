@@ -57,6 +57,9 @@ const (
 	// The board's geometry is irrelevant inside it, so it gets the whole
 	// terminal instead of a cramped panel floating over the columns.
 	viewGraph
+	// viewMap is the dependency MAP — also full-screen. The graph is rooted on
+	// one task; this one is rooted on nothing and shows every cluster at once.
+	viewMap
 )
 
 func (v viewKind) String() string {
@@ -67,6 +70,8 @@ func (v viewKind) String() string {
 		return "table"
 	case viewGraph:
 		return "graph"
+	case viewMap:
+		return "map"
 	}
 	return "unknown"
 }
@@ -188,6 +193,23 @@ type Model struct {
 	graphScroll int
 	graphStack  []string
 	graphLay    *egoLayout
+	// graphFrom is the view `esc` returns to. The graph is reachable from the
+	// board AND from the dep map, and dumping a reader who came from the map
+	// back onto the board loses the overview they were reading.
+	graphFrom viewKind
+
+	// The dependency map view (depmap.go). mapSel is the row the cursor is on;
+	// mapScope decides whether done tasks take part.
+	mapScope board.ClusterScope
+	mapSel   string
+	// mapMoved reports that the USER walked the cursor while in the map.
+	// Closing the map carries the cursor back to the board, and without this
+	// the fallback row that clampMapSel picked — for any task in no cluster,
+	// which is most of the board — was carried back as if it were a choice,
+	// silently relocating the board cursor on a read-only round trip.
+	mapMoved  bool
+	mapScroll int
+	mapLay    *mapLayout
 
 	lay       *layout
 	status    string
@@ -522,6 +544,10 @@ func (m *Model) onKey(msg tea.KeyPressMsg) tea.Cmd {
 	if m.view == viewGraph {
 		return m.onGraphKey(msg)
 	}
+	// The dep map is a full-screen mode by the same rule.
+	if m.view == viewMap {
+		return m.onMapKey(msg)
+	}
 	return m.onNormalKey(msg)
 }
 
@@ -566,6 +592,12 @@ func (m *Model) onGraphKey(msg tea.KeyPressMsg) tea.Cmd {
 		// ⇧space on the node you are already on is a no-op re-root; treat it as
 		// "root here", which is what the gesture means on the board.
 		m.rerootGraph()
+
+	case key.Matches(msg, m.keys.Map):
+		// Zoom out: the ego graph's neighbourhood seen inside every cluster.
+		// Seeded with the graph's own selection, not the board cursor, which
+		// has not moved since the graph opened.
+		m.openMap(m.graphSel)
 
 	case key.Matches(msg, m.keys.PeekScroll):
 		if msg.String() == "ctrl+d" {
@@ -691,6 +723,13 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	case key.Matches(msg, m.keys.Graph):
 		m.openGraph()
+
+	case key.Matches(msg, m.keys.Map):
+		id := ""
+		if t := m.curTask(); t != nil {
+			id = t.ID
+		}
+		m.openMap(id)
 
 	case key.Matches(msg, m.keys.Peek):
 		m.peekOpen = !m.peekOpen

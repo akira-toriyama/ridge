@@ -13,7 +13,7 @@ import (
 // unknown-name error and the tests all read this slice, because the list was
 // duplicated in three places and adding two states updated two of them —
 // `ridge -h` then advertised eight of ten.
-var DemoNames = []string{"move", "drag", "add", "adddraft", "edit", "editpick", "editinput", "editdeps", "editrefs", "note", "refs", "graph", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicnew", "fail"}
+var DemoNames = []string{"move", "drag", "add", "adddraft", "edit", "editpick", "editinput", "editdeps", "editrefs", "note", "refs", "graph", "map", "mapall", "mapfiltered", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicnew", "fail"}
 
 // Options configures a freshly-constructed Model. The zero value is the
 // default TUI: dark palette, board view, no filter.
@@ -240,6 +240,36 @@ func (m *Model) demoState(kind string) error {
 			}
 		}
 		m.openGraph()
+
+	case "map":
+		// The dependency map at its DEFAULT scope: done tasks dropped, so the
+		// fixture's one 19-node tangle breaks into the three live clusters
+		// that are actually in the way. Seeded on a blocked task, so the frame
+		// also proves the selection gutter and the strip below it.
+		m.openMap("t-jv3j")
+
+	case "mapall":
+		// The same board at scope=all: one 19-node cluster, depth 5, which is
+		// the frame that proves the indent ladder and the "+N" blocker tag
+		// (t-t38k has three blockers). Also the only demo where a panel is
+		// taller than one column's share of the canvas, so it proves the pack
+		// does not silently drop the overflow.
+		m.mapScope = board.ClusterAll
+		m.openMap("t-t38k")
+
+	case "mapfiltered":
+		// The map UNDER a board filter. The map deliberately shows what the
+		// filter hides — an edge that vanishes because of a query is a lie
+		// about the board — so this frame is the proof that such rows are
+		// muted and COUNTED rather than dropped.
+		// is:blocked is the filter that makes the point: the board narrows to
+		// the tasks that are stuck, and the map still draws the ROOTS that are
+		// doing the blocking — muted and counted, because a cluster missing
+		// the task at the top of it explains nothing.
+		m.ti.SetValue("is:blocked")
+		m.applyFilter("is:blocked")
+		m.relayout()
+		m.openMap("t-ehk7")
 
 	case "sort":
 		// The table sorted by due ascending: the ▲ marker in the header, the

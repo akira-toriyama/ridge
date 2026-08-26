@@ -162,7 +162,7 @@ func newEpicInput() textinput.Model {
 // overlay) the keyboard is already someone else's, and the failure note still
 // names the title.
 func (m *Model) reopenRefusedEpicAdd(op persistOp) tea.Cmd {
-	if (m.mode != modeSlice && m.mode != modeNormal) || m.view == viewGraph || m.fullHelp {
+	if (m.mode != modeSlice && m.mode != modeNormal) || m.fullScreen() || m.fullHelp {
 		return nil
 	}
 	m.epic = &epicState{stage: epicInput, inputFor: epicInputNewBox,
