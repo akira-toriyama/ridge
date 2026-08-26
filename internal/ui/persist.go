@@ -42,6 +42,11 @@ type persistOp struct {
 	// addRaw is the line as TYPED, inline tokens and all — the reopened modal
 	// restores it, so a due form furrow refused comes back editable; addTitle
 	// is the parsed title, which is what labels and failure notes quote.
+	// addOpts is the INHERITED context only, pre-apply: the reopened modal
+	// re-parses addRaw live, and Draft is the one field apply() ORs instead
+	// of assigning, so storing the composed opts made a typed is:draft
+	// unclearable after a refusal — delete the token, the chip stays (found
+	// by review).
 	addRaw   string
 	addTitle string
 	addOpts  board.AddOptions
@@ -268,7 +273,7 @@ func (m *Model) quitOrFlush() tea.Cmd {
 // write (never a bare Cmd racing the queue's own furrow process), but unlike
 // them it applies nothing optimistically — the store invents the id, so the
 // card appears at the reconcile that follows the drain.
-func (m *Model) enqueueAdd(title, raw string, opts board.AddOptions) tea.Cmd {
+func (m *Model) enqueueAdd(title, raw string, inherited, opts board.AddOptions) tea.Cmd {
 	if m.rollingBack {
 		// Backstop only — onAddKey refuses first and keeps the modal (and
 		// the typed title) open. A future caller must not be able to slip a
@@ -286,7 +291,7 @@ func (m *Model) enqueueAdd(title, raw string, opts board.AddOptions) tea.Cmd {
 		addedID:  id,
 		addRaw:   raw,
 		addTitle: title,
-		addOpts:  opts,
+		addOpts:  inherited,
 		run: func() ([]string, error) {
 			got, err := prov.Add(title, opts)
 			*id = got

@@ -217,6 +217,11 @@ type AddOptions struct {
 	Deps   []string // t- ids; existence/acyclicity stay furrow's rules
 	Checks []string // unchecked checklist items, text verbatim
 	Refs   []string // free text; `,` and `"` refused (the t-pwrp CSV caveat)
+
+	// Draft creates the task with NO repo attached — furrow's `add --draft`,
+	// which also suppresses the board's auto-attach. It conflicts with Repo
+	// (furrow refuses `--draft` with `-r`), and Validate mirrors that refusal.
+	Draft bool
 }
 
 // Validate refuses an AddOptions the flag layer would mangle or furrow would
@@ -227,6 +232,9 @@ type AddOptions struct {
 // of refusing (measured on dev 60074b8: `--value 9` exits 0 and stores 5) —
 // a silent clamp would stamp an estimate the user did not type.
 func (o AddOptions) Validate() error {
+	if o.Draft && o.Repo != "" {
+		return fmt.Errorf("draft conflicts with repo %q — a draft attaches no repo", o.Repo)
+	}
 	for _, v := range []int{o.Value, o.Effort} {
 		if v < 0 || v > 5 {
 			return fmt.Errorf("estimate %d: want 1..5", v)

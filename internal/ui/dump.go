@@ -13,7 +13,7 @@ import (
 // unknown-name error and the tests all read this slice, because the list was
 // duplicated in three places and adding two states updated two of them —
 // `ridge -h` then advertised eight of ten.
-var DemoNames = []string{"move", "drag", "add", "edit", "editpick", "editinput", "editdeps", "editrefs", "note", "refs", "graph", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicnew", "fail"}
+var DemoNames = []string{"move", "drag", "add", "adddraft", "edit", "editpick", "editinput", "editdeps", "editrefs", "note", "refs", "graph", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicnew", "fail"}
 
 // Options configures a freshly-constructed Model. The zero value is the
 // default TUI: dark palette, board view, no filter.
@@ -160,6 +160,22 @@ func (m *Model) demoState(kind string) error {
 		// frame must show the typed TITLE too, not just the scrolled-to
 		// tail. Quoted values are unit-tested; the frame's job is the echo.
 		m.add.input.SetValue("盤面起票 value:4 due:+1d dep:t-jv3j check:再現 effort:高")
+
+	case "adddraft":
+		// The draft half of quick add (t-v4pp): the board narrowed to
+		// is:draft — the fixture's one draft card with its dim marker — and
+		// the modal opened UNDER that filter, so a single frame proves the
+		// filter passthrough, the card marker and the inheritance: the chips
+		// say "draft (no repo)" without the user typing a token, because a
+		// plain add under a draft view would be born repo-attached and vanish
+		// from the very view it was added into.
+		m.ti.SetValue("is:draft")
+		m.applyFilter("is:draft")
+		m.relayout()
+		if c := m.enterAdd(); c != nil {
+			_ = c
+		}
+		m.add.input.SetValue("思いつきを控える")
 
 	case "edit":
 		// Open the field-edit overlay on a task with a checklist AND labels

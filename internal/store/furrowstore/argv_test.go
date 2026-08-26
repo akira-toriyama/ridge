@@ -1,6 +1,11 @@
 package furrowstore
 
 import (
+	"encoding/json"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/akira-toriyama/ridge/internal/board"
@@ -8,11 +13,16 @@ import (
 
 // A title is user free text and furrow's parser reads a leading `-` as a
 // shorthand flag, so every command that takes one as a positional needs `--`.
-// Both of these ran a real `furrow` against a throwaway store; they skip where
-// the binary is absent, like the rest of the contract suite.
+// These run a real `furrow` against a throwaway store; they skip where the
+// binary is absent, like the rest of the contract suite. TestContract* is not
+// decoration: build.yml's contract job runs `-run TestContract` against the
+// pinned release, and a lab test outside that name never executes in CI at
+// all — the ci job has no furrow and this package is bite-exempt (found by
+// review: the draft test's first name left `--draft` with zero CI coverage,
+// and three pre-existing tests here had the same hole).
 
 // bite-exempt: execs a real furrow binary and always skips where furrow is not
-func TestAddAcceptsATitleStartingWithADash(t *testing.T) {
+func TestContractAddAcceptsATitleStartingWithADash(t *testing.T) {
 	p, _ := newLabProvider(t)
 
 	const title = "-t は flag ではなくタイトル"
@@ -37,7 +47,7 @@ func TestAddAcceptsATitleStartingWithADash(t *testing.T) {
 // contract under test, so this runs the real binary.
 //
 // bite-exempt: execs a real furrow binary and always skips where furrow is not
-func TestAddMapsTheDetailFlags(t *testing.T) {
+func TestContractAddMapsTheDetailFlags(t *testing.T) {
 	p, dir := newLabProvider(t)
 	dep := labAdd(t, dir, "依存先")
 
@@ -79,11 +89,115 @@ func TestAddMapsTheDetailFlags(t *testing.T) {
 	}
 }
 
+// The draft add and its promotion (t-v4pp), against furrow's own re-read.
+//
+// The lab store gets a `default_repo` FIRST, because without one every add is
+// repo-less and the draft assertions hold vacuously — the first cut of this
+// test passed with the `--draft` argv line deleted (found by review: furrow's
+// auto-attach is the board config's `default_repo`, not the git remote; the
+// key must sit ABOVE the [sections], v4.0.0 board_scope_test's TOML rule).
+// With it set, the control arm proves the flag bites: a plain add lands
+// repo-attached, the --draft one lands repo-less, the default `furrow ls`
+// hides only the draft, the empty-`-r` load serves both, `is:draft` passes
+// through -q, and the promote gesture is nothing draft-specific — the
+// existing repo attach.
+//
+// bite-exempt: execs a real furrow binary and always skips where furrow is not
+func TestContractAddDraftAndPromoteByRepoAttach(t *testing.T) {
+	p, dir := newLabProvider(t)
+
+	// `furrow config set` is not in the pinned release, so the key is written
+	// directly; prepending keeps the bare key above any [section].
+	cfg := filepath.Join(dir, ".furrow", "config.toml")
+	raw, err := os.ReadFile(cfg) //nolint:gosec // editing the throwaway store's own config IS the seed
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cfg, append([]byte("default_repo = \"lab/lab\"\n"), raw...), 0o600); err != nil { //nolint:gosec // same throwaway path
+		t.Fatal(err)
+	}
+
+	plain, err := p.Add("素の起票", board.AddOptions{})
+	if err != nil {
+		t.Fatalf("plain add: %v", err)
+	}
+	id, err := p.Add("draft の思いつき", board.AddOptions{Draft: true})
+	if err != nil {
+		t.Fatalf("add --draft: %v", err)
+	}
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	// The control arm: auto-attach is live, so an empty repos below is
+	// --draft's doing, not the store's resting state.
+	if got := p.Board().Task(plain); got == nil || len(got.Repos) != 1 || got.Repos[0] != "lab/lab" {
+		t.Fatalf("plain add = %+v, want the default_repo auto-attached — without it every draft assertion is vacuous", got)
+	}
+	got := p.Board().Task(id)
+	if got == nil {
+		t.Fatalf("%s is not on the board after the draft add — load must read drafts (empty -r)", id)
+	}
+	if len(got.Repos) != 0 {
+		t.Errorf("repos = %v, want none — --draft suppresses the default_repo", got.Repos)
+	}
+
+	// The default read hides exactly the draft — the behavior ridge's empty
+	// -r opts out of, pinned so a furrow that stops hiding is news. Not
+	// lab(): its CombinedOutput folds the "N draft(s) hidden" stderr note
+	// into the JSON, which is the hiding at work but not decodable.
+	ls := exec.Command("furrow", "ls", "--json")
+	ls.Dir = dir
+	var hideNote strings.Builder
+	ls.Stderr = &hideNote
+	lsOut, err := ls.Output()
+	if err != nil {
+		t.Fatalf("furrow ls: %v", err)
+	}
+	var rows []struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(lsOut, &rows); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range rows {
+		if r.ID == id {
+			t.Errorf("default `furrow ls` serves the draft %s — it is documented to hide drafts", id)
+		}
+	}
+	if !strings.Contains(hideNote.String(), "draft") {
+		t.Errorf("stderr = %q, want the drafts-hidden note", hideNote.String())
+	}
+
+	ids, err := p.Query("is:draft")
+	if err != nil {
+		t.Fatalf("is:draft: %v", err)
+	}
+	found := false
+	for _, x := range ids {
+		found = found || x == id
+	}
+	if !found {
+		t.Errorf("is:draft = %v, want it to serve %s", ids, id)
+	}
+
+	// Promotion: the repo attach the edit overlay already issues.
+	if err := p.PersistFields(id, board.FieldPatch{AddRepos: []string{"lab/lab"}}); err != nil {
+		t.Fatalf("promote via repo attach: %v", err)
+	}
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	got = p.Board().Task(id)
+	if got == nil || len(got.Repos) != 1 || got.Repos[0] != "lab/lab" {
+		t.Errorf("after the promote, task = %+v, want repos [lab/lab]", got)
+	}
+}
+
 // The retitle half is the damaging one: the board applies the rename
 // optimistically, so a refusal here is watched to land and then get yanked.
 //
 // bite-exempt: execs a real furrow binary and always skips where furrow is not
-func TestRetitleAcceptsATitleStartingWithADash(t *testing.T) {
+func TestContractRetitleAcceptsATitleStartingWithADash(t *testing.T) {
 	p, dir := newLabProvider(t)
 
 	id := labAdd(t, dir, "ordinary title")

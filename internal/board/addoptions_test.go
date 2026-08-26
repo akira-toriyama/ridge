@@ -12,6 +12,8 @@ func TestAddOptionsValidate(t *testing.T) {
 		{Due: "+1d"},
 		{Due: "2026-09-01"},
 		{Deps: []string{"t-a"}, Checks: []string{"書く"}, Refs: []string{"a.go:1"}},
+		{Draft: true},
+		{Draft: true, Lane: "icebox", Epic: "e-x"}, // draft conflicts with repo ONLY
 	}
 	for _, o := range ok {
 		if err := o.Validate(); err != nil {
@@ -36,6 +38,9 @@ func TestAddOptionsValidate(t *testing.T) {
 		// The t-pwrp CSV caveat: a comma'd ref would land SPLIT after the
 		// reconcile, so it is refused before the flag layer sees it.
 		{AddOptions{Refs: []string{"a,b"}}, "CSV"},
+		// furrow refuses `--draft` next to `-r`; the mirror refuses before
+		// the exec so the modal line survives instead of a store round trip.
+		{AddOptions{Draft: true, Repo: "lab/lab"}, "conflicts with repo"},
 	}
 	for _, tc := range bad {
 		err := tc.o.Validate()

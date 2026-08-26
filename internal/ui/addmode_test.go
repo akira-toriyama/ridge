@@ -27,6 +27,7 @@ func TestInheritContextLiftsOnlySingleValuedTokens(t *testing.T) {
 	tests := []struct {
 		q                 string
 		label, epic, repo string
+		draft             bool
 	}{
 		{q: "", label: "", epic: "", repo: ""},
 		{q: "label:ui", label: "ui"},
@@ -35,12 +36,22 @@ func TestInheritContextLiftsOnlySingleValuedTokens(t *testing.T) {
 		{q: "label:ui,dx"},
 		{q: "-label:ui"},
 		{q: "is:blocked 自由語 label:ui", label: "ui"},
+		// is:draft is the one is: state an add can stamp — under a draft view
+		// a plain add would vanish from the very view it was added into.
+		// EqualFold on the value, because -q itself matches it that way
+		// (measured: is:DRAFT narrows identically).
+		{q: "is:draft", draft: true},
+		{q: "is:DRAFT", draft: true},
+		{q: "is:draft label:ui", label: "ui", draft: true},
+		{q: "-is:draft"},
+		{q: "is:draft,open"},
+		{q: "is:blocked"},
 	}
 	for _, tc := range tests {
-		l, e, r := inheritContext(tc.q)
-		if l != tc.label || e != tc.epic || r != tc.repo {
-			t.Errorf("inheritContext(%q) = (%q,%q,%q), want (%q,%q,%q)",
-				tc.q, l, e, r, tc.label, tc.epic, tc.repo)
+		l, e, r, d := inheritContext(tc.q)
+		if l != tc.label || e != tc.epic || r != tc.repo || d != tc.draft {
+			t.Errorf("inheritContext(%q) = (%q,%q,%q,%v), want (%q,%q,%q,%v)",
+				tc.q, l, e, r, d, tc.label, tc.epic, tc.repo, tc.draft)
 		}
 	}
 }
