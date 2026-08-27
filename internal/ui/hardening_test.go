@@ -399,3 +399,27 @@ func TestCtrlCQuitsWhenTheEditedTaskVanished(t *testing.T) {
 		t.Fatalf("got %T, want quit", c())
 	}
 }
+
+// cycleLane used to bypass commitMove: during a rollback it mutated the board
+// FIRST and only then hit enqueuePersist's refusal — breaking "refuse the
+// GESTURE, not just its enqueue" for exactly one gesture (t-8nyd).
+func TestCycleLaneIsRefusedWhileRollingBack(t *testing.T) {
+	m, p := scriptedModel(t)
+	if !m.selectID("a", false) {
+		t.Fatal("could not select a")
+	}
+	m.rollingBack = true
+
+	if cmd := m.cycleLane(+1); cmd != nil {
+		t.Fatal("a refused lane cycle must not fire a persist")
+	}
+	if got := m.b.Task("a").Status; got != "ready" {
+		t.Errorf("the board mutated under the refusal: a is in %q, want ready", got)
+	}
+	if !m.statusErr {
+		t.Error("the refusal must surface as a status error")
+	}
+	if len(p.calls) != 0 {
+		t.Errorf("the store saw %v during a rollback", p.calls)
+	}
+}

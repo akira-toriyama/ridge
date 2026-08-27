@@ -1088,7 +1088,10 @@ func dropToken(raw, tok string) (string, bool) {
 }
 
 // cycleLane moves a task one lane over without entering move mode, appending it
-// at the end of the destination.
+// after the last card the filter SHOWS in the destination (boardInsertIndex's
+// contract — not past cards the filter is hiding). It must go through
+// commitMove: a direct MoveTo mutated the board before enqueuePersist could
+// refuse it, so a rollback in flight rejected the write but not the gesture.
 func (m *Model) cycleLane(d int) tea.Cmd {
 	t := m.curTask()
 	if t == nil {
@@ -1100,15 +1103,13 @@ func (m *Model) cycleLane(d int) tea.Cmd {
 		return nil
 	}
 	dest := m.laneName(i)
-	id := t.ID
-	if _, err := m.b.MoveTo(id, dest, len(m.b.LaneTasks(dest))); err != nil {
+	_, cmd, err := m.commitMove(t.ID, t.Status, dest, len(m.cols[dest]))
+	if err != nil {
 		m.fail("%v", err)
 		return nil
 	}
-	m.recompute()
-	m.selectID(id, false)
 	// No note: the card is now in the other lane, with the cursor on it.
-	return m.persistPlacement(id, dest)
+	return cmd
 }
 
 // quickReorder is shift+K / shift+J: nudge within the lane without the ceremony
