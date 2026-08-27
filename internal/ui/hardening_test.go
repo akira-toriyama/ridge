@@ -7,6 +7,9 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/akira-toriyama/ridge/internal/board"
+	"github.com/akira-toriyama/ridge/internal/store/memstore"
 )
 
 // This file is the regression net for the 2026-08-10 independent review
@@ -398,4 +401,87 @@ func TestCtrlCQuitsWhenTheEditedTaskVanished(t *testing.T) {
 	if _, ok := c().(tea.QuitMsg); !ok {
 		t.Fatalf("got %T, want quit", c())
 	}
+}
+
+// cycleLane used to bypass commitMove: during a rollback it mutated the board
+// FIRST and only then hit enqueuePersist's refusal — breaking "refuse the
+// GESTURE, not just its enqueue" for exactly one gesture (t-8nyd).
+func TestCycleLaneIsRefusedWhileRollingBack(t *testing.T) {
+	m, p := scriptedModel(t)
+	if !m.selectID("a", false) {
+		t.Fatal("could not select a")
+	}
+	m.rollingBack = true
+
+	if cmd := m.cycleLane(+1); cmd != nil {
+		t.Fatal("a refused lane cycle must not fire a persist")
+	}
+	if got := m.b.Task("a").Status; got != "ready" {
+		t.Errorf("the board mutated under the refusal: a is in %q, want ready", got)
+	}
+	if !m.statusErr {
+		t.Error("the refusal must surface as a status error")
+	}
+	if len(p.calls) != 0 {
+		t.Errorf("the store saw %v during a rollback", p.calls)
+	}
+}
+
+// The landing slot with a filter active: after the last card the destination
+// SHOWS, not past the ones the filter hides — the slot every other gesture's
+// boardInsertIndex arithmetic names. Without this pin, a revert to the old
+// full-lane-end append passes the whole suite (the unfiltered e2e cannot tell
+// them apart).
+func TestCycleLaneLandsAfterTheLastVisibleCard(t *testing.T) {
+	m := cycleLaneBoard(t, "p1")
+	if cmd := m.cycleLane(+1); cmd == nil {
+		t.Fatal("the cycle did not fire a persist")
+	}
+	if got := strings.Join(ids(m.b.LaneTasks("in-progress")), ","); got != "p1,a,p2,p3" {
+		t.Errorf("in-progress = %s, want p1,a,p2,p3 — after the last VISIBLE card", got)
+	}
+}
+
+// A destination the filter EMPTIED: nothing visible to land after, so the card
+// takes the lane's top — the same slot a mouse drop into that emptied column
+// takes (boardInsertIndex's len(vis)==0 arm), so the two gestures agree about
+// one visible state.
+func TestCycleLaneIntoAFilterEmptiedLaneLandsOnTop(t *testing.T) {
+	m := cycleLaneBoard(t)
+	if cmd := m.cycleLane(+1); cmd == nil {
+		t.Fatal("the cycle did not fire a persist")
+	}
+	if got := strings.Join(ids(m.b.LaneTasks("in-progress")), ","); got != "a,p1,p2,p3" {
+		t.Errorf("in-progress = %s, want a,p1,p2,p3 — the emptied column's top", got)
+	}
+}
+
+// cycleLaneBoard is a board whose in-progress lane is p1,p2,p3 with only the
+// uiIDs (plus the grabbed card a in ready) surviving a label:ui filter, cursor
+// on a.
+func cycleLaneBoard(t *testing.T, uiIDs ...string) *Model {
+	t.Helper()
+	ui := map[string]bool{"a": true}
+	for _, id := range uiIDs {
+		ui[id] = true
+	}
+	mk := func(id, lane string, prio int) *board.Task {
+		x := &board.Task{ID: id, Title: "card " + id, Status: lane, Priority: prio}
+		if ui[id] {
+			x.Labels = []string{"ui"}
+		}
+		return x
+	}
+	m := New(memstore.NewWith(board.NewBoard([]*board.Task{
+		mk("a", "ready", 10),
+		mk("p1", "in-progress", 10), mk("p2", "in-progress", 20), mk("p3", "in-progress", 30),
+	})), Options{})
+	m.w, m.h = 240, 50
+	m.applyFilter("label:ui")
+	m.recompute()
+	m.relayout()
+	if !m.selectID("a", false) {
+		t.Fatal("could not select a")
+	}
+	return m
 }

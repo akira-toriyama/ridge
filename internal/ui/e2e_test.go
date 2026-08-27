@@ -226,8 +226,9 @@ func TestE2EDoneAndLaneCycle(t *testing.T) {
 	}
 
 	// L and H cycle a lane forward and back. The LANE round-trips; the position
-	// does not — cycleLane appends to the destination lane's end both ways, so
-	// the card lands at the BOTTOM of its home lane. Asserting that index is
+	// does not — cycleLane appends after the destination's last VISIBLE card
+	// (no filter here, so the lane's end both ways) and the card lands at the
+	// BOTTOM of its home lane. Asserting that index is
 	// what makes this test falsifiable: with the keys unbound the card would
 	// still be in backlog, but at its original top slot — the lane-only
 	// assertion could not fail.
