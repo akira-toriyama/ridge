@@ -293,8 +293,10 @@ func (m *Model) reload() {
 }
 
 // recompute rebuilds the derived graph and the filtered columns, then clamps
-// every cursor. Called after any mutation: with 34 tasks it is free, and it
-// removes a whole class of stale-index bugs.
+// every cursor — and cancels a drag whose card left the lane it was grabbed
+// in (dropDragIfCardLeftLane), the least obvious of its jobs. Called after
+// any mutation: with 34 tasks it is free, and it removes a whole class of
+// stale-index bugs.
 func (m *Model) recompute() {
 	m.g = board.NewGraph(m.b)
 	m.ms.rebind(m.g, m.th)
@@ -333,6 +335,7 @@ func (m *Model) recompute() {
 			m.epic.listIdx = clamp(m.epic.listIdx, 0, maxInt(0, len(m.epicListRows(box))-1))
 		}
 	}
+	m.dropDragIfCardLeftLane()
 	m.ensureVisible()
 	m.syncPeek()
 }

@@ -11,7 +11,9 @@ import (
 
 // The board can recompose while a gesture is held: the post-persist reconcile
 // and the rollback re-read both land as async messages, and neither cancels a
-// drag or a lifted card. The slot recorded at press time is then stale, and
+// lifted card — a drag survives too, as long as its card is still in the lane
+// it was grabbed in (recompute cancels only a drag whose card LEFT it, pinned
+// below). The slot recorded at press time is then stale, and
 // stale arithmetic shifted AdjustDropIndex's remove-then-insert boundary — a
 // drop back into the card's own slot was written one slot down (t-raw1). These
 // tests hold a drag across a recompose; commitMove must translate against the
@@ -204,10 +206,13 @@ func TestRefusedMoveCommitRestoresTheLiftTimeSelection(t *testing.T) {
 	}
 }
 
-// The refusal through the real gesture: grab a card, let a re-read move it to
-// another lane, release. The store's truth must stand — committing would yank
-// the external move back — and the refusal must reach the status line.
-func TestReleaseAfterTheCardLeftItsLaneRefusesInsteadOfYankingItBack(t *testing.T) {
+// Through the real gesture: grab a card, let a re-read move it to another
+// lane. The drag must not wait for the release to learn its premise is gone —
+// the recompute that removed the card cancels the gesture on the spot, taking
+// the frame's promise (ghost, drop indicator, DRAG status) down with it, and
+// the release that follows is a swallowed no-op (t-4c7j). commitMove's
+// "no longer shown" refusal stays as the backstop, pinned above.
+func TestDragCancelsTheMomentItsCardLeavesTheLane(t *testing.T) {
 	m := New(memstore.NewWith(staleLane()), Options{})
 	m.w, m.h = 140, 40
 	m.recompute()
@@ -219,6 +224,9 @@ func TestReleaseAfterTheCardLeftItsLaneRefusesInsteadOfYankingItBack(t *testing.
 	if !m.drag.moved {
 		t.Fatal("the pointer move did not arm a drag")
 	}
+	if !strings.Contains(frame(m), "DRAG") {
+		t.Fatal("fixture: the frame must be promising a drop before the recompose")
+	}
 
 	if _, err := m.b.MoveTo("x", "backlog", 0); err != nil {
 		t.Fatal(err)
@@ -226,16 +234,65 @@ func TestReleaseAfterTheCardLeftItsLaneRefusesInsteadOfYankingItBack(t *testing.
 	m.recompute()
 	m.relayout()
 
+	if !m.drag.cancelled || m.drag.moved {
+		t.Fatalf("the recompute left the gesture alive: cancelled=%v moved=%v",
+			m.drag.cancelled, m.drag.moved)
+	}
+	if !strings.Contains(m.status, "left ready mid-drag") {
+		t.Errorf("status = %q — the cancellation must say why", m.status)
+	}
+	if strings.Contains(frame(m), "DRAG") {
+		t.Error("the frame still promises a drop after the card left the lane")
+	}
+
+	// The button is still physically down; the release that follows must be a
+	// swallowed no-op.
 	rel := readyBox(t, m, 0)
 	m.Update(tea.MouseReleaseMsg{X: rel.X + 3, Y: rel.Y + 1, Button: tea.MouseLeft})
 
-	if !m.statusErr || !strings.Contains(m.status, "no longer shown") {
-		t.Errorf("the refusal did not reach the status line: statusErr=%v status=%q", m.statusErr, m.status)
+	if m.statusErr {
+		t.Errorf("the release was not swallowed: status = %q", m.status)
+	}
+	if len(m.pending) != 0 {
+		t.Errorf("the swallowed release enqueued %d write(s)", len(m.pending))
 	}
 	if got := m.b.Task("x").Status; got != "backlog" {
 		t.Errorf("x is in %s, want backlog — the release yanked the external move back", got)
 	}
 	if got := strings.Join(ids(m.b.LaneTasks("ready")), ","); got != "a,b,c" {
 		t.Errorf("ready = %s, want a,b,c untouched", got)
+	}
+}
+
+// The filter hiding the dragged card is NOT a departure: the card is still in
+// the lane, and its drop is a gesture commitMove accepts (pinned above) — only
+// leaving the lane takes the promise down.
+func TestDragSurvivesTheFilterHidingItsCard(t *testing.T) {
+	m := New(memstore.NewWith(labeledLane()), Options{})
+	m.w, m.h = 140, 40
+	m.recompute()
+	m.relayout()
+
+	box := readyBox(t, m, 1) // x, the one unlabelled card
+	m.Update(tea.MouseClickMsg{X: box.X + 3, Y: box.Y + 1, Button: tea.MouseLeft})
+	m.Update(tea.MouseMotionMsg{X: box.X + 3 + dragThreshold, Y: box.Y + 1 + dragThreshold, Button: tea.MouseLeft})
+	if !m.drag.moved {
+		t.Fatal("the pointer move did not arm a drag")
+	}
+
+	m.applyFilter("label:ui")
+	m.recompute()
+	m.relayout()
+	if displayIndex(m.cols["ready"], "x") != -1 {
+		t.Fatal("fixture: the filter must hide x")
+	}
+
+	if m.drag.cancelled || !m.drag.moved {
+		t.Errorf("a filter-hidden card killed the drag: cancelled=%v moved=%v",
+			m.drag.cancelled, m.drag.moved)
+	}
+	// The symmetric frame assertion of the sibling test: the promise stays up.
+	if !strings.Contains(frame(m), "DRAG") {
+		t.Error("the frame dropped the promise for a card that is still in its lane")
 	}
 }
