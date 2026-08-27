@@ -55,6 +55,13 @@ type keyMap struct {
 	Graph       key.Binding
 	GraphRoot   key.Binding
 	GraphRadius key.Binding
+	// GraphOrient reuses `o`, the table's sort key, on the same licence
+	// MapScope has for reusing `z`: `o` is ORDER — "how this view arranges what
+	// it shows". In the table that is which column the rows are sorted by; in
+	// the graph it is which screen axis the layers run along. The two views are
+	// never on screen together, and each section's help string names its own
+	// meaning, so no line of the overlay is false.
+	GraphOrient key.Binding
 
 	// The dep map's three keys. `T` is `t` (this task's dep tree) writ large —
 	// the map IS every dep tree at once, drawn with the same indent-and-name
@@ -160,6 +167,7 @@ func defaultKeys() keyMap {
 		Graph:       key.NewBinding(key.WithKeys("shift+space", "S"), key.WithHelp("⇧space/S", "dep graph")),
 		GraphRoot:   key.NewBinding(key.WithKeys("enter"), key.WithHelp("⏎", "re-root here")),
 		GraphRadius: key.NewBinding(key.WithKeys("z", "1", "2", "3", "0"), key.WithHelp("z/1-3/0", "hop radius")),
+		GraphOrient: key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "top-down / left-right")),
 
 		Map:      key.NewBinding(key.WithKeys("T"), key.WithHelp("T", "dep map")),
 		MapScope: key.NewBinding(key.WithKeys("z"), key.WithHelp("z", "scope open/all")),
@@ -232,7 +240,7 @@ func (k keyMap) HelpSections(enterEdits bool) []helpSection {
 			// the root — move the selection first" while no listed key moved
 			// it. onGraphKey has always handled the arrows.
 			{k.Up, k.Down, k.Left, k.Right},
-			{k.GraphRoot, k.GraphRadius},
+			{k.GraphRoot, k.GraphRadius, k.GraphOrient},
 			{k.JumpBack, k.PeekScroll, k.Map},
 			{k.View, k.Cancel},
 		}},

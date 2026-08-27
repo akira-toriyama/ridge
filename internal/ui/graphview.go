@@ -18,16 +18,20 @@ import (
 //     measured in DISPLAY cells (a Japanese title is two cells per glyph);
 //     box-drawing characters are all single-width and can therefore live in a
 //     plain rune buffer. Mixing the two is the CJK shear bug, so the frame is
-//     built as alternating bands: a lipgloss-composed node row, then a rune-grid
-//     channel, then a node row.
+//     built as alternating BANDS — a lipgloss-composed rank of boxes, then a
+//     rune-grid channel, then the next rank — and every band is exactly its
+//     declared extent on every line, so the joins are width-exact. Top-down
+//     stacks the bands as screen lines; left-right stacks them as columns and
+//     joins them per line, the way mapBands already composes the dep map.
 //
-//  2. HEIGHT IS NEGOTIATED, NOT ASSUMED. Channel heights fall out of the edge
-//     routing, so the title-line budget is whatever is left over divided by the
-//     number of rows. That is why the same graph reads as 2 title lines at
-//     240x60 and 3 at 400x90 instead of scrolling on the smaller one.
+//  2. THE GIVEN AXIS IS SPENT, THE OTHER IS NEGOTIATED — and which is which
+//     swaps with the orientation. Top-down is given the width: node widths fall
+//     out of it and the title-line budget is whatever height the channels
+//     leave. Left-right is given the height: the title-line budget falls out of
+//     it and the node WIDTH is whatever width the channels leave. That is why
+//     the same graph reads as 2 title lines at 240x60 and 3 at 400x90.
 
 const (
-	graphRowHdr       = 1 // focus / radius / counts / legend
 	graphMinNodeLines = 1
 	graphMaxNodeLines = 3
 )
@@ -48,8 +52,42 @@ func (m *Model) graphCanvasH() int {
 	return maxInt(1, m.h-fullTop-m.stripHeight()-footerH)
 }
 
+// graphWidth is how many columns the drawing may use: the frame insets it by
+// one cell on each side, and every band is measured against this.
+func (m *Model) graphWidth() int { return maxInt(1, m.w-2) }
+
+// graphAlong is the ALONG-axis budget place() lays the layers out in — the
+// drawing's width when the layers stack top-down, its height when they run
+// left-to-right.
+func (m *Model) graphAlong() int {
+	if m.graphOrient == orientLeftRight {
+		return m.graphCanvasH()
+	}
+	return m.graphWidth()
+}
+
+// graphFrame is one frame's negotiated geometry: the single measurement the
+// renderer, the scroll clamp and the selection walk all read, so what is drawn
+// and what a keystroke lands on can never disagree.
+type graphFrame struct {
+	orient     graphOrient
+	titleLines int   // title lines inside a node box
+	channels   []int // channel depth between rank r and r+1, on the ACROSS axis
+	routes     [][]routedEdge
+
+	// nodeW is a box's width. Left-right only: top-down spends the along axis,
+	// so there each node carries its own Span.
+	nodeW int
+
+	// The rank window the drawing covers. Top-down always draws every rank, so
+	// it is the whole range and hidden is 0.
+	first, last, hidden int
+}
+
+func (f graphFrame) nodeH() int { return f.titleLines + graphNodeChrome }
+
 // buildGraph lays out the ego graph for the current focus at the current
-// radius.
+// radius and orientation.
 //
 // The key handlers do NOT call it — they read the cached m.graphLay, which
 // renderGraph rewrites on every frame. That holds only because bubbletea calls
@@ -57,67 +95,119 @@ func (m *Model) graphCanvasH() int {
 // frame drew. A handler that both invalidates the layout AND then navigates
 // would be reading a stale one.
 func (m *Model) buildGraph() *egoLayout {
-	avail := maxInt(1, m.w-2)
-	cols := clamp(avail/graphNodeMinW, 1, graphHardCols)
-	l := buildEgo(m.g, m.graphFocus, m.graphRadius, cols, m.taskHidden)
-	l.place(avail)
+	// graphHardCols in BOTH orientations, never a screen-derived cap: see its
+	// doc comment. At the 240-column floor the width-derived formula this
+	// replaced already evaluated to exactly graphHardCols.
+	l := buildEgo(m.g, m.graphFocus, m.graphRadius, graphHardCols, m.taskHidden)
+	l.place(m.graphOrient, m.graphAlong())
 	return l
 }
 
-// graphBands measures the frame: the height of every channel, and how many
-// title lines a node box can afford.
-func (m *Model) graphBands(l *egoLayout) (channels []int, routes [][]routedEdge, titleLines int) {
+// graphMeasure routes every channel and then negotiates whichever axis place()
+// did not spend. See rule 2 at the head of this file for why that differs by
+// orientation.
+func (m *Model) graphMeasure(l *egoLayout) graphFrame {
+	f := graphFrame{orient: m.graphOrient, first: 0, last: len(l.Layers) - 1}
 	for r := 0; r+1 < len(l.Layers); r++ {
-		rt, h := routeChannel(l, l.rowEdges(r))
-		routes = append(routes, rt)
-		channels = append(channels, h)
+		rt, d := routeChannel(l, l.rankEdges(r))
+		f.routes = append(f.routes, rt)
+		f.channels = append(f.channels, d)
 	}
+
+	if f.orient == orientLeftRight {
+		f.titleLines = clamp(l.Span-graphNodeChrome, graphMinNodeLines, graphMaxNodeLines)
+		f.first, f.last, f.hidden = graphRankWindow(l, f.channels, m.graphWidth())
+		f.nodeW = graphNodeMinWLR
+		if n := f.last - f.first + 1; n > 0 {
+			used := 0
+			for r := f.first; r < f.last; r++ {
+				used += f.channels[r]
+			}
+			f.nodeW = clamp((m.graphWidth()-used)/n, graphNodeMinWLR, graphNodeMaxW)
+		}
+		return f
+	}
+
 	sum := 0
-	for _, h := range channels {
-		sum += h
+	for _, d := range f.channels {
+		sum += d
 	}
-	rows := maxInt(1, len(l.Layers))
-	per := (m.graphCanvasH() - sum) / rows
-	// A node box is border(2) + the id line + the meta line, so `per-4` is the
-	// title budget. It is clamped, never trusted: on a tiny terminal the graph
-	// scrolls instead of rendering boxes with no title at all.
-	titleLines = clamp(per-4, graphMinNodeLines, graphMaxNodeLines)
-	return channels, routes, titleLines
+	ranks := maxInt(1, len(l.Layers))
+	per := (m.graphCanvasH() - sum) / ranks
+	// A node box is border(2) + the id line + the meta line, so `per-chrome` is
+	// the title budget. It is clamped, never trusted: on a tiny terminal the
+	// graph scrolls instead of rendering boxes with no title at all.
+	f.titleLines = clamp(per-graphNodeChrome, graphMinNodeLines, graphMaxNodeLines)
+	return f
+}
+
+// graphRankWindow is which ranks the left-right frame can fit across the
+// screen, grown outward from the focus so the picture stays centred on what it
+// is rooted on.
+//
+// This is graphHardCols' mirror on the other axis. The along axis overflows
+// into the scroll, but a rank that will not fit ACROSS cannot be scrolled to
+// without cutting a CJK box mid-glyph, so it is dropped and counted, and the
+// header says so next to the `z` that narrows the radius. On the measured board
+// it never fires: the longest chain is 5 edges, so an ego graph is at most 6
+// ranks, and 6 boxes at graphNodeMinWLR plus their channels fit the 240-column
+// floor.
+func graphRankWindow(l *egoLayout, channels []int, avail int) (first, last, hidden int) {
+	n := len(l.Layers)
+	if n == 0 {
+		return 0, -1, 0
+	}
+	focus := l.FocusRank()
+	first, last = focus, focus
+	used := graphNodeMinWLR
+	for first > 0 || last < n-1 {
+		// Grow the shorter side first, upstream winning ties — the same
+		// preference the cycle placement makes.
+		up := first > 0 && (last == n-1 || (focus-first) <= (last-focus))
+		grew := false
+		for _, tryUp := range [2]bool{up, !up} {
+			if (tryUp && first == 0) || (!tryUp && last == n-1) {
+				continue
+			}
+			cost := graphNodeMinWLR
+			if tryUp {
+				cost += channels[first-1]
+			} else {
+				cost += channels[last]
+			}
+			if used+cost > avail {
+				continue
+			}
+			used += cost
+			if tryUp {
+				first--
+			} else {
+				last++
+			}
+			grew = true
+			break
+		}
+		if !grew {
+			break
+		}
+	}
+	return first, last, first + (n - 1 - last)
 }
 
 func (m *Model) renderGraph() string {
 	l := m.buildGraph()
 	m.graphLay = l
 	m.clampGraphSel(l)
-
-	channels, routes, titleLines := m.graphBands(l)
-
-	// bands is strictly one screen line per element. graphRowBand returns a
-	// multi-line block, so it is split here — appending it whole would make the
-	// scroll math count a 7-line row as 1, and the per-line " "+pad below would
-	// indent only the row's top border (the 1-cell shear this comment replaces).
-	var bands []string
-	for r, row := range l.Layers {
-		bands = append(bands, strings.Split(m.graphRowBand(row, titleLines), "\n")...)
-		if r < len(routes) {
-			c := drawChannel(l.W, routes[r], channels[r])
-			for _, line := range c.rows() {
-				bands = append(bands, m.th.edge.Render(line))
-			}
-		}
-	}
-
-	// A focus with no structure at all: say so in words. A lone box floating in
-	// an empty screen reads as a bug, not as an answer.
-	if l.Empty() {
-		msg := m.th.dim.Render("— nothing depends on this, and it waits on nothing —")
-		bands = append([]string{m.th.dim.Render("— no blockers —"), ""},
-			append(bands, "", msg)...)
-	}
+	f := m.graphMeasure(l)
 
 	canvasH := m.graphCanvasH()
+	bands := m.graphBandsTopDown(l, f)
+	if f.orient == orientLeftRight {
+		bands = m.graphBandsLeftRight(l, f, canvasH)
+	}
+
 	m.graphScroll = clamp(m.graphScroll, 0, maxInt(0, len(bands)-canvasH))
-	m.graphScroll = m.scrollGraphToSel(l, channels, titleLines, len(bands), canvasH)
+	m.graphScroll = m.scrollGraphToSel(l, f, len(bands), canvasH)
 
 	shown := bands
 	if len(shown) > canvasH {
@@ -133,7 +223,7 @@ func (m *Model) renderGraph() string {
 
 	parts := []string{
 		pad(m.graphTitleBar(l), m.w),
-		pad(m.graphHeader(l, len(bands) > canvasH), m.w),
+		pad(m.graphHeader(l, f, len(bands) > canvasH), m.w),
 		strings.Join(canvas, "\n"),
 	}
 	if sh := m.stripHeight(); sh > 0 {
@@ -157,6 +247,138 @@ func (m *Model) renderGraph() string {
 	return frame
 }
 
+// graphBandsTopDown stacks the bands as screen lines.
+//
+// bands is strictly one screen line per element. graphRankRows returns a
+// multi-line block, so it is split here — appending it whole would make the
+// scroll math count a 7-line rank as 1, and the per-line " "+pad in renderGraph
+// would indent only the rank's top border (a 1-cell shear).
+func (m *Model) graphBandsTopDown(l *egoLayout, f graphFrame) []string {
+	var bands []string
+	for r, row := range l.Layers {
+		bands = append(bands, strings.Split(m.graphRankRows(row, f), "\n")...)
+		if r < len(f.routes) {
+			c := drawChannel(f.orient, l.Along, f.routes[r], f.channels[r])
+			for _, line := range c.rows() {
+				bands = append(bands, m.th.edge.Render(line))
+			}
+		}
+	}
+	// A focus with no structure at all: say so in words. A lone box floating in
+	// an empty screen reads as a bug, not as an answer.
+	if l.Empty() {
+		msg := m.th.dim.Render("— nothing depends on this, and it waits on nothing —")
+		bands = append([]string{m.th.dim.Render("— no blockers —"), ""},
+			append(bands, "", msg)...)
+	}
+	return bands
+}
+
+// graphBand is one vertical slice of the left-right frame — a rank of boxes, a
+// channel, or a note — already exactly w cells wide on every one of its rows.
+type graphBand struct {
+	w    int
+	rows []string
+}
+
+// graphBandsLeftRight composes the bands side by side and flattens them to
+// screen lines, the way mapBands does for the dep map's panels.
+//
+// The canvas is as tall as the tallest rank actually reaches, not as tall as
+// the screen: a rank that does not fit runs past the bottom and the frame
+// scrolls, rather than dropping nodes the other orientation would have shown.
+func (m *Model) graphBandsLeftRight(l *egoLayout, f graphFrame, canvasH int) []string {
+	h := maxInt(canvasH, l.Extent())
+
+	var bands []graphBand
+	// A focus with no structure at all: the notes go where the structure would
+	// have been — nothing upstream on the left, nothing downstream on the
+	// right. Top-down puts the same two lines above and below for that reason.
+	if l.Empty() {
+		bands = append(bands, m.graphNoteBand(l, "— no blockers —", h))
+	}
+	for r := f.first; r <= f.last && r < len(l.Layers); r++ {
+		bands = append(bands, graphBand{w: f.nodeW, rows: m.graphRankColumn(l.Layers[r], f, h)})
+		if r < f.last && r < len(f.routes) {
+			c := drawChannel(f.orient, h, f.routes[r], f.channels[r])
+			rows := c.rows()
+			for i := range rows {
+				rows[i] = m.th.edge.Render(rows[i])
+			}
+			bands = append(bands, graphBand{w: f.channels[r], rows: rows})
+		}
+	}
+	if l.Empty() {
+		bands = append(bands, m.graphNoteBand(l,
+			"— nothing depends on this, and it waits on nothing —", h))
+	}
+
+	total := 0
+	for _, b := range bands {
+		total += b.w
+	}
+	lead := strings.Repeat(" ", maxInt(0, (m.graphWidth()-total)/2))
+
+	out := make([]string, h)
+	var sb strings.Builder
+	for y := 0; y < h; y++ {
+		sb.Reset()
+		sb.WriteString(lead)
+		for _, b := range bands {
+			if y < len(b.rows) {
+				sb.WriteString(b.rows[y])
+			}
+		}
+		out[y] = sb.String()
+	}
+	return out
+}
+
+// graphNoteBand is one line of prose set beside the drawing, on the row the
+// focus box's own centre sits on so the eye reads them as one sentence.
+func (m *Model) graphNoteBand(l *egoLayout, s string, h int) graphBand {
+	w := lg.Width(s) + 2
+	blank := strings.Repeat(" ", w)
+	rows := make([]string, h)
+	for i := range rows {
+		rows[i] = blank
+	}
+	at := h / 2
+	if n := l.FocusNode(); n != nil {
+		at = n.Anchor()
+	}
+	if at >= 0 && at < h {
+		rows[at] = " " + pad(m.th.dim.Render(s), w-2) + " "
+	}
+	return graphBand{w: w, rows: rows}
+}
+
+// graphRankColumn draws one rank as a column of exactly h lines, each exactly
+// nodeW cells, so the bands to either side of it cannot drift.
+func (m *Model) graphRankColumn(row []*egoNode, f graphFrame, h int) []string {
+	blank := strings.Repeat(" ", f.nodeW)
+	out := make([]string, h)
+	for i := range out {
+		out[i] = blank
+	}
+	for _, n := range row {
+		var lines []string
+		if n.Kind == egoDummy {
+			// A pass-through is one rule carrying the line straight across the
+			// rank it is only travelling through — one row, not a box's worth.
+			lines = []string{m.th.edge.Render(strings.Repeat("─", f.nodeW))}
+		} else {
+			lines = strings.Split(m.renderGraphNode(n, f.nodeW, f.titleLines), "\n")
+		}
+		for j, ln := range lines {
+			if y := n.Along + j; y >= 0 && y < h {
+				out[y] = ln
+			}
+		}
+	}
+	return out
+}
+
 func (m *Model) graphTitleBar(l *egoLayout) string {
 	th := m.th
 	left := th.title.Render("furrow board") + th.crumb.Render("  ·  ") +
@@ -173,16 +395,23 @@ func (m *Model) graphTitleBar(l *egoLayout) string {
 }
 
 // graphHeader is the one line that says what you are looking at, which way is
-// which, and how deep the walk went.
-func (m *Model) graphHeader(l *egoLayout, clipped bool) string {
+// which, and how deep the walk went. The two direction words follow the
+// orientation: they are half of the position-plus-arrowhead redundancy, and a
+// header still saying "↑ blockers" over a left-right picture would be the
+// reader's only cue, pointing the wrong way.
+func (m *Model) graphHeader(l *egoLayout, f graphFrame, clipped bool) string {
 	th := m.th
 	focus := m.b.Task(l.Focus)
 	name := l.Focus
 	if focus != nil {
 		name = l.Focus + " " + focus.Title
 	}
-	left := th.peekHdr.Render("↑ blockers") + th.dim.Render(" / ") +
-		th.peekHdr.Render("↓ unblocks") + th.dim.Render("  ·  rooted on ") +
+	up, down := "↑ blockers", "↓ unblocks"
+	if f.orient == orientLeftRight {
+		up, down = "← blockers", "→ unblocks"
+	}
+	left := th.peekHdr.Render(up) + th.dim.Render(" / ") +
+		th.peekHdr.Render(down) + th.dim.Render("  ·  rooted on ") +
 		th.chipAlt.Render(ansi.Truncate(name, maxInt(10, m.w/2), "…"))
 
 	bits := []string{fmt.Sprintf("radius %s", radiusLabel(l.Radius)),
@@ -195,7 +424,11 @@ func (m *Model) graphHeader(l *egoLayout, clipped bool) string {
 		for _, v := range l.Overflow {
 			n += v
 		}
-		bits = append(bits, th.warn.Render(fmt.Sprintf("+%d over the row cap", n)))
+		bits = append(bits, th.warn.Render(fmt.Sprintf("+%d over the layer cap", n)))
+	}
+	if f.hidden > 0 {
+		bits = append(bits, th.warn.Render(
+			fmt.Sprintf("+%d layer(s) beyond the width — z narrows the radius", f.hidden)))
 	}
 	if clipped {
 		bits = append(bits, th.dim.Render("^u/^d scroll"))
@@ -203,15 +436,15 @@ func (m *Model) graphHeader(l *egoLayout, clipped bool) string {
 	return joinEnds(left, th.dim.Render(strings.Join(bits, " · ")), m.w)
 }
 
-// graphRowBand composes one row of node boxes into a rectangular band.
+// graphRankRows composes one rank of node boxes into a rectangular band.
 //
 // Boxes are joined by SLICING each box's rendered lines and concatenating them
 // with plain-space gaps, rather than by lipgloss.JoinHorizontal: every box is
-// already exactly n.W display cells wide and exactly the same height, so the
+// already exactly n.Span display cells wide and exactly the same height, so the
 // concatenation is width-exact and the channel anchors below it line up to the
 // cell.
-func (m *Model) graphRowBand(row []*egoNode, titleLines int) string {
-	h := titleLines + 4
+func (m *Model) graphRankRows(row []*egoNode, f graphFrame) string {
+	h := f.nodeH()
 	lines := make([]string, h)
 
 	type piece struct {
@@ -223,13 +456,13 @@ func (m *Model) graphRowBand(row []*egoNode, titleLines int) string {
 		if n.Kind == egoDummy {
 			col := make([]string, h)
 			for i := range col {
-				col[i] = m.th.edge.Render(pad(" │ ", n.W))
+				col[i] = m.th.edge.Render(pad(" │ ", n.Span))
 			}
-			pieces = append(pieces, piece{x: n.X, rows: col})
+			pieces = append(pieces, piece{x: n.Along, rows: col})
 			continue
 		}
-		box := m.renderGraphNode(n, titleLines)
-		pieces = append(pieces, piece{x: n.X, rows: strings.Split(box, "\n")})
+		box := m.renderGraphNode(n, n.Span, f.titleLines)
+		pieces = append(pieces, piece{x: n.Along, rows: strings.Split(box, "\n")})
 	}
 
 	for i := 0; i < h; i++ {
@@ -254,14 +487,17 @@ func (m *Model) graphRowBand(row []*egoNode, titleLines int) string {
 
 // renderGraphNode draws one node box: id line, title, metadata. This is the
 // half of a graph view that is actually hard — a layered picture of 12 boxes is
-// arithmetic, but a box that says something useful in 50-95 cells is design.
+// arithmetic, but a box that says something useful in 32-100 cells is design.
 //
-// At 240+ columns a node gets 52-95 cells of inner width, so the median 82-cell
-// title lands in one or two lines instead of the 22-37% stub a 140-column
-// terminal could show. That is the entire argument for building this wide-first.
-func (m *Model) renderGraphNode(n *egoNode, titleLines int) string {
+// At 240+ columns a top-down node gets 52-95 cells of inner width, so the
+// median 82-cell title lands in one or two lines instead of the 22-37% stub a
+// 140-column terminal could show. That is the entire argument for building this
+// wide-first. Left-right spends the width on layers instead, so its boxes are
+// narrower (32 inner at the 240 floor) but get all three title lines — 96 cells
+// against the same median.
+func (m *Model) renderGraphNode(n *egoNode, w, titleLines int) string {
 	th := m.th
-	inner := maxInt(4, n.W-4)
+	inner := maxInt(4, w-4)
 	t := m.b.Task(n.ID)
 
 	var lines []string
@@ -277,17 +513,11 @@ func (m *Model) renderGraphNode(n *egoNode, titleLines int) string {
 			lines = append(lines, pad(body, inner))
 		}
 		lines = append(lines, pad(th.dim.Render("unresolved dependency"), inner))
-		return th.graphNodeUnknown.Width(n.W).Render(strings.Join(lines, "\n"))
+		return th.graphNodeUnknown.Width(w).Render(strings.Join(lines, "\n"))
 	}
 
 	glyph, styleFor := cardMarker(t, m.g)
 	head := styleFor(th).Render(glyph) + " " + th.chipAlt.Render(t.ID)
-	if n.Focus {
-		head += " " + th.accent.Render("◉ focus")
-	}
-	if n.Both {
-		head += " " + th.warn.Render("↕ both directions")
-	}
 	// Board.Lane is documented to return nil for a slug outside the board's
 	// vocabulary, and laneDot takes a Lane BY VALUE and reads only .Name
 	// precisely so an unknown lane degrades to the muted default. Dereferencing
@@ -299,8 +529,44 @@ func (m *Model) renderGraphNode(n *egoNode, titleLines int) string {
 		ln = *l
 	}
 	right := th.laneDot(ln).Render(glyphLaneDot) + " " + th.muted.Render(t.Status)
-	if r := t.ShortRepo(); r != "" {
-		right += th.dim.Render(" · ") + th.chipAlt.Render(r)
+
+	// The id and the lane always survive; everything else on this line is shed
+	// when it will not fit, most-redundant first — the focus badge (the double
+	// border and the header both say it), then the repo chip (the strip says
+	// it), then the both-directions badge (nothing else says it).
+	//
+	// This is not decoration. joinEnds drops its LEFT end first, so a head line
+	// assembled whole loses the ID before it loses the repo chip, and the id is
+	// what ⏎ re-roots on and what the header and the strip cross-reference. At
+	// the left-right frame's floor width that is the common case, not a corner.
+	both := "↕ both directions"
+	if m.graphOrient == orientLeftRight {
+		both = "↔ both directions"
+	}
+	for _, e := range []struct {
+		s    string
+		left bool
+		want bool
+	}{
+		{th.accent.Render("◉ focus"), true, n.Focus},
+		{th.chipAlt.Render(t.ShortRepo()), false, t.ShortRepo() != ""},
+		{th.warn.Render(both), true, n.Both},
+	} {
+		if !e.want {
+			continue
+		}
+		sep := " "
+		if !e.left {
+			sep = th.dim.Render(" · ")
+		}
+		if lg.Width(head)+lg.Width(right)+1+lg.Width(sep)+lg.Width(e.s) > inner {
+			continue
+		}
+		if e.left {
+			head += sep + e.s
+		} else {
+			right += sep + e.s
+		}
 	}
 	lines = append(lines, joinEnds(head, right, inner))
 
@@ -347,7 +613,7 @@ func (m *Model) renderGraphNode(n *egoNode, titleLines int) string {
 	}
 	lines = append(lines, joinEnds(meta, tag, inner))
 
-	return m.graphNodeStyle(n, t).Width(n.W).Render(strings.Join(lines, "\n"))
+	return m.graphNodeStyle(n, t).Width(w).Render(strings.Join(lines, "\n"))
 }
 
 func (m *Model) graphNodeStyle(n *egoNode, t *board.Task) lg.Style {
@@ -390,9 +656,11 @@ func (m *Model) clampGraphSel(l *egoLayout) {
 	m.graphSel = l.Focus
 }
 
-// graphMove walks the selection. dy crosses rows keeping the nearest slot
-// (which is what makes the grid feel like a grid); dx walks within a row.
-// Dummies are routing artefacts and are skipped.
+// graphMove walks the selection. The key pair aligned with the LAYER axis
+// crosses ranks keeping the nearest anchor (which is what makes the grid feel
+// like a grid); the other pair walks within a rank. Which pair is which follows
+// the orientation, so ↓ always means "further from the blockers". Dummies are
+// routing artefacts and are skipped.
 func (m *Model) graphMove(dx, dy int) {
 	l := m.graphLay
 	if l == nil {
@@ -402,9 +670,13 @@ func (m *Model) graphMove(dx, dy int) {
 	if cur == nil {
 		return
 	}
-	if dx != 0 {
-		row := l.Layers[cur.Row]
-		for i := cur.Slot + dx; i >= 0 && i < len(row); i += dx {
+	along, across := dx, dy
+	if m.graphOrient == orientLeftRight {
+		along, across = dy, dx
+	}
+	if along != 0 {
+		row := l.Layers[cur.Rank]
+		for i := cur.Slot + along; i >= 0 && i < len(row); i += along {
 			if row[i].Kind == egoReal {
 				m.graphSel = row[i].Key
 				return
@@ -412,11 +684,11 @@ func (m *Model) graphMove(dx, dy int) {
 		}
 		return
 	}
-	if dy == 0 {
+	if across == 0 {
 		return
 	}
 	want := cur.Anchor()
-	for r := cur.Row + dy; r >= 0 && r < len(l.Layers); r += dy {
+	for r := cur.Rank + across; r >= 0 && r < len(l.Layers); r += across {
 		best, bestD := "", 1<<30
 		for _, n := range l.Layers[r] {
 			if n.Kind != egoReal {
@@ -433,10 +705,10 @@ func (m *Model) graphMove(dx, dy int) {
 	}
 }
 
-// scrollGraphToSel keeps the selected node's band on screen. Band offsets are
-// recomputed from the same channel heights the renderer used, so the scroll can
-// never disagree with what is drawn.
-func (m *Model) scrollGraphToSel(l *egoLayout, channels []int, titleLines, total, canvasH int) int {
+// scrollGraphToSel keeps the selected node's band on screen. The offsets are
+// recomputed from the same frame the renderer used, so the scroll can never
+// disagree with what is drawn.
+func (m *Model) scrollGraphToSel(l *egoLayout, f graphFrame, total, canvasH int) int {
 	if total <= canvasH {
 		return 0
 	}
@@ -444,15 +716,21 @@ func (m *Model) scrollGraphToSel(l *egoLayout, channels []int, titleLines, total
 	if n == nil {
 		return clamp(m.graphScroll, 0, total-canvasH)
 	}
-	nodeH := titleLines + 4
-	top := 0
-	for r := 0; r < n.Row; r++ {
-		top += nodeH
-		if r < len(channels) {
-			top += channels[r]
+	var top, bot int
+	if f.orient == orientLeftRight {
+		// The along axis IS the screen line axis here, so place() already
+		// answered this.
+		top, bot = n.Along, n.Along+n.Span
+	} else {
+		nodeH := f.nodeH()
+		for r := 0; r < n.Rank; r++ {
+			top += nodeH
+			if r < len(f.channels) {
+				top += f.channels[r]
+			}
 		}
+		bot = top + nodeH
 	}
-	bot := top + nodeH
 	s := m.graphScroll
 	if top < s {
 		s = top
@@ -478,7 +756,7 @@ func (m *Model) openGraph() {
 	m.graphStack = nil
 	m.graphFrom = viewBoard
 	m.view = viewGraph
-	m.note("graph rooted on %s — ⏎ re-roots on the selected node · z cycles radius · esc returns", t.ID)
+	m.note("graph rooted on %s — ⏎ re-roots on the selected node · z cycles radius · o flips the axis · esc returns", t.ID)
 }
 
 // rerootGraph is the thing a static picture cannot do: walk the graph. The
@@ -527,6 +805,22 @@ func (m *Model) cycleGraphRadius() {
 		}
 	}
 	m.graphRadius = graphRadii[0]
+}
+
+// cycleGraphOrient flips which screen axis the layers run along. No note, for
+// the same reason the radius key has none: the header states the direction on
+// every frame, in the two words that are half the redundancy contract.
+//
+// The scroll offset goes with it. It is screen lines in both orientations, but
+// it counts lines of a frame laid out on the other axis, so carrying it over
+// would land the window somewhere nothing chose.
+func (m *Model) cycleGraphOrient() {
+	if m.graphOrient == orientLeftRight {
+		m.graphOrient = orientTopDown
+	} else {
+		m.graphOrient = orientLeftRight
+	}
+	m.graphScroll = 0
 }
 
 // closeGraph returns to the board, landing the board cursor on whatever node

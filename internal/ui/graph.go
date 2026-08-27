@@ -11,9 +11,19 @@ import (
 // this file decides.
 //
 // The shape is an EGO GRAPH around one focus task: "what must finish before
-// this" above it, "what closing this unblocks" below it. Direction is carried
-// by POSITION (upstream is up) and, redundantly, by arrowheads — a reader must
-// never have to remember which way the arrows point.
+// this" on one side of it, "what closing this unblocks" on the other. Direction
+// is carried by POSITION and, redundantly, by arrowheads — a reader must never
+// have to remember which way the arrows point.
+//
+// WHICH SCREEN AXIS the layers run along is a setting, so nothing in this file
+// says "row" or "column". It has two axes instead:
+//
+//	ALONG  — inside one layer, from one sibling to the next
+//	ACROSS — from a layer to the next layer out
+//
+// orientTopDown maps along→x and across→y; orientLeftRight maps along→y and
+// across→x. Every distance below is on one of those two axes, so the engine is
+// written once and the drawing decides what they mean on screen.
 //
 // The algorithm is Sugiyama PHASE 1 ONLY (longest-path layering) plus a single
 // barycenter sweep. That is a deliberate stopping point, not laziness: measured
@@ -26,6 +36,27 @@ import (
 // a git merge can produce one and a graph view that hangs is worse than one
 // that draws a cycle awkwardly.
 
+// graphOrient is which screen axis the LAYERS run along.
+//
+// Both values keep the redundancy contract above: top-down puts upstream ABOVE
+// and points every arrow DOWN, left-right puts upstream LEFT and points every
+// arrow RIGHT. Position and arrowhead always say the same thing.
+type graphOrient int
+
+const (
+	orientTopDown graphOrient = iota
+	orientLeftRight
+)
+
+// String is the word the header and the status line use, so the two surfaces
+// cannot drift apart.
+func (o graphOrient) String() string {
+	if o == orientLeftRight {
+		return "left-right"
+	}
+	return "top-down"
+}
+
 const (
 	// graphAllRadius is the "all" setting of the hop-radius cycle. The real
 	// board's longest chain is 5 edges, so 8 reaches everything while still
@@ -35,13 +66,56 @@ const (
 	// graphHardCols caps how many nodes one layer may DRAW. The measured
 	// widest layer over the whole board is 4; the cap exists so a pathological
 	// fan-out degrades into "+N more" instead of into an unreadable frame.
+	//
+	// It is a property of the PICTURE, not of the terminal, and deliberately
+	// not derived from either screen axis: a cap read off the width and a cap
+	// read off the height would disagree, and `o` would then change how many
+	// nodes the board has.
 	graphHardCols = 6
 
+	// The along-axis extents, top-down: screen columns.
 	graphNodeMinW = 28
 	graphNodeMaxW = 104
 	graphNodeGap  = 3
 	graphDummyW   = 3
+
+	// The along-axis extents, left-right: screen ROWS. A node box costs
+	// border(2) + the id line + the meta line on top of its title lines, so its
+	// height is the title budget (graphview.go) plus that fixed chrome. The gap
+	// is 1 row against top-down's 3 columns because a terminal cell is about
+	// twice as tall as it is wide, and a routing dummy is a single rule.
+	graphNodeChrome = 4
+	graphNodeMinH   = graphMinNodeLines + graphNodeChrome
+	graphNodeMaxH   = graphMaxNodeLines + graphNodeChrome
+	graphNodeGapLR  = 1
+	graphDummyLR    = 1
+
+	// graphNodeMinWLR is how narrow a node box may get in the left-right frame,
+	// where WIDTH is the negotiated axis rather than the given one.
+	//
+	// It is the width at which the box still says something. 36 outer is 32 of
+	// inner width — 16 Japanese glyphs a line, so the three title lines the
+	// frame affords clear the 82-cell median title (CLAUDE.md) with room, and
+	// the id line still fits its repo chip beside the lane. At 28, top-down's
+	// floor, the same box holds 72 cells of title and sheds the chip.
+	//
+	// Below it the picture is boxes you cannot read, so graphview.go drops
+	// LAYERS and says so instead of going under it. The id itself survives much
+	// further down — renderGraphNode sheds the optional halves of the id line
+	// to keep it — which is what makes this a legibility floor and not a
+	// correctness one.
+	graphNodeMinWLR = 36
 )
+
+// nodeSpans is the along-axis budget for one node: the extent a real node may
+// take, the gap between two of them, and what a routing dummy costs. Top-down
+// measures all three in screen columns, left-right in screen rows.
+func nodeSpans(o graphOrient) (lo, hi, gap, dummy int) {
+	if o == orientLeftRight {
+		return graphNodeMinH, graphNodeMaxH, graphNodeGapLR, graphDummyLR
+	}
+	return graphNodeMinW, graphNodeMaxW, graphNodeGap, graphDummyW
+}
 
 // egoKind separates real tasks from the routing dummies that carry an edge
 // spanning more than one layer through the layers in between.
@@ -58,23 +132,26 @@ type egoNode struct {
 	ID    string // the task id; "" for a dummy
 	Kind  egoKind
 	Layer int // SIGNED: negative = upstream, 0 = focus, positive = downstream
-	Row   int // index into egoLayout.Layers (0 = topmost)
-	Slot  int // position within the row, left to right
+	Rank  int // index into egoLayout.Layers (0 = the outermost upstream layer)
+	Slot  int // position within the layer, in along-axis order
 
 	Focus   bool // the task the graph is rooted on
 	Both    bool // reachable both upstream AND downstream (only possible in a cycle)
 	Hidden  bool // the current board filter would hide this task
 	Unknown bool // a dep pointing at an id that is not on the board
 
-	// Filled by place(). X is the node's left column within the graph canvas.
-	X, W int
+	// Filled by place(). Along is the node's offset on the ALONG axis and Span
+	// is its extent there. The extent on the ACROSS axis is uniform across the
+	// whole frame and is negotiated by the view, which is why it is not here.
+	Along, Span int
 }
 
-// Anchor is the column an edge attaches to: the horizontal centre of the node.
-func (n *egoNode) Anchor() int { return n.X + n.W/2 }
+// Anchor is the along-axis position an edge attaches to: the node's centre.
+func (n *egoNode) Anchor() int { return n.Along + n.Span/2 }
 
-// egoEdge is one drawn edge, always between ADJACENT rows after dummy
-// insertion, always pointing DOWN (From is the upper row).
+// egoEdge is one drawn edge, always between ADJACENT ranks after dummy
+// insertion, always pointing OUTWARD from the upstream side (From is the lower
+// rank, drawn above the focus top-down and left of it left-right).
 type egoEdge struct{ From, To string }
 
 // egoLayout is one frame's worth of graph structure.
@@ -83,26 +160,29 @@ type egoLayout struct {
 	Radius int
 
 	Nodes  map[string]*egoNode
-	Layers [][]*egoNode // index 0 = topmost row
+	Layers [][]*egoNode // index 0 = the outermost upstream layer
 	Edges  []egoEdge
 
 	// Skipped are real dep edges the layered drawing cannot express: a cycle
-	// folded two nodes onto the same row, or an edge pointing UP. They are
-	// reported in the UI rather than silently dropped — a graph that quietly
-	// omits an edge is worse than one that admits it.
+	// folded two nodes onto the same rank, or an edge pointing back upstream.
+	// They are reported in the UI rather than silently dropped — a graph that
+	// quietly omits an edge is worse than one that admits it.
 	Skipped []egoEdge
 
-	// Overflow counts nodes dropped from a row by graphHardCols, by row index.
+	// Overflow counts nodes dropped from a layer by graphHardCols, by rank.
 	Overflow map[int]int
 
 	UpCount, DownCount int
-	W, H               int // canvas size, filled by place()
+
+	// Along is the along-axis extent place() laid this frame out in, and Span
+	// is the extent it gave every real node on that axis.
+	Along, Span int
 }
 
 // FocusNode is the node the graph is rooted on.
 func (l *egoLayout) FocusNode() *egoNode { return l.Nodes[l.Focus] }
 
-// Real lists every real (non-dummy) node in draw order: row, then slot.
+// Real lists every real (non-dummy) node in draw order: rank, then slot.
 func (l *egoLayout) Real() []*egoNode {
 	var out []*egoNode
 	for _, row := range l.Layers {
@@ -122,9 +202,18 @@ func (l *egoLayout) Node(key string) *egoNode { return l.Nodes[key] }
 // middle of an empty screen and leaving the reader to wonder what broke.
 func (l *egoLayout) Empty() bool { return l.UpCount == 0 && l.DownCount == 0 }
 
+// FocusRank is the rank the focus sits on, and 0 when the focus is somehow
+// absent — the value the layer window grows outward from.
+func (l *egoLayout) FocusRank() int {
+	if n := l.FocusNode(); n != nil {
+		return n.Rank
+	}
+	return 0
+}
+
 // longestDist is bounded longest-path layering from `from` over the edges
 // `next` yields. Longest path — not shortest — is Sugiyama's phase 1: it is
-// what guarantees every edge points strictly downward, which is what lets the
+// what guarantees every edge points strictly outward, which is what lets the
 // channel router assume a direction.
 //
 // It is a Bellman-Ford-shaped relaxation rather than a DFS precisely so a cycle
@@ -243,7 +332,7 @@ func buildEgo(g *board.Graph, focus string, radius, maxCols int, hidden func(str
 		}
 	}
 
-	// --- 2. group into rows, cap the width ---------------------------------
+	// --- 2. group into ranks, cap the width ---------------------------------
 	byLayer := map[int][]*egoNode{}
 	for _, n := range l.Nodes {
 		byLayer[n.Layer] = append(byLayer[n.Layer], n)
@@ -254,9 +343,7 @@ func buildEgo(g *board.Graph, focus string, radius, maxCols int, hidden func(str
 	}
 	sort.Ints(layerVals)
 
-	rowOf := map[int]int{}
 	for i, v := range layerVals {
-		rowOf[v] = i
 		row := byLayer[v]
 		sort.Slice(row, func(a, b int) bool { return row[a].Key < row[b].Key })
 		if len(row) > maxCols {
@@ -276,14 +363,14 @@ func buildEgo(g *board.Graph, focus string, radius, maxCols int, hidden func(str
 			row = row[:maxCols]
 		}
 		for _, n := range row {
-			n.Row = i
+			n.Rank = i
 		}
 		l.Layers = append(l.Layers, row)
 	}
 
 	// --- 3. edges over the INDUCED subgraph ---------------------------------
 	// Every dep edge whose BOTH ends survived, plus dummies for spans > 1.
-	type raw struct{ from, to string } // from = upper (the dependency)
+	type raw struct{ from, to string } // from = upstream (the dependency)
 	var raws []raw
 	seen := map[raw]bool{}
 	for _, n := range l.Real() {
@@ -308,7 +395,7 @@ func buildEgo(g *board.Graph, focus string, radius, maxCols int, hidden func(str
 
 	for _, r := range raws {
 		fr, to := l.Nodes[r.from], l.Nodes[r.to]
-		span := to.Row - fr.Row
+		span := to.Rank - fr.Rank
 		if span <= 0 {
 			// A cycle folded the edge flat or backwards. Report it; do not try
 			// to route it, and above all do not loop looking for a way.
@@ -319,35 +406,32 @@ func buildEgo(g *board.Graph, focus string, radius, maxCols int, hidden func(str
 			l.Edges = append(l.Edges, egoEdge{From: r.from, To: r.to})
 			continue
 		}
-		// span > 1: chain dummies through the rows in between, so the channel
-		// router only ever sees adjacent-row edges.
+		// span > 1: chain dummies through the ranks in between, so the channel
+		// router only ever sees adjacent-rank edges.
 		prev := r.from
-		for row := fr.Row + 1; row < to.Row; row++ {
-			key := fmt.Sprintf("\x00dummy:%s>%s@%d", r.from, r.to, row)
-			d := &egoNode{Key: key, Kind: egoDummy, Layer: layerVals[row], Row: row}
+		for rank := fr.Rank + 1; rank < to.Rank; rank++ {
+			key := fmt.Sprintf("\x00dummy:%s>%s@%d", r.from, r.to, rank)
+			d := &egoNode{Key: key, Kind: egoDummy, Layer: layerVals[rank], Rank: rank}
 			l.Nodes[key] = d
-			l.Layers[row] = append(l.Layers[row], d)
+			l.Layers[rank] = append(l.Layers[rank], d)
 			l.Edges = append(l.Edges, egoEdge{From: prev, To: key})
 			prev = key
 		}
 		l.Edges = append(l.Edges, egoEdge{From: prev, To: r.to})
 	}
 
-	l.orderRows()
+	l.orderRanks()
 	return l
 }
 
-// orderRows is the single barycenter sweep, run OUTWARD from the focus row so
-// that every row is ordered against a row whose slots are already fixed.
+// orderRanks is the single barycenter sweep, run OUTWARD from the focus rank so
+// that every rank is ordered against one whose slots are already fixed.
 //
 // Sorting is stable and the tie-break is the node key, so a node with no
-// neighbours in the reference row keeps its id-order position instead of
+// neighbours in the reference rank keeps its id-order position instead of
 // floating.
-func (l *egoLayout) orderRows() {
-	focusRow := 0
-	if n := l.FocusNode(); n != nil {
-		focusRow = n.Row
-	}
+func (l *egoLayout) orderRanks() {
+	focusRank := l.FocusRank()
 
 	adj := map[string][]string{}
 	for _, e := range l.Edges {
@@ -355,18 +439,18 @@ func (l *egoLayout) orderRows() {
 		adj[e.To] = append(adj[e.To], e.From)
 	}
 
-	slotIn := func(row int) map[string]int {
+	slotIn := func(rank int) map[string]int {
 		m := map[string]int{}
-		for i, n := range l.Layers[row] {
+		for i, n := range l.Layers[rank] {
 			m[n.Key] = i
 		}
 		return m
 	}
 
-	sweep := func(row, ref int) {
+	sweep := func(rank, ref int) {
 		refSlots := slotIn(ref)
 		bary := map[string]float64{}
-		for _, n := range l.Layers[row] {
+		for _, n := range l.Layers[rank] {
 			sum, cnt := 0.0, 0
 			for _, nb := range adj[n.Key] {
 				if s, ok := refSlots[nb]; ok {
@@ -380,8 +464,8 @@ func (l *egoLayout) orderRows() {
 				bary[n.Key] = sum / float64(cnt)
 			}
 		}
-		sort.SliceStable(l.Layers[row], func(a, b int) bool {
-			na, nb := l.Layers[row][a], l.Layers[row][b]
+		sort.SliceStable(l.Layers[rank], func(a, b int) bool {
+			na, nb := l.Layers[rank][a], l.Layers[rank][b]
 			ba, bb := bary[na.Key], bary[nb.Key]
 			if ba < 0 || bb < 0 {
 				return false // stable: leave opinionless nodes where they are
@@ -393,10 +477,10 @@ func (l *egoLayout) orderRows() {
 		})
 	}
 
-	for r := focusRow - 1; r >= 0; r-- {
+	for r := focusRank - 1; r >= 0; r-- {
 		sweep(r, r+1)
 	}
-	for r := focusRow + 1; r < len(l.Layers); r++ {
+	for r := focusRank + 1; r < len(l.Layers); r++ {
 		sweep(r, r-1)
 	}
 	for _, row := range l.Layers {
@@ -406,13 +490,15 @@ func (l *egoLayout) orderRows() {
 	}
 }
 
-// place assigns every node an X and a width inside a canvas `avail` wide.
+// place assigns every node an offset and an extent on the ALONG axis, inside a
+// canvas `avail` long — screen columns top-down, screen rows left-right.
 //
-// Real nodes all get the SAME width — the grid reads as a grid — sized so the
-// busiest row fits. Dummies get graphDummyW, because a routing artefact should
-// not cost 60 columns. Each row is then CENTRED, which is what puts the focus
-// box in the middle of the frame with its fan-out spread symmetrically under it.
-func (l *egoLayout) place(avail int) {
+// Real nodes all get the SAME extent — the grid reads as a grid — sized so the
+// busiest layer fits. Dummies get a routing artefact's worth, because a
+// pass-through should not cost a whole box. Each layer is then CENTRED, which
+// is what puts the focus box in the middle of the frame with its fan-out spread
+// symmetrically around it.
+func (l *egoLayout) place(o graphOrient, avail int) {
 	if avail < 1 {
 		avail = 1
 	}
@@ -429,38 +515,55 @@ func (l *egoLayout) place(avail int) {
 		}
 	}
 
-	nw := (avail - (cols-1)*graphNodeGap) / cols
-	nw = clamp(nw, graphNodeMinW, graphNodeMaxW)
-	if nw > avail {
-		nw = maxInt(1, avail)
+	lo, hi, gap, dummy := nodeSpans(o)
+	span := (avail - (cols-1)*gap) / cols
+	span = clamp(span, lo, hi)
+	if span > avail {
+		span = maxInt(1, avail)
 	}
 
 	for _, row := range l.Layers {
 		total := 0
 		for i, n := range row {
-			n.W = nw
+			n.Span = span
 			if n.Kind == egoDummy {
-				n.W = graphDummyW
+				n.Span = dummy
 			}
 			if i > 0 {
-				total += graphNodeGap
+				total += gap
 			}
-			total += n.W
+			total += n.Span
 		}
 		x := maxInt(0, (avail-total)/2)
 		for _, n := range row {
-			n.X = x
-			x += n.W + graphNodeGap
+			n.Along = x
+			x += n.Span + gap
 		}
 	}
-	l.W = avail
+	l.Along, l.Span = avail, span
 }
 
-// rowEdges returns the edges that live in the channel between row r and r+1.
-func (l *egoLayout) rowEdges(r int) []egoEdge {
+// Extent is how far along the axis the longest layer actually reaches. place()
+// centres each layer inside `avail`, so a layer that does not fit starts at 0
+// and runs past it — the view sizes its canvas from this rather than assuming
+// the content fits.
+func (l *egoLayout) Extent() int {
+	out := 0
+	for _, row := range l.Layers {
+		for _, n := range row {
+			if end := n.Along + n.Span; end > out {
+				out = end
+			}
+		}
+	}
+	return out
+}
+
+// rankEdges returns the edges that live in the channel between rank r and r+1.
+func (l *egoLayout) rankEdges(r int) []egoEdge {
 	var out []egoEdge
 	for _, e := range l.Edges {
-		if l.Nodes[e.From].Row == r && l.Nodes[e.To].Row == r+1 {
+		if l.Nodes[e.From].Rank == r && l.Nodes[e.To].Rank == r+1 {
 			out = append(out, e)
 		}
 	}
@@ -473,6 +576,11 @@ func (l *egoLayout) rowEdges(r int) []egoEdge {
 // 16-entry array it always was: two lines meeting in one cell can only produce
 // the glyph their combined mask names, so `─` crossing `│` cannot come out as
 // anything but `┼`, and a tee cannot come out as a corner.
+//
+// The table is also what makes the two orientations one piece of code. A
+// channel is described as runs along and across its own axes, and because the
+// bits are COMPASS directions rather than "the bus direction", the same run
+// comes out as `│` on one axis and `─` on the other with no second table.
 const (
 	dirN uint8 = 1 << iota
 	dirE
@@ -500,14 +608,15 @@ var junction = [16]rune{
 }
 
 // edgeCanvas is a plain rune grid, and it is only ever used for the CHANNEL
-// bands between node rows — never for anything containing text.
+// bands between layers — never for anything containing text.
 //
 // That restriction is the whole reason it is safe. A rune-per-cell grid has no
 // idea that a Japanese glyph is two cells wide, so the moment one is written
 // into it every row to the right shears. (That is exactly the defect that
 // disqualified ntcharts' canvas for this job.) Node boxes therefore go through
 // lipgloss, which measures display width, and only box-drawing characters —
-// every one of them single-width — ever reach this type.
+// every one of them single-width, asserted by
+// TestEdgeCanvasGlyphsAreSingleWidth — ever reach this type.
 type edgeCanvas struct {
 	w, h  int
 	mask  []uint8
@@ -573,8 +682,37 @@ func (c *edgeCanvas) hline(y, x0, x1 int) {
 	}
 }
 
-// rows renders the canvas to strings. Every rune it can emit is single-width,
-// which is asserted by TestEdgeCanvasGlyphsAreSingleWidth.
+// The three axis-mapped writers. A channel is described entirely as runs ALONG
+// its layer and runs ACROSS to the next one; these map that description onto
+// the grid, and the compass-bit junction table above turns it into the right
+// glyph on either axis without a second table.
+func (c *edgeCanvas) alongRun(o graphOrient, across, a0, a1 int) {
+	if o == orientLeftRight {
+		c.vline(across, a0, a1)
+		return
+	}
+	c.hline(across, a0, a1)
+}
+
+func (c *edgeCanvas) acrossRun(o graphOrient, along, c0, c1 int) {
+	if o == orientLeftRight {
+		c.hline(along, c0, c1)
+		return
+	}
+	c.vline(along, c0, c1)
+}
+
+func (c *edgeCanvas) putAt(o graphOrient, along, across int, r rune) {
+	if o == orientLeftRight {
+		c.put(across, along, r)
+		return
+	}
+	c.put(along, across, r)
+}
+
+// rows renders the canvas to strings — h of them, w cells each. Top-down that
+// is one screen line per row; left-right it is one COLUMN band, which the view
+// splices between two layers.
 func (c *edgeCanvas) rows() []string {
 	out := make([]string, c.h)
 	buf := make([]rune, c.w)
@@ -591,61 +729,72 @@ func (c *edgeCanvas) rows() []string {
 	return out
 }
 
-// routedEdge is one edge with its assigned bus row inside a channel.
+// routedEdge is one edge with its assigned bus inside a channel. A1 and A2 are
+// its two ends' ALONG-axis anchors; Bus is the ACROSS-axis offset of the shared
+// run between them.
 type routedEdge struct {
 	Edge    egoEdge
-	X1, X2  int
-	Bus     int  // -1 = a straight drop, no horizontal run at all
+	A1, A2  int
+	Bus     int  // -1 = a straight shot, no run along the layer at all
 	ToDummy bool // no arrowhead: the line continues through a pass-through
 }
 
-// routeChannel packs the edges between two rows into as few bus rows as it can,
-// and returns the channel's height.
+// routeChannel packs the edges between two ranks into as few buses as it can,
+// and returns the channel's depth on the ACROSS axis.
 //
 // The ordering rule is the one that makes an orthogonal channel readable:
-// **shortest horizontal span nearest the source row.** Long edges then arc
+// **shortest along-axis span nearest the source layer.** Long edges then arc
 // AROUND short ones instead of cutting across them. Combined with the measured
 // crossing count (2 across the entire real board) this is all the
 // crossing-avoidance the drawing needs.
 //
-// Rows are shared by interval packing: two edges whose horizontal runs do not
-// overlap sit on the same row, so the common fan-out — several short hops —
-// costs one row rather than one row each.
-func routeChannel(l *egoLayout, edges []egoEdge) (routes []routedEdge, height int) {
+// Buses are shared by interval packing: two edges whose along-axis runs do not
+// overlap sit on the same bus, so the common fan-out — several short hops —
+// costs one bus rather than one each.
+//
+// It takes no orientation and needs none: the packing is topology, so one ego
+// graph produces the same channel depths whichever way it is drawn. Padding the
+// left-right channels for looks was tried and reverted — five channels at two
+// cells each cost a whole LAYER at the 240-column floor, which is the one
+// resource that frame is short of.
+func routeChannel(l *egoLayout, edges []egoEdge) (routes []routedEdge, depth int) {
 	type span struct{ lo, hi int }
 	var busy [][]span
 
 	for _, e := range edges {
 		from, to := l.Nodes[e.From], l.Nodes[e.To]
 		routes = append(routes, routedEdge{
-			Edge: e, X1: from.Anchor(), X2: to.Anchor(),
+			Edge: e, A1: from.Anchor(), A2: to.Anchor(),
 			Bus: -1, ToDummy: to.Kind == egoDummy,
 		})
 	}
 	sort.SliceStable(routes, func(a, b int) bool {
-		sa := abs(routes[a].X2 - routes[a].X1)
-		sb := abs(routes[b].X2 - routes[b].X1)
+		sa := abs(routes[a].A2 - routes[a].A1)
+		sb := abs(routes[b].A2 - routes[b].A1)
 		if sa != sb {
 			return sa < sb
 		}
-		if routes[a].X1 != routes[b].X1 {
-			return routes[a].X1 < routes[b].X1
+		if routes[a].A1 != routes[b].A1 {
+			return routes[a].A1 < routes[b].A1
 		}
 		return routes[a].Edge.From < routes[b].Edge.From
 	})
 
 	for i := range routes {
 		r := &routes[i]
-		if r.X1 == r.X2 {
-			continue // straight drop: it needs no bus row
+		if r.A1 == r.A2 {
+			continue // a straight shot: it needs no bus
 		}
-		lo, hi := minInt(r.X1, r.X2), maxInt(r.X1, r.X2)
+		lo, hi := minInt(r.A1, r.A2), maxInt(r.A1, r.A2)
 		placed := false
 		for b := range busy {
 			free := true
 			for _, s := range busy[b] {
-				// A one-cell margin: two horizontal runs that merely TOUCH
-				// would fuse into a single line and read as one edge.
+				// A one-cell margin: two runs that merely TOUCH would fuse
+				// into a single line and read as one edge. One cell on both
+				// axes — unlike the node gaps, this is a topological minimum
+				// rather than a visual one, so the cell aspect ratio does not
+				// enter into it.
 				if lo <= s.hi+1 && s.lo <= hi+1 {
 					free = false
 					break
@@ -664,37 +813,42 @@ func routeChannel(l *egoLayout, edges []egoEdge) (routes []routedEdge, height in
 		}
 	}
 
-	// Row 0 is a clean stub under the source boxes, rows 1..n are the buses,
-	// and the last row carries the arrowheads directly above the target boxes.
-	height = len(busy) + 2
+	// Offset 0 is a clean stub leaving the source boxes, 1..n are the buses,
+	// and the last offset carries the arrowheads against the target boxes.
+	depth = len(busy) + 2
 	if len(edges) == 0 {
-		height = 1
+		depth = 1
 	}
 	for i := range routes {
 		if routes[i].Bus >= 0 {
 			routes[i].Bus++
 		}
 	}
-	return routes, height
+	return routes, depth
 }
 
-// drawChannel paints one channel's edges onto a fresh canvas.
-func drawChannel(w int, routes []routedEdge, height int) *edgeCanvas {
-	c := newEdgeCanvas(w, height)
-	arrowRow := height - 1
+// drawChannel paints one channel's edges onto a fresh canvas `along` long and
+// `depth` deep, in whichever screen orientation those two axes map to.
+func drawChannel(o graphOrient, along int, routes []routedEdge, depth int) *edgeCanvas {
+	w, h := along, depth
+	if o == orientLeftRight {
+		w, h = depth, along
+	}
+	c := newEdgeCanvas(w, h)
+	tip := depth - 1
 	for _, r := range routes {
 		if r.Bus < 0 {
-			c.vline(r.X1, 0, arrowRow-1)
+			c.acrossRun(o, r.A1, 0, tip-1)
 		} else {
-			c.vline(r.X1, 0, r.Bus)
-			c.hline(r.Bus, r.X1, r.X2)
-			c.vline(r.X2, r.Bus, arrowRow-1)
+			c.acrossRun(o, r.A1, 0, r.Bus)
+			c.alongRun(o, r.Bus, r.A1, r.A2)
+			c.acrossRun(o, r.A2, r.Bus, tip-1)
 		}
 		if r.ToDummy {
 			// A pass-through is not a destination; the line simply continues.
-			c.vline(r.X2, arrowRow-1, arrowRow)
+			c.acrossRun(o, r.A2, tip-1, tip)
 		} else {
-			c.put(r.X2, arrowRow, glyphArrowDown)
+			c.putAt(o, r.A2, tip, graphArrow(o))
 		}
 	}
 	return c

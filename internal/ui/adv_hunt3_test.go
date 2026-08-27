@@ -230,6 +230,8 @@ func TestKeyBindingsMatchTheirRealKeyStrings(t *testing.T) {
 		{tea.KeyPressMsg{Code: 'H', Text: "H"}, k.LaneBack, "H"},
 		{tea.KeyPressMsg{Code: 'L', Text: "L"}, k.LaneFwd, "L"},
 		{tea.KeyPressMsg{Code: 'M', Text: "M"}, k.Mouse, "M"},
+		{tea.KeyPressMsg{Code: 'o', Text: "o"}, k.GraphOrient, "o (graph)"},
+		{tea.KeyPressMsg{Code: 'o', Text: "o"}, k.Sort, "o (table)"},
 	}
 	for _, tc := range cases {
 		if !key.Matches(tc.msg, tc.want) {
@@ -257,5 +259,16 @@ func TestKeyBindingsMatchTheirRealKeyStrings(t *testing.T) {
 	if !key.Matches(tea.KeyPressMsg{Code: 'S', Text: "S"}, k.Graph) {
 		t.Error("S must open the graph too: it is the only way in on a terminal " +
 			"that cannot encode shift+space")
+	}
+
+	// `o` deliberately has two owners — sort in the table, orientation in the
+	// graph — on the licence keys.go states: it is ORDER, "how this view
+	// arranges what it shows", and the two views are never on screen together.
+	// The routing that keeps them apart is onGraphKey being reached before
+	// onNormalKey (model.go), so the pairing is pinned here rather than left to
+	// read as an accident.
+	if k.Sort.Help().Desc == k.GraphOrient.Help().Desc {
+		t.Error("the two owners of `o` describe themselves identically; " +
+			"the help overlay would list the same row twice")
 	}
 }

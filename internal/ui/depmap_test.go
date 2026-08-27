@@ -648,11 +648,16 @@ func TestPagingTheMapActuallyMovesTheView(t *testing.T) {
 // A strip too short for a single content row must render nothing, not panic.
 // `-dump -demo map -rows 7` is the height where stripHeight lands on 1.
 func TestAShortTerminalDoesNotPanicInEitherFullScreenView(t *testing.T) {
-	for _, demo := range []string{"map", "mapall", "mapfiltered", "graph"} {
+	for _, demo := range []string{"map", "mapall", "mapfiltered", "graph", "graphall"} {
 		for h := 4; h <= 12; h++ {
-			m := New(memstore.New(), Options{})
-			if _, err := m.Dump(240, h, demo, true); err != nil {
-				t.Errorf("-demo %s -rows %d: %v", demo, h, err)
+			// Both graph orientations: they negotiate opposite axes, so the
+			// height that collapses one is not the height that collapses the
+			// other.
+			for _, lr := range []bool{false, true} {
+				m := New(memstore.New(), Options{GraphLR: lr})
+				if _, err := m.Dump(240, h, demo, true); err != nil {
+					t.Errorf("-demo %s -rows %d graphlr=%v: %v", demo, h, lr, err)
+				}
 			}
 		}
 	}

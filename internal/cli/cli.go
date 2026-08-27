@@ -64,6 +64,7 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 		peek      = fs.Bool("peek", false, "-dump with the detail side-peek open")
 		tree      = fs.Bool("tree", false, "-dump with the dep tree overlay open (implies -peek)")
 		table     = fs.Bool("table", false, "-dump the table view")
+		graphlr   = fs.Bool("graphlr", false, "draw the dependency graph left-to-right instead of top-down (the graph's `o` key)")
 		light     = fs.Bool("light", false, "light palette")
 		plain     = fs.Bool("plain", false, "-dump without ANSI styling (diffable)")
 		demo      = fs.String("demo", "", "-dump in a transient state: "+strings.Join(ui.DemoNames, "|")+" (requires -dump; always the fixture)")
@@ -223,13 +224,14 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 	}
 
 	m := ui.New(prov, ui.Options{
-		Light:  *light,
-		Filter: *filter,
-		Table:  *table,
-		Peek:   *peek,
-		Tree:   *tree,
-		LoadMS: loadMS,
-		Debug:  dbg,
+		Light:   *light,
+		Filter:  *filter,
+		Table:   *table,
+		GraphLR: *graphlr,
+		Peek:    *peek,
+		Tree:    *tree,
+		LoadMS:  loadMS,
+		Debug:   dbg,
 	})
 
 	if *dump {
