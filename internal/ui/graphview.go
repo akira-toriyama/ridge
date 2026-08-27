@@ -36,6 +36,15 @@ const (
 	graphMaxNodeLines = 3
 )
 
+// What an isolated focus is told, spelled once because the left-right frame has
+// to reserve their width before it can size a box. Top-down stacks them above
+// and below the lone box; left-right sets them either side of it, where the
+// structure they report missing would have been.
+const (
+	graphNoUpstream  = "— no blockers —"
+	graphNoStructure = "— nothing depends on this, and it waits on nothing —"
+)
+
 // graphRadii is the hop-radius cycle. The last entry is "all" — bounded by
 // graphAllRadius, which exceeds the real board's longest chain (5).
 var graphRadii = []int{1, 2, 3, graphAllRadius}
@@ -82,6 +91,13 @@ type graphFrame struct {
 	// The rank window the drawing covers. Top-down always draws every rank, so
 	// it is the whole range and hidden is 0.
 	first, last, hidden int
+
+	// overWidth is how far the drawing runs past the right edge. Only top-down
+	// can be non-zero: its ALONG axis is the screen width and there is no
+	// horizontal scroll, so a layer too wide is cut by renderGraph's pad. The
+	// header reports it — this file's own rule is that a graph which quietly
+	// omits a node is worse than one that admits it.
+	overWidth int
 }
 
 func (f graphFrame) nodeH() int { return f.titleLines + graphNodeChrome }
@@ -116,14 +132,22 @@ func (m *Model) graphMeasure(l *egoLayout) graphFrame {
 
 	if f.orient == orientLeftRight {
 		f.titleLines = clamp(l.Span-graphNodeChrome, graphMinNodeLines, graphMaxNodeLines)
-		f.first, f.last, f.hidden = graphRankWindow(l, f.channels, m.graphWidth())
+		f.first, f.last, f.hidden = graphRankWindow(l, f.channels, m.graphWidth(), m.graphSelRank(l))
+		avail := m.graphWidth()
+		if l.Empty() {
+			// The notes sit BESIDE the lone box here, so they come out of the
+			// same budget it does. Negotiated without them, a box clamped up to
+			// graphNodeMaxW pushed the trailing note off the right edge at
+			// every width under 240.
+			avail -= lg.Width(graphNoUpstream) + lg.Width(graphNoStructure) + 4
+		}
 		f.nodeW = graphNodeMinWLR
 		if n := f.last - f.first + 1; n > 0 {
 			used := 0
 			for r := f.first; r < f.last; r++ {
 				used += f.channels[r]
 			}
-			f.nodeW = clamp((m.graphWidth()-used)/n, graphNodeMinWLR, graphNodeMaxW)
+			f.nodeW = clamp((avail-used)/n, graphNodeMinWLR, graphNodeMaxW)
 		}
 		return f
 	}
@@ -138,12 +162,27 @@ func (m *Model) graphMeasure(l *egoLayout) graphFrame {
 	// the title budget. It is clamped, never trusted: on a tiny terminal the
 	// graph scrolls instead of rendering boxes with no title at all.
 	f.titleLines = clamp(per-graphNodeChrome, graphMinNodeLines, graphMaxNodeLines)
+	f.overWidth = maxInt(0, l.Extent()-l.Along)
 	return f
 }
 
+// graphSelRank is the rank the left-right window is grown from: the SELECTION's,
+// not the focus's.
+//
+// The cursor has to be on a drawn box. Top-down's scroll follows the selection
+// for exactly this reason, and the across axis has no scroll of its own, so
+// walking past the drawn ranks would otherwise leave the reader moving an
+// invisible cursor and re-rooting on a node no box ever showed.
+func (m *Model) graphSelRank(l *egoLayout) int {
+	if n := l.Node(m.graphSel); n != nil {
+		return n.Rank
+	}
+	return l.FocusRank()
+}
+
 // graphRankWindow is which ranks the left-right frame can fit across the
-// screen, grown outward from the focus so the picture stays centred on what it
-// is rooted on.
+// screen, grown outward from `at` — the selected node's rank, so the window
+// follows the walk and the cursor is always on a drawn box.
 //
 // This is graphHardCols' mirror on the other axis. The along axis overflows
 // into the scroll, but a rank that will not fit ACROSS cannot be scrolled to
@@ -152,18 +191,18 @@ func (m *Model) graphMeasure(l *egoLayout) graphFrame {
 // it never fires: the longest chain is 5 edges, so an ego graph is at most 6
 // ranks, and 6 boxes at graphNodeMinWLR plus their channels fit the 240-column
 // floor.
-func graphRankWindow(l *egoLayout, channels []int, avail int) (first, last, hidden int) {
+func graphRankWindow(l *egoLayout, channels []int, avail, at int) (first, last, hidden int) {
 	n := len(l.Layers)
 	if n == 0 {
 		return 0, -1, 0
 	}
-	focus := l.FocusRank()
-	first, last = focus, focus
+	at = clamp(at, 0, n-1)
+	first, last = at, at
 	used := graphNodeMinWLR
 	for first > 0 || last < n-1 {
 		// Grow the shorter side first, upstream winning ties — the same
 		// preference the cycle placement makes.
-		up := first > 0 && (last == n-1 || (focus-first) <= (last-focus))
+		up := first > 0 && (last == n-1 || (at-first) <= (last-at))
 		grew := false
 		for _, tryUp := range [2]bool{up, !up} {
 			if (tryUp && first == 0) || (!tryUp && last == n-1) {
@@ -201,9 +240,14 @@ func (m *Model) renderGraph() string {
 	f := m.graphMeasure(l)
 
 	canvasH := m.graphCanvasH()
-	bands := m.graphBandsTopDown(l, f)
+	// Exactly one of these runs. Either composes every node box in the graph,
+	// so assigning one and overwriting it would render the whole frame twice on
+	// every keystroke in the other orientation.
+	var bands []string
 	if f.orient == orientLeftRight {
 		bands = m.graphBandsLeftRight(l, f, canvasH)
+	} else {
+		bands = m.graphBandsTopDown(l, f)
 	}
 
 	m.graphScroll = clamp(m.graphScroll, 0, maxInt(0, len(bands)-canvasH))
@@ -267,9 +311,8 @@ func (m *Model) graphBandsTopDown(l *egoLayout, f graphFrame) []string {
 	// A focus with no structure at all: say so in words. A lone box floating in
 	// an empty screen reads as a bug, not as an answer.
 	if l.Empty() {
-		msg := m.th.dim.Render("— nothing depends on this, and it waits on nothing —")
-		bands = append([]string{m.th.dim.Render("— no blockers —"), ""},
-			append(bands, "", msg)...)
+		bands = append([]string{m.th.dim.Render(graphNoUpstream), ""},
+			append(bands, "", m.th.dim.Render(graphNoStructure))...)
 	}
 	return bands
 }
@@ -295,7 +338,7 @@ func (m *Model) graphBandsLeftRight(l *egoLayout, f graphFrame, canvasH int) []s
 	// have been — nothing upstream on the left, nothing downstream on the
 	// right. Top-down puts the same two lines above and below for that reason.
 	if l.Empty() {
-		bands = append(bands, m.graphNoteBand(l, "— no blockers —", h))
+		bands = append(bands, m.graphNoteBand(l, graphNoUpstream, h))
 	}
 	for r := f.first; r <= f.last && r < len(l.Layers); r++ {
 		bands = append(bands, graphBand{w: f.nodeW, rows: m.graphRankColumn(l.Layers[r], f, h)})
@@ -309,8 +352,7 @@ func (m *Model) graphBandsLeftRight(l *egoLayout, f graphFrame, canvasH int) []s
 		}
 	}
 	if l.Empty() {
-		bands = append(bands, m.graphNoteBand(l,
-			"— nothing depends on this, and it waits on nothing —", h))
+		bands = append(bands, m.graphNoteBand(l, graphNoStructure, h))
 	}
 
 	total := 0
@@ -426,6 +468,10 @@ func (m *Model) graphHeader(l *egoLayout, f graphFrame, clipped bool) string {
 		}
 		bits = append(bits, th.warn.Render(fmt.Sprintf("+%d over the layer cap", n)))
 	}
+	if f.overWidth > 0 {
+		bits = append(bits, th.warn.Render(
+			fmt.Sprintf("%d cell(s) past the right edge", f.overWidth)))
+	}
 	if f.hidden > 0 {
 		bits = append(bits, th.warn.Render(
 			fmt.Sprintf("+%d layer(s) beyond the width — z narrows the radius", f.hidden)))
@@ -531,42 +577,53 @@ func (m *Model) renderGraphNode(n *egoNode, w, titleLines int) string {
 	right := th.laneDot(ln).Render(glyphLaneDot) + " " + th.muted.Render(t.Status)
 
 	// The id and the lane always survive; everything else on this line is shed
-	// when it will not fit, most-redundant first — the focus badge (the double
-	// border and the header both say it), then the repo chip (the strip says
-	// it), then the both-directions badge (nothing else says it).
+	// when it will not fit.
 	//
 	// This is not decoration. joinEnds drops its LEFT end first, so a head line
 	// assembled whole loses the ID before it loses the repo chip, and the id is
 	// what ⏎ re-roots on and what the header and the strip cross-reference. At
 	// the left-right frame's floor width that is the common case, not a corner.
+	//
+	// The list below is in KEEP order, so it reads as the reverse of the shed
+	// order: the both-directions badge stays longest because nothing else on
+	// any screen says it, the repo chip next because the strip says it too, and
+	// the focus badge goes first because the double border AND the header
+	// already say it. The loop BREAKS rather than skipping, so a small badge
+	// cannot jump the queue past a big one that missed.
 	both := "↕ both directions"
 	if m.graphOrient == orientLeftRight {
 		both = "↔ both directions"
 	}
+	keep := map[string]bool{}
+	used := lg.Width(head) + lg.Width(right) + 1
 	for _, e := range []struct {
+		name string
 		s    string
-		left bool
+		sep  int
 		want bool
 	}{
-		{th.accent.Render("◉ focus"), true, n.Focus},
-		{th.chipAlt.Render(t.ShortRepo()), false, t.ShortRepo() != ""},
-		{th.warn.Render(both), true, n.Both},
+		{"both", both, 1, n.Both},
+		{"repo", t.ShortRepo(), 3, t.ShortRepo() != ""},
+		{"focus", "◉ focus", 1, n.Focus},
 	} {
 		if !e.want {
 			continue
 		}
-		sep := " "
-		if !e.left {
-			sep = th.dim.Render(" · ")
+		if used+e.sep+lg.Width(e.s) > inner {
+			break
 		}
-		if lg.Width(head)+lg.Width(right)+1+lg.Width(sep)+lg.Width(e.s) > inner {
-			continue
-		}
-		if e.left {
-			head += sep + e.s
-		} else {
-			right += sep + e.s
-		}
+		used += e.sep + lg.Width(e.s)
+		keep[e.name] = true
+	}
+	// Assembled in READING order, which is deliberately not the shed order.
+	if keep["focus"] {
+		head += " " + th.accent.Render("◉ focus")
+	}
+	if keep["both"] {
+		head += " " + th.warn.Render(both)
+	}
+	if keep["repo"] {
+		right += th.dim.Render(" · ") + th.chipAlt.Render(t.ShortRepo())
 	}
 	lines = append(lines, joinEnds(head, right, inner))
 

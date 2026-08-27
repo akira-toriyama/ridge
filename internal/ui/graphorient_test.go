@@ -484,3 +484,364 @@ func TestAPassThroughSitsOnTheRowItsChannelAttachesTo(t *testing.T) {
 		}
 	}
 }
+
+// handChannel is two sources fanning into one target, laid out BY HAND so the
+// expected picture below is a literal rather than something recomputed from the
+// code under test.
+func handChannel() (*egoLayout, []routedEdge, int) {
+	l := &egoLayout{Nodes: map[string]*egoNode{
+		"a": {Key: "a", Kind: egoReal, Rank: 0, Along: 0, Span: 4},
+		"b": {Key: "b", Kind: egoReal, Rank: 0, Along: 8, Span: 4},
+		"c": {Key: "c", Kind: egoReal, Rank: 1, Along: 4, Span: 4},
+	}}
+	l.Edges = []egoEdge{{From: "a", To: "c"}, {From: "b", To: "c"}}
+	routes, depth := routeChannel(l, l.Edges)
+	return l, routes, depth
+}
+
+// The one ABSOLUTE assertion about the drawing. Everything else in this file
+// compares the two orientations against each other, which cannot see an error
+// that is symmetric in both — and a symmetric one is the likely error, because
+// alongRun and acrossRun are two branches of the same thought. Inverting either
+// pair leaves the transpose test green while every edge in the DEFAULT top-down
+// view comes apart.
+//
+// It is also the only thing that pins the junction table, which graph.go's own
+// doc comment calls "the thing worth porting out of a charting library" and
+// which had not one entry asserted anywhere.
+func TestDrawChannelDrawsTheChannelItWasGiven(t *testing.T) {
+	_, routes, depth := handChannel()
+	if depth != 4 {
+		t.Fatalf("channel depth %d, want 4 (a stub, two buses and the arrowheads)", depth)
+	}
+
+	td := []string{
+		"  ╷       ╷  ",
+		"  ╰───╮   │  ",
+		"      ├───╯  ",
+		"      ▼      ",
+	}
+	if got := drawChannel(orientTopDown, 13, routes, depth).rows(); !equalRows(got, td) {
+		t.Errorf("top-down channel:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(td, "\n"))
+	}
+
+	// The same channel a quarter turn round: every run swaps axis, every corner
+	// glyph rotates with it, and the arrowhead points the way the layers run.
+	lr := []string{
+		"    ",
+		"    ",
+		"─╮  ",
+		" │  ",
+		" │  ",
+		" │  ",
+		" ╰┬▶",
+		"  │ ",
+		"  │ ",
+		"  │ ",
+		"──╯ ",
+		"    ",
+		"    ",
+	}
+	if got := drawChannel(orientLeftRight, 13, routes, depth).rows(); !equalRows(got, lr) {
+		t.Errorf("left-right channel:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(lr, "\n"))
+	}
+}
+
+// A channel with ONE bussed edge, where nothing else writes the cell the run
+// ends on. In the two-source case above every interesting cell is written twice
+// and the arrowhead's explicit glyph covers the last row, so a run that
+// overshoots by one is invisible there — this is the shape that sees it.
+func TestASingleBussedEdgeEndsItsRunWhereTheArrowheadBegins(t *testing.T) {
+	l := &egoLayout{Nodes: map[string]*egoNode{
+		"a": {Key: "a", Kind: egoReal, Rank: 0, Along: 0, Span: 4},
+		"b": {Key: "b", Kind: egoReal, Rank: 1, Along: 8, Span: 4},
+	}}
+	l.Edges = []egoEdge{{From: "a", To: "b"}}
+	routes, depth := routeChannel(l, l.Edges)
+	if depth != 3 {
+		t.Fatalf("channel depth %d, want 3 (a stub, one bus and the arrowheads)", depth)
+	}
+	want := []string{
+		"  ╷        ",
+		"  ╰───────┤",
+		"          ▼",
+	}
+	if got := drawChannel(orientTopDown, 11, routes, depth).rows(); !equalRows(got, want) {
+		t.Errorf("channel:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+func equalRows(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// The pass-through has to be drawn ON the row its channel attaches to, and to
+// span the whole rank it is travelling through. Asserting the layout numbers
+// alone was self-referential — it compared place()'s output against the
+// function that produced it and never looked at a drawing.
+func TestAPassThroughIsDrawnAsOneFullWidthRule(t *testing.T) {
+	m := New(memstore.NewWith(spanningBoard()), Options{GraphLR: true})
+	m.selectID("t-c", false)
+	m.openGraph()
+	m.graphRadius = graphAllRadius
+	if _, err := m.Dump(240, 50, "", true); err != nil {
+		t.Fatal(err)
+	}
+	l := m.graphLay
+	f := m.graphMeasure(l)
+
+	var dummies int
+	for r := range l.Layers {
+		col := m.graphRankColumn(l.Layers[r], f, maxInt(m.graphCanvasH(), l.Extent()))
+		for _, n := range l.Layers[r] {
+			if n.Kind != egoDummy {
+				continue
+			}
+			dummies++
+			rule := strings.Repeat("─", f.nodeW)
+			if got := ansiStrip(col[n.Along]); got != rule {
+				t.Errorf("the pass-through row is %q, want %d cells of rule", got, f.nodeW)
+			}
+			for _, off := range []int{-1, 1} {
+				y := n.Along + off
+				if y < 0 || y >= len(col) {
+					continue
+				}
+				if got := strings.TrimSpace(ansiStrip(col[y])); got != "" {
+					t.Errorf("the row %+d from the pass-through is %q, want blank — the rule "+
+						"must sit on the row the channel attaches to", off, got)
+				}
+			}
+		}
+	}
+	if dummies == 0 {
+		t.Fatal("no dummy in the spanning fixture, so nothing was checked")
+	}
+}
+
+// The shed ORDER is a claim the comment, the glossary and this test have to
+// agree on. Asserting that "kyushu-trip" appears somewhere in the canvas said
+// nothing: every task on the chain carries it, so any unsqueezed box satisfied
+// it while the box that actually shed something went unexamined.
+func TestTheIDLineShedsItsExtrasInTheDocumentedOrder(t *testing.T) {
+	m, _ := chainGraph(t, 12, 240, 50)
+	l := m.graphLay
+	f := m.graphMeasure(l)
+	focus := l.FocusNode()
+	if focus == nil {
+		t.Fatal("no focus node")
+	}
+
+	tight := ansiStrip(strings.Split(m.renderGraphNode(focus, f.nodeW, f.titleLines), "\n")[1])
+	if !strings.Contains(tight, focus.ID) {
+		t.Errorf("the focus box lost its id at the floor width: %q", tight)
+	}
+	if !strings.Contains(tight, "kyushu-trip") {
+		t.Errorf("the focus box shed the repo chip before the focus badge: %q", tight)
+	}
+	if strings.Contains(tight, "◉ focus") {
+		t.Errorf("the focus badge survived at a width where the chip had to go: %q", tight)
+	}
+
+	// Given room, everything comes back — the shedding is a squeeze, not a rule.
+	wide := ansiStrip(strings.Split(m.renderGraphNode(focus, graphNodeMaxW, f.titleLines), "\n")[1])
+	for _, want := range []string{focus.ID, "kyushu-trip", "◉ focus"} {
+		if !strings.Contains(wide, want) {
+			t.Errorf("a %d-cell box dropped %q: %q", graphNodeMaxW, want, wide)
+		}
+	}
+}
+
+// The notes go BESIDE the lone box, on its own centre row. Searching the whole
+// frame for the words could not tell that from putting them on its bottom
+// border, or off the right edge entirely.
+func TestTheIsolatedFocusNotesSitBesideTheBox(t *testing.T) {
+	b := board.NewBoard([]*board.Task{
+		{ID: "t-lonely", Title: "誰も待たず誰にも待たれない作業", Status: "backlog", Priority: 10},
+	})
+	for _, w := range []int{160, 240, 400} {
+		m := New(memstore.NewWith(b), Options{GraphLR: true})
+		m.selectID("t-lonely", false)
+		m.openGraph()
+		out, err := m.Dump(w, 50, "", true)
+		if err != nil {
+			t.Fatalf("w=%d: %v", w, err)
+		}
+		canvas := strings.Split(canvasOf(m, out), "\n")
+
+		row := -1
+		for i, line := range canvas {
+			if strings.Contains(line, graphNoUpstream) {
+				row = i
+			}
+		}
+		if row < 0 {
+			t.Errorf("w=%d: %q is not in the drawing", w, graphNoUpstream)
+			continue
+		}
+		if !strings.Contains(canvas[row], graphNoStructure) {
+			t.Errorf("w=%d: the second note is not on the same row as the first: %q", w, canvas[row])
+		}
+		n := m.graphLay.FocusNode()
+		if n == nil {
+			t.Fatalf("w=%d: no focus node", w)
+		}
+		// The box's own centre row, which is a title row rather than the id
+		// line — the point is that the notes are level with the box, not that
+		// they are level with its name.
+		if row != n.Anchor() {
+			t.Errorf("w=%d: the notes are on row %d, the box's centre is %d", w, row, n.Anchor())
+		}
+		if row < n.Along || row >= n.Along+n.Span {
+			t.Errorf("w=%d: row %d is outside the box's rows %d..%d", w, row, n.Along, n.Along+n.Span-1)
+		}
+	}
+}
+
+// The left-right window grows from the SELECTION, so walking across the layers
+// pulls the frame along instead of leaving the cursor on a box nobody drew.
+func TestTheLeftRightWindowFollowsTheSelection(t *testing.T) {
+	m, _ := chainGraph(t, 12, 240, 50)
+	for i := 0; i < 8; i++ {
+		m.graphMove(+1, 0) // left-right: the horizontal pair crosses layers
+		out, err := m.Dump(240, 50, "", true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		n := m.graphLay.Node(m.graphSel)
+		if n == nil {
+			t.Fatalf("step %d: the selection left the layout", i)
+		}
+		f := m.graphMeasure(m.graphLay)
+		if n.Rank < f.first || n.Rank > f.last {
+			t.Fatalf("step %d: selection %s is on rank %d, outside the drawn window %d..%d",
+				i, n.ID, n.Rank, f.first, f.last)
+		}
+		if !strings.Contains(canvasOf(m, out), n.ID) {
+			t.Fatalf("step %d: selection %s is not drawn anywhere in the canvas", i, n.ID)
+		}
+		// Eight different windows, so this is where a window one cell too
+		// greedy actually shows up.
+		fitsTheWidth(t, m, f)
+	}
+}
+
+// fanOutBoard is one task blocking n others, so its ego graph has a layer wider
+// than graphHardCols. The fixture's widest is 3, which is why neither the cap
+// nor the over-width report has a route through it.
+func fanOutBoard(n int) *board.Board {
+	tasks := []*board.Task{{ID: "t-hub", Title: "扇の要 — 枝を一手に塞ぐ", Status: "backlog", Priority: 10}}
+	for i := 0; i < n; i++ {
+		tasks = append(tasks, &board.Task{
+			ID:       fmt.Sprintf("t-f%02d", i),
+			Title:    fmt.Sprintf("枝の%d本目 — 要が空くまで動けない", i),
+			Status:   "backlog",
+			Priority: (i + 2) * 10,
+			Deps:     []string{"t-hub"},
+		})
+	}
+	return board.NewBoard(tasks)
+}
+
+// The row cap has a report and no way to see it: the fixture's widest layer is
+// 3 and the cap is 6. On main a terminal narrower than the design floor lowered
+// the cap and made it fire; that route went with the width-derived cap, which
+// had to go so `o` could not change the node count. A fan-out board reaches it
+// on its own terms, and in both orientations.
+func TestALayerWiderThanTheCapIsReportedInBothOrientations(t *testing.T) {
+	b := fanOutBoard(8)
+	for _, lr := range []bool{false, true} {
+		m := New(memstore.NewWith(b), Options{GraphLR: lr})
+		m.selectID("t-hub", false)
+		m.openGraph()
+		out, err := m.Dump(240, 50, "", true)
+		if err != nil {
+			t.Fatalf("lr=%v: %v", lr, err)
+		}
+		if len(m.graphLay.Overflow) == 0 {
+			t.Fatalf("lr=%v: an 8-wide layer did not overflow a cap of %d", lr, graphHardCols)
+		}
+		if !strings.Contains(out, "over the layer cap") {
+			t.Errorf("lr=%v: nodes were dropped and the header never said so", lr)
+		}
+	}
+}
+
+// Top-down has no horizontal scroll, so a layer wider than the drawing is cut
+// by renderGraph's pad. Below the 240-column floor that is reachable — six
+// boxes at the minimum width need 183 cells — and this file's own rule is that
+// a graph which quietly omits a node is worse than one that admits it.
+func TestATopDownLayerWiderThanTheScreenSaysSo(t *testing.T) {
+	b := fanOutBoard(8)
+	for _, tc := range []struct {
+		w    int
+		says bool
+	}{
+		{160, true},  // six boxes at the floor width do not fit
+		{240, false}, // the design floor: they do
+	} {
+		m := New(memstore.NewWith(b), Options{})
+		m.selectID("t-hub", false)
+		m.openGraph()
+		out, err := m.Dump(tc.w, 50, "", true)
+		if err != nil {
+			t.Fatalf("w=%d: %v", tc.w, err)
+		}
+		if got := strings.Contains(out, "past the right edge"); got != tc.says {
+			t.Errorf("w=%d: reports over-width=%v, want %v", tc.w, got, tc.says)
+		}
+	}
+}
+
+// The rank window has to fit the drawing at EVERY width, not just the ones a
+// demo happens to use: it is a greedy loop over per-rank costs, so it goes
+// wrong one cell at a time and only at the widths where a rank lands on the
+// boundary.
+func TestTheRankWindowFitsTheDrawingAtEveryWidth(t *testing.T) {
+	for w := 200; w <= 340; w++ {
+		m := New(memstore.NewWith(chainBoard(12)), Options{GraphLR: true})
+		m.selectID("t-c06", false)
+		m.openGraph()
+		m.graphRadius = graphAllRadius
+		out, err := m.Dump(w, 50, "", true)
+		if err != nil {
+			t.Fatalf("w=%d: %v", w, err)
+		}
+		f := m.graphMeasure(m.graphLay)
+		total := (f.last - f.first + 1) * f.nodeW
+		for r := f.first; r < f.last; r++ {
+			total += f.channels[r]
+		}
+		if total > m.graphWidth() {
+			t.Errorf("w=%d: the bands add up to %d in a %d-cell drawing", w, total, m.graphWidth())
+		}
+		for _, line := range strings.Split(out, "\n") {
+			if got := lg.Width(line); got != w {
+				t.Fatalf("w=%d: a row is %d cells wide", w, got)
+			}
+		}
+	}
+}
+
+// A canvas shorter than one box must scroll, not hand out a slot smaller than
+// the box drawn in it — which fused the borders and put every anchor on one.
+func TestAShortCanvasNeverPlacesABoxSmallerThanItDraws(t *testing.T) {
+	for h := 4; h <= 20; h++ {
+		m := New(memstore.New(), Options{GraphLR: true})
+		if _, err := m.Dump(240, h, "graphall", true); err != nil {
+			t.Fatalf("rows=%d: %v", h, err)
+		}
+		f := m.graphMeasure(m.graphLay)
+		if got, want := f.nodeH(), m.graphLay.Span; got != want {
+			t.Errorf("rows=%d: boxes are drawn %d rows tall in a %d-row slot", h, got, want)
+		}
+	}
+}

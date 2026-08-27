@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -264,24 +265,66 @@ func TestDumpDefaultsToTheDesignFloor(t *testing.T) {
 	}
 }
 
-// -benchload used to accept and ignore most of the flag surface. The list is
-// derived from what the caller TYPED, so a flag left at its default never
+// -benchload used to accept and ignore most of the flag surface. The refusal
+// is driven off what the caller TYPED, so a flag left at its default never
 // trips it.
+//
+// The flags to try are read back off `ridge -h` rather than listed here: a
+// hand-written copy passes for every flag it happens to name, which makes it
+// silent on precisely the case it exists for — a flag added to run() and
+// forgotten in cli.go's list. It caught two on the day it was written.
 func TestBenchloadRefusesEveryFrameShapingFlag(t *testing.T) {
-	for _, arg := range [][]string{
-		{"-mock"}, {"-readonly"}, {"-dump"}, {"-plain"},
-		{"-cols", "300"}, {"-rows", "50"}, {"-filter", "lane:ready"},
-		{"-peek"}, {"-tree"}, {"-table"}, {"-light"},
-	} {
-		args := append([]string{"-benchload"}, arg...)
+	// What -benchload legitimately composes with, plus both spellings of help.
+	// Everything else shapes a frame or swaps the store.
+	allowed := map[string]bool{"benchload": true, "perflog": true, "help": true, "h": true}
+	surface := flagSurface(t)
+	names := make([]string, 0, len(surface))
+	for name := range surface {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		if allowed[name] {
+			continue
+		}
+		args := []string{"-benchload", "-" + name}
+		if !surface[name] {
+			args = append(args, "1") // a value flag needs one to parse at all
+		}
 		code, _, errb := runArgs(t, args...)
 		if code != CodeUsage {
-			t.Errorf("%v exited %d, want %d", args, code, CodeUsage)
+			t.Errorf("%v exited %d, want %d — it shapes a frame and is being ignored",
+				args, code, CodeUsage)
 		}
-		if !strings.Contains(errb, strings.TrimPrefix(arg[0], "-")) {
+		if !strings.Contains(errb, name) {
 			t.Errorf("%v did not name the offending flag: %q", args, errb)
 		}
 	}
+}
+
+// flagSurface reads the flag set off `ridge -h`, which is the block
+// flag.PrintDefaults writes: "  -name" for a bool, "  -name type" otherwise.
+func flagSurface(t *testing.T) map[string]bool {
+	t.Helper()
+	code, out, _ := runArgs(t, "-h")
+	if code != CodeOK {
+		t.Fatalf("-h exited %d", code)
+	}
+	isBool := map[string]bool{}
+	for _, line := range strings.Split(out, "\n") {
+		if !strings.HasPrefix(line, "  -") {
+			continue
+		}
+		fields := strings.Fields(strings.TrimPrefix(line, "  -"))
+		if len(fields) == 0 {
+			continue
+		}
+		isBool[fields[0]] = len(fields) == 1
+	}
+	if len(isBool) < 10 {
+		t.Fatalf("parsed %d flags out of -h; the usage format changed", len(isBool))
+	}
+	return isBool
 }
 
 // -perflog measures furrow execs. On the fixture there are none, and perfHook

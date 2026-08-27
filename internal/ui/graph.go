@@ -518,7 +518,14 @@ func (l *egoLayout) place(o graphOrient, avail int) {
 	lo, hi, gap, dummy := nodeSpans(o)
 	span := (avail - (cols-1)*gap) / cols
 	span = clamp(span, lo, hi)
-	if span > avail {
+	if o == orientTopDown && span > avail {
+		// A box wider than the whole canvas is meaningless, so top-down
+		// shrinks it. Left-right must NOT: the box's extent on this axis is
+		// its HEIGHT, which the view floors at graphNodeMinH, so a smaller
+		// Span would hand out a slot smaller than the box drawn in it —
+		// boxes overlapping, every anchor landing on a border, and rows the
+		// canvas never sizes for. The along axis overflows into the scroll
+		// instead, which is the whole reason that scroll survived the change.
 		span = maxInt(1, avail)
 	}
 

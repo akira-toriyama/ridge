@@ -58,13 +58,16 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 		// -cols/-rows, not -w/-h: `-h` is the one flag name every CLI reserves
 		// for help, and binding it to a height made `ridge -h` fail with
 		// "flag needs an argument: -h" and exit 2.
-		cols      = fs.Int("cols", 240, "width for -dump (240 is the board's design floor)")
-		rows      = fs.Int("rows", 40, "height for -dump")
-		filter    = fs.String("filter", "", "initial filter query, e.g. 'lane:backlog is:blocked'")
-		peek      = fs.Bool("peek", false, "-dump with the detail side-peek open")
-		tree      = fs.Bool("tree", false, "-dump with the dep tree overlay open (implies -peek)")
-		table     = fs.Bool("table", false, "-dump the table view")
-		graphlr   = fs.Bool("graphlr", false, "draw the dependency graph left-to-right instead of top-down (the graph's `o` key)")
+		cols   = fs.Int("cols", 240, "width for -dump (240 is the board's design floor)")
+		rows   = fs.Int("rows", 40, "height for -dump")
+		filter = fs.String("filter", "", "initial filter query, e.g. 'lane:backlog is:blocked'")
+		peek   = fs.Bool("peek", false, "-dump with the detail side-peek open")
+		tree   = fs.Bool("tree", false, "-dump with the dep tree overlay open (implies -peek)")
+		table  = fs.Bool("table", false, "-dump the table view")
+		// No back quotes in this usage string: flag reads the first back-quoted
+		// word as the operand NAME, so "the graph's `o` key" rendered as
+		// `-graphlr o` — the one bool in -h that looks like it takes a value.
+		graphlr   = fs.Bool("graphlr", false, "draw the dependency graph left-to-right instead of top-down (the graph's o key)")
 		light     = fs.Bool("light", false, "light palette")
 		plain     = fs.Bool("plain", false, "-dump without ANSI styling (diffable)")
 		demo      = fs.String("demo", "", "-dump in a transient state: "+strings.Join(ui.DemoNames, "|")+" (requires -dump; always the fixture)")
@@ -105,15 +108,16 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 		// exits. Everything that shapes a FRAME or swaps in the fixture is
 		// meaningless to it, and it used to accept them all silently — most
 		// damagingly -mock, which left `-benchload -mock` reading the REAL
-		// store. Derived from the flag set, so a new flag is refused here by
-		// default rather than joining the list of things quietly dropped.
+		// store. The list is hand-written, so it is only as complete as the
+		// last person to add a flag — TestBenchloadRefusesEveryFrameShapingFlag
+		// walks the real flag surface and fails on the first one missing here.
 		//
 		// Checked BEFORE the -demo gate below: otherwise `-benchload -demo move`
 		// told the user to add -dump, and adding it produced a second, different
 		// refusal — two steps to learn the combination was never going to work.
 		for _, name := range []string{
 			"mock", "readonly", "dump", "demo", "plain", "cols", "rows",
-			"filter", "peek", "tree", "table", "light", "debuglog",
+			"filter", "peek", "tree", "table", "light", "graphlr", "debuglog",
 		} {
 			if set[name] {
 				_, _ = fmt.Fprintf(stderr,

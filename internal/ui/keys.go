@@ -251,4 +251,4 @@ func (k keyMap) HelpSections(enterEdits bool) []helpSection {
 // mode already names its own exits where the eye is. Move and drag put
 // "⏎ commit · esc restore" in the status line, the edit overlay carries its
 // per-stage hints inside the box, and the graph's status line spells out
-// "⏎ re-roots · z cycles radius · esc returns".
+// "⏎ re-roots · z cycles radius · o flips the axis · esc returns".

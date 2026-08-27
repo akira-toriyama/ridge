@@ -485,7 +485,7 @@ func (m *Model) graphFromMap() {
 	m.graphScroll = 0
 	m.graphStack = nil
 	m.view = viewGraph
-	m.note("graph rooted on %s — ⏎ re-roots · z cycles radius · esc returns to the dep map", m.mapSel)
+	m.note("graph rooted on %s — ⏎ re-roots · z cycles radius · o flips the axis · esc returns to the dep map", m.mapSel)
 }
 
 // onMapKey is the map's whole keyboard surface. Like the graph it is a reading
