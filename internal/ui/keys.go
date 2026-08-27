@@ -56,6 +56,20 @@ type keyMap struct {
 	GraphRoot   key.Binding
 	GraphRadius key.Binding
 
+	// The dep map's three keys. `T` is `t` (this task's dep tree) writ large —
+	// the map IS every dep tree at once, drawn with the same indent-and-name
+	// vocabulary — which is the uppercase/lowercase relation K/J/H/L already
+	// use: the shifted key is the bigger version of the unshifted one.
+	//
+	// MapScope reuses `z`, the graph's radius key, on purpose: in both
+	// full-screen views `z` cycles the one knob that decides how much of the
+	// dependency structure is on screen. MapGraph carries ⏎ AND the graph's
+	// own `S`/⇧space, so the gesture that opens a graph is the same letter
+	// everywhere; its help text differs because from here it is not a re-root.
+	Map      key.Binding
+	MapScope key.Binding
+	MapGraph key.Binding
+
 	// The slice panel's two epic-management keys (epicmode.go). EpicEdit is
 	// `m`-only on purpose: keys.Move is ("enter","m") and the panel's ⏎ SLICES,
 	// so reusing Move here would shadow the panel's own commit key. `e` was the
@@ -147,6 +161,13 @@ func defaultKeys() keyMap {
 		GraphRoot:   key.NewBinding(key.WithKeys("enter"), key.WithHelp("⏎", "re-root here")),
 		GraphRadius: key.NewBinding(key.WithKeys("z", "1", "2", "3", "0"), key.WithHelp("z/1-3/0", "hop radius")),
 
+		Map:      key.NewBinding(key.WithKeys("T"), key.WithHelp("T", "dep map")),
+		MapScope: key.NewBinding(key.WithKeys("z"), key.WithHelp("z", "scope open/all")),
+		// "graph here", not "dep graph": TestHelpAdvertisesThePortableGraphKey
+		// reads the FIRST line carrying "dep graph" and requires it to name the
+		// portable half of the gesture, and that line is normal mode's.
+		MapGraph: key.NewBinding(key.WithKeys("enter", "S", "shift+space"), key.WithHelp("⏎/S", "graph here")),
+
 		EpicEdit: key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "manage box")),
 		EpicNew:  key.NewBinding(key.WithKeys("A"), key.WithHelp("A", "new box")),
 	}
@@ -183,7 +204,7 @@ func (k keyMap) HelpSections(enterEdits bool) []helpSection {
 			{k.Up, k.Down, k.Left, k.Right, k.NextCol, k.PrevCol, k.Top, k.Bottom},
 			{open, k.QuickUp, k.QuickDown, k.LaneBack, k.LaneFwd, k.Done, k.Edit, k.Note, k.Add},
 			{k.Peek, k.Tree, k.PeekScroll, k.Filter, k.OnlyBlock, k.Slice, k.View, k.Sort},
-			{k.Graph, k.JumpBlock, k.JumpBack, k.Reload, k.Sync, k.Mouse, k.Cancel, k.Help, k.Quit},
+			{k.Graph, k.Map, k.JumpBlock, k.JumpBack, k.Reload, k.Sync, k.Mouse, k.Cancel, k.Help, k.Quit},
 		}},
 		{"move mode", [][]key.Binding{
 			// The arrows come first because they are how the lifted card is
@@ -198,13 +219,21 @@ func (k keyMap) HelpSections(enterEdits bool) []helpSection {
 		// The graph's full surface, not just its two custom bindings: sectioning
 		// turned this block into "your keys right now", so listing 2 of the ~10
 		// keys — and no way out — was an assertion, not an omission.
+		// The dep map's surface. Same rule as the graph's: every key onMapKey
+		// acts on, not just the ones unique to it — a full-screen mode's
+		// section is read as "your keys right now".
+		{"dep map", [][]key.Binding{
+			{k.Up, k.Down, k.Left, k.Right},
+			{k.MapGraph, k.MapScope},
+			{k.PeekScroll, k.Map, k.View, k.Cancel},
+		}},
 		{"graph", [][]key.Binding{
 			// Sharpest omission of the three: re-rooting answers "is already
 			// the root — move the selection first" while no listed key moved
 			// it. onGraphKey has always handled the arrows.
 			{k.Up, k.Down, k.Left, k.Right},
 			{k.GraphRoot, k.GraphRadius},
-			{k.JumpBack, k.PeekScroll},
+			{k.JumpBack, k.PeekScroll, k.Map},
 			{k.View, k.Cancel},
 		}},
 	}

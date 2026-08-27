@@ -44,14 +44,16 @@ func TestModeBadgeAlwaysNamesTheMode(t *testing.T) {
 					t.Fatalf("%v", err)
 				}
 			}
-			// The two badges that are not m.mode: a drag lives in dragState,
-			// and the graph is a full-screen view with its own title row.
+			// The badges that are not m.mode: a drag lives in dragState, and
+			// the two full-screen views have title rows of their own.
 			want := ""
 			switch {
 			case m.drag.moved:
 				want = "⟨DRAG⟩"
 			case m.view == viewGraph:
 				want = "⟨GRAPH⟩"
+			case m.view == viewMap:
+				want = "⟨MAP⟩"
 			default:
 				var ok bool
 				if want, ok = badgeTokens[m.mode]; !ok {
