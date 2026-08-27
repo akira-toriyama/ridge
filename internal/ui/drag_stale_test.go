@@ -291,4 +291,8 @@ func TestDragSurvivesTheFilterHidingItsCard(t *testing.T) {
 		t.Errorf("a filter-hidden card killed the drag: cancelled=%v moved=%v",
 			m.drag.cancelled, m.drag.moved)
 	}
+	// The symmetric frame assertion of the sibling test: the promise stays up.
+	if !strings.Contains(frame(m), "DRAG") {
+		t.Error("the frame dropped the promise for a card that is still in its lane")
+	}
 }

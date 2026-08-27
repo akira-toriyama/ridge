@@ -411,9 +411,11 @@ func (m *Model) onWheel(msg tea.MouseWheelMsg) {
 // indicator, DRAG status) down with it — rule 4's invariant that the frame
 // never promises a drop the release refuses. A card the FILTER hid is
 // deliberately NOT cancelled: it is still in the lane, and commitMove accepts
-// its drop for the same reason.
+// its drop for the same reason. Armed-but-unmoved (a plain click) is left
+// alone too: nothing was promised, and cancelling would report a drag that
+// never existed.
 func (m *Model) dropDragIfCardLeftLane() {
-	if !m.drag.armed || m.drag.cancelled {
+	if !m.drag.armed || !m.drag.moved || m.drag.cancelled {
 		return
 	}
 	if t := m.b.Task(m.drag.id); t != nil && t.Status == m.drag.from {
