@@ -1089,9 +1089,12 @@ func dropToken(raw, tok string) (string, bool) {
 
 // cycleLane moves a task one lane over without entering move mode, appending it
 // after the last card the filter SHOWS in the destination (boardInsertIndex's
-// contract — not past cards the filter is hiding). It must go through
-// commitMove: a direct MoveTo mutated the board before enqueuePersist could
-// refuse it, so a rollback in flight rejected the write but not the gesture.
+// contract — not past cards the filter is hiding). A destination the filter
+// EMPTIED puts the card on the lane's TOP: the slot a mouse drop into that
+// same emptied column takes, kept identical so the two gestures cannot
+// disagree about one visible state. It must go through commitMove: a direct
+// MoveTo mutated the board before enqueuePersist could refuse it, so a
+// rollback in flight rejected the write but not the gesture.
 func (m *Model) cycleLane(d int) tea.Cmd {
 	t := m.curTask()
 	if t == nil {

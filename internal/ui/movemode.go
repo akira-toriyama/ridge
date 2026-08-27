@@ -15,7 +15,7 @@ import (
 // commitMove at the bottom of this file is the SINGLE mutation path for every
 // reorder gesture in the app (move mode, shift+J/K, H/L lane cycling, and a
 // mouse drop), which is what keeps the two index translations applied exactly
-// once each — and the rollingBack refusal applied to every gesture.
+// once each — and the rollingBack refusal applied to every reorder gesture.
 
 func (m *Model) enterMove() {
 	if m.drag.armed {
@@ -169,8 +169,7 @@ func (m *Model) followDrop() {
 
 // commitMove is the ONE mutation path for every reorder gesture — move mode,
 // shift+J/K, H/L lane cycling, and mouse drop all land here. It applies the
-// move to the board
-// (the optimistic half) and returns the tea.Cmd that records it in the store
+// move to the board (the optimistic half) and returns the tea.Cmd that records it in the store
 // (the persist half); it reports whether the board actually changed, so a
 // clamped or no-op gesture can say so instead of claiming a reposition that
 // never happened.
