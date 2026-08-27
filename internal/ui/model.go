@@ -25,7 +25,28 @@ const (
 	modeEdit        // the field-edit overlay has the keyboard (editmode.go)
 	modeAdd         // the quick-add modal has the keyboard (addmode.go)
 	modeSlice       // the slice panel has the keyboard (slicemode.go)
+	modeEpic        // the epic overlay has the keyboard (epicmode.go)
 )
+
+func (md mode) String() string {
+	switch md {
+	case modeNormal:
+		return "normal"
+	case modeMove:
+		return "move"
+	case modeFilter:
+		return "filter"
+	case modeEdit:
+		return "edit"
+	case modeAdd:
+		return "add"
+	case modeSlice:
+		return "slice"
+	case modeEpic:
+		return "epic"
+	}
+	return "unknown"
+}
 
 type viewKind int
 
@@ -36,7 +57,24 @@ const (
 	// The board's geometry is irrelevant inside it, so it gets the whole
 	// terminal instead of a cramped panel floating over the columns.
 	viewGraph
+	// viewMap is the dependency MAP — also full-screen. The graph is rooted on
+	// one task; this one is rooted on nothing and shows every cluster at once.
+	viewMap
 )
+
+func (v viewKind) String() string {
+	switch v {
+	case viewBoard:
+		return "board"
+	case viewTable:
+		return "table"
+	case viewGraph:
+		return "graph"
+	case viewMap:
+		return "map"
+	}
+	return "unknown"
+}
 
 // Model is the whole application state.
 type Model struct {
@@ -67,6 +105,7 @@ type Model struct {
 
 	edit *editState // non-nil exactly while mode == modeEdit
 	add  *addState  // non-nil exactly while mode == modeAdd
+	epic *epicState // non-nil exactly while mode == modeEpic
 
 	selectAfterReload string // id to select once the next re-read lands
 
@@ -121,6 +160,24 @@ type Model struct {
 	// the wrong-checklist-item write, and the rollback that any keystroke
 	// could preempt).
 	rollingBack bool
+	// A write has LANDED in a live store and the board has not re-read since.
+	// Two things are stale until it does: a store-first write (persistOp.noLocal)
+	// has no local half at all, so its effect is invisible; and furrow's derived
+	// values (epic progress, close stamps, respaced priorities) lag even for an
+	// optimistic one. The refusal path that rolls nothing back therefore has to
+	// re-read anyway.
+	//
+	// Cleared when a re-read actually APPLIES, never at drain end: the drain's
+	// own reconcile can be dropped by onReloadDone's in-flight guard (a keypress
+	// landing behind it), and clearing early would let the next refusal skip the
+	// re-read that the dropped one still owed.
+	unreadLanded bool
+	// The same window, narrowed to the STORE-FIRST writes: the overlay that
+	// issued one is still showing pre-write values until the re-read lands, so it
+	// refuses another gesture. Separate from unreadLanded because that one is set
+	// by ordinary optimistic writes too, and refusing an epic gesture with "a box
+	// write is in flight" after a card move would name the wrong write.
+	storeFirstUnread bool
 	// A $EDITOR result that arrived inside the rollback window. Every other
 	// refused write is a gesture the user can repeat; this one's payload is
 	// hand-typed text whose temp file is already deleted, so it is held and
@@ -136,13 +193,39 @@ type Model struct {
 	graphScroll int
 	graphStack  []string
 	graphLay    *egoLayout
+	// graphFrom is the view `esc` returns to. The graph is reachable from the
+	// board AND from the dep map, and dumping a reader who came from the map
+	// back onto the board loses the overview they were reading.
+	graphFrom viewKind
+
+	// The dependency map view (depmap.go). mapSel is the row the cursor is on;
+	// mapScope decides whether done tasks take part.
+	mapScope board.ClusterScope
+	mapSel   string
+	// mapMoved reports that the USER walked the cursor while in the map.
+	// Closing the map carries the cursor back to the board, and without this
+	// the fallback row that clampMapSel picked — for any task in no cluster,
+	// which is most of the board — was carried back as if it were a choice,
+	// silently relocating the board cursor on a read-only round trip.
+	mapMoved  bool
+	mapScroll int
+	mapLay    *mapLayout
 
 	lay       *layout
 	status    string
 	statusErr bool
+
+	// The -debuglog recorder (debuglog.go). nil = off; every emit site calls
+	// through anyway, because the nil *DebugLog is the disabled recorder.
+	dbg *DebugLog
 }
 
-func newModel(p board.Provider) *Model {
+// newModel takes the recorder up front, not via a setter: the constructor
+// itself emits status (the read-only warning below), and a recorder attached
+// after the fact missed it — the one status set exactly once per session, so
+// a -readonly -debuglog file could not explain its own status line (found by
+// review).
+func newModel(p board.Provider, dbg *DebugLog) *Model {
 	ti := textinput.New()
 	ti.Prompt = "/ "
 	ti.SetWidth(48)
@@ -151,6 +234,7 @@ func newModel(p board.Provider) *Model {
 
 	m := &Model{
 		prov:        p,
+		dbg:         dbg,
 		th:          newTheme(true),
 		ms:          newMeasurer(nil, nil),
 		keys:        defaultKeys(),
@@ -209,7 +293,7 @@ func (m *Model) reload() {
 }
 
 // recompute rebuilds the derived graph and the filtered columns, then clamps
-// every cursor. Called after any mutation: with 33 tasks it is free, and it
+// every cursor. Called after any mutation: with 34 tasks it is free, and it
 // removes a whole class of stale-index bugs.
 func (m *Model) recompute() {
 	m.g = board.NewGraph(m.b)
@@ -233,6 +317,22 @@ func (m *Model) recompute() {
 	// unclamped cursor pushes the panel window past the end and it renders
 	// zero rows under a "↑ N more" line.
 	m.sliceIdx = clamp(m.sliceIdx, 0, maxInt(0, len(m.sliceRows())-1))
+	// Same shrink, epic overlay's list cursor: a removed label/repo leaves the
+	// rows when no task carries it, and a removed dep/meta row IS the row.
+	// Clamped here — where the re-read lands — and nowhere else: clamping at
+	// the gesture moved the cursor even when the write was refused, and the
+	// labels/repos arms had no clamp at all, so removing their last row left
+	// ⏎/x silently dead on a cursor past the end. Not gated on the list
+	// stage: the re-read can land while the overlay is parked in the `a`
+	// input, whose esc walks back into the list with the index untouched
+	// (found by review) — e.field still names the list the index is for, and
+	// epicListRows is empty on the non-list fields, where openEpicField
+	// re-zeroes the index anyway.
+	if m.epic != nil && !m.epic.creating {
+		if box := m.b.Epic(m.epic.id); box != nil {
+			m.epic.listIdx = clamp(m.epic.listIdx, 0, maxInt(0, len(m.epicListRows(box))-1))
+		}
+	}
 	m.ensureVisible()
 	m.syncPeek()
 }
@@ -289,6 +389,11 @@ func (m *Model) ensureVisible() {
 
 // Update is the whole event loop.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// The debug layers hook HERE, the single funnel, and nowhere deeper:
+	// input is recorded before dispatch, mode/view as a diff after it.
+	m.dbgInput(msg)
+	preMode, preView := m.mode, m.view
+
 	var cmds []tea.Cmd
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -369,6 +474,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	m.dbgTransitions(preMode, preView)
 	m.relayout()
 	return m, tea.Batch(cmds...)
 }
@@ -385,8 +491,20 @@ func (m *Model) relayout() {
 	m.laneOff = m.lay.LaneOff
 }
 
-func (m *Model) note(f string, a ...any) { m.status, m.statusErr = fmt.Sprintf(f, a...), false }
-func (m *Model) fail(f string, a ...any) { m.status, m.statusErr = fmt.Sprintf(f, a...), true }
+// note/fail are the status funnel, and the debug status layer rides it: the
+// board's refusals that never reach the persist queue (a double-press while a
+// store-first write is in flight, a local validation) surface ONLY here, and
+// without them a log of "I pressed it and nothing happened" shows an
+// input/key followed by silence (found in review).
+func (m *Model) note(f string, a ...any) {
+	m.status, m.statusErr = fmt.Sprintf(f, a...), false
+	m.dbg.event("status", "note", map[string]any{"text": m.status})
+}
+
+func (m *Model) fail(f string, a ...any) {
+	m.status, m.statusErr = fmt.Sprintf(f, a...), true
+	m.dbg.event("status", "fail", map[string]any{"text": m.status})
+}
 
 func (m *Model) onKey(msg tea.KeyPressMsg) tea.Cmd {
 	// A modal text input owns Esc, full stop. Checking cancelDrag() first let a
@@ -406,6 +524,11 @@ func (m *Model) onKey(msg tea.KeyPressMsg) tea.Cmd {
 	if m.mode == modeSlice {
 		return m.onSliceKey(msg)
 	}
+	// The epic overlay is modal like the others, and it is reached FROM the
+	// slice panel, so it must be routed before it.
+	if m.mode == modeEpic {
+		return m.onEpicKey(msg)
+	}
 	// Esc while a mouse button is down cancels the drag before anything else
 	// gets to interpret it — and leaves the drag armed so the release that
 	// follows is swallowed rather than treated as a drop.
@@ -420,6 +543,10 @@ func (m *Model) onKey(msg tea.KeyPressMsg) tea.Cmd {
 	// rather than being a case inside them.
 	if m.view == viewGraph {
 		return m.onGraphKey(msg)
+	}
+	// The dep map is a full-screen mode by the same rule.
+	if m.view == viewMap {
+		return m.onMapKey(msg)
 	}
 	return m.onNormalKey(msg)
 }
@@ -465,6 +592,12 @@ func (m *Model) onGraphKey(msg tea.KeyPressMsg) tea.Cmd {
 		// ⇧space on the node you are already on is a no-op re-root; treat it as
 		// "root here", which is what the gesture means on the board.
 		m.rerootGraph()
+
+	case key.Matches(msg, m.keys.Map):
+		// Zoom out: the ego graph's neighbourhood seen inside every cluster.
+		// Seeded with the graph's own selection, not the board cursor, which
+		// has not moved since the graph opened.
+		m.openMap(m.graphSel)
 
 	case key.Matches(msg, m.keys.PeekScroll):
 		if msg.String() == "ctrl+d" {
@@ -590,6 +723,13 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	case key.Matches(msg, m.keys.Graph):
 		m.openGraph()
+
+	case key.Matches(msg, m.keys.Map):
+		id := ""
+		if t := m.curTask(); t != nil {
+			id = t.ID
+		}
+		m.openMap(id)
 
 	case key.Matches(msg, m.keys.Peek):
 		m.peekOpen = !m.peekOpen
@@ -752,6 +892,10 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 		if t := m.curTask(); t != nil {
 			return m.editCmd(t)
 		}
+
+	case key.Matches(msg, m.keys.Note):
+		m.fullHelp = false // same rule as Filter: a modal never inherits the overlay
+		return m.enterNote()
 
 	case key.Matches(msg, m.keys.Move):
 		// GitHub's Enter is cell EDITING; move mode is the board-only lift.

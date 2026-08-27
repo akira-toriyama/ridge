@@ -25,6 +25,9 @@ go run ./cmd/ridge -benchload # 実盤面の読み込みレイテンシを実測
 （実測 63-77ms / 914 tasks・cold 181ms）、書きは**楽観的キュー** — 盤面へ先に適用し、
 `furrow set/done/check` を裏で直列に流し、失敗したら store 再読で巻き戻す
 （書き実測 85-115ms・respace 時 280ms が根拠。`internal/ui/persist.go`）。
+例外は **store-first** の書き込み（quick add と epic 管理）: 何を意味するかが
+furrow 側にあるもの（id 発行・repo ごとの active 枠・導出値）は盤面に先取り適用せず、
+着地後の再読で収束させる。
 
 POC が答えを出した3つの問い:
 
@@ -74,13 +77,47 @@ POC が答えを出した3つの問い:
  ╰──────────────╯  ╰──────────────╯
 ```
 
+### Map — 依存マップ
+
+`T`（`t` = そのタスクの依存ツリー、の全体版）。**盤面の依存クラスタを全部
+一画面に並べる**。Graph が「このタスクの周り」を答えるのに対し、Map は起点を
+持たず「盤面は何と何が絡んでいるか」を答える。
+
+**線は引かない。** インデントが深さ、`←` が blocker の名指しで、これで曖昧さは
+ゼロになる（`←t-ehk7,t-t38k` は 2 本の辺そのもの）。2 経路で到達するノードも
+**1 回しか出ない** — ツリー表示の唯一の弱点がここでは消える。実データ 658 タスクで
+「全体を 1 枚の DAG に描く」を検証して捨てた経緯は furrow `t-5g52`。
+
+`-dump -demo map` の抜粋（実出力は 240 桁 3 カラム。ここは幅を詰めて 2 カラム分だけ）:
+
+```
+ ── #1  4 nodes · depth 2 ────────────────────  ── #2  2 nodes · depth 1 ────────────────────
+     t-ehk7 キャンプ献立プラン — 3泊分の夕食…       t-fn4k 装備の安全講習 — ナイフと火の…
+ ▌   x t-jv3j 行程表 v2 — 阿蘇→高千穂を…  ←t-ehk7     x t-0esb 子どもの自由研究連動 —…  ←t-fn4k
+       x t-pk4f 買い出し計画 — 道の駅ごとに… ←t-jv3j   1 unblocked · 1 blocked · t-fn4k frees 1
+       x t-rmtc 予約の総ざらい — 温泉・…      ←t-jv3j
+   1 unblocked · 3 blocked · t-ehk7 frees 3
+```
+
+俯瞰でしか出ない数字を各クラスタと全体で出す: **今すぐ着手できる数 / 塞がれている数
+/ 最も多くを塞いでいるタスク / 最長チェーン**。数字はすべて**同じ画面の行の印から
+数え直せる**（`unblocked + blocked + done = ノード数`）— 純トポロジーで数えると
+`v` が並ぶ行の上に「7 unblocked」が出る。
+
+- `z` で scope 切替。既定は **open**（done とその辺を落とす — 終わった依存は
+  blocker ではない。全件だと生きたクラスタが死んだ塊に溶接される）、`all` で全部。
+- `⏎` / `S` で、その行を起点にした Graph へ。`Esc` で **Map に戻る**（盤面には
+  落とさない）。
+- filter が効いていても**行は消さない**（消える辺は盤面についての嘘になる）。
+  薄く落として、ヘッダで件数を出す。
+
 ### 詳細ペイン
 
 `Space` で開く。解決済みの双方向依存リスト（`blocked by` / `blocks` を
 ID+タイトル+レーンまで解決）、チェックリスト、本文。`t` で推移的ツリー。
 `Enter` で**フィールド編集メニュー**: title / value / effort / labels / epic /
-due / repos / checklist（カーソルで項目選択・toggle/add/delete/reword）を
-`furrow set / retitle / repo / check` 相当の1書き込みで編集する（楽観的適用・
+due / deps / repos / checklist（カーソルで項目選択・toggle/add/delete/reword）を
+`furrow set / retitle / repo / check / dep` 相当の1書き込みで編集する（楽観的適用・
 失敗時は store 再読でロールバック）。
 
 ## キー
@@ -88,13 +125,14 @@ due / repos / checklist（カーソルで項目選択・toggle/add/delete/reword
 **全キーは `?` が正典。** 起動して `?` を押すと、その時点で有効なキーが全部出る
 （一覧は `internal/ui/keys.go` の `key.Binding` から生成しているので、handler が
 照合しているものとズレない）。ここに表を置くとその写しが手書きで増えるだけなので、
-置くのは取っ掛かりの5つだけにする。
+置くのは取っ掛かりだけにする（数を書くとその数が古くなる）。
 
 | キー | 動作 |
 |---|---|
 | `?` | **キー一覧**（ここから全部辿れる） |
 | `Space` | 詳細ペイン |
-| `S` | 依存グラフ |
+| `S` | 依存グラフ（1タスク起点） |
+| `T` | 依存マップ（全クラスタ俯瞰） |
 | `Enter` | move mode（`Enter` 確定・`Esc` 取消）。**peek を開いていると / Table では編集メニュー** |
 | `q` | 終了 |
 
@@ -112,7 +150,9 @@ due / repos / checklist（カーソルで項目選択・toggle/add/delete/reword
   xterm/Ghostty/tmux=`Shift`、iTerm2=`Option`）、`M` で切れる。
 - **楽観的 TUI**: 書き込みの完了を待たず先に画面を更新する。store への記録は
   直列キュー（同時 1 本 — 並べ替えの anchor が前の書き込みの結果に依存するため）。
-  quit は未完了の書き込みを flush してから終了する。
+  quit は未完了の書き込みを flush してから終了する。**意味が furrow 側にある書き込み
+  だけは先取りしない**（store-first）: 楽観適用するには ridge が furrow の規則を
+  写す必要があり、それは front-end に業務ロジックを溜めることになる。
 - **ロジックは furrow 側に置く**: 「仮に TUI を作るならロジックが冗長になるか」で
   迷ったら furrow へ。ridge と vista で同じものを二重に持たない。
 
@@ -139,6 +179,29 @@ go run ./cmd/ridge -readonly -dump           # schema gate で read-only の盤�
 フラグにしてある。実物を出すには古い schema の board が要る = 手では作れないので、
 この経路が無いと read-only の1フレームは誰も目視できない（実際、その状態の警告を
 消す退行を1度通した）。`-mock -readonly` で TUI としても触れる。
+
+### `-debuglog` — 操作履歴の構造化ログ
+
+```sh
+go run ./cmd/ridge -debuglog session.jsonl        # 実盤面 + 全イベント記録
+go run ./cmd/ridge -mock -debuglog session.jsonl  # fixture でも記録できる
+```
+
+1 イベント 1 行の JSONL。層は 5 つ — **input**（key/mouse の生イベント）/
+**mode**（mode・view の遷移）/ **apply**（gesture が queue に enqueue/refuse
+したもの）/ **persist**（furrow exec・書き込みの成否と所要 ms・reload の
+着地/skip）/ **status**（status line に出した note/fail の全文 — queue に
+届かない拒否はここにしか現れない）。「操作したら盤面がこうなった」系の
+バグ報告にはこのファイルを添付する。
+
+**打鍵は 1 文字ずつそのまま記録される**（modal に打った title や filter 文も
+含む）。入らないのは task の body 本文だけ — body は `$EDITOR` 側で編集され
+event loop を通らない。他人に渡す前に中身を確認すること。
+
+追記 open なので 1 ファイルに複数セッションを重ねられる（区切りは
+`session/start` — 構築時に書くので必ず各セッションの先頭行）。`-perflog` は
+別物として残る: あちらは latency 計測の素材（TSV 2 列・`-benchload` 対応）、
+こちらは時系列の再構成用。
 
 ## 既知の課題
 

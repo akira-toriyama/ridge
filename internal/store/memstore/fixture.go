@@ -1,4 +1,4 @@
-// A synthetic 33-task board: a family's Kyushu camping trip (an 18-member
+// A synthetic 34-task board: a family's Kyushu camping trip (an 18-member
 // epic), three smaller boxes wired to it by epic deps (t-vfm9), and unfiled
 // kitchen and trip-support tasks. It began as a
 // snapshot of a real work board; t-862b re-themed the SURFACE (titles,
@@ -8,6 +8,12 @@
 // (the width bugs this app guards against live there). Epics are not tasks
 // and hold no lane. This is a static in-memory copy; the mock provider
 // never reads or writes a real .furrow store.
+//
+// t-dg7k is NOT from the snapshot, like the Due values and t-9sa6's refs: it
+// is the board's one DRAFT (no repo attached — furrow's `add --draft` shape),
+// so the draft marker on cards/table, the peek's "draft (no repo)" line and
+// the is:draft filter all have a headless frame to land in (t-v4pp). Keep it
+// the only repo-less task: `no:repo`/`is:draft` tests pin exactly it.
 
 package memstore
 
@@ -16,6 +22,14 @@ import (
 
 	"github.com/akira-toriyama/ridge/internal/board"
 )
+
+// fixtureDefaultRepo mirrors furrow's board-config `default_repo`: a plain
+// `furrow add` auto-attaches it and `--draft` suppresses it. Without this
+// mirror every quick add in the mock landed repo-less, i.e. AS A DRAFT — the
+// modal's chip said "repo (board auto)" and the created card said "draft" in
+// the same session (found by review) — and the "t-dg7k is the only repo-less
+// task" invariant above broke on the first add.
+const fixtureDefaultRepo = "tomo/kyushu-trip"
 
 func ts(s string) time.Time {
 	t, err := time.Parse(time.RFC3339, s)
@@ -93,7 +107,13 @@ func fixtureTasks() []*board.Task {
 			Created: ts("2026-07-16T15:27:16Z"),
 			Updated: ts("2026-07-16T15:27:16Z"),
 			Due:     ts("2026-09-30T14:59:59Z"), // see t-jv3j's Due note
-			Body:    "# 持ち物リスト最終版\n\nリスト自体は前回の使い回しで 8 割できている。今回の本題は積載で、後部座席に子どもが2人いる状態でルーフボックス無しに収めるのが制約。重いものを下・低頻度を奥・雨で最初に要るもの（タープ・レイン）を最後に積む。\n\n積載図はA4一枚。設営順と逆順に積むと現地で上から順に降ろせる。",
+			// NOT from the snapshot, like the Due values: one file:line and one
+			// URL so the peek's refs section and the refs sub-editor render both
+			// forms furrow documents (`furrow ref` — file:line or URL) in one
+			// frame. Order is load-bearing: refs are a sequence, and the tests
+			// pin that an add appends AFTER the URL.
+			Refs: []string{"docs/積載図-2026.md:18", "https://camp.example.com/loading-guide"},
+			Body: "# 持ち物リスト最終版\n\nリスト自体は前回の使い回しで 8 割できている。今回の本題は積載で、後部座席に子どもが2人いる状態でルーフボックス無しに収めるのが制約。重いものを下・低頻度を奥・雨で最初に要るもの（タープ・レイン）を最後に積む。\n\n積載図はA4一枚。設営順と逆順に積むと現地で上から順に降ろせる。",
 		},
 		{
 			ID:       "t-7wdg",
@@ -544,6 +564,15 @@ func fixtureTasks() []*board.Task {
 			Updated:  ts("2026-08-09T13:05:00Z"),
 			Body:     "# 燻製チャレンジ\n\nダッチオーブン（[[t-ecfm]]）で温燻ができるらしい。ただしベランダの煙は近所問題になるので、熱源と煙の少ないチップの組合せを調べてから。キャンプ場でやる案が先かもしれない。",
 		},
+		{
+			ID:       "t-dg7k",
+			Title:    "来季の装備メモ — ポータブル冷蔵庫か大型クーラー増設か（どの計画に載せるか未定）",
+			Status:   "icebox",
+			Priority: 5020,
+			Created:  ts("2026-08-09T09:30:00Z"),
+			Updated:  ts("2026-08-09T09:30:00Z"),
+			Body:     "# 来季の装備メモ\n\n電源の実測（[[t-p7xw]]）の結果次第で、来季は冷蔵庫化するか保冷力の高いクーラーを足すかが分かれる。旅の計画に載せるか台所側に載せるかも未定なので、決まるまで draft のまま置く。",
+		},
 	}
 }
 
@@ -560,32 +589,64 @@ func fixtureTasks() []*board.Task {
 // resolved away (outside open_deps, absent from the open-only read: the
 // shape a dep on a closed epic arrives in), and e-9wtv is the stuck epic the
 // warn glyph needs.
+//
+// The Repos/Active shape is load-bearing for the epic overlay, not decoration:
+//   - EXACTLY ONE box is Active (e-fw2m), because furrow allows at most one per
+//     repo and a fixture with two for tomo/kyushu-trip would be a board furrow
+//     cannot produce.
+//   - e-c4mt and e-9wtv share that repo while inactive, so "activating this
+//     clashes with the box that already holds the slot" has a site — the
+//     precondition line and the refusal it warns about are both unreachable
+//     headless without one.
+//   - e-p3dx is the only box whose repo is FREE, so it is the one `activate`
+//     lands on without first deactivating e-fw2m. A box naming no repo cannot be
+//     activated at all (it would bypass the one-active-per-repo rule), so a
+//     fixture where every box was repo-less could only ever demo refusals.
+//   - e-p3dx carries Standing+Pinned, the mandate-shaped pair, so the two
+//     PERMANENT-channel rows have a non-default value to render somewhere.
 func fixtureEpics() []board.EpicInfo {
 	return []board.EpicInfo{
 		{
 			ID:       "e-fw2m",
 			Title:    "九州キャンプ旅 2026 — 行程・予約・装備（阿蘇→高千穂 3泊）",
+			Goal:     "阿蘇→高千穂 3泊の行程が確定し、予約と装備が揃っている",
+			Active:   true,
+			Repos:    []string{"tomo/kyushu-trip"},
+			Meta:     map[string]string{"origin": "2026-06 家族会議"},
 			Done:     6,
 			Total:    18,
 			Deps:     []string{"e-p3dx"},
 			OpenDeps: []string{"e-p3dx"},
 		},
 		{
-			ID:    "e-p3dx",
-			Title: "常備菜ライン 2026 夏→秋 — 平日を回しつつキャンプへ供給する",
-			Done:  1,
-			Total: 5,
+			ID:       "e-p3dx",
+			Title:    "常備菜ライン 2026 夏→秋 — 平日を回しつつキャンプへ供給する",
+			Goal:     "平日の作り置きが週2回で回り、キャンプ前の仕込みに転用できている",
+			Standing: true,
+			Pinned:   true,
+			Repos:    []string{"tomo/joubisai"},
+			Labels:   []string{"bento"},
+			Done:     1,
+			Total:    5,
 		},
 		{
 			ID:    "e-9wtv",
 			Title: "夏休み自由研究 — 火起こしと星の観察記録",
+			Repos: []string{"tomo/kyushu-trip"},
 			Done:  0,
 			Total: 2,
 			Stuck: true,
 		},
 		{
+			// The overlay's one fully-populated box: every editable row has a
+			// value AND `active` reads "slot held by e-fw2m", so a single menu
+			// frame proves the row layout and the activate precondition at once.
 			ID:       "e-c4mt",
 			Title:    "冬キャンプ 2026-27 — 薪ストーブ泊まで",
+			Goal:     "薪ストーブで一泊できる装備と練習が揃っている",
+			Repos:    []string{"tomo/kyushu-trip"},
+			Labels:   []string{"gear"},
+			Meta:     map[string]string{"origin": "夏の反省", "season": "2026-27"},
 			Done:     0,
 			Total:    1,
 			Deps:     []string{"e-fw2m", "e-2b7h"},

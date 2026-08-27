@@ -13,7 +13,7 @@ import (
 // unknown-name error and the tests all read this slice, because the list was
 // duplicated in three places and adding two states updated two of them —
 // `ridge -h` then advertised eight of ten.
-var DemoNames = []string{"move", "drag", "add", "edit", "editpick", "editinput", "editdeps", "graph", "help", "slice", "sort", "filter", "filterchips", "epicdeps", "fail"}
+var DemoNames = []string{"move", "drag", "add", "adddraft", "edit", "editpick", "editinput", "editdeps", "editrefs", "note", "refs", "graph", "map", "mapall", "mapfiltered", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicnew", "fail"}
 
 // Options configures a freshly-constructed Model. The zero value is the
 // default TUI: dark palette, board view, no filter.
@@ -24,11 +24,14 @@ type Options struct {
 	Peek   bool   // open with the detail side-peek
 	Tree   bool   // open with the dep-tree overlay (implies Peek)
 	LoadMS int    // real-store load time, for the startup note
+	// Debug is the -debuglog recorder over an already-open sink (nil = off).
+	// The caller opens the file: this package never touches the filesystem.
+	Debug *DebugLog
 }
 
 // New builds the Model the program runs.
 func New(p board.Provider, o Options) *Model {
-	m := newModel(p)
+	m := newModel(p, o.Debug)
 	if o.Light {
 		m.th = newTheme(false)
 	}
@@ -48,6 +51,13 @@ func New(p board.Provider, o Options) *Model {
 		m.peekOpen = true
 		m.treeOpen = o.Tree
 	}
+	// The board snapshot, after the flags above shaped it, so the log states
+	// its own baseline (-table starts on the table). Not the session marker:
+	// that is NewDebugLog's first line, because on a live store the load execs
+	// fire before this constructor runs.
+	m.dbg.event("session", "board", map[string]any{
+		"live": p.Live(), "tasks": len(m.b.Tasks()), "view": m.view.String(),
+	})
 	// What the read cost is the one thing the opening frame knows and the
 	// screen does not show anywhere else. The keys that used to be tacked on
 	// here (`r reload · R sync · ? help`) were a third partial key list.
@@ -137,14 +147,35 @@ func (m *Model) demoState(kind string) error {
 
 	case "add":
 		// A filtered board, so the modal PROVES the context inheritance: the
-		// filter's label lands in the chips, not silently on the task.
+		// filter's label lands in the chips, not silently on the task. The
+		// typed line carries the inline tokens (t-69v9) plus one bad one, so
+		// this single frame also proves the live echo AND the warning row.
 		m.ti.SetValue("label:bbq")
 		m.applyFilter("label:bbq")
 		m.relayout()
 		if c := m.enterAdd(); c != nil {
 			_ = c
 		}
-		m.add.input.SetValue("盤面から起票するタスク")
+		// Short enough for the 56-cell input window (cursor included): the
+		// frame must show the typed TITLE too, not just the scrolled-to
+		// tail. Quoted values are unit-tested; the frame's job is the echo.
+		m.add.input.SetValue("盤面起票 value:4 due:+1d dep:t-jv3j check:再現 effort:高")
+
+	case "adddraft":
+		// The draft half of quick add (t-v4pp): the board narrowed to
+		// is:draft — the fixture's one draft card with its dim marker — and
+		// the modal opened UNDER that filter, so a single frame proves the
+		// filter passthrough, the card marker and the inheritance: the chips
+		// say "draft (no repo)" without the user typing a token, because a
+		// plain add under a draft view would be born repo-attached and vanish
+		// from the very view it was added into.
+		m.ti.SetValue("is:draft")
+		m.applyFilter("is:draft")
+		m.relayout()
+		if c := m.enterAdd(); c != nil {
+			_ = c
+		}
+		m.add.input.SetValue("思いつきを控える")
 
 	case "edit":
 		// Open the field-edit overlay on a task with a checklist AND labels
@@ -210,6 +241,36 @@ func (m *Model) demoState(kind string) error {
 		}
 		m.openGraph()
 
+	case "map":
+		// The dependency map at its DEFAULT scope: done tasks dropped, so the
+		// fixture's one 19-node tangle breaks into the three live clusters
+		// that are actually in the way. Seeded on a blocked task, so the frame
+		// also proves the selection gutter and the strip below it.
+		m.openMap("t-jv3j")
+
+	case "mapall":
+		// The same board at scope=all: one 19-node cluster, depth 5, which is
+		// the frame that proves the indent ladder and the "+N" blocker tag
+		// (t-t38k has three blockers). Also the only demo where a panel is
+		// taller than one column's share of the canvas, so it proves the pack
+		// does not silently drop the overflow.
+		m.mapScope = board.ClusterAll
+		m.openMap("t-t38k")
+
+	case "mapfiltered":
+		// The map UNDER a board filter. The map deliberately shows what the
+		// filter hides — an edge that vanishes because of a query is a lie
+		// about the board — so this frame is the proof that such rows are
+		// muted and COUNTED rather than dropped.
+		// is:blocked is the filter that makes the point: the board narrows to
+		// the tasks that are stuck, and the map still draws the ROOTS that are
+		// doing the blocking — muted and counted, because a cluster missing
+		// the task at the top of it explains nothing.
+		m.ti.SetValue("is:blocked")
+		m.applyFilter("is:blocked")
+		m.relayout()
+		m.openMap("t-ehk7")
+
 	case "sort":
 		// The table sorted by due ascending: the ▲ marker in the header, the
 		// dated fixture tasks on top, the undated majority below them — the
@@ -264,6 +325,41 @@ func (m *Model) demoState(kind string) error {
 		m.edit.menuIdx = int(fieldDeps)
 		m.openField(fieldDeps, m.b.Task("t-jv3j"))
 
+	case "editrefs":
+		// The refs sub-editor on the task whose two refs are the two forms
+		// furrow documents — a file:line and a URL — so one frame proves the
+		// rows, the cursor and the remove/add keys.
+		if !m.selectID("t-9sa6", false) {
+			return fmt.Errorf("demo editrefs: t-9sa6 is not on the fixture board")
+		}
+		m.enterEdit()
+		if m.edit == nil {
+			return fmt.Errorf("demo editrefs: the edit menu did not open")
+		}
+		m.edit.menuIdx = int(fieldRefs)
+		m.openField(fieldRefs, m.b.Task("t-9sa6"))
+
+	case "note":
+		// The note input, focused and holding a typed CJK paragraph — the
+		// state between `n` and ⏎ that no bare flag combination can reach.
+		if !m.selectID("t-9sa6", false) {
+			return fmt.Errorf("demo note: t-9sa6 is not on the fixture board")
+		}
+		if c := m.enterNote(); c == nil {
+			return fmt.Errorf("demo note: the note input did not open")
+		}
+		m.edit.input.SetValue("重量実測まで完了。次は車載レイアウト案の2案目から。")
+
+	case "refs":
+		// The peek's refs section, both documented forms (file:line and URL)
+		// in furrow's own order. The default -dump selection has no refs, so
+		// no bare flag combination reaches this frame.
+		if !m.selectID("t-9sa6", false) {
+			return fmt.Errorf("demo refs: t-9sa6 is not on the fixture board")
+		}
+		m.peekOpen = true
+		m.syncPeek()
+
 	case "epicdeps":
 		// The peek's epic-dep line, both resolutions at once: t-y4st's box
 		// waits on an OPEN box (resolved to id+progress+title) and carries
@@ -275,6 +371,84 @@ func (m *Model) demoState(kind string) error {
 		}
 		m.peekOpen = true
 		m.syncPeek()
+
+	case "sliceepic":
+		// The panel holding the keyboard on the EPIC axis — the state every
+		// epic gesture starts from, and the only frame that shows the ▶/◆
+		// lifecycle markers and the note advertising m/A. No bare flag
+		// combination reaches it: the `slice` demo forces the label axis and
+		// `filterchips` hands the keyboard to the filter input.
+		m.toggleSlice()
+		m.sliceField = sliceEpic
+		m.noteSliceAxis()
+
+	case "epic":
+		// The overlay's menu on the one fully-populated box, cursor parked on
+		// `active` — so the frame proves every row's value AND the activate
+		// precondition ("slot held by e-fw2m"), which is what stops furrow's
+		// exit 2 from being the user's first news of the one-active-per-repo
+		// rule. `-table -demo epic` composes, which is the frame that covers the
+		// overlay over the table view — a modal that owns the keyboard must be
+		// visible in both, and it was not.
+		if err := m.demoEpicPanel("e-c4mt"); err != nil {
+			return err
+		}
+		m.epic.menuIdx = int(epicFieldActive)
+
+	case "epiclist":
+		// The deps sub-editor, both resolutions in one frame: e-c4mt waits on
+		// an OPEN box and carries a dep furrow already resolved away.
+		if err := m.demoEpicPanel("e-c4mt"); err != nil {
+			return err
+		}
+		m.epic.menuIdx = int(epicFieldDeps)
+		if c := m.openEpicField(epicFieldDeps); c != nil {
+			_ = c
+		}
+
+	case "epicreason":
+		// The activate input. It is the confirm step AND the collection of
+		// furrow's --reason, which is appended to the box's body as the
+		// activation record — a stage that exists only between two keystrokes.
+		if err := m.demoEpicPanel("e-c4mt"); err != nil {
+			return err
+		}
+		m.epic.menuIdx = int(epicFieldActive)
+		if c := m.openEpicField(epicFieldActive); c != nil {
+			_ = c
+		}
+		m.epic.input.SetValue("ユーザー依頼: 冬支度を先に回す")
+
+	case "epicconfirm":
+		// The deactivate gate, reachable only on the ACTIVE box.
+		if err := m.demoEpicPanel("e-fw2m"); err != nil {
+			return err
+		}
+		m.epic.menuIdx = int(epicFieldActive)
+		if c := m.openEpicField(epicFieldActive); c != nil {
+			_ = c
+		}
+
+	case "epicnew":
+		// The new-box modal under a typed repo: filter, so the frame PROVES
+		// the inheritance: the filter's repo lands in the chip, not silently
+		// on the box. The filter, not a repo slice — `A` only answers on the
+		// epic axis and the axis switch clears a repo-axis pick, so a typed
+		// repo: is the one form that can still be in force when `A` fires.
+		// Without a repo a new box cannot be activated at all, which is why
+		// this one is worth a frame of its own.
+		m.ti.SetValue("repo:tomo/kyushu-trip")
+		m.applyFilter("repo:tomo/kyushu-trip")
+		m.relayout()
+		m.toggleSlice()
+		m.sliceField = sliceEpic
+		// Fed through the panel's own key handler, not enterEpicNew directly:
+		// this frame is also the proof that `A` is BOUND — a staged call would
+		// keep rendering after the binding was deleted (found by review).
+		if c := m.onSliceKey(tea.KeyPressMsg{Code: 'A', Text: "A"}); c == nil {
+			return fmt.Errorf("demo epicnew: A did not open the new-box modal")
+		}
+		m.epic.input.SetValue("薪ストーブ導入")
 
 	case "fail":
 		// A refused write. The ⚠ styling has its own colour and its own row,
@@ -290,5 +464,29 @@ func (m *Model) demoState(kind string) error {
 		return fmt.Errorf("unknown -demo %q (want %s)", kind, strings.Join(DemoNames, "|"))
 	}
 	m.relayout()
+	return nil
+}
+
+// demoEpicPanel reaches the epic overlay the way a user does — through the
+// panel, on the epic axis, with the cursor on the box — so the frame behind the
+// overlay is the real one and `esc` in the resulting state would land back in
+// modeSlice rather than on a bare board.
+func (m *Model) demoEpicPanel(id string) error {
+	m.toggleSlice()
+	m.sliceField = sliceEpic
+	rows := m.sliceRows()
+	found := false
+	for i, r := range rows {
+		if r.value == id {
+			m.sliceIdx, found = i, true
+		}
+	}
+	if !found {
+		return fmt.Errorf("demo epic: %s is not a box on the fixture board", id)
+	}
+	m.enterEpic(id)
+	if m.epic == nil {
+		return fmt.Errorf("demo epic: the overlay did not open on %s", id)
+	}
 	return nil
 }

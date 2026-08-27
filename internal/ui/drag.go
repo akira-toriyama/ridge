@@ -137,7 +137,7 @@ func (m *Model) onMouseDown(msg tea.MouseClickMsg) tea.Cmd {
 	// the mode switched out from under it by a panel click (observed: a
 	// click during modeAdd stranded a half-typed title behind an invariant
 	// break).
-	if m.sliceOpen && msg.X < sliceInsetW && msg.Y >= boardTop && m.view != viewGraph &&
+	if m.sliceOpen && msg.X < sliceInsetW && msg.Y >= boardTop && !m.fullScreen() &&
 		(m.mode == modeNormal || m.mode == modeSlice) {
 		return m.sliceClick(msg.X, msg.Y)
 	}
@@ -349,7 +349,7 @@ func (m *Model) onWheel(msg tea.MouseWheelMsg) {
 	// deliberately opens it (enterEdit), and a mode guard here once made a
 	// long body unreadable while editing. Scrolling the peek commits
 	// nothing; it is not the board's hit surface.
-	if m.view != viewGraph && m.inPeek(msg.X, msg.Y) {
+	if !m.fullScreen() && m.inPeek(msg.X, msg.Y) {
 		switch msg.Button {
 		case tea.MouseWheelUp:
 			m.vp.ScrollUp(3)
@@ -361,7 +361,7 @@ func (m *Model) onWheel(msg tea.MouseWheelMsg) {
 	// The slice panel scrolls under the wheel wherever it is rendered. The
 	// cursor deliberately stays put — like a board column, a panel scrolled
 	// away from its cursor is a legitimate state (the next arrow re-pulls).
-	if m.sliceOpen && msg.X < sliceInsetW && msg.Y >= boardTop && m.view != viewGraph {
+	if m.sliceOpen && msg.X < sliceInsetW && msg.Y >= boardTop && !m.fullScreen() {
 		switch msg.Button {
 		case tea.MouseWheelUp:
 			m.sliceOff--

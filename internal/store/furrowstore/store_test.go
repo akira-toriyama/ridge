@@ -546,3 +546,61 @@ func TestContractPersistDepAddAndRm(t *testing.T) {
 		t.Errorf("deps = %v, want none after the rm", got.Deps)
 	}
 }
+
+// Refs and the note append ride the same PersistFields/PersistNote seams the
+// overlay uses; read the store back and believe IT, not the patch. The note
+// half also pins the join AppendNote mirrors (one blank line, one trailing
+// newline) against furrow's own file — the mirror's measurement, kept honest.
+func TestContractRefEditsAndNoteAppend(t *testing.T) {
+	p, dir := newLabProvider(t)
+	id := labAdd(t, dir, "参照とメモの対象")
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Adds keep the order given (refs are a sequence, not a sorted set).
+	if err := p.PersistFields(id, board.FieldPatch{
+		AddRefs: []string{"internal/x.go:12", "https://example.com/spec"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// One mixed write: rm one, add one — furrow composes both in one call.
+	if err := p.PersistFields(id, board.FieldPatch{
+		AddRefs: []string{"-dash.md:1"}, // a leading dash rides as a flag VALUE, never a positional
+		RmRefs:  []string{"internal/x.go:12"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	got := p.Board().Task(id)
+	if want := []string{"https://example.com/spec", "-dash.md:1"}; strings.Join(got.Refs, ",") != strings.Join(want, ",") {
+		t.Errorf("refs = %v, want %v", got.Refs, want)
+	}
+
+	// The note appends a paragraph AND advances updated, in one command. The
+	// stamps are second-precision, so the advance is only observable across a
+	// real second — hence the sleep; a same-instant write made the first
+	// version of this assertion vacuously green (found by review).
+	before := got.Updated
+	wantBody := got.Body
+	time.Sleep(1100 * time.Millisecond)
+	if err := p.PersistNote(id, "-先頭ダッシュでも一段落として載る"); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	got = p.Board().Task(id)
+	mirror := board.NewBoard([]*board.Task{{ID: id, Title: "x", Status: "inbox", Body: wantBody}})
+	if err := mirror.AppendNote(id, "-先頭ダッシュでも一段落として載る"); err != nil {
+		t.Fatal(err)
+	}
+	if want := mirror.Task(id).Body; got.Body != want {
+		t.Errorf("body after note = %q, want the AppendNote mirror %q", got.Body, want)
+	}
+	if !got.Updated.After(before) {
+		t.Errorf("updated did not advance across the note: %v (before %v)", got.Updated, before)
+	}
+}

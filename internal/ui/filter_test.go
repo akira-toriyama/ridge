@@ -41,6 +41,7 @@ func (p *liveQueryProvider) PersistMove(_, _, _, _ string) ([]string, error)    
 func (p *liveQueryProvider) PersistDone(_ string) error                         { return nil }
 func (p *liveQueryProvider) PersistCheck(_ string, _ int, _ bool) error         { return nil }
 func (p *liveQueryProvider) PersistBody(_, _ string) error                      { return nil }
+func (p *liveQueryProvider) PersistNote(_, _ string) error                      { return nil }
 func (p *liveQueryProvider) PersistFields(_ string, _ board.FieldPatch) error   { return nil }
 func (p *liveQueryProvider) PersistCheckAdd(_, _ string) error                  { return nil }
 func (p *liveQueryProvider) PersistCheckRm(_ string, _ int) error               { return nil }
@@ -48,6 +49,18 @@ func (p *liveQueryProvider) PersistCheckReword(_ string, _ int, _ string) error 
 func (p *liveQueryProvider) PersistDepAdd(_, _ string) error                    { return nil }
 func (p *liveQueryProvider) PersistDepRm(_, _ string) error                     { return nil }
 func (p *liveQueryProvider) Add(string, board.AddOptions) (string, error)       { return "", nil }
+func (p *liveQueryProvider) EpicSet(string, board.EpicPatch) error              { return nil }
+func (p *liveQueryProvider) EpicActivate(_, _ string) error                     { return nil }
+func (p *liveQueryProvider) EpicDepAdd(_, _ string) error                       { return nil }
+func (p *liveQueryProvider) EpicDepRm(_, _ string) error                        { return nil }
+
+func (p *liveQueryProvider) EpicAdd(string, board.EpicAddOptions) (string, error) {
+	return "e-new", nil
+}
+
+func (p *liveQueryProvider) EpicDeactivate(string) (board.EpicPrevious, error) {
+	return board.EpicPrevious{}, nil
+}
 
 func liveModel(t *testing.T) (*Model, *liveQueryProvider) {
 	t.Helper()

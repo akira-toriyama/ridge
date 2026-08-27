@@ -1,5 +1,10 @@
 package board
 
+import (
+	"fmt"
+	"strings"
+)
+
 // Provider is the seam between the UI and the task store — the port; the
 // adapters live in internal/store (furrowstore for the real CLI/JSON store,
 // memstore for the fixture).
@@ -55,11 +60,16 @@ type Provider interface {
 	PersistBody(id, body string) error
 
 	// PersistFields records id's already-applied metadata edit. Everything
-	// set-shaped in the patch lands in ONE `furrow set` write; Title and the
-	// repo edits are their own commands (retitle / repo), so a mixed patch
-	// may cost up to three writes — the UI edits one field per gesture, so
-	// in practice it is one.
+	// set-shaped in the patch lands in ONE `furrow set` write; Title, the
+	// repo edits and the ref edits are their own commands (retitle / repo /
+	// ref), so a mixed patch may cost up to four writes — the UI edits one
+	// field per gesture, so in practice it is one.
 	PersistFields(id string, p FieldPatch) error
+
+	// PersistNote records an already-applied note append: one paragraph added
+	// to the body with Updated stamped, `furrow note`'s contract. The local
+	// half is Board.AppendNote, which already refused an empty text.
+	PersistNote(id, text string) error
 
 	// PersistCheckAdd records an already-appended checklist item.
 	PersistCheckAdd(id, text string) error
@@ -81,17 +91,181 @@ type Provider interface {
 	// Add creates a task in the store and returns its id. Unlike the
 	// Persist* family this is NOT the record of an applied edit: the store
 	// owns id assignment, so the model waits for the id and re-reads instead
-	// of applying optimistically (a single add measures ~57ms).
+	// of applying optimistically (a single add measures ~57ms). Both
+	// adapters run o.Validate() themselves — the UI refuses first for the
+	// modal's sake, but a future caller must not be able to slip a comma'd
+	// ref past the CSV flag layer by skipping the modal.
 	Add(title string, o AddOptions) (id string, err error)
+
+	// --- epic writes: store-first, NOT the Persist* contract ---------------
+	//
+	// The Persist* family records a change the model already applied to the
+	// board on the UI thread. The epic family deliberately does not join it:
+	// what an epic write MEANS is furrow's, not ridge's — activate refuses a
+	// second box for a repo rather than stealing the slot, add invents the id,
+	// and Done/Total/Stuck/OpenDeps are all derived furrow-side. Mirroring any
+	// of that locally is the front-end logic this repo exists to not have.
+	//
+	// So these writes apply NOTHING locally: they ride the same strictly-serial
+	// queue (ordering and the quit-flush still hold), and the board converges
+	// on the re-read that follows the drain. A refusal therefore needs no
+	// rollback — there is no optimistic half to undo — but the queue must still
+	// re-read when an earlier store-first write in the same drain LANDED, or
+	// that write stays invisible until the next reload (persist.go).
+
+	// EpicAdd creates a box and returns its id. Never active on creation:
+	// opening one is a separate deliberate act (`epic activate`).
+	EpicAdd(title string, o EpicAddOptions) (id string, err error)
+
+	// EpicSet writes one metadata edit; everything in the patch lands in ONE
+	// `furrow epic set`. An empty patch is refused rather than sent: furrow
+	// answers exit 2 ("needs at least one change") and a no-op that reports a
+	// store error is worse than one that reports nothing.
+	EpicSet(id string, p EpicPatch) error
+
+	// EpicActivate makes the box active for every repo it names. reason is
+	// furrow's --reason: it is appended to the box's own body as an activation
+	// record, which is how a switch stays visible to the next session. "" omits
+	// the flag.
+	EpicActivate(id, reason string) error
+
+	// EpicDeactivate clears the active flag without closing the box, and
+	// returns furrow's suggestion of where to go back to — computed fresh from
+	// the activation log, never a stored pointer. The zero value means furrow
+	// had no record to decide it, which is a legitimate answer, not an error.
+	EpicDeactivate(id string) (EpicPrevious, error)
+
+	// EpicDepAdd makes id wait on dep ("open this box after that one closes").
+	// Acyclic and idempotent furrow-side.
+	EpicDepAdd(id, dep string) error
+
+	// EpicDepRm removes the edge. The dep need not resolve on this board — a
+	// closed or archived box leaves a removable edge behind, which is exactly
+	// the removal that matters.
+	EpicDepRm(id, dep string) error
+}
+
+// EpicAddOptions is a new box's inherited context — the same
+// filtered-metadata inheritance rule quick add follows. Repos matters most: a
+// box naming no repo cannot be activated at all (furrow refuses it, because a
+// repo-less box would bypass the one-active-per-repo rule).
+type EpicAddOptions struct {
+	Goal   string
+	Labels []string
+	Repos  []string
+}
+
+// EpicPatch is one `furrow epic set` write. nil/empty means "untouched"; a
+// pointed-to zero clears (--goal "" is furrow's clear, and --standing=false /
+// --pinned=false are its explicit negatives — an omitted flag never touches the
+// stored value).
+//
+// Title has no clearing form on purpose: `epic set --title ""` is exit 2
+// ("epic title must not be empty"), so an empty rename is refused upstream.
+type EpicPatch struct {
+	Title     *string
+	Goal      *string
+	AddLabels []string
+	RmLabels  []string
+	AddRepos  []string
+	RmRepos   []string
+	SetMeta   map[string]string
+	RmMeta    []string
+	Standing  *bool
+	Pinned    *bool
+}
+
+// Empty reports whether the patch would send `furrow epic set` with no change
+// flag, which furrow refuses (exit 2). The check lives here rather than in the
+// adapter so the UI can refuse the gesture before it queues a write.
+//
+// It counts Standing/Pinned even though furrow's own refusal message does not
+// list them: a standing-only set IS accepted, so deriving this from that
+// message would refuse a write furrow takes.
+func (p EpicPatch) Empty() bool {
+	return p.Title == nil && p.Goal == nil && p.Standing == nil && p.Pinned == nil &&
+		len(p.AddLabels) == 0 && len(p.RmLabels) == 0 &&
+		len(p.AddRepos) == 0 && len(p.RmRepos) == 0 &&
+		len(p.SetMeta) == 0 && len(p.RmMeta) == 0
+}
+
+// EpicPrevious is `epic deactivate`'s "where to return" suggestion: the open,
+// inactive box with the newest activation record. furrow computes it and never
+// acts on it — activating remains the human's call — so ridge shows it and
+// nothing more. The zero value means furrow named nobody.
+type EpicPrevious struct {
+	ID    string
+	Title string
 }
 
 // AddOptions is quick add's inherited context — the GitHub Projects rule
-// that a filtered view's metadata applies to the item it creates.
+// that a filtered view's metadata applies to the item it creates — plus the
+// detail fields the modal's inline tokens carry (t-69v9), furrow add's
+// --value/--effort/--due/--dep/--check/--ref. The zero value of every detail
+// field means "omitted": an add has no clearing form, so 0/"" never reaches
+// the flag. Bulk creation (--stdin) is deliberately NOT here — pasting many
+// titles is the CLI's job, not a modal's.
 type AddOptions struct {
 	Lane  string // "" = the store's default lane
 	Label string // one inherited label
 	Epic  string // e- id
 	Repo  string // owner/repo or unique short name; "" = the board's auto-attach
+
+	Value  int      // 1..5; 0 = unset
+	Effort int      // 1..5; 0 = unset
+	Due    string   // furrow date form incl. the +1d offset; "" = no promise
+	Deps   []string // t- ids; existence/acyclicity stay furrow's rules
+	Checks []string // unchecked checklist items, text verbatim
+	Refs   []string // free text; `,` and `"` refused (the t-pwrp CSV caveat)
+
+	// Draft creates the task with NO repo attached — furrow's `add --draft`,
+	// which also suppresses the board's auto-attach. It conflicts with Repo
+	// (furrow refuses `--draft` with `-r`), and Validate mirrors that refusal.
+	Draft bool
+}
+
+// Validate refuses an AddOptions the flag layer would mangle or furrow would
+// refuse — BEFORE the modal closes, so the typed line survives as a
+// still-open modal instead of a refusal round trip. Due goes through the same
+// ParseDue mirror SetFields uses and refs through the same CSV caveat; the
+// estimate check is deliberately STRICTER than furrow, which clamps instead
+// of refusing (measured on dev 60074b8: `--value 9` exits 0 and stores 5) —
+// a silent clamp would stamp an estimate the user did not type.
+func (o AddOptions) Validate() error {
+	if o.Draft && o.Repo != "" {
+		return fmt.Errorf("draft conflicts with repo %q — a draft attaches no repo", o.Repo)
+	}
+	for _, v := range []int{o.Value, o.Effort} {
+		if v < 0 || v > 5 {
+			return fmt.Errorf("estimate %d: want 1..5", v)
+		}
+	}
+	if o.Due != "" {
+		if _, err := ParseDue(o.Due); err != nil {
+			return err
+		}
+	}
+	for _, d := range o.Deps {
+		if d == "" {
+			return fmt.Errorf("dep: needs a task id")
+		}
+		// --dep is the same pflag CSV field as --ref: a comma'd id would
+		// SPLIT silently and a bare `"` is pflag's own exit-2 parse error.
+		if strings.ContainsAny(d, `,"`) {
+			return fmt.Errorf("dep %q: `,` and `\"` cannot ride furrow's CSV flag parsing", d)
+		}
+	}
+	for _, c := range o.Checks {
+		if strings.TrimSpace(c) == "" {
+			return fmt.Errorf("check: needs text")
+		}
+	}
+	for _, r := range o.Refs {
+		if err := validateRef(r); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // FieldPatch is one already-applied metadata edit. nil means "untouched";
@@ -107,4 +281,12 @@ type FieldPatch struct {
 	Title     *string
 	AddRepos  []string // full owner/repo
 	RmRepos   []string
+	// Refs are a SEQUENCE, not a sorted set like labels: furrow appends adds
+	// at the end and keeps the order given. Add is idempotent, Rm is
+	// exact-match and a no-op on an absent ref (measured on dev 60074b8).
+	// The form is free text (file:line or URL) with one flag-layer caveat:
+	// furrow's --add/--rm are pflag CSV StringSlices, so SetFields refuses
+	// adds carrying `,` or `"` until furrow takes them verbatim (t-pwrp).
+	AddRefs []string
+	RmRefs  []string
 }

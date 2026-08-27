@@ -79,6 +79,7 @@ func TestHelpOverlayOpensInEveryViewThatAdvertisesIt(t *testing.T) {
 		{"board", ""},
 		{"table", "sort"},
 		{"graph", "graph"},
+		{"map", "map"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := New(memstore.New(), Options{})
@@ -113,6 +114,8 @@ func (m *Model) frameRows(t *testing.T, w, h int) []string {
 		s = m.renderTable()
 	case viewGraph:
 		s = m.renderGraph()
+	case viewMap:
+		s = m.renderMap()
 	default:
 		s = m.renderBoard()
 	}
@@ -160,7 +163,7 @@ func TestLastRowIsTheStatusLine(t *testing.T) {
 		t.Fatalf("frame is %d rows, want 50", len(lines))
 	}
 	last := strings.TrimSpace(lines[len(lines)-1])
-	if last != "fixture · 33 tasks" {
+	if last != "fixture · 34 tasks" {
 		t.Errorf("last row = %q, want the startup status line", last)
 	}
 
@@ -187,7 +190,7 @@ func TestLastRowIsTheStatusLine(t *testing.T) {
 // `? help` is the whole in-app pointer to the key surface, so it must be on
 // screen in every view and never scroll away.
 func TestTitleRowPointsAtTheHelpOverlay(t *testing.T) {
-	for _, demo := range []string{"", "graph", "slice", "sort"} {
+	for _, demo := range []string{"", "graph", "map", "slice", "sort"} {
 		name := demo
 		if name == "" {
 			name = "board"
@@ -205,7 +208,10 @@ func TestTitleRowPointsAtTheHelpOverlay(t *testing.T) {
 // widths this board is read at.
 func TestFrameStaysRectangularAfterTheFooterWent(t *testing.T) {
 	for _, w := range []int{240, 241, 259, 320, 399, 400} {
-		for _, demo := range []string{"", "graph", "edit", "editdeps"} {
+		// The map's three demos are all here: it is the only view whose
+		// columns are composed side by side, so a one-cell shear accumulates
+		// per column and shows up at some widths and not others.
+		for _, demo := range []string{"", "graph", "map", "mapall", "mapfiltered", "edit", "editdeps"} {
 			lines := dumpFrame(t, w, 50, demo)
 			for i, line := range lines {
 				if got := lipgloss.Width(line); got != w {

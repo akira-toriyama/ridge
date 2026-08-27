@@ -12,29 +12,109 @@ import (
 
 func frame(m *Model) string { return ansiStrip(m.View().Content) }
 
+// badgeTokens is the mode→token declaration this test checks the FRAME against.
+// It is deliberately a map keyed by the mode enum rather than by demo name: a
+// mode with no entry here fails the sweep below instead of quietly rendering
+// ⟨NORMAL⟩ over its own overlay, which is what a hand-written {demo, token}
+// list allowed (the epic overlay would have passed it while badge-less).
+var badgeTokens = map[mode]string{
+	modeNormal: "⟨NORMAL⟩",
+	modeMove:   "⟨MOVE⟩",
+	modeFilter: "⟨FILTER⟩",
+	modeEdit:   "⟨EDIT⟩",
+	modeAdd:    "⟨ADD⟩",
+	modeSlice:  "⟨SLICE⟩",
+	modeEpic:   "⟨EPIC⟩",
+}
+
 // The mode badge is the ONLY place the current mode is named — the modes are
-// otherwise invisible state (the complaint that opened t-8xk8). Every state a
-// demo can pin must carry its token, normal included.
+// otherwise invisible state (the complaint that opened t-8xk8). Swept over
+// DemoNames, so every state a demo can pin must carry the right token, normal
+// included, and a new mode cannot arrive without one.
 func TestModeBadgeAlwaysNamesTheMode(t *testing.T) {
-	cases := []struct{ demo, token string }{
-		{"", "⟨NORMAL⟩"},
-		{"move", "⟨MOVE⟩"},
-		{"drag", "⟨DRAG⟩"},
-		{"filter", "⟨FILTER⟩"},
-		{"edit", "⟨EDIT⟩"},
-		{"add", "⟨ADD⟩"},
-		{"slice", "⟨SLICE⟩"},
-		{"graph", "⟨GRAPH⟩"},
+	for _, demo := range append([]string{""}, DemoNames...) {
+		name := demo
+		if name == "" {
+			name = "board"
+		}
+		t.Run(name, func(t *testing.T) {
+			m := boardModel(t, 200, 40)
+			if demo != "" {
+				if err := m.demoState(demo); err != nil {
+					t.Fatalf("%v", err)
+				}
+			}
+			// The badges that are not m.mode: a drag lives in dragState, and
+			// the two full-screen views have title rows of their own.
+			want := ""
+			switch {
+			case m.drag.moved:
+				want = "⟨DRAG⟩"
+			case m.view == viewGraph:
+				want = "⟨GRAPH⟩"
+			case m.view == viewMap:
+				want = "⟨MAP⟩"
+			default:
+				var ok bool
+				if want, ok = badgeTokens[m.mode]; !ok {
+					t.Fatalf("mode %d has no badge token — add it to badgeTokens "+
+						"and to modeBadge, or the frame names the wrong owner of the keyboard", m.mode)
+				}
+			}
+			if out := frame(m); !strings.Contains(out, want) {
+				t.Errorf("frame does not carry %s", want)
+			}
+		})
+	}
+}
+
+// A modal that owns the keyboard must be VISIBLE in every view. The board and
+// the table compose separate frames, and while the overlay list was written out
+// twice the epic overlay was added to the board's only: in the table it held the
+// whole keyboard — arrows, ⏎, and writes — while rendering nothing at all. Same
+// class as the slice panel's own recorded failure.
+func TestEveryModalRendersInBothViews(t *testing.T) {
+	// want must be text only the overlay's BODY draws. Every overlay also names
+	// itself in the status line, and matching that passed while the overlay
+	// itself rendered nowhere — the exact bug this test exists to catch. The
+	// status is cleared below as well, so a future marker cannot regress into
+	// the same false pass.
+	cases := []struct {
+		mode  string
+		want  string
+		setup func(*Model)
+	}{
+		{"edit", "⏎ edit · esc close", func(m *Model) {
+			m.selectID("t-9sa6", false)
+			m.enterEdit()
+		}},
+		{"add", "add item", func(m *Model) {
+			if c := m.enterAdd(); c != nil {
+				_ = c
+			}
+		}},
+		{"epic", "standing", func(m *Model) {
+			m.toggleSlice()
+			m.sliceField = sliceEpic
+			m.enterEpic("e-c4mt")
+		}},
 	}
 	for _, tc := range cases {
-		m := boardModel(t, 200, 40)
-		if tc.demo != "" {
-			if err := m.demoState(tc.demo); err != nil {
-				t.Fatalf("%s: %v", tc.demo, err)
-			}
-		}
-		if out := frame(m); !strings.Contains(out, tc.token) {
-			t.Errorf("demo %q: frame does not carry %s", tc.demo, tc.token)
+		for _, view := range []struct {
+			name string
+			kind viewKind
+		}{{"board", viewBoard}, {"table", viewTable}} {
+			t.Run(tc.mode+"/"+view.name, func(t *testing.T) {
+				m := boardModel(t, 240, 50)
+				m.view = view.kind
+				tc.setup(m)
+				m.status, m.statusErr = "", false
+				m.relayout()
+				if out := frame(m); !strings.Contains(out, tc.want) {
+					t.Errorf("the %s overlay owns the keyboard but does not render in the %s view "+
+						"(looking for %q)", tc.mode, view.name, tc.want)
+				}
+			})
 		}
 	}
 }
@@ -390,8 +470,8 @@ func TestTableViewListsEveryVisibleTask(t *testing.T) {
 	m.view = viewTable
 	out := frame(m)
 	rows := m.tableRows()
-	if len(rows) != 33 {
-		t.Fatalf("expected all 33 tasks, got %d", len(rows))
+	if len(rows) != 34 {
+		t.Fatalf("expected all 34 tasks, got %d", len(rows))
 	}
 	// The cursor is a glyph, not only colour, so -plain can see it.
 	if !strings.Contains(out, "▌ "+rows[0].ID) {

@@ -36,6 +36,7 @@ type keyMap struct {
 	Sort       key.Binding
 	Done       key.Binding
 	Edit       key.Binding
+	Note       key.Binding
 	Reload     key.Binding
 	Sync       key.Binding
 	Tree       key.Binding
@@ -54,6 +55,31 @@ type keyMap struct {
 	Graph       key.Binding
 	GraphRoot   key.Binding
 	GraphRadius key.Binding
+
+	// The dep map's three keys. `T` is `t` (this task's dep tree) writ large —
+	// the map IS every dep tree at once, drawn with the same indent-and-name
+	// vocabulary — which is the uppercase/lowercase relation K/J/H/L already
+	// use: the shifted key is the bigger version of the unshifted one.
+	//
+	// MapScope reuses `z`, the graph's radius key, on purpose: in both
+	// full-screen views `z` cycles the one knob that decides how much of the
+	// dependency structure is on screen. MapGraph carries ⏎ AND the graph's
+	// own `S`/⇧space, so the gesture that opens a graph is the same letter
+	// everywhere; its help text differs because from here it is not a re-root.
+	Map      key.Binding
+	MapScope key.Binding
+	MapGraph key.Binding
+
+	// The slice panel's two epic-management keys (epicmode.go). EpicEdit is
+	// `m`-only on purpose: keys.Move is ("enter","m") and the panel's ⏎ SLICES,
+	// so reusing Move here would shadow the panel's own commit key. `e` was the
+	// obvious letter and is deliberately left alone — it means $EDITOR, and
+	// `furrow edit` takes an epic id, so that is the key epic body editing will
+	// want. EpicNew is uppercase for the same reason R/K/J/H/L are: the
+	// lowercase sibling (`a`) creates a TASK, and furrow has no `epic rm` to
+	// undo a slip with.
+	EpicEdit key.Binding
+	EpicNew  key.Binding
 }
 
 func defaultKeys() keyMap {
@@ -104,9 +130,12 @@ func defaultKeys() keyMap {
 		// `o` (order), not the `s` t-qve3 sketched: `s` is the slice panel, and
 		// the panel deliberately reaches the table view too — two owners for
 		// one key, and the panel got there first.
-		Sort:      key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "sort (table)")),
-		Done:      key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "done")),
-		Edit:      key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "$EDITOR")),
+		Sort: key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "sort (table)")),
+		Done: key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "done")),
+		Edit: key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "$EDITOR")),
+		// `n` next to `e`: the light body path (one appended paragraph,
+		// `furrow note`'s contract) beside the heavy one ($EDITOR full open).
+		Note:      key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "append note")),
 		Check:     key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "toggle")),
 		Add:       key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add item")),
 		Slice:     key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "slice panel")),
@@ -131,6 +160,16 @@ func defaultKeys() keyMap {
 		Graph:       key.NewBinding(key.WithKeys("shift+space", "S"), key.WithHelp("⇧space/S", "dep graph")),
 		GraphRoot:   key.NewBinding(key.WithKeys("enter"), key.WithHelp("⏎", "re-root here")),
 		GraphRadius: key.NewBinding(key.WithKeys("z", "1", "2", "3", "0"), key.WithHelp("z/1-3/0", "hop radius")),
+
+		Map:      key.NewBinding(key.WithKeys("T"), key.WithHelp("T", "dep map")),
+		MapScope: key.NewBinding(key.WithKeys("z"), key.WithHelp("z", "scope open/all")),
+		// "graph here", not "dep graph": TestHelpAdvertisesThePortableGraphKey
+		// reads the FIRST line carrying "dep graph" and requires it to name the
+		// portable half of the gesture, and that line is normal mode's.
+		MapGraph: key.NewBinding(key.WithKeys("enter", "S", "shift+space"), key.WithHelp("⏎/S", "graph here")),
+
+		EpicEdit: key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "manage box")),
+		EpicNew:  key.NewBinding(key.WithKeys("A"), key.WithHelp("A", "new box")),
 	}
 }
 
@@ -163,9 +202,9 @@ func (k keyMap) HelpSections(enterEdits bool) []helpSection {
 	return []helpSection{
 		{"normal mode", [][]key.Binding{
 			{k.Up, k.Down, k.Left, k.Right, k.NextCol, k.PrevCol, k.Top, k.Bottom},
-			{open, k.QuickUp, k.QuickDown, k.LaneBack, k.LaneFwd, k.Done, k.Edit, k.Add},
+			{open, k.QuickUp, k.QuickDown, k.LaneBack, k.LaneFwd, k.Done, k.Edit, k.Note, k.Add},
 			{k.Peek, k.Tree, k.PeekScroll, k.Filter, k.OnlyBlock, k.Slice, k.View, k.Sort},
-			{k.Graph, k.JumpBlock, k.JumpBack, k.Reload, k.Sync, k.Mouse, k.Cancel, k.Help, k.Quit},
+			{k.Graph, k.Map, k.JumpBlock, k.JumpBack, k.Reload, k.Sync, k.Mouse, k.Cancel, k.Help, k.Quit},
 		}},
 		{"move mode", [][]key.Binding{
 			// The arrows come first because they are how the lifted card is
@@ -180,13 +219,21 @@ func (k keyMap) HelpSections(enterEdits bool) []helpSection {
 		// The graph's full surface, not just its two custom bindings: sectioning
 		// turned this block into "your keys right now", so listing 2 of the ~10
 		// keys — and no way out — was an assertion, not an omission.
+		// The dep map's surface. Same rule as the graph's: every key onMapKey
+		// acts on, not just the ones unique to it — a full-screen mode's
+		// section is read as "your keys right now".
+		{"dep map", [][]key.Binding{
+			{k.Up, k.Down, k.Left, k.Right},
+			{k.MapGraph, k.MapScope},
+			{k.PeekScroll, k.Map, k.View, k.Cancel},
+		}},
 		{"graph", [][]key.Binding{
 			// Sharpest omission of the three: re-rooting answers "is already
 			// the root — move the selection first" while no listed key moved
 			// it. onGraphKey has always handled the arrows.
 			{k.Up, k.Down, k.Left, k.Right},
 			{k.GraphRoot, k.GraphRadius},
-			{k.JumpBack, k.PeekScroll},
+			{k.JumpBack, k.PeekScroll, k.Map},
 			{k.View, k.Cancel},
 		}},
 	}

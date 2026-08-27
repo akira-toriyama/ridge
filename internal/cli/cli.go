@@ -70,6 +70,7 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 		mock      = fs.Bool("mock", false, "serve the built-in fixture instead of the real furrow store")
 		readonly  = fs.Bool("readonly", false, "serve the fixture as a schema-gated read-only board (implies -mock)")
 		perflog   = fs.String("perflog", "", "append one 'op\\tms' line per furrow command to this file")
+		debuglog  = fs.String("debuglog", "", "append one JSONL event per input/mode-transition/apply/persist/status to this file (attach it to a bug report; keystrokes are recorded verbatim)")
 		benchload = fs.Bool("benchload", false, "load the real board once, print the latency breakdown, exit (read-only)")
 		// Both spellings are DEFINED rather than left to flag's built-in
 		// handler, which writes the usage block to stderr — explicitly asked-for
@@ -111,7 +112,7 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 		// refusal — two steps to learn the combination was never going to work.
 		for _, name := range []string{
 			"mock", "readonly", "dump", "demo", "plain", "cols", "rows",
-			"filter", "peek", "tree", "table", "light",
+			"filter", "peek", "tree", "table", "light", "debuglog",
 		} {
 			if set[name] {
 				_, _ = fmt.Fprintf(stderr,
@@ -151,6 +152,51 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 		return CodeUsage
 	}
 
+	// -debuglog records the interactive event loop, so an interactive fixture
+	// session (-mock/-readonly) is a legitimate subject — unlike -perflog
+	// above, whose only content is exec latency. -dump has no loop at all.
+	if set["debuglog"] && *dump {
+		_, _ = fmt.Fprintln(stderr,
+			"error: -debuglog records the interactive session; -dump renders one frame and exits")
+		return CodeUsage
+	}
+
+	// -perflog opens BEFORE -debuglog: openings after the first cannot be
+	// un-refused, so every refusal that can still happen must precede the
+	// first file the invocation creates. (perfHook on the fixture is the ""
+	// no-op — a typed -perflog was already refused above.)
+	perf, err := perfHook(*perflog)
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, "error: -perflog:", err)
+		return CodeUsage
+	}
+
+	var dbg *ui.DebugLog
+	if *debuglog != "" {
+		// Same contract as -perflog: the user chose where their own log goes
+		// (G304), append-open, and a log that cannot open is fatal — a debug
+		// run that silently records nothing is worse than no run. Unlike
+		// -perflog's op/ms pairs, this file carries every keystroke verbatim
+		// (titles, filter text), so it is created 0600 — sharing it is a copy
+		// the user makes on purpose, not a mode bit they forgot.
+		f, err := os.OpenFile(*debuglog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec
+		if err != nil {
+			_, _ = fmt.Fprintln(stderr, "error: -debuglog:", err)
+			return CodeUsage
+		}
+		dbg = ui.NewDebugLog(f)
+		// The debug timeline records the same exec pair -perflog persists
+		// (as persist/exec events), so both flags may be set — they feed
+		// different consumers, see perfHook.
+		inner := perf
+		perf = func(op string, d time.Duration) {
+			if inner != nil {
+				inner(op, d)
+			}
+			dbg.Exec(op, d)
+		}
+	}
+
 	var (
 		prov   board.Provider
 		loadMS int
@@ -166,11 +212,6 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 	case useMock:
 		prov = memstore.New()
 	default:
-		perf, err := perfHook(*perflog)
-		if err != nil {
-			_, _ = fmt.Fprintln(stderr, "error: -perflog:", err)
-			return CodeUsage
-		}
 		start := time.Now()
 		p, err := furrowstore.New(perf)
 		if err != nil {
@@ -188,6 +229,7 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 		Peek:   *peek,
 		Tree:   *tree,
 		LoadMS: loadMS,
+		Debug:  dbg,
 	})
 
 	if *dump {
@@ -258,6 +300,12 @@ func runBenchload(stdout, stderr io.Writer, extra func(op string, d time.Duratio
 // append-only "op\tms" line writer (the raw material for t-s86r's latency
 // record). Failure to open the file is fatal — a measurement run that
 // silently measures nothing is worse than no run.
+//
+// -perflog stays alongside -debuglog on purpose: this TSV is the latency
+// MEASUREMENT (2 columns, -benchload compatible, trivially awk-able), while
+// -debuglog is the session TIMELINE for bug reports — it carries the same
+// exec pair as persist/exec events, but buried in JSONL that a latency
+// analysis would have to dig out of.
 func perfHook(path string) (func(op string, d time.Duration), error) {
 	if path == "" {
 		return nil, nil

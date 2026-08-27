@@ -89,3 +89,51 @@ func TestEditDepsDemoProvesBothStates(t *testing.T) {
 		}
 	}
 }
+
+// The refs list stage, same contract as the two pins above: it exists only
+// mid-overlay, so this is the frame that would have shipped blank unseen.
+func TestEditRefsDemoProvesTheList(t *testing.T) {
+	m := New(memstore.New(), Options{})
+	frame, err := m.Dump(240, 60, "editrefs", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"edit t-9sa6",
+		"▌ docs/積載図-2026.md:18", // the cursor on the file:line row
+		"https://camp.example.com/loading-guide",
+		"⏎/x remove · a add · esc back",
+	} {
+		if !strings.Contains(frame, want) {
+			t.Errorf("-demo editrefs: %q is missing from the frame", want)
+		}
+	}
+}
+
+// The note input demo, line-scoped like TestEditInputDemoSeedsTheFocusedInput:
+// the one prompt line must hold the seeded value's TAIL (the cursor sits at
+// the end of a value wider than the 48-cell window).
+func TestNoteDemoSeedsTheFocusedInput(t *testing.T) {
+	m := New(memstore.New(), Options{})
+	frame, err := m.Dump(240, 60, "note", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var promptLines []string
+	for _, l := range strings.Split(frame, "\n") {
+		if strings.Contains(l, "> ") {
+			promptLines = append(promptLines, l)
+		}
+	}
+	if len(promptLines) != 1 {
+		t.Fatalf("want exactly one prompt line in the frame, got %d: %q", len(promptLines), promptLines)
+	}
+	if !strings.Contains(promptLines[0], "2案目から。") {
+		t.Errorf("the input line lost the seeded tail: %q", promptLines[0])
+	}
+	for _, want := range []string{"edit t-9sa6", "append note — one paragraph onto the body", "⏎ apply · esc back"} {
+		if !strings.Contains(frame, want) {
+			t.Errorf("-demo note: %q is missing from the frame", want)
+		}
+	}
+}

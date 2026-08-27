@@ -35,6 +35,8 @@ func (m *Model) View() tea.View {
 		content = m.renderTable()
 	case viewGraph:
 		content = m.renderGraph()
+	case viewMap:
+		content = m.renderMap()
 	default:
 		content = m.renderBoard()
 	}
@@ -90,21 +92,39 @@ func (m *Model) renderBoard() string {
 	if m.peekOpen {
 		layers = append(layers, m.peekLayer())
 	}
-	if m.mode == modeEdit {
-		if l := m.editLayer(); l != nil {
-			layers = append(layers, l)
-		}
-	}
-	if m.mode == modeAdd {
-		layers = append(layers, m.addLayer())
-	}
-	if m.fullHelp {
-		layers = append(layers, m.helpLayer())
-	}
+	layers = append(layers, m.modalLayers()...)
 	if g := m.ghostLayer(); g != nil {
 		layers = append(layers, g)
 	}
 	return m.fitFrame(lg.NewCompositor(layers...).Render())
+}
+
+// modalLayers is every overlay that OWNS THE KEYBOARD, listed ONCE. The board
+// and the table each compose their own frame, and this list used to be written
+// out in both — so an overlay added to one of them held the keyboard while
+// rendering nowhere at all in the other. That is the same failure the slice
+// panel's own comment in table.go records ("an invisible panel that still owned
+// the keyboard ate every arrow key"). A new mode belongs here, never in a caller.
+//
+// The help overlay is last because it sits above all of them (zHelp).
+func (m *Model) modalLayers() []*lg.Layer {
+	var out []*lg.Layer
+	switch m.mode {
+	case modeEdit:
+		if l := m.editLayer(); l != nil {
+			out = append(out, l)
+		}
+	case modeAdd:
+		out = append(out, m.addLayer())
+	case modeEpic:
+		if l := m.epicLayer(); l != nil {
+			out = append(out, l)
+		}
+	}
+	if m.fullHelp {
+		out = append(out, m.helpLayer())
+	}
+	return out
 }
 
 // minFilterInputW is the floor under the filter input when the chips squeeze
@@ -251,6 +271,8 @@ func (m *Model) modeBadge() string {
 		return th.chipAlt.Render("⟨ADD⟩")
 	case modeSlice:
 		return th.chipAlt.Render("⟨SLICE⟩")
+	case modeEpic:
+		return th.chipAlt.Render("⟨EPIC⟩")
 	}
 	return th.dim.Render("⟨NORMAL⟩")
 }
@@ -456,8 +478,8 @@ func (m *Model) helpLayer() *lg.Layer {
 
 	// One titled block per mode section, so a key is read under the mode that
 	// answers it. The current mode's heading is lit — the overlay opens from
-	// normal mode, move mode and the graph, so "which of these blocks is mine
-	// right now" is a real question with three answers. Mode outranks view:
+	// normal mode, move mode, the graph and the dep map, so "which of these
+	// blocks is mine right now" is a real question. Mode outranks view:
 	// a lift is a lift on whatever screen it started from.
 	now := "normal mode"
 	switch {
@@ -465,6 +487,8 @@ func (m *Model) helpLayer() *lg.Layer {
 		now = "move mode"
 	case m.view == viewGraph:
 		now = "graph"
+	case m.view == viewMap:
+		now = "dep map"
 	}
 
 	// Render each section as its own block first…

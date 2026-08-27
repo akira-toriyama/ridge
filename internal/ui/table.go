@@ -309,7 +309,11 @@ func (m *Model) renderTable() string {
 		plain[tcFlag] = pad(glyph, cols[tcFlag].w)
 		plain[tcVE] = pad(ve, cols[tcVE].w)
 		plain[tcTitle] = pad(t.Title, cols[tcTitle].w)
-		plain[tcRepo] = pad(t.ShortRepo(), cols[tcRepo].w)
+		repo := t.ShortRepo()
+		if repo == "" {
+			repo = "draft" // no repo attached = a draft (see card.go)
+		}
+		plain[tcRepo] = pad(repo, cols[tcRepo].w)
 		plain[tcEpic] = pad(epic, cols[tcEpic].w)
 		plain[tcLabels] = pad(strings.Join(t.Labels, ","), cols[tcLabels].w)
 		plain[tcDue] = pad(due, cols[tcDue].w)
@@ -330,7 +334,11 @@ func (m *Model) renderTable() string {
 			copy(styled, plain)
 			styled[tcID] = th.dim.Render(plain[tcID])
 			styled[tcFlag] = styleFor(th).Render(plain[tcFlag])
-			styled[tcRepo] = th.chipAlt.Render(plain[tcRepo])
+			if t.ShortRepo() == "" {
+				styled[tcRepo] = th.dim.Render(plain[tcRepo]) // the draft marker, not a repo
+			} else {
+				styled[tcRepo] = th.chipAlt.Render(plain[tcRepo])
+			}
 			styled[tcEpic] = th.muted.Render(plain[tcEpic])
 			styled[tcLabels] = th.muted.Render(plain[tcLabels])
 			styled[tcDue] = dueStyle.Render(plain[tcDue])
@@ -372,17 +380,10 @@ func (m *Model) renderTable() string {
 		// still owned the keyboard ate every arrow key (observed).
 		layers = append(layers, m.sliceLayer())
 	}
-	if m.mode == modeEdit {
-		if l := m.editLayer(); l != nil {
-			layers = append(layers, l)
-		}
-	}
-	if m.mode == modeAdd {
-		layers = append(layers, m.addLayer())
-	}
-	if m.fullHelp {
-		layers = append(layers, m.helpLayer())
-	}
+	// One list, shared with the board (view.go): a modal that owns the keyboard
+	// must render in BOTH views, and two hand-kept lists is how one of them
+	// ends up invisible.
+	layers = append(layers, m.modalLayers()...)
 	return m.fitFrame(lg.NewCompositor(layers...).Render())
 }
 

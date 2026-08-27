@@ -189,11 +189,12 @@ func TestQueryMatchesFixture(t *testing.T) {
 		{q: "id:t-jv3j", want: []string{"t-jv3j"}},
 		{q: "epic:e-fw2m", min: 18},
 		{q: "has:epic", min: 26},
-		{q: "is:unfiled", min: 7}, // 33 tasks - 26 filed under the four boxes; epics themselves are no tasks
+		{q: "is:unfiled", min: 8}, // 34 tasks - 26 filed under the four boxes; epics themselves are no tasks
 		{q: "repo:kyushu-trip", min: 27},
 		{q: "label:bbq", min: 9},
 		{q: "no:label", min: 1},
-		{q: "no:repo", want: []string{}}, // the fixture has no drafts
+		{q: "no:repo", want: []string{"t-dg7k"}}, // exactly the fixture's one draft
+		{q: "is:draft", want: []string{"t-dg7k"}},
 		// Of the fixture's four dues, only t-jv3j (2026-07-31) is past the
 		// pinned clock and still open.
 		{q: "is:overdue", want: []string{"t-jv3j"}},
@@ -431,22 +432,22 @@ func TestQueryPresenceVocabularyIsFurrows(t *testing.T) {
 		field    string
 		has, not int
 	}{
-		{"deps", 12, 21},
-		{"refs", 0, all},
+		{"deps", 12, 22},
+		{"refs", 1, all - 1}, // t-9sa6 carries the two documented ref forms
 		{"due", 4, all - 4},
 		{"closed", 9, all - 9},
 		{"reviewed", 0, all},
-		{"label", 18, 15},
-		{"repo", all, 0},
+		{"label", 18, 16},
+		{"repo", all - 1, 1}, // t-dg7k, the fixture's one draft
 		{"epic", 26, all - 26},
 		{"checklist", 8, all - 8},
 		// value/effort/body are presence fields too. They used to be "covered"
 		// by a `has + no == all` check below, which is the exact tautology this
 		// file condemns elsewhere: `no:` is the literal negation of `has:`, so
 		// it holds for any predicate at all, including a broken one.
-		{"value", 32, 1},
-		{"effort", 32, 1},
-		{"body", 33, 0},
+		{"value", 32, 2},
+		{"effort", 32, 2},
+		{"body", all, 0},
 	}
 	for _, tc := range cases {
 		t.Run(tc.field, func(t *testing.T) {

@@ -16,15 +16,23 @@ import (
 // it records every persist in call order and serves a rebuilt "store truth"
 // on Reload, so a rollback is observable as the board reverting.
 type scriptedProvider struct {
-	mu      sync.Mutex
-	truth   func() *board.Board
-	current *board.Board
-	calls   []string
-	moves   []scriptedMove
-	queries []string
-	qIDs    []string // Query's scripted verdict
-	moveErr error
-	addErr  error
+	mu        sync.Mutex
+	truth     func() *board.Board
+	current   *board.Board
+	calls     []string
+	moves     []scriptedMove
+	queries   []string
+	qIDs      []string // Query's scripted verdict
+	moveErr   error
+	addErr    error
+	addFailAt int
+	addCalls  int
+	// epicErr is returned by the epicFailAt'th epic write (1-based; 0 = never);
+	// epicPrev is what EpicDeactivate suggests.
+	epicErr    error
+	epicFailAt int
+	epicCalls  int
+	epicPrev   board.EpicPrevious
 }
 
 type scriptedMove struct{ id, lane, before, after string }
@@ -69,11 +77,16 @@ func (p *scriptedProvider) PersistCheckRm(id string, i int) error {
 	return nil
 }
 
+// addFailAt is 1-based and 0 means "every call fails when addErr is set" — the
+// shape most tests want. Scripting a specific call matters for the drain where
+// one add LANDS and the next is refused: the Cmd runs long after the enqueue, so
+// flipping addErr between enqueues would refuse both.
 func (p *scriptedProvider) Add(title string, _ board.AddOptions) (string, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.calls = append(p.calls, "add "+title)
-	if p.addErr != nil {
+	p.addCalls++
+	if p.addErr != nil && (p.addFailAt == 0 || p.addCalls == p.addFailAt) {
 		return "", p.addErr
 	}
 	return "t-new", nil
@@ -106,6 +119,57 @@ func (p *scriptedProvider) PersistBody(id, _ string) error {
 	defer p.mu.Unlock()
 	p.calls = append(p.calls, "body "+id)
 	return nil
+}
+
+func (p *scriptedProvider) PersistNote(id, _ string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.calls = append(p.calls, "note "+id)
+	return nil
+}
+
+// The epic family is store-first: it records the call and, when the scenario
+// asks for it, refuses. epicFailAt is 1-based, so a test can script "the first
+// lands, the second is refused" — the drain shape the landed re-read exists for.
+func (p *scriptedProvider) epicCall(label string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.calls = append(p.calls, label)
+	p.epicCalls++
+	if p.epicErr != nil && p.epicCalls == p.epicFailAt {
+		return p.epicErr
+	}
+	return nil
+}
+
+func (p *scriptedProvider) EpicAdd(title string, _ board.EpicAddOptions) (string, error) {
+	if err := p.epicCall("epicadd " + title); err != nil {
+		return "", err
+	}
+	return "e-new", nil
+}
+
+func (p *scriptedProvider) EpicSet(id string, _ board.EpicPatch) error {
+	return p.epicCall("epicset " + id)
+}
+
+func (p *scriptedProvider) EpicActivate(id, reason string) error {
+	return p.epicCall("epicactivate " + id + " reason=" + reason)
+}
+
+func (p *scriptedProvider) EpicDeactivate(id string) (board.EpicPrevious, error) {
+	if err := p.epicCall("epicdeactivate " + id); err != nil {
+		return board.EpicPrevious{}, err
+	}
+	return p.epicPrev, nil
+}
+
+func (p *scriptedProvider) EpicDepAdd(id, dep string) error {
+	return p.epicCall("epicdep " + id + " " + dep)
+}
+
+func (p *scriptedProvider) EpicDepRm(id, dep string) error {
+	return p.epicCall("epicdeprm " + id + " " + dep)
 }
 
 func scriptedBoard() *board.Board {

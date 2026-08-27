@@ -87,12 +87,25 @@ func (p *emptyProvider) PersistMove(_, _, _, _ string) ([]string, error) {
 func (p *emptyProvider) PersistDone(_ string) error                         { return nil }
 func (p *emptyProvider) PersistCheck(_ string, _ int, _ bool) error         { return nil }
 func (p *emptyProvider) PersistBody(_, _ string) error                      { return nil }
+func (p *emptyProvider) PersistNote(_, _ string) error                      { return nil }
 func (p *emptyProvider) PersistFields(_ string, _ board.FieldPatch) error   { return nil }
 func (p *emptyProvider) PersistCheckAdd(_, _ string) error                  { return nil }
 func (p *emptyProvider) PersistCheckRm(_ string, _ int) error               { return nil }
 func (p *emptyProvider) PersistCheckReword(_ string, _ int, _ string) error { return nil }
 func (p *emptyProvider) PersistDepAdd(_, _ string) error                    { return nil }
 func (p *emptyProvider) PersistDepRm(_, _ string) error                     { return nil }
+func (p *emptyProvider) EpicSet(string, board.EpicPatch) error              { return nil }
+func (p *emptyProvider) EpicActivate(_, _ string) error                     { return nil }
+func (p *emptyProvider) EpicDepAdd(_, _ string) error                       { return nil }
+func (p *emptyProvider) EpicDepRm(_, _ string) error                        { return nil }
+
+func (p *emptyProvider) EpicAdd(string, board.EpicAddOptions) (string, error) {
+	return "", fmt.Errorf("no store")
+}
+
+func (p *emptyProvider) EpicDeactivate(string) (board.EpicPrevious, error) {
+	return board.EpicPrevious{}, nil
+}
 func (p *emptyProvider) Add(string, board.AddOptions) (string, error) {
 	return "", fmt.Errorf("no store")
 }

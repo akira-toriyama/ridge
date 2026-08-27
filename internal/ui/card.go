@@ -127,6 +127,11 @@ func cardLines(t *board.Task, g *board.Graph, th *theme, w int) []string {
 	left := th.dim.Render(t.ID)
 	if r := t.ShortRepo(); r != "" {
 		left += " " + th.chipAlt.Render(r)
+	} else {
+		// No repo attached = a draft, furrow's definition. The board reads
+		// drafts (load's empty -r) that `furrow ls` hides by default, so the
+		// card must SAY so — an absent repo chip alone reads as nothing.
+		left += " " + th.dim.Render("draft")
 	}
 	// The epic membership chip, resolved to its title; a stuck epic's glyph
 	// turns warn (EpicInfo.Stuck is furrow's own verdict). joinEnds truncates

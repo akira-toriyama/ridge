@@ -28,8 +28,6 @@ import (
 
 const (
 	graphRowHdr       = 1 // focus / radius / counts / legend
-	graphTop          = 2 // first canvas row
-	graphStripH       = 8 // the selected-node detail strip, border included
 	graphMinNodeLines = 1
 	graphMaxNodeLines = 3
 )
@@ -47,35 +45,21 @@ func radiusLabel(r int) string {
 
 // graphCanvasH is how many rows the drawing itself may use.
 func (m *Model) graphCanvasH() int {
-	return maxInt(1, m.h-graphTop-m.graphStripHeight()-footerH)
-}
-
-// graphStripHeight shrinks the detail strip on a short terminal rather than
-// letting it push the graph off the screen entirely.
-func (m *Model) graphStripHeight() int {
-	if m.h < 24 {
-		return minInt(graphStripH, maxInt(0, m.h-graphTop-footerH-3))
-	}
-	return graphStripH
+	return maxInt(1, m.h-fullTop-m.stripHeight()-footerH)
 }
 
 // buildGraph lays out the ego graph for the current focus at the current
-// radius. It is called from the render path and from every graph key handler,
-// so navigation always walks the geometry that is actually on screen.
+// radius.
+//
+// The key handlers do NOT call it — they read the cached m.graphLay, which
+// renderGraph rewrites on every frame. That holds only because bubbletea calls
+// View() after every Update, so a keystroke walks the geometry the previous
+// frame drew. A handler that both invalidates the layout AND then navigates
+// would be reading a stale one.
 func (m *Model) buildGraph() *egoLayout {
 	avail := maxInt(1, m.w-2)
 	cols := clamp(avail/graphNodeMinW, 1, graphHardCols)
-	hidden := func(id string) bool {
-		// effectiveQuery, not qRaw: the slice term filters the graph exactly
-		// as it filters the board — taskVisible's contract, which this
-		// predicate mirrors for off-board ids.
-		if m.effectiveQuery() == "" || m.pinned[id] || m.qMatched == nil {
-			return false
-		}
-		t := m.b.Task(id)
-		return t != nil && !m.qMatched[id]
-	}
-	l := buildEgo(m.g, m.graphFocus, m.graphRadius, cols, hidden)
+	l := buildEgo(m.g, m.graphFocus, m.graphRadius, cols, m.taskHidden)
 	l.place(avail)
 	return l
 }
@@ -152,7 +136,7 @@ func (m *Model) renderGraph() string {
 		pad(m.graphHeader(l, len(bands) > canvasH), m.w),
 		strings.Join(canvas, "\n"),
 	}
-	if sh := m.graphStripHeight(); sh > 0 {
+	if sh := m.stripHeight(); sh > 0 {
 		parts = append(parts, m.graphStrip(l, sh))
 	}
 	parts = append(parts, pad(m.statusLine(), m.w))
@@ -178,7 +162,8 @@ func (m *Model) graphTitleBar(l *egoLayout) string {
 	left := th.title.Render("furrow board") + th.crumb.Render("  ·  ") +
 		th.tabOff.Render("Board") + th.dim.Render(" │ ") +
 		th.tabOff.Render("Table") + th.dim.Render(" │ ") +
-		th.tabOn.Render("Graph")
+		th.tabOn.Render("Graph") + th.dim.Render(" │ ") +
+		th.tabOff.Render("Map")
 	// `? help` here too: the graph is a full-screen mode, so once its footer
 	// went this row became the only pointer to the key surface from inside it.
 	right := th.crumb.Render(fmt.Sprintf("%d nodes · %d edges  ·  ",
@@ -381,116 +366,17 @@ func (m *Model) graphNodeStyle(n *egoNode, t *board.Task) lg.Style {
 	return th.graphNode
 }
 
-// graphStrip is the selected node's full record, uncut.
-//
-// The layout research flagged LABELLING as the hard half of a graph view, and
-// it is right: a box can only ever show a truncated title, so the graph would
-// be a picture you cannot read the captions of. The strip is the answer — the
-// selection's whole title and metadata, wrapped, never elided, always on
-// screen, so the boxes are free to be a MAP rather than a document.
+// graphStrip resolves the graph's selection to a task and hands it to the
+// shared detail strip.
 func (m *Model) graphStrip(l *egoLayout, h int) string {
-	th := m.th
-	inner := maxInt(10, m.w-4)
 	n := l.Node(m.graphSel)
 	if n == nil {
 		n = l.FocusNode()
 	}
-	var t *board.Task
-	if n != nil {
-		t = m.b.Task(n.ID)
+	if n == nil {
+		return m.taskStrip(nil, false, h)
 	}
-	if t == nil {
-		return th.peek.Width(m.w).Height(h).Render(th.dim.Render("no node selected"))
-	}
-
-	// Two columns when there is room: identity and prose on the left, the
-	// resolved dep lists on the right. At 240+ this is free real estate.
-	leftW := inner
-	rightW := 0
-	if inner >= 120 {
-		rightW = inner / 2
-		leftW = inner - rightW - 3
-	}
-
-	var left []string
-	head := th.peekHdr.Render(t.ID) + " " + th.chipAlt.Render("["+t.Status+"]")
-	if m.g.Actionable(t.ID) {
-		head += " " + th.ok.Render(glyphActionable+" actionable")
-	}
-	if nb := len(m.g.BlockedBy(t.ID)); nb > 0 {
-		head += " " + th.danger.Render(fmt.Sprintf("%s blocked by %d", glyphBlocked, nb))
-	}
-	if n.Hidden {
-		head += " " + th.warn.Render("· hidden by the current filter")
-	}
-	left = append(left, head)
-	// The FULL title, wrapped, never truncated — that is the strip's whole job.
-	for _, line := range wrapLines(t.Title, leftW) {
-		left = append(left, th.base.Render(line))
-	}
-	var meta []string
-	if t.Value > 0 || t.Effort > 0 {
-		meta = append(meta, fmt.Sprintf("value %d", t.Value), fmt.Sprintf("effort %d", t.Effort))
-	}
-	if len(t.Repos) > 0 {
-		meta = append(meta, "repos "+strings.Join(t.Repos, ","))
-	} else {
-		meta = append(meta, "draft (no repo)")
-	}
-	if len(t.Labels) > 0 {
-		meta = append(meta, "labels "+strings.Join(t.Labels, ","))
-	}
-	if t.Epic != "" {
-		// Resolve the way the card, the table column and the peek all do. An
-		// epic is an entity; the raw e- id in a frame is a leak the repo
-		// already asserts against in two other views.
-		label := t.Epic
-		if e := m.b.Epic(t.Epic); e != nil {
-			label = e.Title
-		}
-		meta = append(meta, "epic "+label)
-	}
-	if d, tot := t.CheckProgress(); tot > 0 {
-		meta = append(meta, fmt.Sprintf("checklist %d/%d", d, tot))
-	}
-	meta = append(meta, "updated "+ago(t.Updated))
-	for _, line := range strings.Split(wrapJoin(meta, " · ", leftW), "\n") {
-		left = append(left, th.muted.Render(line))
-	}
-
-	var right []string
-	if rightW > 0 {
-		up, down := m.g.BlockedBy(t.ID), m.g.OpenBlocks(t.ID)
-		right = append(right, th.muted.Render(fmt.Sprintf("blocked by %d open · blocks %d open",
-			len(up), len(down))))
-		for _, id := range t.Deps {
-			right = append(right, "↑ "+m.depLine(id, rightW-2))
-		}
-		for _, id := range m.g.Blocks(t.ID) {
-			right = append(right, "↓ "+m.depLine(id, rightW-2))
-		}
-		if len(t.Deps) == 0 && len(m.g.Blocks(t.ID)) == 0 {
-			right = append(right, th.dim.Render("— no dependency edges —"))
-		}
-	}
-
-	body := h - 2
-	rows := make([]string, 0, body)
-	for i := 0; i < body; i++ {
-		lseg, rseg := "", ""
-		if i < len(left) {
-			lseg = left[i]
-		}
-		if i < len(right) {
-			rseg = right[i]
-		}
-		if rightW == 0 {
-			rows = append(rows, pad(lseg, inner))
-			continue
-		}
-		rows = append(rows, pad(lseg, leftW)+"   "+pad(rseg, rightW))
-	}
-	return th.peek.Width(m.w).Height(h).Render(strings.Join(rows, "\n"))
+	return m.taskStrip(m.b.Task(n.ID), n.Hidden, h)
 }
 
 // ---- navigation -------------------------------------------------------------
@@ -590,6 +476,7 @@ func (m *Model) openGraph() {
 	m.graphFocus, m.graphSel = t.ID, t.ID
 	m.graphScroll = 0
 	m.graphStack = nil
+	m.graphFrom = viewBoard
 	m.view = viewGraph
 	m.note("graph rooted on %s — ⏎ re-roots on the selected node · z cycles radius · esc returns", t.ID)
 }
@@ -646,6 +533,24 @@ func (m *Model) cycleGraphRadius() {
 // the graph walk ended on — the walk was navigation, so it should have moved
 // you.
 func (m *Model) closeGraph() {
+	// Back to whichever view opened it. From the dep map the walk was a detour
+	// INSIDE the overview, so landing on the board would throw away the thing
+	// the reader was actually reading.
+	if m.graphFrom == viewMap {
+		m.graphFrom = viewBoard
+		m.view = viewMap
+		if l := m.graphLay; l != nil {
+			if n := l.Node(m.graphSel); n != nil && n.Kind == egoReal {
+				// Walking a graph and stopping on a node IS a choice, so the
+				// map cursor that comes back from it is one the board may
+				// follow — unlike the fallback row openMap had to invent.
+				m.mapSel, m.mapMoved = n.ID, true
+			}
+		}
+		m.mapScroll = 0
+		m.note("dep map — the cursor followed the graph walk")
+		return
+	}
 	m.view = viewBoard
 	// graphLay is written only by renderGraph, so a driver that calls Update
 	// without View — every headless harness in this package — reaches here with
