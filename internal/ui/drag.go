@@ -403,6 +403,32 @@ func (m *Model) onWheel(msg tea.MouseWheelMsg) {
 	}
 }
 
+// dropDragIfCardLeftLane cancels an armed drag whose card is no longer in the
+// lane it was grabbed in — moved or closed by a re-read, a reconcile, or a
+// keyboard gesture landing mid-drag (`d` is the single-key reproduction).
+// commitMove would refuse the release anyway; cancelling HERE, at the
+// recompute that removed the card, takes the frame's promise (ghost, drop
+// indicator, DRAG status) down with it — rule 4's invariant that the frame
+// never promises a drop the release refuses. A card the FILTER hid is
+// deliberately NOT cancelled: it is still in the lane, and commitMove accepts
+// its drop for the same reason.
+func (m *Model) dropDragIfCardLeftLane() {
+	if !m.drag.armed || m.drag.cancelled {
+		return
+	}
+	if t := m.b.Task(m.drag.id); t != nil && t.Status == m.drag.from {
+		return
+	}
+	id, from := m.drag.id, m.drag.from
+	m.drag.cancelled, m.drag.moved = true, false
+	m.drag.scrollDir, m.drag.scrollSeq = 0, m.drag.scrollSeq+1
+	// Same rule as cancelMove: a refusal the user has not seen yet outranks
+	// the cancellation note.
+	if !m.statusErr {
+		m.note("%s left %s mid-drag — drag cancelled", id, from)
+	}
+}
+
 // cancelDrag is Esc while a button is down. The drag stops immediately but stays
 // armed so the release that inevitably follows is swallowed.
 func (m *Model) cancelDrag() bool {

@@ -180,7 +180,9 @@ func (m *Model) followDrop() {
 //
 // The card's own slot is NOT a parameter: the board can recompose under a held
 // gesture — the post-persist reconcile and the rollback re-read both land as
-// async messages, and neither cancels a drag or a lifted card — so an index a
+// async messages, and neither cancels a lifted card (a drag, too, survives any
+// recompose that keeps its card in the grabbed lane; recompute cancels only a
+// drag whose card LEFT it) — so an index a
 // caller recorded at press/lift time can be stale by commit time, and a stale
 // index shifts AdjustDropIndex's boundary: a drop into the card's own slot
 // writes one slot off (t-raw1). The slot is therefore derived here, against

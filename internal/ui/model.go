@@ -333,6 +333,7 @@ func (m *Model) recompute() {
 			m.epic.listIdx = clamp(m.epic.listIdx, 0, maxInt(0, len(m.epicListRows(box))-1))
 		}
 	}
+	m.dropDragIfCardLeftLane()
 	m.ensureVisible()
 	m.syncPeek()
 }
