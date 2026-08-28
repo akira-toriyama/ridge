@@ -130,7 +130,7 @@ func (m *Model) frameRows(t *testing.T, w, h int) []string {
 // nothing you do touches disk.
 func TestReadOnlyBoardKeepsItsWarningInTheOpeningFrame(t *testing.T) {
 	ro := memstore.New().Board()
-	gated := board.NewStoreBoard(ro.Lanes(), ro.Tasks(), ro.Epics(), false, "board-behind")
+	gated := board.NewStoreBoard(ro.Lanes(), ro.Tasks(), ro.EpicsAll(), false, "board-behind")
 	p := newScriptedProvider(func() *board.Board { return gated }) // Live() is true
 
 	m := New(p, Options{})

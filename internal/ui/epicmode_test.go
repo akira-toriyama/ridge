@@ -912,10 +912,13 @@ func TestEpicDemoFramesCarryWhatTheyExistFor(t *testing.T) {
 		// The menu: the derived line furrow owns, and the activate precondition.
 		{"epic", []string{"box e-c4mt", "0/1 done", "no — slot held by e-fw2m",
 			"standing", "pinned", "meta", "origin,season"}},
-		// The deps list: BOTH resolutions in one frame — a still-open box
-		// resolved to id+progress+title, and a dep furrow already resolved away.
-		{"epiclist", []string{"open this box after those close", "e-fw2m", "(6/18)",
-			"e-2b7h", "(satisfied)"}},
+		// The deps list: all THREE resolutions in one frame, each with the word
+		// furrow uses for it. The ids are paired with their words on purpose —
+		// asserting "e-2b7h" and "(closed)" separately passes even when they
+		// land on different rows, which is how the old two-way version of this
+		// test went vacuous the moment a third row appeared.
+		{"epiclist", []string{"open this box after those close", "e-fw2m (6/18)",
+			"夏キャンプ 2026 — 装備の棚卸しと積み方の確定 (closed)", "e-x0k9 (missing)"}},
 		// The reason input: it is the confirm step AND the audit trail.
 		{"epicreason", []string{"activate — who asked, and why", "ユーザー依頼", "⏎ apply"}},
 		// The deactivate gate, reachable only on the active box.

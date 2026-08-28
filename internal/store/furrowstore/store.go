@@ -116,7 +116,7 @@ type taskJSON struct {
 	Due      *time.Time `json:"due"`
 }
 
-// epicJSON is one `furrow epic ls --json` row, and it doubles as the epic
+// epicJSON is one `furrow epic ls --all --json` row, and it doubles as the epic
 // mutation replies' payload — minus progress/stuck, which the add reply does
 // not carry. The reply shapes differ per verb (measured on furrow dev
 // 60074b8): `epic add` answers ONE bare row with a top-level id, while
@@ -133,7 +133,11 @@ type epicJSON struct {
 	Labels   []string          `json:"labels"`
 	Repos    []string          `json:"repos"`
 	Meta     map[string]string `json:"meta"`
-	Deps     []string          `json:"deps"`
+	// closed is null on an open box and an RFC3339 stamp on a closed one; it
+	// is on the wire whether or not --all is passed, so it needs no scope of
+	// its own.
+	Closed *time.Time `json:"closed"`
+	Deps   []string   `json:"deps"`
 	// open_deps is furrow-derived, like progress and stuck: the deps still
 	// waiting, with deps on closed epics already resolved away (omitted
 	// entirely when none remain). ridge never recomputes it.
@@ -151,7 +155,8 @@ func (e epicJSON) toEpicInfo() board.EpicInfo {
 		ID: e.ID, Title: e.Title, Goal: e.Goal,
 		Active: e.Active, Standing: e.Standing, Pinned: e.Pinned,
 		Labels: e.Labels, Repos: e.Repos, Meta: e.Meta,
-		Done: e.Progress.Done, Total: e.Progress.Total,
+		Closed: fromPtr(e.Closed),
+		Done:   e.Progress.Done, Total: e.Progress.Total,
 		Stuck: e.Stuck, Deps: e.Deps, OpenDeps: e.OpenDeps,
 	}
 }
@@ -161,7 +166,9 @@ func (e epicJSON) toEpicInfo() board.EpicInfo {
 var wipDefaults = map[string]int{"ready": 2, "in-progress": 1}
 
 // load runs the three reads concurrently — lane vocabulary, every task
-// (drafts included: that needs the empty -r), every epic — and assembles a
+// (drafts included: that needs the empty -r), every epic OPEN OR CLOSED (that
+// needs --all, and it is why board.Board carries two epic populations rather
+// than one) — and assembles a
 // Board. Measured on the real 914-task store: 63-77ms wall warm, 181ms cold,
 // bodies included.
 func (p *Store) load() (*board.Board, error) {
@@ -191,7 +198,7 @@ func (p *Store) load() (*board.Board, error) {
 	}()
 	go func() {
 		defer wg.Done()
-		out, err := p.c.run("epic-ls", "epic", "ls", "-r", "", "--json")
+		out, err := p.c.run("epic-ls", "epic", "ls", "-r", "", "--all", "--json")
 		if err == nil {
 			err = json.Unmarshal(out, &boxes)
 		}
@@ -556,9 +563,8 @@ func (p *Store) PersistDepRm(id, dep string) error {
 // workstation build was the OLDER one), and a flag that exists on only one of
 // them is a green local test and a red contract job.
 //
-// `epic done`/`reopen` stay absent from this family even though the pin now
-// carries both: ridge's epic read is open-only, so a closed box leaves the
-// board entirely and `done` alone is a one-way door (t-sq02).
+// `epic done`/`reopen` are not in this family yet: the pin carries both and the
+// read now serves closed boxes, so only the UI surface is missing (t-sq02).
 
 // epicEnvelope is the {before,after,changed} reply every epic mutation answers
 // with. Only `previous` is read: `after` would be a second, narrower source of

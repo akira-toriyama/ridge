@@ -119,12 +119,19 @@ var boardLanes = []Lane{
 //     present the flag as a toggle that always lands.
 //   - Derived — Done, Total, Stuck, OpenDeps. furrow computes these and ridge
 //     consumes them verbatim; recomputing any of them here would be the
-//     front-end logic this repo exists to not have — and would silently break
-//     the day the epic read gains a scope.
+//     front-end logic this repo exists to not have. Closed makes OpenDeps look
+//     re-derivable, and over this read it genuinely is — measured, a dep is in
+//     open_deps exactly when it resolves to a box that is not closed. Deriving
+//     it anyway would still be wrong: it would be a SECOND rule, kept in step
+//     with `furrow epic dep --list` by nothing but attention. The fixture
+//     tests assert the equivalence; the code does not implement it.
+//   - Closed — the closing stamp, zero for an open box.
 //
-// There is no Closed field because the read is OPEN-ONLY (`epic ls` without
-// --all): every box that reaches this struct is open. Serving closed boxes is
-// t-sq02's, together with the `epic done`/`reopen` pair that needs them.
+// The read is `epic ls --all`, so the CLOSED population is on the board too.
+// Without it a dep on a finished box is indistinguishable from a dangling id,
+// and `epic reopen` has nothing to name. WHICH boxes a surface shows is that
+// surface's own call: Epics() is the open ones, EpicsAll() is everything, and
+// the split is deliberate — see Epics().
 //
 // Deps is the epic-to-epic edge furrow's `epic dep` records: "open this box
 // after those close". It is INFORMATION, not enforcement — furrow itself
@@ -143,6 +150,8 @@ type EpicInfo struct {
 	Labels []string
 	Repos  []string
 	Meta   map[string]string // free-form; furrow stores it and never interprets it
+
+	Closed time.Time // zero = open
 
 	Done     int
 	Total    int
@@ -195,42 +204,66 @@ func (b *Board) ActiveHolder(id string) string {
 // ORDER is Task.Priority — there is no separate ordering table to fall out of
 // sync with, exactly as in a real furrow store.
 type Board struct {
-	tasks    []*Task
-	lanes    []Lane
-	epics    []EpicInfo
-	epicByID map[string]*EpicInfo
-	writable bool
-	schema   string // furrow's schema_state; "" for the fixture
+	tasks     []*Task
+	lanes     []Lane
+	epics     []EpicInfo
+	epicsOpen []EpicInfo // the Closed-zero subset of epics, in the same order
+	epicByID  map[string]*EpicInfo
+	writable  bool
+	schema    string // furrow's schema_state; "" for the fixture
 }
 
 // NewBoard builds a fixture-lane board that is always writable.
 func NewBoard(tasks []*Task, epics ...EpicInfo) *Board {
 	b := &Board{tasks: tasks, lanes: append([]Lane(nil), boardLanes...),
 		epics: epics, writable: true}
-	b.epicByID = make(map[string]*EpicInfo, len(epics))
-	for i := range b.epics {
-		b.epicByID[b.epics[i].ID] = &b.epics[i]
-	}
+	b.indexEpics()
 	return b
 }
 
-// Epics returns the board's epic entities.
-func (b *Board) Epics() []EpicInfo { return b.epics }
+// indexEpics builds the id index and the open subset from b.epics. Both are
+// built ONCE per board rather than filtered per call: the slice panel rebuilds
+// its rows every frame, and the board is rebuilt after every mutation anyway.
+func (b *Board) indexEpics() {
+	b.epicByID = make(map[string]*EpicInfo, len(b.epics))
+	b.epicsOpen = make([]EpicInfo, 0, len(b.epics))
+	for i := range b.epics {
+		b.epicByID[b.epics[i].ID] = &b.epics[i]
+		if b.epics[i].Closed.IsZero() {
+			b.epicsOpen = append(b.epicsOpen, b.epics[i])
+		}
+	}
+}
+
+// Epics is the OPEN boxes, in furrow's order. This is the default population,
+// and widening it is a silent bug rather than a compile error: the task edit
+// overlay picks a box to file under by INDEXING this slice, so a closed box
+// slipped in here both offers a finished box as a destination and shifts every
+// id after it. Surfaces that must see a closed box — resolving a dep, reopening
+// one — ask for EpicsAll.
+//
+// It is a precomputed COPY, so it does not alias Epic(id). Nothing in the app
+// writes through that pointer (the store swaps a fresh board in for every epic
+// write), but a test that does will not see its edit here.
+func (b *Board) Epics() []EpicInfo { return b.epicsOpen }
+
+// EpicsAll is every box the read served, open and closed, in furrow's order
+// (active first, then pinned open, then open by id, then closed).
+func (b *Board) EpicsAll() []EpicInfo { return b.epics }
 
 // NewStoreBoard assembles a snapshot of a real furrow store: its own lane
 // vocabulary (not the fixture's), the epic entities, and the write pre-flight
 // from `furrow board`.
 func NewStoreBoard(lanes []Lane, tasks []*Task, epics []EpicInfo, writable bool, schema string) *Board {
 	b := &Board{tasks: tasks, lanes: lanes, epics: epics, writable: writable, schema: schema}
-	b.epicByID = make(map[string]*EpicInfo, len(epics))
-	for i := range b.epics {
-		b.epicByID[b.epics[i].ID] = &b.epics[i]
-	}
+	b.indexEpics()
 	return b
 }
 
 // Epic resolves an e- id to its entity, nil when unknown (a stale membership
-// renders as the raw id rather than vanishing).
+// renders as the raw id rather than vanishing). It resolves CLOSED boxes too —
+// that is what lets a surface say "closed" instead of guessing at a dep it
+// cannot see.
 func (b *Board) Epic(id string) *EpicInfo { return b.epicByID[id] }
 
 // Writable reports the store's write pre-flight; a fixture board is always

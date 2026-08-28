@@ -105,11 +105,22 @@ func (m *Model) peekContent(w int) string {
 	// on", in its wording. Gated on furrow's derived open_deps, the same
 	// field the slice panel counts for →N, so the two surfaces cannot
 	// disagree about whether a box still waits; with every dep satisfied
-	// there is no line, exactly as there is no arrow. A dep outside
-	// open_deps is rendered "(satisfied)" — furrow's word for a dep on a
-	// closed epic — never "(closed)": the open-only read cannot tell a
-	// closed dep from a dangling one (furrow lints the latter as
-	// epic-dep-missing), so ridge does not claim to.
+	// there is no line, exactly as there is no arrow.
+	//
+	// Three states, and furrow names all three itself: `epic dep --list`
+	// prints [open], [closed] and [?]. Over the --all read they are decidable
+	// from what the board holds — measured on v5.0.0 with one box carrying all
+	// three at once, open_deps was exactly the OPEN dep, excluding both the
+	// closed and the dangling one. So this renders (closed) for a resolved-away
+	// dep the board holds as closed, and (missing) — furrow's lint code is
+	// epic-dep-missing, at severity ERROR — for one it cannot resolve at all.
+	// Calling that second one "satisfied" would put a reassuring word on a
+	// broken reference.
+	//
+	// "(satisfied)" survives for the case the measurement says cannot happen:
+	// furrow settled a dep whose box this board still shows OPEN. It has no
+	// fixture site because no board furrow produces has one, and it says the
+	// weakest true thing rather than inventing a reason.
 	if e := m.b.Epic(t.Epic); e != nil && len(e.OpenDeps) > 0 {
 		open := make(map[string]bool, len(e.OpenDeps))
 		for _, d := range e.OpenDeps {
@@ -119,6 +130,13 @@ func (m *Model) peekContent(w int) string {
 		for _, d := range e.Deps {
 			de := m.b.Epic(d)
 			switch {
+			case !open[d] && de == nil:
+				parts = append(parts, d+" (missing)")
+			case !open[d] && !de.Closed.IsZero():
+				// Resolved, so the numbers and the title are available — and
+				// they are the half a CJK ellipsis must not eat, exactly as on
+				// the waiting rows below.
+				parts = append(parts, fmt.Sprintf("%s (%d/%d) %s (closed)", d, de.Done, de.Total, de.Title))
 			case !open[d]:
 				parts = append(parts, d+" (satisfied)")
 			case de == nil:

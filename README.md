@@ -21,7 +21,7 @@ go run ./cmd/ridge -benchload # 実盤面の読み込みレイテンシを実測
 このリポジトリは、2026-07-20〜21 に furrow の
 [`poc/tui-bubbletea-v2`](https://github.com/akira-toriyama/furrow/tree/poc/tui-bubbletea-v2)
 ブランチで行った実現可能性検証のコードを出発点にしている。t-s86r で実 furrow に
-接続した: 読みは `board` / `ls -r ''` / `epic ls` の並列 3 exec + body ファイル
+接続した: 読みは `board` / `ls -r ''` / `epic ls --all` の並列 3 exec + body ファイル
 （実測 63-77ms / 914 tasks・cold 181ms）、書きは**楽観的キュー** — 盤面へ先に適用し、
 `furrow set/done/check` を裏で直列に流し、失敗したら store 再読で巻き戻す
 （書き実測 85-115ms・respace 時 280ms が根拠。`internal/ui/persist.go`）。

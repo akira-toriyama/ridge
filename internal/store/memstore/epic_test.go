@@ -140,17 +140,35 @@ func TestEpicDepAddAndRm(t *testing.T) {
 	if err := p.EpicDepAdd("e-9wtv", "e-9wtv"); err == nil {
 		t.Error("a box was allowed to wait on itself")
 	}
+	if got := fixtureBox(t, p, "e-9wtv").OpenDeps; len(got) != 1 || got[0] != "e-p3dx" {
+		t.Errorf("open deps = %v, want [e-p3dx] — a wait on an OPEN box is a wait", got)
+	}
 
-	// The edge worth removing most is the one whose target is NOT on this
-	// board: a closed or archived box leaves exactly that behind. e-2b7h is the
-	// fixture's closed-dep shape.
-	if err := p.EpicDepRm("e-c4mt", "e-2b7h"); err != nil {
+	// An edge onto a box the read serves as CLOSED is settled the moment it is
+	// made, so it must not show up as a wait. This is the half the --all read
+	// changed: before it, no served box was ever closed.
+	if err := p.EpicDepAdd("e-9wtv", "e-2b7h"); err != nil {
+		t.Fatalf("dep add onto a closed box: %v", err)
+	}
+	box := fixtureBox(t, p, "e-9wtv")
+	if !containsStr(box.Deps, "e-2b7h") {
+		t.Errorf("deps = %v, want the closed edge recorded", box.Deps)
+	}
+	if containsStr(box.OpenDeps, "e-2b7h") {
+		t.Errorf("open deps = %v, want the closed edge absent — it waits on nothing", box.OpenDeps)
+	}
+
+	// The edge worth removing most is the one whose target this board cannot
+	// resolve at all: a hand-edited or merged shard leaves exactly that behind,
+	// and requiring the target to resolve would refuse the removal. e-x0k9 is
+	// the fixture's dangling-edge shape.
+	if err := p.EpicDepRm("e-c4mt", "e-x0k9"); err != nil {
 		t.Fatalf("removing a dangling epic dep: %v", err)
 	}
-	if got := fixtureBox(t, p, "e-c4mt").Deps; containsStr(got, "e-2b7h") {
-		t.Errorf("deps = %v, want e-2b7h gone", got)
+	if got := fixtureBox(t, p, "e-c4mt").Deps; containsStr(got, "e-x0k9") {
+		t.Errorf("deps = %v, want e-x0k9 gone", got)
 	}
-	if err := p.EpicDepRm("e-c4mt", "e-2b7h"); err == nil {
+	if err := p.EpicDepRm("e-c4mt", "e-x0k9"); err == nil {
 		t.Error("removing an absent edge was accepted; furrow refuses it")
 	}
 }
