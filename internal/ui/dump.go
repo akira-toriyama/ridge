@@ -13,7 +13,7 @@ import (
 // unknown-name error and the tests all read this slice, because the list was
 // duplicated in three places and adding two states updated two of them —
 // `ridge -h` then advertised eight of ten.
-var DemoNames = []string{"move", "drag", "add", "adddraft", "edit", "editpick", "editinput", "editdeps", "editrefs", "note", "refs", "graph", "map", "mapall", "mapfiltered", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicnew", "fail"}
+var DemoNames = []string{"move", "drag", "add", "adddraft", "edit", "editpick", "editinput", "editdeps", "editrefs", "note", "refs", "graph", "graphall", "map", "mapall", "mapfiltered", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicnew", "fail"}
 
 // Options configures a freshly-constructed Model. The zero value is the
 // default TUI: dark palette, board view, no filter.
@@ -21,9 +21,14 @@ type Options struct {
 	Light  bool   // light palette
 	Filter string // initial filter query
 	Table  bool   // open on the table view
-	Peek   bool   // open with the detail side-peek
-	Tree   bool   // open with the dep-tree overlay (implies Peek)
-	LoadMS int    // real-store load time, for the startup note
+	// GraphLR opens the dependency graph with its layers running left to
+	// right. It is a view SETTING, not a transient gesture, so it is a flag
+	// like Table rather than a -demo name — which also means it composes with
+	// every graph demo instead of needing a mirrored copy of each.
+	GraphLR bool
+	Peek    bool // open with the detail side-peek
+	Tree    bool // open with the dep-tree overlay (implies Peek)
+	LoadMS  int  // real-store load time, for the startup note
 	// Debug is the -debuglog recorder over an already-open sink (nil = off).
 	// The caller opens the file: this package never touches the filesystem.
 	Debug *DebugLog
@@ -46,6 +51,9 @@ func New(p board.Provider, o Options) *Model {
 	}
 	if o.Table {
 		m.view = viewTable
+	}
+	if o.GraphLR {
+		m.graphOrient = orientLeftRight
 	}
 	if o.Peek || o.Tree {
 		m.peekOpen = true
@@ -240,6 +248,17 @@ func (m *Model) demoState(kind string) error {
 			}
 		}
 		m.openGraph()
+
+	case "graphall":
+		// The DEEPEST ego graph the fixture has, at radius all: six ranks, the
+		// shape where the two orientations actually diverge. `graph` roots at
+		// the default radius 2 and fits either way, so it proves the happy path
+		// and nothing about the axis the frame has to negotiate.
+		if err := m.demoState("graph"); err != nil {
+			return err
+		}
+		m.graphRadius = graphAllRadius
+		m.graphScroll = 0
 
 	case "map":
 		// The dependency map at its DEFAULT scope: done tasks dropped, so the

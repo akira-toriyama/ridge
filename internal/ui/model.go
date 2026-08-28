@@ -190,6 +190,12 @@ type Model struct {
 	graphFocus  string
 	graphSel    string
 	graphRadius int
+	// graphOrient is which screen axis the layers run along. It is view state
+	// with no counterpart on the board, and like graphRadius it is re-made
+	// every session — ridge writes no state of its own to disk.
+	graphOrient graphOrient
+	// graphScroll is a screen-LINE offset into the composed frame, in both
+	// orientations. Which axis those lines run down changes; the unit does not.
 	graphScroll int
 	graphStack  []string
 	graphLay    *egoLayout
@@ -590,6 +596,11 @@ func (m *Model) onGraphKey(msg tea.KeyPressMsg) tea.Cmd {
 			m.cycleGraphRadius()
 		}
 		m.graphScroll = 0
+
+	case key.Matches(msg, m.keys.GraphOrient):
+		// No note, same as the radius: the header names the direction on every
+		// frame, in the two words that are half the redundancy contract.
+		m.cycleGraphOrient()
 
 	case key.Matches(msg, m.keys.Graph):
 		// ⇧space on the node you are already on is a no-op re-root; treat it as

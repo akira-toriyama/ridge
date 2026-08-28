@@ -211,7 +211,7 @@ func TestFrameStaysRectangularAfterTheFooterWent(t *testing.T) {
 		// The map's three demos are all here: it is the only view whose
 		// columns are composed side by side, so a one-cell shear accumulates
 		// per column and shows up at some widths and not others.
-		for _, demo := range []string{"", "graph", "map", "mapall", "mapfiltered", "edit", "editdeps"} {
+		for _, demo := range []string{"", "graph", "graphall", "map", "mapall", "mapfiltered", "edit", "editdeps"} {
 			lines := dumpFrame(t, w, 50, demo)
 			for i, line := range lines {
 				if got := lipgloss.Width(line); got != w {

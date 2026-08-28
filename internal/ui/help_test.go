@@ -151,7 +151,7 @@ func TestHelpListsEveryKeyItsSectionsModesHandle(t *testing.T) {
 			k.MoveTop, k.MoveBottom, k.MoveFirst, k.MoveLast},
 		// onGraphKey (model.go)
 		"graph": {k.Up, k.Down, k.Left, k.Right, k.GraphRoot, k.GraphRadius,
-			k.JumpBack, k.PeekScroll, k.Map, k.View, k.Cancel},
+			k.GraphOrient, k.JumpBack, k.PeekScroll, k.Map, k.View, k.Cancel},
 		// onMapKey (depmapview.go)
 		"dep map": {k.Up, k.Down, k.Left, k.Right, k.MapGraph, k.MapScope,
 			k.PeekScroll, k.Map, k.View, k.Cancel},
