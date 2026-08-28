@@ -30,6 +30,17 @@ func newLabProvider(t *testing.T) (*Store, string) {
 	if _, err := exec.LookPath("furrow"); err != nil {
 		t.Skip("furrow binary not on PATH")
 	}
+	// The throwaway store is only throwaway if furrow cannot be pointed
+	// somewhere else, and every command below inherits this process's env.
+	// FURROW_DIR outranks the working directory outright; FURROW_BOARD outranks
+	// it only for `init`, which is enough, because init is what decides where
+	// the store the rest of the suite asserts against gets made. Measured on
+	// v5.0.0: under an exported FURROW_DIR, `furrow init` seeds THAT directory
+	// or refuses at it, so a developer with one exported would have this suite
+	// asserting about — and mutating — a real board. Empty reads as unset.
+	t.Setenv("FURROW_DIR", "")
+	t.Setenv("FURROW_BOARD", "")
+
 	dir := t.TempDir()
 	lab(t, dir, "git", "init", "-q")
 	lab(t, dir, "furrow", "init")

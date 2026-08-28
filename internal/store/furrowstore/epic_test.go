@@ -13,8 +13,9 @@ import (
 
 // Contract tests for the epic write family: a real furrow binary against a
 // throwaway store, like the rest of the suite. They pin the argv facts the
-// adapter composes, each of which was measured against furrow v4.0.0 — the
-// release .github/workflows/build.yml installs for the contract job. Every one
+// adapter composes, each of which was measured against the release
+// .github/workflows/build.yml installs for the contract job — v4.0.0
+// originally, re-measured on v5.0.0 when the pin moved. Every one
 // of them is a spelling furrow refuses if it is composed the other way, and none
 // of them is visible from ridge's own tests.
 
