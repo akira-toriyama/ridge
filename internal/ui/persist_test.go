@@ -164,6 +164,19 @@ func (p *scriptedProvider) EpicDeactivate(id string) (board.EpicPrevious, error)
 	return p.epicPrev, nil
 }
 
+// The lifecycle pair rides the same script: done answers the previous-active
+// suggestion the way deactivate does, reopen answers nothing but the verdict.
+func (p *scriptedProvider) EpicDone(id string) (board.EpicPrevious, error) {
+	if err := p.epicCall("epicdone " + id); err != nil {
+		return board.EpicPrevious{}, err
+	}
+	return p.epicPrev, nil
+}
+
+func (p *scriptedProvider) EpicReopen(id string) error {
+	return p.epicCall("epicreopen " + id)
+}
+
 func (p *scriptedProvider) EpicDepAdd(id, dep string) error {
 	return p.epicCall("epicdep " + id + " " + dep)
 }

@@ -94,6 +94,12 @@ func (m *Model) peekContent(w int) string {
 			if e.Stuck {
 				label += " " + th.warn.Render("STUCK")
 			}
+			// furrow lints an open task under a closed box (epic-closed), and
+			// the --all read is what lets ridge say so instead of rendering it
+			// as an ordinary membership.
+			if !e.Closed.IsZero() {
+				label += " " + th.dim.Render("(closed)")
+			}
 		}
 		meta2 = append(meta2, "epic "+label)
 	}

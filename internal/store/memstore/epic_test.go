@@ -317,3 +317,70 @@ func TestEpicWriteDoesNotRaceWithAReader(t *testing.T) {
 	close(stop)
 	wg.Wait()
 }
+
+// Closing a box is two writes furrow does as one, and the fixture must not
+// serve a state furrow cannot produce: closed AND active is such a state.
+// Settling the other boxes' waits is the same rule EpicDepRm follows — the →N
+// readout must not count an edge that is no longer waiting.
+func TestEpicDoneClosesTheBoxAndSettlesTheWaitsOnIt(t *testing.T) {
+	p := New()
+	if got := fixtureBox(t, p, "e-c4mt").OpenDeps; !containsStr(got, "e-fw2m") {
+		t.Fatalf("the fixture must start with e-c4mt waiting on e-fw2m, got %v", got)
+	}
+	if !fixtureBox(t, p, "e-fw2m").Active {
+		t.Fatal("the fixture's e-fw2m must start ACTIVE — this test is about the slot")
+	}
+
+	prev, err := p.EpicDone("e-fw2m")
+	if err != nil {
+		t.Fatalf("epic done: %v", err)
+	}
+	if prev.ID != "" {
+		t.Errorf("previous = %+v, want the zero value — the fixture keeps no activation log", prev)
+	}
+	box := fixtureBox(t, p, "e-fw2m")
+	if box.Closed.IsZero() {
+		t.Error("done must stamp Closed")
+	}
+	if box.Active {
+		t.Error("done must vacate the active slot; closed AND active is a board furrow cannot produce")
+	}
+	if got := fixtureBox(t, p, "e-c4mt").OpenDeps; containsStr(got, "e-fw2m") {
+		t.Errorf("open deps = %v, want the wait on the just-closed box settled", got)
+	}
+	// And it leaves the default population, without leaving the board.
+	for _, e := range p.Board().Epics() {
+		if e.ID == "e-fw2m" {
+			t.Error("a closed box must drop out of Epics()")
+		}
+	}
+	if p.Board().Epic("e-fw2m") == nil {
+		t.Error("a closed box must still resolve — reopen has nothing to name otherwise")
+	}
+}
+
+// Reopening is the mirror, minus the activation: furrow refuses to chain the
+// two, so a fixture that re-activated would teach the UI a promise the real
+// store never keeps.
+func TestEpicReopenRevivesTheBoxButNotItsSlot(t *testing.T) {
+	p := New()
+	if _, err := p.EpicDone("e-fw2m"); err != nil {
+		t.Fatalf("epic done: %v", err)
+	}
+	if err := p.EpicReopen("e-fw2m"); err != nil {
+		t.Fatalf("epic reopen: %v", err)
+	}
+	box := fixtureBox(t, p, "e-fw2m")
+	if !box.Closed.IsZero() {
+		t.Error("reopen must clear the closing stamp")
+	}
+	if box.Active {
+		t.Error("reopen must leave the box INACTIVE — furrow never chains the two")
+	}
+	if got := fixtureBox(t, p, "e-c4mt").OpenDeps; !containsStr(got, "e-fw2m") {
+		t.Errorf("open deps = %v, want the wait on the reopened box back", got)
+	}
+	if p.Board().Epic("e-2b7h") == nil {
+		t.Error("the OTHER closed box must survive an epic write — the set is rebuilt from EpicsAll")
+	}
+}

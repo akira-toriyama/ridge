@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/akira-toriyama/ridge/internal/board"
 )
@@ -392,20 +393,28 @@ func (p *Store) PersistDepRm(id, _ string) error {
 // one — the same atomicity Add has. fn returning an error swaps NOTHING, so a
 // refused edit leaves the board exactly as it was.
 func (p *Store) editEpic(id string, fn func(*board.EpicInfo) error) error {
+	return p.editEpicSet(func(epics []board.EpicInfo) error {
+		for i := range epics {
+			if epics[i].ID == id {
+				return fn(&epics[i])
+			}
+		}
+		return fmt.Errorf("unknown epic %q", id)
+	})
+}
+
+// editEpicSet is the same clone-under-lock and atomic swap over the WHOLE set,
+// for the writes whose effect is not confined to one box: closing a box also
+// settles every other box's wait on it, and reopening revives them.
+func (p *Store) editEpicSet(fn func([]board.EpicInfo) error) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	epics := cloneEpics(p.b.EpicsAll())
-	for i := range epics {
-		if epics[i].ID != id {
-			continue
-		}
-		if err := fn(&epics[i]); err != nil {
-			return err
-		}
-		p.b = withEpics(p.b, epics)
-		return nil
+	if err := fn(epics); err != nil {
+		return err
 	}
-	return fmt.Errorf("unknown epic %q", id)
+	p.b = withEpics(p.b, epics)
+	return nil
 }
 
 // EpicAdd appends a box and swaps in a board that contains it
@@ -524,6 +533,73 @@ func (p *Store) EpicDeactivate(id string) (board.EpicPrevious, error) {
 		return nil
 	})
 	return board.EpicPrevious{}, err
+}
+
+// EpicDone stamps the box closed and drops the active flag with it, because
+// furrow does both in the one write and a box that is closed AND active is a
+// board furrow cannot produce (board.Provider). It names no previous box, for
+// the reason EpicDeactivate names none.
+//
+// It also settles every OTHER box's wait on it, which is the rule EpicDepRm
+// already follows: OpenDeps is furrow-derived and never RECOMPUTED here, but
+// leaving a wait on a box just closed in the `→N` readout is not "not
+// recomputing", it is stale.
+//
+// Closing an already-closed box is not refused. Mirroring furrow's refusal
+// prose is not this store's job (see the family comment above); the states it
+// does keep out are the ones furrow could not produce, and a re-stamped
+// closing time is not one of those.
+func (p *Store) EpicDone(id string) (board.EpicPrevious, error) {
+	if err := p.gate(); err != nil {
+		return board.EpicPrevious{}, err
+	}
+	err := p.editEpicSet(func(epics []board.EpicInfo) error {
+		target := indexEpic(epics, id)
+		if target < 0 {
+			return fmt.Errorf("unknown epic %q", id)
+		}
+		epics[target].Closed = time.Now().UTC().Truncate(time.Second)
+		epics[target].Active = false
+		for i := range epics {
+			epics[i].OpenDeps = removeStr(epics[i].OpenDeps, id)
+		}
+		return nil
+	})
+	return board.EpicPrevious{}, err
+}
+
+// EpicReopen clears the closing stamp (board.Provider). The box comes back
+// open and INACTIVE — furrow refuses to chain the two — and every edge pointing
+// at it waits again, the mirror of what EpicDone settled.
+func (p *Store) EpicReopen(id string) error {
+	if err := p.gate(); err != nil {
+		return err
+	}
+	return p.editEpicSet(func(epics []board.EpicInfo) error {
+		target := indexEpic(epics, id)
+		if target < 0 {
+			return fmt.Errorf("unknown epic %q", id)
+		}
+		epics[target].Closed = time.Time{}
+		for i := range epics {
+			if i == target || !containsStr(epics[i].Deps, id) {
+				continue
+			}
+			if !containsStr(epics[i].OpenDeps, id) {
+				epics[i].OpenDeps = append(epics[i].OpenDeps, id)
+			}
+		}
+		return nil
+	})
+}
+
+func indexEpic(epics []board.EpicInfo, id string) int {
+	for i := range epics {
+		if epics[i].ID == id {
+			return i
+		}
+	}
+	return -1
 }
 
 // EpicDepAdd appends an epic dep edge (board.Provider).

@@ -135,6 +135,22 @@ type Provider interface {
 	// had no record to decide it, which is a legitimate answer, not an error.
 	EpicDeactivate(id string) (EpicPrevious, error)
 
+	// EpicDone closes the box, and vacates the active slot with it when the box
+	// held one — furrow does both in the one write, so this answers the same
+	// "where to return" suggestion EpicDeactivate does. It is not a one-way
+	// door: the read serves closed boxes, so the box stays on the board for
+	// EpicReopen to name.
+	//
+	// furrow does NOT refuse a box with open members. Closing one is a
+	// judgement, not an error, so the caller owes the user the progress before
+	// the keystroke rather than trusting a refusal that will not come.
+	EpicDone(id string) (EpicPrevious, error)
+
+	// EpicReopen clears the closing stamp. The box comes back OPEN and
+	// INACTIVE: furrow refuses to chain reopening to activating, and ridge must
+	// not paper over that with a second write of its own.
+	EpicReopen(id string) error
+
 	// EpicDepAdd makes id wait on dep ("open this box after that one closes").
 	// Acyclic and idempotent furrow-side.
 	EpicDepAdd(id, dep string) error

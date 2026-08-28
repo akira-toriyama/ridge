@@ -3,6 +3,7 @@ package ui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -117,5 +118,45 @@ func TestEpicDepsDemoCarriesTheDepLine(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("-demo epicdeps: %q is missing from the frame", want)
 		}
+	}
+}
+
+// An open task filed under a CLOSED box is a state furrow keeps and lints
+// (epic-closed, a warning): `epic done` does not archive or unfile the members
+// (measured on v5.0.0 — the member stays in its lane, still attached, and the
+// box reports 0/1). The --all read is what lets ridge resolve that membership
+// at all, and resolving it is exactly what would make it render like a live
+// one on every surface that shows an epic by title.
+//
+// A constructed board rather than the fixture: the fixture's closed box is the
+// archived-members shape, which is the OTHER real ending, and one fixture
+// cannot be both.
+func TestAClosedBoxIsMarkedEverywhereATaskNamesIt(t *testing.T) {
+	b := board.NewBoard(
+		[]*board.Task{{ID: "t-under", Title: "閉じた箱に残っている一枚",
+			Status: "backlog", Priority: 10, Epic: "e-shut"}},
+		board.EpicInfo{ID: "e-shut", Title: "終わった箱", Total: 1,
+			Closed: time.Date(2026, 7, 15, 9, 12, 7, 0, time.UTC)},
+	)
+	for _, tc := range []struct{ name, want string }{
+		{"card", glyphDone + " 終わった箱"},
+		{"peek", "(closed)"},
+		{"table", glyphDone + " 終わった箱"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := New(memstore.NewWith(b), Options{Table: tc.name == "table"})
+			m.w, m.h = 240, 50
+			m.recompute()
+			m.relayout()
+			if !m.selectID("t-under", false) {
+				t.Fatal("t-under is not on the board")
+			}
+			if tc.name == "peek" {
+				press(m, "space")
+			}
+			if out := frame(m); !strings.Contains(out, tc.want) {
+				t.Errorf("the %s surface must mark a membership furrow lints; %q is missing", tc.name, tc.want)
+			}
+		})
 	}
 }

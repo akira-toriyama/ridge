@@ -13,7 +13,7 @@ import (
 // unknown-name error and the tests all read this slice, because the list was
 // duplicated in three places and adding two states updated two of them —
 // `ridge -h` then advertised eight of ten.
-var DemoNames = []string{"move", "drag", "add", "adddraft", "edit", "editpick", "editinput", "editdeps", "editrefs", "note", "refs", "graph", "graphall", "map", "mapall", "mapfiltered", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicnew", "fail"}
+var DemoNames = []string{"move", "drag", "add", "adddraft", "edit", "editpick", "editinput", "editdeps", "editrefs", "note", "refs", "graph", "graphall", "map", "mapall", "mapfiltered", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicshut", "epicdone", "epicreopen", "sliceepicall", "epicnew", "fail"}
 
 // Options configures a freshly-constructed Model. The zero value is the
 // default TUI: dark palette, board view, no filter.
@@ -447,6 +447,57 @@ func (m *Model) demoState(kind string) error {
 		m.epic.menuIdx = int(epicFieldActive)
 		if c := m.openEpicField(epicFieldActive); c != nil {
 			_ = c
+		}
+
+	case "epicshut":
+		// The MENU on a closed box — the only frame where the `closed` row
+		// reads its own state back. Without it the row could say "no — open"
+		// on a box whose ⏎ reopens, and nothing would catch it.
+		m.sliceEpicAll = true
+		if err := m.demoEpicPanel("e-2b7h"); err != nil {
+			return err
+		}
+		m.epic.menuIdx = int(epicFieldClosed)
+
+	case "epicdone":
+		// The close gate on the ACTIVE box, which is also the one with the
+		// most work still under it. furrow closes such a box at exit 0, so
+		// this frame is the only warning there is — and closing the active box
+		// vacates its repo slot in the same write, which is the other half the
+		// gate owes the user.
+		if err := m.demoEpicPanel("e-fw2m"); err != nil {
+			return err
+		}
+		m.epic.menuIdx = int(epicFieldClosed)
+		if c := m.openEpicField(epicFieldClosed); c != nil {
+			_ = c
+		}
+
+	case "epicreopen":
+		// The same row on the CLOSED box, which is the other verb and the
+		// other wording. Reaching it needs the widened scope, which is the
+		// point: without it the box `reopen` targets is not on any list.
+		m.sliceEpicAll = true
+		if err := m.demoEpicPanel("e-2b7h"); err != nil {
+			return err
+		}
+		m.epic.menuIdx = int(epicFieldClosed)
+		if c := m.openEpicField(epicFieldClosed); c != nil {
+			_ = c
+		}
+
+	case "sliceepicall":
+		// The epic axis widened to the closed boxes. Driven through the panel's
+		// own key handler rather than the field, so the frame also proves `z`
+		// is BOUND here — the trap the epicnew demo documents.
+		m.toggleSlice()
+		m.sliceField = sliceEpic
+		m.noteSliceAxis()
+		if c := m.onSliceKey(tea.KeyPressMsg{Code: 'z', Text: "z"}); c != nil {
+			_ = c
+		}
+		if !m.sliceEpicAll {
+			return fmt.Errorf("demo sliceepicall: z did not widen the epic axis")
 		}
 
 	case "epicnew":

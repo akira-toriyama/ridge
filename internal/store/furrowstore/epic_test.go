@@ -299,3 +299,77 @@ func TestContractEpicDepAddAndRm(t *testing.T) {
 		t.Errorf("deps = %v, want none after the rm", e.Deps)
 	}
 }
+
+// The lifecycle pair against the real CLI. `done` is in v4.0.0 but `reopen`
+// arrived only in v5.0.0, which is the release build.yml pins — on the older
+// pin this test fails with kind "validation" for `unknown command "reopen"`,
+// indistinguishable by Kind from a legitimate refusal, so the pin and this
+// test move together.
+//
+// bite-exempt: execs a real furrow binary and always skips where furrow is not
+// on PATH — which is CI, so the gate can never judge it there
+func TestContractEpicDoneAndReopenRoundTrip(t *testing.T) {
+	p, dir := newLabProvider(t)
+	labAdd(t, dir, "既存のタスク") // seeds lab/lab as a known repo
+	id := labEpic(t, dir, "閉じたり開いたりする箱", "lab/lab")
+	if err := p.EpicActivate(id, "契約テスト"); err != nil {
+		t.Fatalf("activate: %v", err)
+	}
+
+	if _, err := p.EpicDone(id); err != nil {
+		t.Fatalf("epic done: %v", err)
+	}
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	box := p.Board().Epic(id)
+	if box == nil || box.Closed.IsZero() {
+		t.Fatalf("a closed box must reach the snapshot WITH its stamp: %+v", box)
+	}
+	// Closing an ACTIVE box vacates the slot in the same write. ridge shows
+	// the flag, so a stale `active: yes` on a closed box would be a lie the
+	// overlay renders.
+	if box.Active {
+		t.Error("furrow clears the active flag when it closes the box; the snapshot kept it")
+	}
+	for _, e := range p.Board().Epics() {
+		if e.ID == id {
+			t.Error("a closed box must stay out of the default population")
+		}
+	}
+
+	if err := p.EpicReopen(id); err != nil {
+		t.Fatalf("epic reopen: %v", err)
+	}
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	box = p.Board().Epic(id)
+	if box == nil || !box.Closed.IsZero() {
+		t.Fatalf("reopen must clear the stamp: %+v", box)
+	}
+	// The half a "it is open again" assertion would miss: furrow reopens
+	// INACTIVE, and ridge must not grow a second write that re-activates.
+	if box.Active {
+		t.Error("reopen re-activated the box; furrow never chains the two")
+	}
+	back := false
+	for _, e := range p.Board().Epics() {
+		back = back || e.ID == id
+	}
+	if !back {
+		t.Error("a reopened box must return to the default population")
+	}
+
+	// Both no-op directions are refusals, not silent successes, and the KIND
+	// is what a caller may branch on.
+	if _, err := p.EpicDone(id); err != nil {
+		t.Fatalf("closing an open box must still work: %v", err)
+	}
+	_, err := p.EpicDone(id)
+	wantKind(t, err, "validation")
+	if err := p.EpicReopen(id); err != nil {
+		t.Fatalf("reopening a closed box must work: %v", err)
+	}
+	wantKind(t, p.EpicReopen(id), "validation")
+}

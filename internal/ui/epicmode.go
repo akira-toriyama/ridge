@@ -31,11 +31,15 @@ import (
 // second keypress queue a duplicate write, and it must say what it is waiting
 // for.
 //
-// `epic done` / `epic reopen` are not here YET. The pinned furrow release
-// carries both (v5.0.0) and the read now serves closed boxes, so the one-way
-// door that kept them out is gone; what is left is the surface itself — the
-// row, its confirm gate, and a way to reach a box closed in an earlier
-// session. t-sq02.
+// The lifecycle pair `epic done` / `epic reopen` is ONE row, not two, and it
+// reads the box's own state to decide which verb it is. Two rows would put a
+// dead one on screen at all times, and there is no third state to name.
+//
+// It is reachable at all because the read serves closed boxes: `done` leaves
+// the box resolvable, so this overlay survives its own write and `reopen` is
+// one keystroke back. Finding a box closed in an EARLIER session is the slice
+// panel's job — its epic axis lists the open ones by default and takes `z` for
+// the whole population.
 
 type epicStage int
 
@@ -58,6 +62,9 @@ const (
 	epicFieldRepos
 	epicFieldDeps
 	epicFieldMeta
+	// Last on purpose: it is the row whose write is a lifecycle decision, so
+	// it must not sit where the cursor lands or where a mistyped ↓ reaches.
+	epicFieldClosed
 	epicFieldCount
 )
 
@@ -81,6 +88,8 @@ func epicFieldName(f epicField) string {
 		return "deps"
 	case epicFieldMeta:
 		return "meta"
+	case epicFieldClosed:
+		return "closed"
 	}
 	return ""
 }
@@ -193,6 +202,10 @@ func (m *Model) exitEpic() {
 
 // epicBox resolves the box under edit, closing the overlay when a reload has
 // dropped it rather than editing a ghost.
+//
+// Closing the box is NOT such a drop: the read serves closed boxes, so `Epic`
+// still resolves one and the overlay stays up on its own `done`. That is what
+// makes `reopen` reachable without hunting the box down again.
 func (m *Model) epicBox() *board.EpicInfo {
 	if m.epic == nil || m.epic.creating {
 		return nil
@@ -231,6 +244,24 @@ func (m *Model) noteEpicStage() {
 		}
 	case e.stage == epicInput:
 		m.note("box %s · %s — ⏎ apply · esc back", e.id, epicInputTitleFor(e.inputFor))
+	case e.stage == epicConfirm && e.field == epicFieldClosed:
+		box := m.b.Epic(e.id)
+		switch {
+		case box == nil:
+			m.note("box %s · closed — ⏎ confirms · esc backs out", e.id)
+		case !box.Closed.IsZero():
+			// furrow's own wording, not a paraphrase: reopening does NOT
+			// re-activate, and a note that implied it would promise something
+			// the next frame contradicts.
+			m.note("reopen %s — it comes back OPEN and INACTIVE · ⏎ confirms · esc backs out", e.id)
+		default:
+			// furrow closes a box with open members at exit 0, so this line is
+			// the ONLY thing standing between one keystroke and a box closed
+			// over live work.
+			left := box.Total - box.Done
+			m.note("close %s — %d/%d done, %d still open · ⏎ confirms · esc backs out",
+				e.id, box.Done, box.Total, left)
+		}
 	case e.stage == epicConfirm:
 		m.note("box %s · %s — ⏎ confirms · esc backs out", e.id, epicFieldName(e.field))
 	default:
@@ -371,7 +402,7 @@ func (m *Model) openEpicField(f epicField) tea.Cmd {
 		// own body as the activation record: the input IS the confirmation, and
 		// it collects the thing that keeps the switch visible next session.
 		return m.startEpicInput(epicInputReason, "", "who asked for this switch · empty omits it")
-	case epicFieldStanding, epicFieldPinned:
+	case epicFieldStanding, epicFieldPinned, epicFieldClosed:
 		e.stage = epicConfirm
 		m.noteEpicStage()
 		return nil
@@ -578,6 +609,25 @@ func (m *Model) commitEpicConfirm() tea.Cmd {
 	case epicFieldPinned:
 		on := !box.Pinned
 		return m.epicPatch("pinned", board.EpicPatch{Pinned: &on})
+	case epicFieldClosed:
+		if !box.Closed.IsZero() {
+			return m.epicWrite("epic reopen "+id, func(p board.Provider) error {
+				return p.EpicReopen(id)
+			})
+		}
+		// Same suggestion pointer `deactivate` uses — but only when this box
+		// actually held the slot. furrow answers `previous` either way
+		// (measured: closing an INACTIVE box still names one), and "where to
+		// return" for a slot nobody gave up is an instruction about nothing.
+		wasActive := box.Active
+		suggestion := new(string)
+		return m.epicWriteNoting("epic done "+id, suggestion, func(p board.Provider) error {
+			prev, err := p.EpicDone(id)
+			if err == nil && wasActive && prev.ID != "" {
+				*suggestion = "previous: " + prev.ID + " " + prev.Title
+			}
+			return err
+		})
 	}
 	return nil
 }
@@ -709,6 +759,15 @@ func epicInputTitleFor(k epicInputKind) string {
 	return ""
 }
 
+// epicClosedCell names the state, not the verb: the row's cell answers "is
+// this box closed", and the confirm stage names what ⏎ would do about it.
+func epicClosedCell(box *board.EpicInfo) string {
+	if box.Closed.IsZero() {
+		return "no — open"
+	}
+	return "yes — " + box.Closed.Local().Format("2006-01-02")
+}
+
 // epicActiveCell is the `active` row's value AND its precondition. furrow
 // refuses a second active box for a repo rather than stealing the slot, and
 // refuses a repo-less box outright — so the row says which of those applies
@@ -717,6 +776,13 @@ func epicInputTitleFor(k epicInputKind) string {
 func (m *Model) epicActiveCell(box *board.EpicInfo) string {
 	if box.Active {
 		return "yes"
+	}
+	// The closed check leads because it outranks the others: furrow answers
+	// "epic X is closed — run `furrow epic reopen X` first" (measured on
+	// v5.0.0) before it looks at repos or the slot at all, so naming a repo
+	// problem here would send the reader to fix the wrong thing.
+	if !box.Closed.IsZero() {
+		return "no — closed; reopen it first"
 	}
 	if len(box.Repos) == 0 {
 		return "no — attach a repo first"
@@ -803,6 +869,7 @@ func (m *Model) renderEpicMenu(box *board.EpicInfo, inner int) string {
 		{epicFieldName(epicFieldRepos), strings.Join(box.Repos, ",")},
 		{epicFieldName(epicFieldDeps), depCell},
 		{epicFieldName(epicFieldMeta), metaCell},
+		{epicFieldName(epicFieldClosed), epicClosedCell(box)},
 	}
 
 	var b strings.Builder
@@ -847,6 +914,22 @@ func (m *Model) renderEpicConfirm(box *board.EpicInfo, inner int) string {
 	case epicFieldPinned:
 		hdr = "pinned → " + yesNo(!box.Pinned)
 		detail = "A pinned box's actionable tasks lead next/brief regardless of scope."
+	case epicFieldClosed:
+		if !box.Closed.IsZero() {
+			hdr = "reopen this box"
+			detail = "It comes back OPEN and INACTIVE. furrow never chains reopening to activating, so choosing it again is a separate act."
+			break
+		}
+		hdr = "close this box"
+		// furrow closes a box with open members at exit 0 (measured on
+		// v5.0.0), so this count is the entire warning that exists. Saying the
+		// way back in the same breath is what keeps the gate a gate rather
+		// than a scare.
+		detail = fmt.Sprintf("%d/%d done — %d still open under it. furrow closes it anyway. The way back is this same row, which reads `reopen` once it is closed.",
+			box.Done, box.Total, box.Total-box.Done)
+		if box.Active {
+			detail += " This is the ACTIVE box: closing vacates its repo slot too."
+		}
 	}
 	var b strings.Builder
 	b.WriteString(th.peekHdr.Render(hdr) + "\n\n")
