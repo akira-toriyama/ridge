@@ -116,6 +116,8 @@ func (m *Model) frameRows(t *testing.T, w, h int) []string {
 		s = m.renderGraph()
 	case viewMap:
 		s = m.renderMap()
+	case viewBoxes:
+		s = m.renderBoxes()
 	default:
 		s = m.renderBoard()
 	}

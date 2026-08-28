@@ -141,6 +141,25 @@ due / deps / repos / checklist（カーソルで項目選択・toggle/add/delete
 `furrow set / retitle / repo / check / dep` 相当の1書き込みで編集する（楽観的適用・
 失敗時は store 再読でロールバック）。
 
+### Boxes — 箱の俯瞰
+
+`E`。**盤面の epic を全部、repo 別に並べる**。Graph / Map が task の依存を
+答えるのに対し、これは「どの repo が今どの箱で作業しているか」を答える。
+
+**graph にしないのは実測が理由。** 2026-08-28 の実盤面は箱 153 個
+（open 117 / closed 36）に対し epic 間の dep edge が **4 本**（2 箱）しか無い。
+ego graph も連結成分も、149 個の孤立ノードを並べて本体を埋めるだけになる。
+4 本は Map と同じ `←id` インライン tag で足りる。repo で括るのは、全箱が持つ
+唯一の軸だから（実盤面で repo 無しは 0・repo は 31）— そして furrow が repo
+あたり active を1つに制限するので、`▶` が縦に読むだけでチェックリストになる。
+
+`⏎` は**新しい絞り込み機構を作らず**、slice パネルと同じ `epic:<id>` term を
+発行して盤面に戻る（closed な箱でも効く）。`m` でその箱のオーバーレイ、
+`z` で closed 込み、`^u/^d` でページ。
+
+実測の詰まり方（153 箱 / 31 repo）: 240桁 = 4カラム×58セル、320桁 = 6×51、
+400桁 = 6×64。
+
 ## キー
 
 **全キーは `?` が正典。** 起動して `?` を押すと、その時点で有効なキーが全部出る
@@ -154,6 +173,7 @@ due / deps / repos / checklist（カーソルで項目選択・toggle/add/delete
 | `Space` | 詳細ペイン |
 | `S` | 依存グラフ（1タスク起点。`o` で上下 / 左右） |
 | `T` | 依存マップ（全クラスタ俯瞰） |
+| `E` | 箱の俯瞰（全 epic を repo 別に。`⏎` でその箱に絞る・`z` で closed 込み） |
 | `Enter` | move mode（`Enter` 確定・`Esc` 取消）。**peek を開いていると / Table では編集メニュー** |
 | `q` | 終了 |
 
@@ -235,7 +255,7 @@ event loop を通らない。他人に渡す前に中身を確認すること。
   `edit --body`（t-8q8c・2026-08-10 着地）が正しい経路で、v5.0.0 でリリース済み。
   残りは ridge 側の作業（furrowClient に stdin 経路が無い・空 body が exit 2）で
   t-t9ac。
-- swimlane（group by）未実装。
+- swimlane（group by）未実装。task の group by であって、`E` の箱の俯瞰とは別物。
 - Table ビューに横スクロールが無い（ワイド前提の設計判断。要るなら既存依存の
   bubbles viewport v2 の `SoftWrap=false` + `XOffset` を配線する — 新規実装不要と
   確認済み。罠: `SetXOffset` は `SoftWrap=true` だと黙って no-op）。

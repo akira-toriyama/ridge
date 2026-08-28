@@ -101,95 +101,19 @@ func (l *mapLayout) Empty() bool { return len(l.Panels) == 0 }
 // height depends on how its title wraps.
 func mapPanelH(c board.Cluster) int { return mapPanelHdr + len(c.Nodes) + mapPanelFoot }
 
-// packMap lays the clusters into columns.
-//
-// Column-major, not a shortest-column fit: the reading order of an overview
-// has to be "down this column, then the next one", and a masonry pack scatters
-// #4 above #3. So the only free choice is the height each column is allowed to
-// reach, and packMap SEARCHES for the smallest one that still fits in the
-// columns available — the classic "split a sequence into k contiguous parts,
-// minimising the largest part".
-//
-// It is a search rather than the obvious total/cols because that average is
-// not always achievable: a column holding k panels pays k-1 separators, not
-// its share of all n-1, so the average can sit BELOW every feasible split. The
-// greedy then starts a new column after the first panel every time, runs out
-// of columns, and stacks the whole remainder in the last one. Measured before
-// this was a search: 9 equal clusters at 400 columns packed 1/1/1/1/5, 44 rows
-// tall against a 39-row canvas, with four columns blank below row 9.
+// packMap lays the clusters into columns. The column search itself is
+// packColumns (pack.go), shared with the box overview.
 func packMap(scope board.ClusterScope, clusters []board.Cluster, avail int) *mapLayout {
-	if avail < 1 {
-		avail = 1
-	}
-	maxCols := 1
-	for maxCols < mapMaxCols && (maxCols+1)*mapPanelMinW+maxCols*mapPanelGap <= avail {
-		maxCols++
-	}
-	// Never more columns than clusters. Width is the scarce resource a
-	// Japanese title competes for, so a board with one big tangle must spend
-	// all 240-400 cells on it rather than reserving empty columns and
-	// truncating every row to a fraction of the screen.
-	if len(clusters) > 0 && maxCols > len(clusters) {
-		maxCols = len(clusters)
-	}
-
 	heights := make([]int, len(clusters))
-	total, tallest := 0, 0
 	for i, c := range clusters {
 		heights[i] = mapPanelH(c)
-		if i > 0 {
-			total += mapPanelSep
-		}
-		total += heights[i]
-		if heights[i] > tallest {
-			tallest = heights[i]
-		}
 	}
-
-	// fill runs the greedy at one target height and returns each panel's
-	// column. A column always takes at least one panel, so the walk always
-	// terminates; a target below `tallest` simply needs one column per panel.
-	fill := func(target int) []int {
-		cols := make([]int, len(clusters))
-		col, h := 0, 0
-		for i, ph := range heights {
-			if h > 0 && h+mapPanelSep+ph > target {
-				col++
-				h = 0
-			}
-			if h > 0 {
-				h += mapPanelSep
-			}
-			h += ph
-			cols[i] = col
-		}
-		return cols
+	if avail < 1 {
+		avail = 1 // packColumns clamps its own copy; mapLayout.W records this one
 	}
-	used := func(cols []int) int {
-		if len(cols) == 0 {
-			return 0
-		}
-		return cols[len(cols)-1] + 1
-	}
-
-	lo, hi := tallest, maxInt(tallest, total)
-	for lo < hi {
-		mid := lo + (hi-lo)/2
-		if used(fill(mid)) <= maxCols {
-			hi = mid
-		} else {
-			lo = mid + 1
-		}
-	}
-	placed := fill(lo)
-
-	// Spend the width on the columns actually used. Reserving a column for a
-	// panel that never arrives narrows every row for nothing.
-	cols := maxInt(1, used(placed))
-	colW := (avail - (cols-1)*mapPanelGap) / cols
-	if colW < 1 {
-		colW = 1
-	}
+	placed, cols, colW := packColumns(heights, packSpec{
+		Sep: mapPanelSep, Gap: mapPanelGap, MinW: mapPanelMinW, MaxCols: mapMaxCols, Avail: avail,
+	})
 
 	l := &mapLayout{Scope: scope, Cols: cols, ColW: colW, W: avail, rowAt: map[string]int{}}
 	colH := make([]int, cols)
