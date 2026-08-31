@@ -13,6 +13,21 @@ import (
 	"github.com/akira-toriyama/ridge/internal/ui"
 )
 
+// The live path reads the user's real views.toml (views.DefaultPath), so the
+// XDG root is pinned to an empty temp dir for the whole package — a test must
+// never vary with this machine's config, even one that only reaches the live
+// path by a future edit.
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "ridge-cli-xdg-*")
+	if err != nil {
+		panic(err)
+	}
+	_ = os.Setenv("XDG_CONFIG_HOME", dir)
+	code := m.Run()
+	_ = os.RemoveAll(dir)
+	os.Exit(code)
+}
+
 // The exit-code contract is declared "a public API for scripts and agents, so
 // the meanings must stay stable" — and nothing asserted a single return site.
 // These drive run() with its writers injected, so no test touches os.Args or

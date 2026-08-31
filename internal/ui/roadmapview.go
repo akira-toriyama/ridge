@@ -297,7 +297,11 @@ func (m *Model) roadCells(l *roadLayout, t *board.Task, r *roadRow, tlW int) str
 
 func (m *Model) roadTitleBar(l *roadLayout) string {
 	th := m.th
-	left := th.title.Render("furrow board") + th.crumb.Render("  ·  ") + m.fullTabs(viewRoadmap)
+	// The saved-view tabs render here too: the roadmap is the one full-screen
+	// view a saved view can BE, so landing on a roadmap tab must not hide the
+	// tab strip that got you there (viewtabs.go).
+	left := th.title.Render("furrow board") + th.crumb.Render("  ·  ") + m.fullTabs(viewRoadmap) +
+		m.viewTabStrip()
 	right := th.crumb.Render(fmt.Sprintf("%d dated tasks  ·  ", len(l.Rows))) +
 		th.accent.Render("⟨ROADMAP⟩") + th.dim.Render("  ·  ? help")
 	return joinEnds(left, right, m.w)
@@ -572,6 +576,15 @@ func (m *Model) onRoadKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	case key.Matches(msg, m.keys.RoadZoom):
 		m.cycleRoadZoom()
+
+	// The saved-view keys work here because the title row shows the tabs
+	// here — a strip rendered in the one view that can BE a tab, with its
+	// keys dead in exactly that view, would be the advertised-but-unbound
+	// failure t-84r1 wrote the rule about.
+	case key.Matches(msg, m.keys.ViewTab):
+		return m.switchView(viewTabDigit(msg))
+	case key.Matches(msg, m.keys.ViewSave):
+		m.saveView()
 
 	case key.Matches(msg, m.keys.Roadmap), key.Matches(msg, m.keys.View):
 		m.closeRoadmap()

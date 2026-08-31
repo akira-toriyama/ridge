@@ -19,6 +19,7 @@ import (
 	"github.com/akira-toriyama/ridge/internal/store/furrowstore"
 	"github.com/akira-toriyama/ridge/internal/store/memstore"
 	"github.com/akira-toriyama/ridge/internal/ui"
+	"github.com/akira-toriyama/ridge/internal/views"
 )
 
 // Code is ridge's exit-code contract — a public API for scripts and agents,
@@ -244,16 +245,43 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 		prov, loadMS = p, int(time.Since(start).Milliseconds())
 	}
 
+	// The saved-view tabs load only for a REAL session. The fixture paths
+	// (-dump/-mock/-readonly) leave them empty on both sides: a -dump frame
+	// must not vary with whatever views.toml this machine carries (-demo
+	// views injects a fixture set instead), and a fixture session must not
+	// be able to WRITE the real file either. A malformed file is fatal here,
+	// while semantic typos are clamped inside Load — the split the views
+	// package documents.
+	var (
+		savedViews   []views.View
+		saveViews    func([]views.View) error
+		viewWarnings []string
+	)
+	if !useMock {
+		path, err := views.DefaultPath()
+		if err == nil {
+			savedViews, viewWarnings, err = views.Load(path)
+		}
+		if err != nil {
+			_, _ = fmt.Fprintln(stderr, "error:", err)
+			return CodeRun
+		}
+		saveViews = func(vs []views.View) error { return views.Save(path, vs) }
+	}
+
 	m := ui.New(prov, ui.Options{
-		Light:   *light,
-		Filter:  *filter,
-		Table:   *table,
-		Roadmap: *roadmap,
-		GraphLR: *graphlr,
-		Peek:    *peek,
-		Tree:    *tree,
-		LoadMS:  loadMS,
-		Debug:   dbg,
+		Light:        *light,
+		Filter:       *filter,
+		Table:        *table,
+		Roadmap:      *roadmap,
+		GraphLR:      *graphlr,
+		Peek:         *peek,
+		Tree:         *tree,
+		LoadMS:       loadMS,
+		Debug:        dbg,
+		Views:        savedViews,
+		SaveViews:    saveViews,
+		ViewWarnings: viewWarnings,
 	})
 
 	if *dump {

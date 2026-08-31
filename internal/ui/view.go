@@ -178,7 +178,11 @@ func (m *Model) chromeLayers() []*lg.Layer {
 	}
 	tabs := tab("Board", m.view == viewBoard) + th.dim.Render(" │ ") + tab("Table", m.view == viewTable)
 
-	left := th.title.Render("furrow board") + th.crumb.Render("  ·  ") + tabs
+	// The saved-view tabs extend the strip (t-es5v). They sit AFTER the
+	// layout pair because they are the bigger object: a view tab carries a
+	// whole {layout, q, sort, slice} bundle, of which Board|Table names one
+	// dimension of the current state.
+	left := th.title.Render("furrow board") + th.crumb.Render("  ·  ") + tabs + m.viewTabStrip()
 	counts := fmt.Sprintf("%d/%d tasks", shown, total)
 	if shown == total {
 		counts = fmt.Sprintf("%d tasks", total)
@@ -583,11 +587,15 @@ func (m *Model) helpLayer() *lg.Layer {
 		"field:value · comma = OR · leading - negates · no:/has:",
 		"· is:actionable|blocked|stale|open|closed|draft|unfiled|overdue",
 		"· value:>=4 · updated:>=-2w · epic:/depends-on:/blocks: · free words over title+body"}, " ", inner)
+	// The 1-9/V bindings above cannot carry the FILE, and the file is the
+	// rename/delete surface — this is the one place in the app to learn it.
+	viewsLine := wrapJoin([]string{"saved views (1-9/V):",
+		"named {layout, q, sort, slice} bundles from ~/.config/ridge/views.toml — V saves, the file renames"}, " ", inner)
 	note := wrapJoin([]string{"every mouse gesture above has a keyboard twin —",
 		"that is the rule, not a bonus"}, " ", inner)
 	box := m.th.peek.Render(m.th.peekHdr.Render("keys") + "\n\n" +
 		strings.Join(rows, "\n") + "\n\n" +
-		m.th.dim.Render(syntax) + "\n" + m.th.dim.Render(note))
+		m.th.dim.Render(syntax) + "\n" + m.th.dim.Render(viewsLine) + "\n" + m.th.dim.Render(note))
 	// Hard backstop: an overlay must never be able to overflow the frame —
 	// and row 0 is not the overlay's to take. The title bar carries the mode
 	// badge and the tab strip; when the terminal is too short for both, the

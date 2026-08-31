@@ -28,6 +28,8 @@
 | **Map**（依存マップ） | **全依存クラスタを一画面で俯瞰するビュー**。Graph が「1タスク起点」なのに対し、こちらは起点を持たない。`T`（`t` = そのタスクの依存ツリー、の全体版）。線は引かず、**インデント = 深さ・`←` = blocker の名指し**で表す。 |
 | **Roadmap** | **due タイムライン**。due を持つ **open** な task を due 昇順の行にし、横軸 = 時間に `◆` を置く全画面ビュー。`C`（calendar — `R` は sync、`D` は小文字 `d`=done が write なので不採用）。due 無しは出さない（GH 同）・done も出さない（果たされた約束は約束ではない）。`┊` = today 縦線、`◆` の右に所属 epic の `▤` chip（epic は日付を持たないので GH の vertical marker は成立しない — 行内 chip が最小形）。filter は Map と同契約（隠さず mute + header で件数）。読み専用 — due の drag 変更は価値検証後（t-7t28）。 |
 | **zoom**（Roadmap の） | 1 セルが暦のどれだけか。day（既定）/ week / month の 3 値で、境界は**暦どおり**（月曜始まりの週・月初）。`z` で循環 — 全画面ビューの `z` = 「どれだけ画面に載るか」の踏襲。h/l で窓を pan（1 押し = zoom の自然な一期間: 7日/4週/3月）。セッションを跨いで保存しない（hop radius と同じ）。 |
+| **保存ビュー**（saved view） | **{layout, q, sort, slice} の束に名前を付けたもの**（GH Projects の view タブ相当）。正本は `~/.config/ridge/views.toml` の `[[view]]` — **ridge が書く唯一のファイル**で、書くのは明示の `V` だけ（config でなく保存データ、の整理）。タイトル行の Board\|Table の右がタブ帯: `1`-`9` 切替・`V` 保存（roadmap ビュー内でも効く）。layout は board\|table\|roadmap の 3 値（graph は起点 task が要り、map/boxes は population 切替なので対象外）。 |
+| **未保存ドット**（●） | active な保存ビューのタブに付く「現在の状態が保存済みの束からずれている」印（GH の青ドット相当）。digit 再押下 = 保存済みの束へ巻き戻し・`V` = ずれた側を保存。 |
 | **peek**（詳細ペイン） | 選択中タスクの詳細を横に出すオーバーレイ。`Space`。 |
 | **cluster**（依存クラスタ） | 依存辺で繋がったタスクの連結成分。Map のパネル 1 枚 = 1 クラスタ。実データでは未完了分で 9 個・中央値 2 ノード。正本は `internal/board/cluster.go`（`Graph.Clusters`）— furrow に同形の口が無いので ridge が topology だけ自前で出す。 |
 | **scope**（Map の） | Map が何を数えるか。`open` = done を辺ごと落とす（既定 — 終わった依存は blocker ではない）/ `all` = 全部。`z` で切替。 |

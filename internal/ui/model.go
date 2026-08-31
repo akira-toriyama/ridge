@@ -1,13 +1,17 @@
 // Package ui is the bubbletea Model and every renderer behind it. It owns
 // the optimistic local apply and the strictly-serial persist queue, but no
 // business logic — furrow semantics live in internal/board, and the store
-// boundary is the board.Provider port. Nothing here execs or reads files.
+// boundary is the board.Provider port. Nothing here execs or touches the
+// filesystem: the one write that is not a Provider call — views.toml — rides
+// the injected Options.SaveViews closure, nil in fixture sessions.
 package ui
 
 import (
 	"fmt"
-	"github.com/akira-toriyama/ridge/internal/board"
 	"strings"
+
+	"github.com/akira-toriyama/ridge/internal/board"
+	"github.com/akira-toriyama/ridge/internal/views"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
@@ -112,6 +116,16 @@ type Model struct {
 	qMatched map[string]bool // the store's verdict; nil = no verdict yet
 	qErr     string          // furrow's refusal for the current text, "" when clean
 	qSeq     int             // debounce + staleness fence (filter.go)
+
+	// The saved-view tabs (viewtabs.go). viewIdx is the active tab, -1 until
+	// the first switch or save — the session's own flag-shaped state is not a
+	// tab. saveViews is the ONE write path out of this package that is not a
+	// board.Provider call: an injected closure over views.toml, nil in
+	// fixture sessions, so the package still never touches the filesystem
+	// itself.
+	views     []views.View
+	viewIdx   int
+	saveViews func([]views.View) error
 
 	startupFilter tea.Cmd // pending verdict for Options.Filter, fired by Init
 
@@ -219,7 +233,9 @@ type Model struct {
 	graphRadius int
 	// graphOrient is which screen axis the layers run along. It is view state
 	// with no counterpart on the board, and like graphRadius it is re-made
-	// every session — ridge writes no state of its own to disk.
+	// every session — the one display state ridge persists at all is the
+	// explicitly saved views.toml (viewtabs.go), and the graph is not part
+	// of a saved view.
 	graphOrient graphOrient
 	// graphScroll is a screen-LINE offset into the composed frame, in both
 	// orientations. Which axis those lines run down changes; the unit does not.
@@ -302,6 +318,7 @@ func newModel(p board.Provider, dbg *DebugLog) *Model {
 		h:           60,
 		mouseOn:     true,
 		tableSort:   sortCanonical, // sortKey's zero value is sortNone (fail-safe)
+		viewIdx:     -1,            // no saved view is active until one is chosen
 		pinned:      map[string]bool{},
 		curIdx:      map[string]int{},
 		scroll:      map[string]int{},
@@ -786,6 +803,12 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 			return nil
 		}
 		m.cycleSort()
+
+	case key.Matches(msg, m.keys.ViewTab):
+		return m.switchView(viewTabDigit(msg))
+
+	case key.Matches(msg, m.keys.ViewSave):
+		m.saveView()
 
 	case key.Matches(msg, m.keys.Mouse):
 		m.mouseOn = !m.mouseOn
