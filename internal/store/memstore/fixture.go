@@ -576,19 +576,32 @@ func fixtureTasks() []*board.Task {
 	}
 }
 
-// fixtureEpics mirrors `furrow epic ls --json` for the snapshot — OPEN epics
-// only, the population that read serves. Done/Total agree with the member
-// lanes above (fixture_test pins that per epic).
+// fixtureEpics mirrors `furrow epic ls --all --json` for the snapshot — the
+// WHOLE population, open and closed. Done/Total agree with the member lanes
+// above (fixture_test pins that per epic), and a closed box with no members
+// left is a shape furrow really produces: `archive` retires the done tasks and
+// the box then reports 0/0 (measured 2026-08-28).
 //
 // OpenDeps is hand-written the way Done/Total/Stuck are: all four arrive
 // DERIVED from furrow, and fixture_test pins that the hand-kept values agree
 // with the tasks and epics this file actually holds.
 //
-// The dep edges exercise every rendering state: e-fw2m waits on ONE open box,
-// e-c4mt waits on an open box AND on e-2b7h — a dep furrow has already
-// resolved away (outside open_deps, absent from the open-only read: the
-// shape a dep on a closed epic arrives in), and e-9wtv is the stuck epic the
-// warn glyph needs.
+// The dep edges exercise every rendering state, and e-c4mt alone carries all
+// three so one peek line proves the lot: it waits on e-fw2m (OPEN), on e-2b7h
+// (CLOSED — resolvable now that the read is --all, so the surface may say so),
+// and on e-x0k9 (an id no read serves, which keeps furrow's weaker
+// "(satisfied)" reachable beside the new "(closed)"). e-fw2m waits on one open
+// box, and e-9wtv is the stuck epic the warn glyph needs.
+//
+// e-x0k9 sits in Deps and NOT in OpenDeps because that is what furrow does
+// with it: measured on v5.0.0, a box carrying an open dep, a closed dep and a
+// dangling one reported open_deps = [the open one] alone, and `epic dep --list`
+// printed the three as [open] / [closed] / [?]. The edge cannot be made with
+// the CLI — `epic dep` on an unknown ref is exit 2, kind epic-not-found — so it
+// was built by removing the target's shard, which is how a hand edit or a merge
+// produces it; `epic-dep-missing` is in furrow's lint vocabulary at severity
+// ERROR. Same deal graph.go strikes staying cycle-safe over a board that has no
+// cycles.
 //
 // The Repos/Active shape is load-bearing for the epic overlay, not decoration:
 //   - EXACTLY ONE box is Active (e-fw2m), because furrow allows at most one per
@@ -649,8 +662,21 @@ func fixtureEpics() []board.EpicInfo {
 			Meta:     map[string]string{"origin": "夏の反省", "season": "2026-27"},
 			Done:     0,
 			Total:    1,
-			Deps:     []string{"e-fw2m", "e-2b7h"},
+			Deps:     []string{"e-fw2m", "e-2b7h", "e-x0k9"},
 			OpenDeps: []string{"e-fw2m"},
+		},
+		{
+			// The CLOSED box, and the only one: it is what `epic reopen` has to
+			// aim at, what the closed-scope surfaces have to show, and what
+			// makes e-c4mt's wait on it resolvable instead of a bare id. Its
+			// members were archived with it, which is why a finished box
+			// reports 0/0.
+			ID:     "e-2b7h",
+			Title:  "夏キャンプ 2026 — 装備の棚卸しと積み方の確定",
+			Goal:   "夏装備一式が積載図つきで確定している",
+			Repos:  []string{"tomo/kyushu-trip"},
+			Labels: []string{"gear"},
+			Closed: ts("2026-07-15T09:12:07Z"),
 		},
 	}
 }

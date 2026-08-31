@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -656,5 +657,59 @@ func TestNoteEscAndEmptySubmitAppendNothing(t *testing.T) {
 	}
 	if m.inflight || len(m.pending) > 0 {
 		t.Error("nothing must reach the persist queue")
+	}
+}
+
+// furrow permits a task to stay filed under a CLOSED box — it lints that
+// epic-closed, a warning, not an error — and the --all read makes such a
+// membership resolve like any other. Both halves of that are traps:
+//
+//   - the menu would render the closed box's title with nothing to distinguish
+//     it, so the one fact worth noticing is the one not shown;
+//   - the picker is INDEXED, and a current value it cannot represent lands the
+//     cursor on row 0, "(unfiled)", whose ⏎ persists `set -e ""`.
+//
+// The second one is a silent unfile one keystroke from the cursor's resting
+// place, which is the trap the landing rule exists to prevent in the first
+// place.
+func TestAClosedMembershipIsRepresentableInTheEpicPicker(t *testing.T) {
+	task := &board.Task{ID: "t-filed", Title: "閉じた箱の中の一枚", Status: "backlog",
+		Priority: 10, Epic: "e-shut"}
+	b := board.NewBoard([]*board.Task{task},
+		board.EpicInfo{ID: "e-open", Title: "開いている箱"},
+		board.EpicInfo{ID: "e-shut", Title: "閉じた箱",
+			Closed: time.Date(2026, 7, 15, 9, 12, 7, 0, time.UTC)},
+	)
+	m := New(memstore.NewWith(b), Options{})
+	m.w, m.h = 240, 50
+	m.recompute()
+	m.relayout()
+
+	if !m.selectID("t-filed", false) {
+		t.Fatal("t-filed is not on the board")
+	}
+	m.enterEdit()
+	if m.edit == nil {
+		t.Fatal("the edit overlay did not open")
+	}
+	m.edit.menuIdx = int(fieldEpic)
+	press(m, "enter") // the picker, with its landing rule applied
+
+	rows := m.editListRows(task)
+	if len(rows) != 3 {
+		t.Fatalf("picker rows = %v, want (unfiled) + the open box + the task's own closed box", rows)
+	}
+	if !strings.Contains(rows[2], "e-shut") || !strings.Contains(rows[2], "(closed)") {
+		t.Errorf("the closed row = %q, want it named AND marked closed", rows[2])
+	}
+	if m.edit.listIdx != 2 {
+		t.Errorf("cursor landed on row %d (%q) — it must open on the task's own box, "+
+			"never on (unfiled), whose ⏎ unfiles the task", m.edit.listIdx, rows[m.edit.listIdx])
+	}
+
+	// And the menu label says so, which is the signal the raw id used to give
+	// before a closed box resolved.
+	if out := frame(m); !strings.Contains(out, "閉じた箱 (closed)") {
+		t.Error("the epic row must mark a membership furrow itself lints (epic-closed)")
 	}
 }

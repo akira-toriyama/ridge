@@ -31,10 +31,11 @@ import (
 // second keypress queue a duplicate write, and it must say what it is waiting
 // for.
 //
-// `epic done` / `epic reopen` are absent on purpose. The pinned furrow release
-// carries both (v5.0.0), but ridge's epic read is open-only, so a closed box
-// leaves the board entirely and shipping `done` alone would make closing one a
-// one-way door. Both land with the closed population, in t-sq02.
+// `epic done` / `epic reopen` are not here YET. The pinned furrow release
+// carries both (v5.0.0) and the read now serves closed boxes, so the one-way
+// door that kept them out is gone; what is left is the surface itself — the
+// row, its confirm gate, and a way to reach a box closed in an earlier
+// session. t-sq02.
 
 type epicStage int
 
@@ -893,16 +894,23 @@ func (m *Model) renderEpicList(box *board.EpicInfo, inner, budget int) string {
 			open[d] = true
 		}
 		mark = func(_ int, row string) string {
-			// The peek's wording, not a second vocabulary: furrow's derived
-			// open_deps decides, and a dep outside it is "satisfied" rather
-			// than "closed" — the open-only read cannot tell a closed box from
-			// a dangling id, so ridge does not claim to.
+			// The peek's wording, not a second vocabulary — see the block
+			// above `epic waits on` in peek.go for why each word is the one
+			// furrow itself uses.
+			de := m.b.Epic(row)
 			label := row
-			if de := m.b.Epic(row); de != nil {
+			if de != nil {
 				label = fmt.Sprintf("%s (%d/%d) %s", row, de.Done, de.Total, de.Title)
 			}
 			if !open[row] {
-				return glyphDone + " " + label + " (satisfied)"
+				switch {
+				case de == nil:
+					return glyphDone + " " + label + " (missing)"
+				case !de.Closed.IsZero():
+					return glyphDone + " " + label + " (closed)"
+				default:
+					return glyphDone + " " + label + " (satisfied)"
+				}
 			}
 			return glyphOpen + " " + label
 		}

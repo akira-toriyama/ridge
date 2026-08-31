@@ -65,7 +65,7 @@ func NewWith(b *board.Board) *Store {
 func NewGated(schema string) *Store {
 	f := func() *board.Board {
 		b := board.NewBoard(fixtureTasks(), fixtureEpics()...)
-		return board.NewStoreBoard(b.Lanes(), b.Tasks(), b.Epics(), false, schema)
+		return board.NewStoreBoard(b.Lanes(), b.Tasks(), b.EpicsAll(), false, schema)
 	}
 	return &Store{
 		b:    f(),
@@ -140,13 +140,16 @@ func (p *Store) rebuild() *board.Board {
 func withTask(b *board.Board, extra *board.Task) *board.Board {
 	tasks := append([]*board.Task(nil), b.Tasks()...)
 	tasks = append(tasks, extra)
-	return board.NewStoreBoard(b.Lanes(), tasks, cloneEpics(b.Epics()), b.Writable(), b.SchemaState())
+	return board.NewStoreBoard(b.Lanes(), tasks, cloneEpics(b.EpicsAll()), b.Writable(), b.SchemaState())
 }
 
-// withEpics returns a NEW board carrying the given epic set. Board.Epics()
-// hands out its internal slice and NewStoreBoard indexes into it by address, so
-// an epic edit applied in place would mutate the very snapshot the UI thread is
-// rendering — the one thing the port contract forbids a provider to do.
+// withEpics returns a NEW board carrying the given epic set. It takes the WHOLE
+// population, open and closed: every caller reads it back with EpicsAll, because
+// rebuilding from Epics() would drop every closed box on the first epic write.
+// Board.EpicsAll() hands out its internal slice and NewStoreBoard indexes into it
+// by address, so an epic edit applied in place would mutate the very snapshot the
+// UI thread is rendering — the one thing the port contract forbids a provider to
+// do.
 func withEpics(b *board.Board, epics []board.EpicInfo) *board.Board {
 	return board.NewStoreBoard(b.Lanes(), b.Tasks(), epics, b.Writable(), b.SchemaState())
 }
@@ -383,15 +386,15 @@ func (p *Store) PersistDepRm(id, _ string) error {
 // clones the epic set, hands fn the box to edit, and swaps a fresh board in.
 //
 // Two properties, both load-bearing. The clone means no write ever touches a
-// board already handed out (the port forbids it, and Board.Epics() returns the
-// internal slice that NewStoreBoard indexes by address). Holding the lock across
+// board already handed out (the port forbids it, and Board.EpicsAll() returns
+// the internal slice that NewStoreBoard indexes by address). Holding the lock across
 // the whole read-modify-write means an edit cannot be lost to an interleaving
 // one — the same atomicity Add has. fn returning an error swaps NOTHING, so a
 // refused edit leaves the board exactly as it was.
 func (p *Store) editEpic(id string, fn func(*board.EpicInfo) error) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	epics := cloneEpics(p.b.Epics())
+	epics := cloneEpics(p.b.EpicsAll())
 	for i := range epics {
 		if epics[i].ID != id {
 			continue
@@ -423,7 +426,7 @@ func (p *Store) EpicAdd(title string, o board.EpicAddOptions) (string, error) {
 		Labels: append([]string(nil), o.Labels...),
 		Repos:  append([]string(nil), o.Repos...),
 	}
-	p.b = withEpics(p.b, append(cloneEpics(p.b.Epics()), e))
+	p.b = withEpics(p.b, append(cloneEpics(p.b.EpicsAll()), e))
 	p.mu.Unlock()
 	return e.ID, nil
 }
@@ -525,12 +528,14 @@ func (p *Store) EpicDeactivate(id string) (board.EpicPrevious, error) {
 
 // EpicDepAdd appends an epic dep edge (board.Provider).
 //
-// The new edge joins OpenDeps too. That is NOT recomputing furrow's derivation —
-// it is keeping the two hand-kept fields consistent for the one edge just added.
-// Under ridge's open-only epic read every box on the board is open, so a wait on
-// a served box is by definition still waiting; and an edge on an id this read
-// does not serve cannot be proven satisfied either. Leaving it out instead made
-// the deps list render a wait added one keystroke ago as "(satisfied)".
+// The new edge joins OpenDeps unless it lands on a box this read serves as
+// CLOSED. That is NOT recomputing furrow's derivation — it is keeping the two
+// hand-kept fields consistent for the one edge just added. Leaving it out
+// unconditionally made the deps list render a wait added one keystroke ago as
+// already settled; adding it unconditionally would do the opposite now that the
+// read serves closed boxes and the overlay can name one. An edge on an id this
+// read does not serve at all still counts as waiting: it cannot be proven
+// satisfied.
 func (p *Store) EpicDepAdd(id, dep string) error {
 	if err := p.gate(); err != nil {
 		return err
@@ -541,6 +546,9 @@ func (p *Store) EpicDepAdd(id, dep string) error {
 	return p.editEpic(id, func(e *board.EpicInfo) error {
 		if !containsStr(e.Deps, dep) {
 			e.Deps = append(e.Deps, dep)
+		}
+		if de := p.b.Epic(dep); de != nil && !de.Closed.IsZero() {
+			return nil
 		}
 		if !containsStr(e.OpenDeps, dep) {
 			e.OpenDeps = append(e.OpenDeps, dep)

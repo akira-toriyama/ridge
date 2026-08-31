@@ -415,8 +415,9 @@ func (m *Model) demoState(kind string) error {
 		m.epic.menuIdx = int(epicFieldActive)
 
 	case "epiclist":
-		// The deps sub-editor, both resolutions in one frame: e-c4mt waits on
-		// an OPEN box and carries a dep furrow already resolved away.
+		// The deps sub-editor, all three resolutions in one frame: e-c4mt waits
+		// on an OPEN box, on one the board holds CLOSED, and on an id no read
+		// serves.
 		if err := m.demoEpicPanel("e-c4mt"); err != nil {
 			return err
 		}
