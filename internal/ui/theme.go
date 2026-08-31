@@ -219,12 +219,26 @@ func (t *theme) chipFor(name string) lg.Style {
 	if len(t.chipHues) == 0 {
 		return t.chip
 	}
-	var h uint32 = 2166136261
-	for i := 0; i < len(name); i++ {
-		h ^= uint32(name[i])
+	return t.chipHues[chipIndex(name, len(t.chipHues))]
+}
+
+// chipIndex maps a label name onto a palette slot: FNV-1a over the name's
+// BYTES, modulo n (which every caller must keep positive).
+//
+// Bytes — not runes, not display cells. The repo rule "measure text with
+// lipgloss.Width, never len()" governs LAYOUT and has no jurisdiction over a
+// hash: applied here it hashes only a prefix of every multi-byte name, and
+// ranging runes feeds code points where the contract says bytes. Both
+// recolour CJK labels without failing anything but
+// TestChipIndexHashesBytesNotRunesOrCells, which is why n is a parameter:
+// that test pins its own, so the palette can grow without going red.
+func chipIndex(name string, n int) int {
+	h := uint32(2166136261)
+	for _, b := range []byte(name) {
+		h ^= uint32(b)
 		h *= 16777619
 	}
-	return t.chipHues[int(h%uint32(len(t.chipHues)))] //nolint:gosec // a fixed palette: len is tiny and non-negative, nowhere near MaxUint32
+	return int(h % uint32(n)) //nolint:gosec // n is a palette length: tiny and positive, nowhere near MaxUint32
 }
 
 // laneDot is the column's colour identity, falling back to the muted default
