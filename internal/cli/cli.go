@@ -142,6 +142,13 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 		_, _ = fmt.Fprintln(stderr, "error: -table and -roadmap both name the opening view; pick one")
 		return CodeUsage
 	}
+	// The peek is board/table chrome; the roadmap never composites it, so
+	// accepting the pair would ship exactly the silent no-op the refusal
+	// above exists to prevent (-table -peek, by contrast, is honoured).
+	if *roadmap && (*peek || *tree) {
+		_, _ = fmt.Fprintln(stderr, "error: -peek/-tree open the board's side panel; the roadmap view has none")
+		return CodeUsage
+	}
 
 	// -demo is a -dump modifier (glossary), and it used to be READ only inside
 	// the -dump branch while still forcing the fixture: a bare `-demo move`

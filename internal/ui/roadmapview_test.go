@@ -24,6 +24,9 @@ func roadModel(t *testing.T, w, h int) *Model {
 	if m.view != viewRoadmap {
 		t.Fatal("C did not open the roadmap")
 	}
+	// One render, as bubbletea guarantees after every Update: the first frame
+	// is what places the window (roadXOff's sentinel).
+	_ = frame(m)
 	return m
 }
 
@@ -98,6 +101,7 @@ func TestRoadmapDiamondColoursByOverdue(t *testing.T) {
 	m2 := New(memstore.NewWith(b), Options{})
 	m2.w, m2.h = 240, 40
 	m2.openRoadmap()
+	_ = frame(m2)
 	l2 := m2.roadLay
 	if row := m2.roadRowLine(l2, l2.Row("t-now"), m2.roadTLW()); !strings.Contains(row, m2.th.warn.Render(glyphDue)) {
 		t.Errorf("a due-today ◆ is not warn-styled: %q", row)
@@ -346,6 +350,60 @@ func TestRoadmapEmptyBoardSaysSo(t *testing.T) {
 	m.openRoadmap()
 	if !strings.Contains(frame(m), "no open task carries a due") {
 		t.Error("an empty roadmap did not say why it is empty")
+	}
+}
+
+// Today's gridline survives the epic chip: on an overdue boxed row the
+// chip's natural span crosses today, and the chip yields — found by review:
+// every headless frame the first cut shipped had a hole in the ┊ on exactly
+// the rows the view exists to surface.
+func TestRoadmapTodayGridlineSurvivesTheEpicChip(t *testing.T) {
+	m := roadModel(t, 240, 40)
+	l := m.roadLay
+	r := l.Row("t-jv3j") // overdue AND boxed
+	cells := ansiStrip(m.roadCells(l, m.b.Task("t-jv3j"), r, m.roadTLW()))
+	if got, want := pos(cells, glyphToday), l.TodayX-m.roadXOff; got != want {
+		t.Errorf("┊ at column %d, want %d — the chip covered the gridline: %q", got, want, cells)
+	}
+	if !strings.Contains(cells, glyphEpic) {
+		t.Errorf("the chip vanished instead of yielding: %q", cells)
+	}
+}
+
+// The opening window is placed at the first RENDER, against the real width:
+// today a third of the way in, even when the seeded selection is a year of
+// cells away — the seed keeps the selection and degrades to an edge arrow
+// rather than dragging the window off the one anchor a timeline opens on.
+// Found by review: the first cut let the seed win and derived the window
+// from the constructor's default width, and a 240-column frame opened with
+// no ┊ anywhere.
+func TestRoadmapOpensWithTodayPlacedAgainstTheRealWidth(t *testing.T) {
+	fixedZone(t, "TEST", 9)
+	fixedNow(t, time.Date(2026, 8, 31, 12, 0, 0, 0, time.Local))
+	b := board.NewBoard([]*board.Task{
+		{ID: "t-old", Status: "ready", Title: "a year late", Due: at(2025, 9, 1, 12)},
+		{ID: "t-soon", Status: "ready", Title: "soon", Due: at(2026, 9, 2, 12)},
+	})
+	m := New(memstore.NewWith(b), Options{Roadmap: true})
+	m.w, m.h = 240, 40
+	m.recompute()
+	out := frame(m)
+
+	l, tlW := m.roadLay, m.roadTLW()
+	if l.Cells <= tlW {
+		t.Fatalf("setup: axis %d cells must overflow the %d-cell window", l.Cells, tlW)
+	}
+	if m.roadSel != "t-old" {
+		t.Fatalf("seed = %q, want the board cursor's t-old", m.roadSel)
+	}
+	if got, want := m.roadXOff, clamp(l.TodayX-tlW/3, 0, l.Cells-tlW); got != want {
+		t.Errorf("roadXOff = %d, want today a third in (%d)", got, want)
+	}
+	if tx := l.TodayX - m.roadXOff; tx < 0 || tx >= tlW {
+		t.Errorf("today sits at window column %d of %d — the window opened away from it", tx, tlW)
+	}
+	if !strings.Contains(out, glyphDropR) {
+		t.Error("the off-window seed ◆ left no ◂ edge arrow")
 	}
 }
 

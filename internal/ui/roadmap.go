@@ -248,9 +248,11 @@ func roadTicks(z roadZoom, start, off, n int) (coarse, fine []roadTick) {
 	// a period start near the edge wins over the context — the first cut of
 	// this function placed the context first, and its collision guard then
 	// dropped "2026-08" in favour of a "2026-07" that owned two cells.
-	ctx := unitStart(z, start+off).Format(map[roadZoom]string{
-		zoomDay: "2006-01", zoomWeek: "2006", zoomMonth: "2006",
-	}[z])
+	form := "2006"
+	if z == zoomDay {
+		form = "2006-01"
+	}
+	ctx := unitStart(z, start+off).Format(form)
 	if (len(coarse) == 0 || coarse[0].X >= len(ctx)+1) && len(ctx) <= n {
 		coarse = append([]roadTick{{X: 0, Text: ctx}}, coarse...)
 	}

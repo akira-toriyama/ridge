@@ -59,11 +59,13 @@ func New(p board.Provider, o Options) *Model {
 		m.view = viewTable
 	}
 	if o.Roadmap {
-		// The full open sequence, not a bare view assignment: the roadmap
-		// needs its selection and initial window derived. Its opening note is
-		// overwritten by the load note below, exactly as -table's silent
-		// switch is.
-		m.openRoadmap()
+		// startRoadmap, NOT openRoadmap: the note-free half. openRoadmap's
+		// status line would land exactly where the read-only warning below
+		// protects itself by writing nothing — the first cut used the full
+		// open and `-readonly -roadmap` lost the warning (found by review;
+		// the same regression this switch's own comment records shipping
+		// once before).
+		m.startRoadmap()
 	}
 	if o.GraphLR {
 		m.graphOrient = orientLeftRight

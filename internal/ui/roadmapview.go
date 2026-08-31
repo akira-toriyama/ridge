@@ -90,6 +90,22 @@ func (m *Model) renderRoadmap() string {
 	m.roadScroll = clamp(m.roadScroll, 0, maxInt(0, len(l.Rows)-rowsH))
 	m.roadScroll = m.scrollRoadToSel(l, len(l.Rows), rowsH)
 	tlW := m.roadTLW()
+	if m.roadXOff < 0 {
+		// The opening window, placed at first RENDER rather than in
+		// startRoadmap: the -roadmap flag opens the view inside New(), before
+		// the terminal has reported a size, and a window placed against the
+		// constructor's default width put today off screen on any other
+		// terminal (found by review). Today lands a third of the way in —
+		// the promises just behind and just ahead of it are the ones that
+		// need attention, and GH's roadmap opens the same way. The seed may
+		// sit outside this window: its row is still the selection (the strip
+		// shows it, its ◆ leaves an edge arrow), and the first cursor move
+		// pans to it.
+		m.roadXOff = 0
+		if l.Cells > tlW {
+			m.roadXOff = clamp(l.TodayX-tlW/3, 0, l.Cells-tlW)
+		}
+	}
 	m.roadXOff = clamp(m.roadXOff, 0, maxInt(0, l.Cells-tlW))
 
 	canvas := make([]string, 0, roadAxisH+rowsH)
@@ -253,8 +269,17 @@ func (m *Model) roadCells(l *roadLayout, t *board.Task, r *roadRow, tlW int) str
 	// substitute for GH's vertical markers, which need dates no furrow epic
 	// has. Resolved to its title like every other surface; the raw e- id in a
 	// frame is a leak two views already assert against.
+	//
+	// The chip YIELDS to today's gridline: on every overdue row that belongs
+	// to a box the chip's natural span crosses today, and letting it win put
+	// a hole in the ┊ on exactly the rows the view exists to surface (found
+	// by review — all three shipped headless frames had it).
 	chip := ""
-	if t.Epic != "" && rest > 3 {
+	budget := rest - 3
+	if tx > x {
+		budget = minInt(budget, tx-x-4)
+	}
+	if t.Epic != "" && budget > 0 {
 		label := t.Epic
 		if e := m.b.Epic(t.Epic); e != nil {
 			label = e.Title
@@ -263,7 +288,7 @@ func (m *Model) roadCells(l *roadLayout, t *board.Task, r *roadRow, tlW int) str
 		if m.taskHidden(t.ID) {
 			st = th.dim
 		}
-		chip = " " + st.Render(glyphEpic+" "+ansi.Truncate(label, rest-3, "…"))
+		chip = " " + st.Render(glyphEpic+" "+ansi.Truncate(label, budget, "…"))
 	}
 	return out + chip + seg(x+1+lg.Width(chip), tlW)
 }
@@ -370,7 +395,10 @@ func (m *Model) roadJump(last bool) {
 // (ensureVisible's rule).
 func (m *Model) roadEnsureX() {
 	l := m.roadLay
-	if l == nil {
+	// A negative offset is the not-yet-placed sentinel: the first render owns
+	// the placement, and nudging the sentinel would pan a window that does
+	// not exist yet.
+	if l == nil || m.roadXOff < 0 {
 		return
 	}
 	r := l.Row(m.roadSel)
@@ -378,10 +406,12 @@ func (m *Model) roadEnsureX() {
 		return
 	}
 	tlW := m.roadTLW()
+	// else-if, deliberately: the second test must read the offset the FIRST
+	// one was judged against, or at tlW==1 the branches chain and park the ◆
+	// one cell outside the window (found by review).
 	if r.X < m.roadXOff {
 		m.roadXOff = maxInt(0, r.X-1)
-	}
-	if r.X >= m.roadXOff+tlW {
+	} else if r.X >= m.roadXOff+tlW {
 		m.roadXOff = minInt(r.X-tlW+2, maxInt(0, l.Cells-tlW))
 	}
 }
@@ -409,7 +439,9 @@ func (m *Model) scrollRoadToSel(l *roadLayout, total, rowsH int) int {
 
 func (m *Model) roadPanBy(d int) {
 	l := m.roadLay
-	if l == nil {
+	if l == nil || m.roadXOff < 0 {
+		// Panning before the first render would move the sentinel, not a
+		// window (roadEnsureX's rule).
 		return
 	}
 	m.roadXOff = clamp(m.roadXOff+d*roadPan(m.roadZoom), 0, maxInt(0, l.Cells-m.roadTLW()))
@@ -417,13 +449,22 @@ func (m *Model) roadPanBy(d int) {
 
 // ---- keys -------------------------------------------------------------------
 
-// openRoadmap switches to the timeline, landing on the board cursor's task
-// when it is on the axis at all — arriving from a dated task and losing it
-// would make the roadmap a place you go rather than a way to look at when
-// you already are.
-func (m *Model) openRoadmap() {
+// startRoadmap is openRoadmap minus the status line, because the -roadmap
+// flag opens the view from inside New() — where a note would overwrite the
+// read-only warning that is set exactly once per session and never restored
+// (dump.go's own switch documents that trap; -table dodges it by being a
+// bare view assignment, and this split is how -roadmap dodges it — found by
+// review). It returns the fallback sentence the interactive path owes, ""
+// when the seed landed.
+//
+// The seed is the caller's cursor when that task is on the axis at all —
+// arriving from a dated task and losing it would make the roadmap a place
+// you go rather than a way to look at when you already are. The WINDOW is
+// deliberately not placed here: roadXOff's sentinel defers it to the first
+// render, the one place the real terminal width is known (renderRoadmap).
+func (m *Model) startRoadmap() string {
 	m.cancelDrag()
-	m.roadScroll, m.roadXOff, m.roadMoved = 0, 0, false
+	m.roadScroll, m.roadXOff, m.roadMoved = 0, -1, false
 	m.roadSel = ""
 	if t := m.curTask(); t != nil {
 		m.roadSel = t.ID
@@ -431,13 +472,6 @@ func (m *Model) openRoadmap() {
 	m.view = viewRoadmap
 	l := m.buildRoad()
 	m.roadLay = l
-	tlW := m.roadTLW()
-	if l.Cells > tlW {
-		// Open with today a third of the way in: the promises that need
-		// attention are the ones just behind and just ahead of it, and GH's
-		// roadmap opens the same way.
-		m.roadXOff = clamp(l.TodayX-tlW/3, 0, l.Cells-tlW)
-	}
 	if l.Row(m.roadSel) == nil {
 		was := m.b.Task(m.roadSel)
 		m.clampRoadSel(l)
@@ -446,15 +480,18 @@ func (m *Model) openRoadmap() {
 			// a due is not a task without one, and the map's opening fallback
 			// records what saying the wrong reason costs.
 			if was.Due.IsZero() {
-				m.note("roadmap — %s carries no due, so the cursor went to the first promise · z zoom · esc returns", was.ID)
-			} else {
-				m.note("roadmap — %s is done, so the cursor went to the first open promise · z zoom · esc returns", was.ID)
+				return fmt.Sprintf("roadmap — %s carries no due, so the cursor went to the first promise · z zoom · esc returns", was.ID)
 			}
-			m.roadEnsureX()
-			return
+			return fmt.Sprintf("roadmap — %s is done, so the cursor went to the first open promise · z zoom · esc returns", was.ID)
 		}
-	} else {
-		m.roadEnsureX()
+	}
+	return ""
+}
+
+func (m *Model) openRoadmap() {
+	if s := m.startRoadmap(); s != "" {
+		m.note("%s", s)
+		return
 	}
 	m.note("roadmap — every open task with a due, on one time axis · z zoom · h/l pan · esc returns")
 }
