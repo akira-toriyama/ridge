@@ -81,6 +81,30 @@ type reloadDoneMsg struct {
 	err      error
 }
 
+// refuseWhileRollingBack refuses a gesture before it commits anything the
+// window cannot take back. enqueuePersist and enqueueStoreFirstOp both refuse
+// too, but only after the caller has already mutated m.b or closed a modal over
+// hand-typed text, and those outlive the message: the mutation stays on screen
+// until the rollback re-read lands, and permanently if that re-read fails,
+// since onReloadDone clears the window without restoring the board.
+//
+// The status line is not what breaks — the Done handler's note() is overwritten
+// by the queue's fail() inside the same Update, and applyCheck never notes at
+// all, so no success is ever rendered (measured). The board is.
+//
+// Same wording and the same apply/refused debug event those two funnels emit,
+// one layer earlier: the trail a "my edit vanished" report is read from must
+// not lose the refusal because it moved.
+func (m *Model) refuseWhileRollingBack(label string) bool {
+	if !m.rollingBack {
+		return false
+	}
+	// TestDebugLogRecordsFailureAndRollbackRefusal reads this sequence.
+	m.dbg.event("apply", "refused", map[string]any{"label": label, "why": "rolling-back"})
+	m.fail("%s dropped — the store refused the last write, rolling back", label)
+	return true
+}
+
 // enqueuePersist queues one store write whose effect is already on the board,
 // and starts the queue when it is idle. Nil when a write is in flight — the
 // queue drains itself from onPersistDone.

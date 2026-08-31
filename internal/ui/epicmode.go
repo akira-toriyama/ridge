@@ -515,6 +515,15 @@ func (m *Model) onEpicInputKey(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	case key.Matches(msg, m.keys.Commit):
 		v := strings.TrimSpace(e.input.Value())
+		// Same rule as the task overlay's inputs: a store-first write never
+		// touches m.b, so enqueueStoreFirstOp's refusal is early enough for the
+		// BOARD — but not for the draft, because the blur and stage reset below
+		// run first and the modal closes over text nothing can recover.
+		// onEpicNewKey has guarded its own title this way since t-74y3.
+		if v != "" && m.refuseWhileRollingBack("box "+e.id) {
+			m.status += "; ⏎ again in a moment"
+			return e.input.Focus()
+		}
 		e.input.Blur()
 		id := e.id
 		switch e.inputFor {

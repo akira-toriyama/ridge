@@ -525,6 +525,15 @@ func (m *Model) onEditInputKey(msg tea.KeyPressMsg, t *board.Task) tea.Cmd {
 		return nil
 	case key.Matches(msg, m.keys.Commit):
 		v := strings.TrimSpace(e.input.Value())
+		// Refused BEFORE the blur and the stage reset below. applyPatch and
+		// applyCheck refuse it too, but only after the modal has closed over
+		// hand-typed text that nothing can recover; leaving the input open and
+		// focused is what lets the user land it once the re-read arrives. An
+		// empty ⏎ is a back-out, not a write, so it still passes through.
+		if v != "" && m.refuseWhileRollingBack("edit "+e.id) {
+			m.status += "; ⏎ again in a moment"
+			return e.input.Focus()
+		}
 		e.input.Blur()
 		switch e.inputFor {
 		case inputTitle:
@@ -614,17 +623,6 @@ func (m *Model) onEditInputKey(msg tea.KeyPressMsg, t *board.Task) tea.Cmd {
 				m.note("note cancelled — nothing appended")
 				return nil
 			}
-			if m.rollingBack {
-				// Refused BEFORE the local apply, not by the queue behind it:
-				// applyCheck would land the paragraph on a board the store
-				// already refused, enqueuePersist would drop the write, and
-				// the re-focused input would invite a retry — each ⏎ stacking
-				// another unsaved copy of the same paragraph. The quick-add
-				// modal refuses this window the same way (onAddKey), keeping
-				// the typed text alive for after the rollback re-read.
-				m.fail("note dropped — the store refused the last write, rolling back; ⏎ again in a moment")
-				return e.input.Focus()
-			}
 			// One paragraph per open: the apply CLOSES the overlay (there is
 			// no list to land back in), and the peek left open behind it shows
 			// the paragraph at the body's tail.
@@ -653,6 +651,12 @@ func (m *Model) onEditInputKey(msg tea.KeyPressMsg, t *board.Task) tea.Cmd {
 // re-render, then the queued store write.
 func (m *Model) applyPatch(label string, p board.FieldPatch) tea.Cmd {
 	id := m.edit.id
+	// Every field gesture in the overlay funnels through here — title, due,
+	// value, effort, epic, and the label/repo/ref list rows — so this one
+	// guard is the whole overlay's up-front refusal.
+	if m.refuseWhileRollingBack(label + " " + id) {
+		return nil
+	}
 	if err := m.b.SetFields(id, p); err != nil {
 		m.fail("%v", err)
 		return nil
@@ -669,6 +673,9 @@ func (m *Model) applyPatch(label string, p board.FieldPatch) tea.Cmd {
 // applies are not FieldPatch-shaped.
 func (m *Model) applyCheck(label string, local func() error, persist func() error) tea.Cmd {
 	id := m.edit.id
+	if m.refuseWhileRollingBack(label + " " + id) {
+		return nil
+	}
 	if err := local(); err != nil {
 		m.fail("%v", err)
 		return nil
