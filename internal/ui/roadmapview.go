@@ -297,9 +297,14 @@ func (m *Model) roadCells(l *roadLayout, t *board.Task, r *roadRow, tlW int) str
 
 func (m *Model) roadTitleBar(l *roadLayout) string {
 	th := m.th
-	left := th.title.Render("furrow board") + th.crumb.Render("  ·  ") + m.fullTabs(viewRoadmap)
 	right := th.crumb.Render(fmt.Sprintf("%d dated tasks  ·  ", len(l.Rows))) +
 		th.accent.Render("⟨ROADMAP⟩") + th.dim.Render("  ·  ? help")
+	// The saved-view tabs render here too: the roadmap is the one full-screen
+	// view a saved view can BE, so landing on a roadmap tab must not hide the
+	// tab strip that got you there (viewtabs.go). Right first, then the strip
+	// budgeted to what remains — chromeLayers' rule.
+	prefix := th.title.Render("furrow board") + th.crumb.Render("  ·  ") + m.fullTabs(viewRoadmap)
+	left := prefix + m.viewTabStrip(m.w-lg.Width(prefix)-lg.Width(right)-1)
 	return joinEnds(left, right, m.w)
 }
 
@@ -467,12 +472,23 @@ func (m *Model) roadPanBy(d int) {
 // deliberately not placed here: roadXOff's sentinel defers it to the first
 // render, the one place the real terminal width is known (renderRoadmap).
 func (m *Model) startRoadmap() string {
+	seed := ""
+	if t := m.curTask(); t != nil {
+		seed = t.ID
+	}
+	return m.startRoadmapFrom(seed)
+}
+
+// startRoadmapFrom is startRoadmap with the seed made explicit. A tab
+// switch must carry roadSel directly: the roadmap MUTES what the filter
+// hides rather than dropping it, so its cursor is routinely on a task the
+// board cols do not contain — a round trip through the board cursor
+// (selectID, then curTask inside this function) dropped exactly those rows
+// and snapped the walk back (found by review, on the second pass).
+func (m *Model) startRoadmapFrom(seed string) string {
 	m.cancelDrag()
 	m.roadScroll, m.roadXOff, m.roadMoved, m.roadAnchored = 0, 0, false, false
-	m.roadSel = ""
-	if t := m.curTask(); t != nil {
-		m.roadSel = t.ID
-	}
+	m.roadSel = seed
 	m.view = viewRoadmap
 	l := m.buildRoad()
 	m.roadLay = l
@@ -572,6 +588,15 @@ func (m *Model) onRoadKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	case key.Matches(msg, m.keys.RoadZoom):
 		m.cycleRoadZoom()
+
+	// The saved-view keys work here because the title row shows the tabs
+	// here — a strip rendered in the one view that can BE a tab, with its
+	// keys dead in exactly that view, would be the advertised-but-unbound
+	// failure t-84r1 wrote the rule about.
+	case key.Matches(msg, m.keys.ViewTab):
+		return m.switchView(viewTabDigit(msg))
+	case key.Matches(msg, m.keys.ViewSave):
+		m.saveView()
 
 	case key.Matches(msg, m.keys.Roadmap), key.Matches(msg, m.keys.View):
 		m.closeRoadmap()

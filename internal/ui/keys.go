@@ -105,6 +105,14 @@ type keyMap struct {
 	// cell here.
 	RoadZoom key.Binding
 
+	// The saved-view tabs (viewtabs.go). ViewSave is the uppercase of `v` by
+	// the K/J/H/L relation: `v` toggles the layout of the state you are in,
+	// `V` names/saves the WHOLE state as a view. The digits are free on the
+	// board — the graph's radius digits live in their own full-screen mode
+	// (onGraphKey is routed first), so the two never collide.
+	ViewTab  key.Binding
+	ViewSave key.Binding
+
 	// The slice panel's two epic-management keys (epicmode.go). EpicEdit is
 	// `m`-only on purpose: keys.Move is ("enter","m") and the panel's ⏎ SLICES,
 	// so reusing Move here would shadow the panel's own commit key. `e` was the
@@ -209,6 +217,10 @@ func defaultKeys() keyMap {
 		Roadmap:  key.NewBinding(key.WithKeys("C"), key.WithHelp("C", "roadmap")),
 		RoadZoom: key.NewBinding(key.WithKeys("z"), key.WithHelp("z", "zoom day/week/month")),
 
+		ViewTab: key.NewBinding(key.WithKeys("1", "2", "3", "4", "5", "6", "7", "8", "9"),
+			key.WithHelp("1-9", "saved view")),
+		ViewSave: key.NewBinding(key.WithKeys("V"), key.WithHelp("V", "save view")),
+
 		EpicEdit: key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "manage box")),
 		EpicNew:  key.NewBinding(key.WithKeys("A"), key.WithHelp("A", "new box")),
 	}
@@ -244,7 +256,7 @@ func (k keyMap) HelpSections(enterEdits bool) []helpSection {
 		{"normal mode", [][]key.Binding{
 			{k.Up, k.Down, k.Left, k.Right, k.NextCol, k.PrevCol, k.Top, k.Bottom},
 			{open, k.QuickUp, k.QuickDown, k.LaneBack, k.LaneFwd, k.Done, k.Edit, k.Note, k.Add},
-			{k.Peek, k.Tree, k.PeekScroll, k.Filter, k.OnlyBlock, k.Slice, k.View, k.Sort},
+			{k.Peek, k.Tree, k.PeekScroll, k.Filter, k.OnlyBlock, k.Slice, k.View, k.Sort, k.ViewTab, k.ViewSave},
 			// Boxes was absent from this section for two releases: `E` worked
 			// while the one canonical key list denied it existed. Every
 			// full-screen view's opener belongs here — the section is "your
@@ -282,9 +294,13 @@ func (k keyMap) HelpSections(enterEdits bool) []helpSection {
 			{k.Boxes, k.View, k.Cancel},
 		}},
 		// The roadmap's surface. Same rule again: every key onRoadKey acts on.
+		// The saved-view keys are listed here and in no other full-screen
+		// section because the roadmap is the one full-screen view a saved
+		// view can BE — its title row carries the tabs, so its keys must too.
 		{"roadmap", [][]key.Binding{
 			{k.Up, k.Down, k.Left, k.Right},
 			{k.RoadZoom, k.Top, k.Bottom, k.PeekScroll},
+			{k.ViewTab, k.ViewSave},
 			{k.Roadmap, k.View, k.Cancel},
 		}},
 		{"graph", [][]key.Binding{

@@ -180,6 +180,44 @@ due 昇順に並べ、横軸 = 時間に `◆` を置く**。「何がいつ切�
 `ridge -roadmap` で実盤面をこのビューから開ける。headless は
 `-dump -roadmap`（day）と `-demo roadmapweek` / `-demo roadmapmonth`。
 
+### 保存ビュー — タブ + views.toml
+
+GitHub Projects の view タブ相当。**view = {layout, q, sort, slice} の束に
+名前を付けたもの**で、正本は `~/.config/ridge/views.toml`（`XDG_CONFIG_HOME`
+対応）の `[[view]]`。furrow の board には置かない — 見せ方は front-end の
+所有物（vista と共有したくなったら furrow 側に要望を出し直す）。
+
+```toml
+[[view]]
+name = "今週の締切"
+layout = "roadmap"    # board | table | roadmap（省略 = board）
+q = "is:actionable"   # furrow -q へそのまま渡る文字列
+sort = "due asc"      # updated|created|value|effort|due [asc|desc]（効くのは table）
+slice = "epic:e-xxxx" # repo|label|epic :値（slice パネルの選択と同じ）
+```
+
+- タブ帯はタイトル行の Board|Table の右。`1`-`9` で切替、`V` で現在の状態を
+  active タブへ保存。タブが無い状態の `V` は "view N" で新規作成（GH の
+  New view と同じく placeholder 名 — rename は views.toml を編集）。
+  **上限 9 個**: digit がタブへ届く唯一の経路なので、10 個目の新規は理由つきで
+  拒否する（手書きで 10 個以上置いた場合、10 個目以降は表示のみ）。
+- active タブから状態がずれるとタブに **●**（GH の未保存ドット）。digit の
+  再押下で保存済みの束に巻き戻せる。
+- **roadmap ビューの中でも `1`-`9` / `V` は効く** — roadmap は保存ビューに
+  なれる唯一の全画面ビューなので、そのタイトル行にもタブ帯が出る。graph /
+  map / boxes が layout に無いのは意図: graph は起点 task が要り、map / boxes
+  は population の切替で、どれも「名前を付けて冷えた状態から再現する」対象では
+  ない。
+- 読み込みは起動時1回・書くのは `V` だけ。書き戻しは**全量・last-writer-wins**
+  — セッション中の手編集も、並行セッションの先行 `V` も、後の `V` が上書きする
+  （merge はしない）。file が読めない / parse できない時だけが起動失敗で、
+  semantic な typo（未知の layout・sort・slice・key・制御文字）は 1フィールド
+  単位で clamp して status line に警告する。symlink の views.toml へは
+  link を貫通して書く（dotfiles 管理を壊さない）。
+- fixture 系（`-mock` / `-dump` / `-readonly`）は実 views.toml を読まず書けない。
+  headless 検証面は `-demo views`（table + 未保存ドット）と `-demo viewsroad`
+  （roadmap タブ）。
+
 ## キー
 
 **全キーは `?` が正典。** 起動して `?` を押すと、その時点で有効なキーが全部出る
@@ -195,6 +233,7 @@ due 昇順に並べ、横軸 = 時間に `◆` を置く**。「何がいつ切�
 | `T` | 依存マップ（全クラスタ俯瞰） |
 | `E` | 箱の俯瞰（全 epic を repo 別に。`⏎` でその箱に絞る・`z` で closed 込み） |
 | `C` | roadmap（due タイムライン。`z` で day/week/month・`h`/`l` で pan） |
+| `1`-`9` / `V` | 保存ビューの切替 / 保存（views.toml が正本。タブ無しの `V` = 新規） |
 | `Enter` | move mode（`Enter` 確定・`Esc` 取消）。**peek を開いていると / Table では編集メニュー** |
 | `q` | 終了 |
 
@@ -289,6 +328,7 @@ charm.land/bubbletea/v2      ランタイム
 charm.land/lipgloss/v2       スタイル・レイアウト・コンポジタ（Layer / Hit）
 charm.land/bubbles/v2        help / key / textinput / viewport
 github.com/charmbracelet/x/ansi  幅を保つ切り詰め（CJK 必須。`len()` 禁止の相方）
+github.com/pelletier/go-toml/v2  views.toml の読み書き（保存ビュー）
 ```
 
 v2 からモジュールパスが `github.com/charmbracelet/*` → `charm.land/*` に

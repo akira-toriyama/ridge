@@ -13,6 +13,21 @@ import (
 	"github.com/akira-toriyama/ridge/internal/ui"
 )
 
+// The live path reads the user's real views.toml (views.DefaultPath), so the
+// XDG root is pinned to an empty temp dir for the whole package — a test must
+// never vary with this machine's config, even one that only reaches the live
+// path by a future edit.
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "ridge-cli-xdg-*")
+	if err != nil {
+		panic(err)
+	}
+	_ = os.Setenv("XDG_CONFIG_HOME", dir)
+	code := m.Run()
+	_ = os.RemoveAll(dir)
+	os.Exit(code)
+}
+
 // The exit-code contract is declared "a public API for scripts and agents, so
 // the meanings must stay stable" — and nothing asserted a single return site.
 // These drive run() with its writers injected, so no test touches os.Args or
@@ -23,6 +38,50 @@ func runArgs(t *testing.T, args ...string) (Code, string, string) {
 	var out, errb bytes.Buffer
 	code := run(args, &out, &errb)
 	return code, out.String(), errb.String()
+}
+
+// setViewsToml points XDG at a fresh dir holding the given views.toml and
+// returns that dir. t.Setenv overrides TestMain's package-wide pin for one
+// test.
+func setViewsToml(t *testing.T, content string) string {
+	t.Helper()
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	if err := os.MkdirAll(filepath.Join(dir, "ridge"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "ridge", "views.toml"), []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+// A views.toml that cannot be parsed refuses the LIVE invocation before any
+// file is created or any store is contacted — semantic typos are clamped
+// inside views.Load instead and never reach this refusal.
+func TestMalformedViewsTomlRefusesTheLiveInvocation(t *testing.T) {
+	setViewsToml(t, "[[view]\nbroken")
+	code, _, errb := runArgs(t)
+	if code != CodeRun {
+		t.Fatalf("exit %d, want %d (CodeRun): %s", code, CodeRun, errb)
+	}
+	if !strings.Contains(errb, "views.toml") {
+		t.Errorf("stderr %q does not name the file to fix", errb)
+	}
+}
+
+// The fixture paths must not vary with this machine's views.toml — a -dump
+// frame is deterministic chrome, and -demo views injects its own set. This
+// is the wiring pin the -debuglog test exists for, on the views port.
+func TestDumpIgnoresTheMachinesViewsToml(t *testing.T) {
+	setViewsToml(t, "[[view]]\nname = \"SHOULD-NOT-APPEAR\"\n")
+	code, out, errb := runArgs(t, "-dump", "-plain")
+	if code != CodeOK {
+		t.Fatalf("-dump exited %d: %s", code, errb)
+	}
+	if strings.Contains(out, "SHOULD-NOT-APPEAR") {
+		t.Error("-dump rendered the machine's views.toml into a fixture frame")
+	}
 }
 
 // `ridge -h` is the invocation everyone types first. Binding -h to the dump
