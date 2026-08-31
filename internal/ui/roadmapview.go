@@ -297,13 +297,14 @@ func (m *Model) roadCells(l *roadLayout, t *board.Task, r *roadRow, tlW int) str
 
 func (m *Model) roadTitleBar(l *roadLayout) string {
 	th := m.th
-	// The saved-view tabs render here too: the roadmap is the one full-screen
-	// view a saved view can BE, so landing on a roadmap tab must not hide the
-	// tab strip that got you there (viewtabs.go).
-	left := th.title.Render("furrow board") + th.crumb.Render("  ·  ") + m.fullTabs(viewRoadmap) +
-		m.viewTabStrip()
 	right := th.crumb.Render(fmt.Sprintf("%d dated tasks  ·  ", len(l.Rows))) +
 		th.accent.Render("⟨ROADMAP⟩") + th.dim.Render("  ·  ? help")
+	// The saved-view tabs render here too: the roadmap is the one full-screen
+	// view a saved view can BE, so landing on a roadmap tab must not hide the
+	// tab strip that got you there (viewtabs.go). Right first, then the strip
+	// budgeted to what remains — chromeLayers' rule.
+	prefix := th.title.Render("furrow board") + th.crumb.Render("  ·  ") + m.fullTabs(viewRoadmap)
+	left := prefix + m.viewTabStrip(m.w-lg.Width(prefix)-lg.Width(right)-1)
 	return joinEnds(left, right, m.w)
 }
 

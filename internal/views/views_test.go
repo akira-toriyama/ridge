@@ -135,6 +135,87 @@ slice = "epic:e-xxxx"
 	}
 }
 
+// TestLoadStripsControlCharacters: every one of these strings is rendered
+// into a single chrome row, and a TOML basic string can spell \n or \u001b
+// without a raw byte in the file — one such name sheared the whole frame
+// under the title row (found by review).
+func TestLoadStripsControlCharacters(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "views.toml")
+	src := "[[view]]\nname = \"火の\\n粉\"\nq = \"label:\\u001b[31mred\"\n"
+	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	vs, warns, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(vs) != 1 {
+		t.Fatalf("got %d views, want 1", len(vs))
+	}
+	if strings.ContainsAny(vs[0].Name+vs[0].Q, "\n\x1b") {
+		t.Errorf("control characters survived: %+v", vs[0])
+	}
+	if vs[0].Name != "火の 粉" {
+		t.Errorf("name: got %q, want the newline replaced by a space", vs[0].Name)
+	}
+	if len(warns) != 2 {
+		t.Errorf("got %d warnings %q, want one per repaired field", len(warns), warns)
+	}
+}
+
+// TestLoadWarnsOnUnknownKeys: a misspelled KEY is the likelier hand-edit
+// than a misspelled value, and it used to be the one typo with no report.
+// Still a warning, never an error — unknown keys stay ignored on purpose
+// (forward-compat).
+func TestLoadWarnsOnUnknownKeys(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "views.toml")
+	src := "[[view]]\nname = \"ok\"\nlayuot = \"table\"\n"
+	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	vs, warns, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(vs) != 1 || vs[0].Layout != "" {
+		t.Fatalf("unknown key changed the decode: %+v", vs)
+	}
+	found := false
+	for _, w := range warns {
+		if strings.Contains(w, "layuot") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("warnings %q do not name the misspelled key", warns)
+	}
+}
+
+// TestSaveWritesThroughASymlink: a dotfiles-managed views.toml is a symlink,
+// and a bare temp+rename replaced the link with a regular file, orphaning
+// the target (found by review).
+func TestSaveWritesThroughASymlink(t *testing.T) {
+	target := filepath.Join(t.TempDir(), "dotfiles", "views.toml")
+	if err := Save(target, []View{{Name: "old"}}); err != nil {
+		t.Fatalf("seed Save: %v", err)
+	}
+	linkDir := t.TempDir()
+	link := filepath.Join(linkDir, "views.toml")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatalf("Symlink: %v", err)
+	}
+	if err := Save(link, []View{{Name: "new"}}); err != nil {
+		t.Fatalf("Save through link: %v", err)
+	}
+	if fi, err := os.Lstat(link); err != nil || fi.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("the link was replaced by a regular file (mode %v, err %v)", fi.Mode(), err)
+	}
+	got, _, err := Load(target)
+	if err != nil || len(got) != 1 || got[0].Name != "new" {
+		t.Errorf("the TARGET did not receive the write: (%+v, %v)", got, err)
+	}
+}
+
 func TestSplitSort(t *testing.T) {
 	cases := []struct {
 		in       string

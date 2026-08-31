@@ -14,6 +14,7 @@
 package views
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -61,10 +62,11 @@ type file struct {
 }
 
 // Load reads and clamps a views file. A missing file is zero views and no
-// error; a malformed TOML is the one hard error. Everything semantic is
-// CLAMPED, never fatal — an unknown layout falls back to board, a bad sort
-// or slice is dropped — with one warning per clamp, so a typo costs one
-// field of one view, not the session.
+// error; a file that cannot be read or parsed is the hard error. Everything
+// semantic is CLAMPED, never fatal — an unknown layout falls back to board,
+// a bad sort or slice is dropped, a misspelled key is ignored — with one
+// warning per repair, so a typo costs one field of one view, not the
+// session, and never goes unreported.
 func Load(path string) ([]View, []string, error) {
 	b, err := os.ReadFile(path) //nolint:gosec // the caller chose the path; default is the user's own config dir
 	if errors.Is(err, fs.ErrNotExist) {
@@ -77,11 +79,32 @@ func Load(path string) ([]View, []string, error) {
 	if err := toml.Unmarshal(b, &f); err != nil {
 		return nil, nil, fmt.Errorf("%s: %w", path, err)
 	}
-	var warns []string
+	warns := unknownKeyWarnings(b)
 	for i := range f.View {
 		f.View[i] = clamp(f.View[i], i, &warns)
 	}
 	return f.View, warns, nil
+}
+
+// unknownKeyWarnings is a second, strict decode of the same bytes, demoted
+// to warnings: the lenient decode above deliberately ignores unknown keys
+// (forward-compat — go-dev's config rule), but a misspelled KEY is the
+// likelier hand-edit than a misspelled value, and it was the one typo with
+// no report at all (found by review).
+func unknownKeyWarnings(b []byte) []string {
+	d := toml.NewDecoder(bytes.NewReader(b))
+	d.DisallowUnknownFields()
+	var f file
+	err := d.Decode(&f)
+	var sme *toml.StrictMissingError
+	if !errors.As(err, &sme) {
+		return nil // any other error already surfaced from the lenient pass
+	}
+	var warns []string
+	for _, de := range sme.Errors {
+		warns = append(warns, fmt.Sprintf("unknown key %q ignored", strings.Join(de.Key(), ".")))
+	}
+	return warns
 }
 
 // clamp normalises one view in place of rejecting it, appending one warning
@@ -89,6 +112,19 @@ func Load(path string) ([]View, []string, error) {
 func clamp(v View, i int, warns *[]string) View {
 	warn := func(format string, a ...any) {
 		*warns = append(*warns, fmt.Sprintf("view %d (%s): %s", i+1, v.Name, fmt.Sprintf(format, a...)))
+	}
+	// Control characters first: every one of these strings is rendered into
+	// a single chrome row, and one raw newline or escape byte in a
+	// hand-written name shears the whole frame under it (a TOML basic
+	// string can spell \n and \u001b escapes without a raw byte in the file).
+	for _, f := range []struct {
+		name string
+		p    *string
+	}{{"name", &v.Name}, {"q", &v.Q}, {"sort", &v.Sort}, {"slice", &v.Slice}} {
+		if s, changed := stripControl(*f.p); changed {
+			*f.p = s
+			warn("control characters in %s replaced with spaces", f.name)
+		}
 	}
 	v.Name = strings.TrimSpace(v.Name)
 	if v.Name == "" {
@@ -127,6 +163,20 @@ func clamp(v View, i int, warns *[]string) View {
 	return v
 }
 
+// stripControl replaces C0/C1 control characters and DEL with spaces,
+// reporting whether anything changed.
+func stripControl(s string) (string, bool) {
+	changed := false
+	out := strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f) {
+			changed = true
+			return ' '
+		}
+		return r
+	}, s)
+	return out, changed
+}
+
 // SplitSort parses the "<key>[ asc| desc]" spelling: the key, whether a
 // direction was given as "asc", and whether the whole string is well-formed.
 // When no direction is given, dir is returned as "" — the caller owes the
@@ -148,14 +198,24 @@ func SplitSort(s string) (key, dir string, ok bool) {
 // Save rewrites the whole file atomically (temp + rename in the same
 // directory), creating the directory on first save. The atomic dance is not
 // ceremony: the file is hand-edited too, and a crash mid-write must leave
-// the old file, never half of the new one.
+// the old file, never half of the new one. Whole-file rewrite also means
+// LAST WRITER WINS across concurrent sessions — no merge is attempted.
 func Save(path string, vs []View) error {
 	b, err := toml.Marshal(file{View: vs})
 	if err != nil {
 		return err
 	}
+	// Write THROUGH a symlinked views.toml (dotfiles-managed configs), not
+	// over it: a bare rename would replace the link with a regular file and
+	// orphan the target. A path that does not resolve (first save) stays
+	// as given.
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		path = resolved
+	}
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o750); err != nil {
+	// 0700, not 0750: when the config ROOT itself is missing, MkdirAll
+	// creates it too, and XDG says that directory is the user's alone.
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
 	tmp, err := os.CreateTemp(dir, ".views-*.toml")

@@ -199,6 +199,8 @@ slice = "epic:e-xxxx" # repo|label|epic :値（slice パネルの選択と同じ
 - タブ帯はタイトル行の Board|Table の右。`1`-`9` で切替、`V` で現在の状態を
   active タブへ保存。タブが無い状態の `V` は "view N" で新規作成（GH の
   New view と同じく placeholder 名 — rename は views.toml を編集）。
+  **上限 9 個**: digit がタブへ届く唯一の経路なので、10 個目の新規は理由つきで
+  拒否する（手書きで 10 個以上置いた場合、10 個目以降は表示のみ）。
 - active タブから状態がずれるとタブに **●**（GH の未保存ドット）。digit の
   再押下で保存済みの束に巻き戻せる。
 - **roadmap ビューの中でも `1`-`9` / `V` は効く** — roadmap は保存ビューに
@@ -206,9 +208,12 @@ slice = "epic:e-xxxx" # repo|label|epic :値（slice パネルの選択と同じ
   map / boxes が layout に無いのは意図: graph は起点 task が要り、map / boxes
   は population の切替で、どれも「名前を付けて冷えた状態から再現する」対象では
   ない。
-- 読み込みは起動時1回・書くのは `V` だけ（全量書き戻し — セッション中の手編集は
-  次の `V` で消える）。TOML 構文エラーだけが起動失敗で、semantic な typo は
-  1フィールド単位で clamp して status line に警告する。
+- 読み込みは起動時1回・書くのは `V` だけ。書き戻しは**全量・last-writer-wins**
+  — セッション中の手編集も、並行セッションの先行 `V` も、後の `V` が上書きする
+  （merge はしない）。file が読めない / parse できない時だけが起動失敗で、
+  semantic な typo（未知の layout・sort・slice・key・制御文字）は 1フィールド
+  単位で clamp して status line に警告する。symlink の views.toml へは
+  link を貫通して書く（dotfiles 管理を壊さない）。
 - fixture 系（`-mock` / `-dump` / `-readonly`）は実 views.toml を読まず書けない。
   headless 検証面は `-demo views`（table + 未保存ドット）と `-demo viewsroad`
   （roadmap タブ）。

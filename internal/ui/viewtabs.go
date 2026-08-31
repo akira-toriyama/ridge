@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	lg "charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/akira-toriyama/ridge/internal/views"
@@ -139,6 +140,9 @@ func (m *Model) currentBundle() views.View {
 		v.Layout = lay
 	case m.viewIdx >= 0 && m.viewIdx < len(m.views):
 		// A side-trip view is up: the layout dimension reads as unchanged.
+		// No caller reaches this today (the strip and V exist only where
+		// layoutOf answers) — kept so a future caller cannot make a graph
+		// detour read as an edit of the view.
 		v.Layout = normalizeView(m.views[m.viewIdx]).Layout
 	default:
 		v.Layout = "board"
@@ -162,10 +166,15 @@ func (m *Model) viewDirty() bool {
 // included: verdicts are gated downstream, exactly as they are for typing).
 func (m *Model) switchView(i int) tea.Cmd {
 	if i < 0 || i >= len(m.views) {
-		if len(m.views) == 0 {
-			m.note("no saved views — [[view]] tables in ~/.config/ridge/views.toml define the tabs (V saves the first)")
-		} else {
+		switch {
+		case len(m.views) > 0:
 			m.note("no view %d — %d view(s) in views.toml", i+1, len(m.views))
+		case m.saveViews == nil:
+			// Never advertise V here: this session cannot honour it, and the
+			// two messages would contradict each other one keystroke apart.
+			m.note("no saved views — a fixture session reads no views.toml")
+		default:
+			m.note("no saved views — [[view]] tables in ~/.config/ridge/views.toml define the tabs (V saves the first)")
 		}
 		return nil
 	}
@@ -174,6 +183,16 @@ func (m *Model) switchView(i int) tea.Cmd {
 	m.cancelDrag()
 	v := normalizeView(m.views[i])
 	prev := m.curTask()
+	if m.view == viewRoadmap {
+		// curTask knows only the board and the table; inside the roadmap the
+		// selection the user can SEE is roadSel — the trap keys.View's own
+		// comment records ("curTask() reads whichever view is current").
+		// Both exits from the view must agree about what the cursor is, and
+		// esc (closeRoadmap) carries the walk.
+		if t := m.b.Task(m.roadSel); t != nil {
+			prev = t
+		}
+	}
 	m.viewIdx = i
 
 	// The slice is ASSIGNED, not selectSlice'd: selection there is a radio
@@ -205,14 +224,17 @@ func (m *Model) switchView(i int) tea.Cmd {
 	// re-packs when it does — the same contract as typing `/` inside it.
 	switch target := viewKindOf(v.Layout); {
 	case target == viewRoadmap:
+		// Seed the walk from prev BEFORE the rebuild: startRoadmap reads the
+		// board cursor, and on a roadmap→roadmap switch that cursor is the
+		// one the user has not seen since the first roadmap tab opened.
+		if prev != nil {
+			m.selectID(prev.ID, false)
+		}
 		if s := m.startRoadmap(); s != "" {
 			// The seed-fallback sentence (why the cursor moved) still applies.
 			m.note("%s", s)
 		}
 	case m.view != target:
-		if m.view == viewRoadmap {
-			m.roadMoved = false // leaving by tab is not the walk-carrying esc
-		}
 		m.view = target
 		if target == viewTable {
 			m.tableIdx = 0
@@ -249,6 +271,12 @@ func (m *Model) saveView() {
 	if m.viewIdx >= 0 && m.viewIdx < len(m.views) {
 		b.Name = m.views[m.viewIdx].Name
 	} else {
+		if len(m.views) >= 9 {
+			// The digits are the ONLY way to reach a tab, so a tenth would be
+			// born unreachable — and the session would be parked on it.
+			m.fail("nine views is the digit budget (1-9) — prune views.toml to add another")
+			return
+		}
 		// GH's "New view" too creates a placeholder name; the file is the
 		// rename surface.
 		b.Name = fmt.Sprintf("view %d", len(m.views)+1)
@@ -275,29 +303,73 @@ func (m *Model) saveView() {
 	m.note("view %q saved", b.Name)
 }
 
-// viewTabStrip is the saved-view half of the tab band, "" when none are
-// loaded — chrome must not advertise a surface that has no keys behind it.
-// Each tab leads with the digit that reaches it, the active tab is lit, and
-// the dirty dot rides only the active one (an inactive tab cannot drift).
-func (m *Model) viewTabStrip() string {
+// viewTabStrip is the saved-view half of the tab band, at most `budget`
+// display cells; "" when no views are loaded — chrome must not advertise a
+// surface that has no keys behind it. Each tab leads with the digit that
+// reaches it, the active tab is lit, and the dirty dot rides only the
+// active one (an inactive tab cannot drift).
+//
+// When the whole strip does not fit, tabs are DROPPED FROM THE ENDS and
+// each dropped side is marked "+N", growing outward from the active tab —
+// the lit tab and its dot are the only signals of "which bundle is applied"
+// and "it has drifted", so they are the last cells this strip gives up.
+// (joinEnds truncates the row's LEFT end first, which is exactly where an
+// unbudgeted strip put them — found by review.) Lower digits are preferred
+// when both neighbours fit: the digits are the reachable tabs.
+func (m *Model) viewTabStrip(budget int) string {
 	if len(m.views) == 0 {
 		return ""
 	}
 	th := m.th
-	parts := make([]string, 0, len(m.views))
-	for i, v := range m.views {
-		label := ansi.Truncate(v.Name, viewTabW, "…")
+	sep := th.dim.Render(" │ ")
+	tab := func(i int) string {
+		label := ansi.Truncate(m.views[i].Name, viewTabW, "…")
 		if i < 9 {
 			label = fmt.Sprintf("%d %s", i+1, label)
 		}
 		switch {
 		case i == m.viewIdx && m.viewDirty():
-			parts = append(parts, th.tabOn.Render(label)+th.accent.Render(glyphViewDirty))
+			return th.tabOn.Render(label) + th.accent.Render(glyphViewDirty)
 		case i == m.viewIdx:
-			parts = append(parts, th.tabOn.Render(label))
-		default:
-			parts = append(parts, th.tabOff.Render(label))
+			return th.tabOn.Render(label)
 		}
+		return th.tabOff.Render(label)
 	}
-	return th.crumb.Render("  ·  ") + strings.Join(parts, th.dim.Render(" │ "))
+	render := func(lo, hi int) string {
+		var b strings.Builder
+		b.WriteString(th.crumb.Render("  ·  "))
+		if lo > 0 {
+			b.WriteString(th.dim.Render(fmt.Sprintf("+%d ", lo)))
+		}
+		for i := lo; i <= hi; i++ {
+			if i > lo {
+				b.WriteString(sep)
+			}
+			b.WriteString(tab(i))
+		}
+		if n := len(m.views) - 1 - hi; n > 0 {
+			b.WriteString(th.dim.Render(fmt.Sprintf(" +%d", n)))
+		}
+		return b.String()
+	}
+	anchor := clamp(m.viewIdx, 0, len(m.views)-1)
+	lo, hi := anchor, anchor
+	for {
+		if lo > 0 && lg.Width(render(lo-1, hi)) <= budget {
+			lo--
+			continue
+		}
+		if hi < len(m.views)-1 && lg.Width(render(lo, hi+1)) <= budget {
+			hi++
+			continue
+		}
+		break
+	}
+	out := render(lo, hi)
+	if lg.Width(out) > budget {
+		// Even the anchor alone overflows: the terminal, not the strip, is
+		// the problem — hard-truncate as the backstop, never overflow.
+		out = ansi.Truncate(out, maxInt(0, budget), "…")
+	}
+	return out
 }

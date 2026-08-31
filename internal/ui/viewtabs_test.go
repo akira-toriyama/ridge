@@ -2,10 +2,12 @@ package ui
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	lg "charm.land/lipgloss/v2"
 
 	"github.com/akira-toriyama/ridge/internal/store/memstore"
 	"github.com/akira-toriyama/ridge/internal/views"
@@ -271,7 +273,7 @@ func TestSaveViewInsideTheRoadmap(t *testing.T) {
 
 func TestViewTabStripShowsDigitsNamesAndTheDirtyDot(t *testing.T) {
 	m := New(memstore.New(), Options{Views: demoViews()})
-	strip := ansiStrip(m.viewTabStrip())
+	strip := ansiStrip(m.viewTabStrip(200))
 	for _, want := range []string{"1 火の粉", "2 締切", "3 表で総覧"} {
 		if !strings.Contains(strip, want) {
 			t.Errorf("strip %q is missing %q", strip, want)
@@ -284,12 +286,163 @@ func TestViewTabStripShowsDigitsNamesAndTheDirtyDot(t *testing.T) {
 		c()
 	}
 	m.cycleSort()
-	if strip := ansiStrip(m.viewTabStrip()); !strings.Contains(strip, "表で総覧"+glyphViewDirty) {
+	if strip := ansiStrip(m.viewTabStrip(200)); !strings.Contains(strip, "表で総覧"+glyphViewDirty) {
 		t.Errorf("strip %q does not dot the drifted active tab", strip)
 	}
 
-	if s := New(memstore.New(), Options{}).viewTabStrip(); s != "" {
+	if s := New(memstore.New(), Options{}).viewTabStrip(200); s != "" {
 		t.Errorf("strip with no views: got %q, want \"\" (no chrome without keys behind it)", s)
+	}
+}
+
+// TestViewTabStripNeverElidesTheActiveTab: joinEnds truncates a row's LEFT
+// end, which is exactly where an unbudgeted strip put the lit tab and its
+// dot — the two signals with no other surface (found by review). The strip
+// must spend its budget outward from the active tab and mark what it drops.
+func TestViewTabStripNeverElidesTheActiveTab(t *testing.T) {
+	nine := make([]views.View, 9)
+	for i := range nine {
+		nine[i] = views.View{Name: fmt.Sprintf("保存済みビューの長い名前%d", i+1)}
+	}
+	m := New(memstore.New(), Options{Views: nine})
+	if c := pressKey(m, '9'); c != nil {
+		c()
+	}
+	if c := m.applyFilter("label:bbq"); c != nil { // drift: the dot must ride along
+		c()
+	}
+	for _, budget := range []int{40, 60, 90, 130, 400} {
+		strip := ansiStrip(m.viewTabStrip(budget))
+		if w := lg.Width(m.viewTabStrip(budget)); w > budget {
+			t.Errorf("budget %d: strip measures %d cells", budget, w)
+		}
+		if !strings.Contains(strip, "9 ") || !strings.Contains(strip, glyphViewDirty) {
+			t.Errorf("budget %d: active tab 9 or its dot elided: %q", budget, strip)
+		}
+		if budget <= 130 && !strings.Contains(strip, "+") {
+			t.Errorf("budget %d: dropped tabs are unmarked: %q", budget, strip)
+		}
+	}
+	// The whole title row composes without overflow at the design floor.
+	frame, err := m.Dump(240, 8, "", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := strings.SplitN(frame, "\n", 2)[0]
+	if !strings.Contains(row, "9 ") || !strings.Contains(row, glyphViewDirty) {
+		t.Errorf("240-col title row lost the active tab or dot:\n%s", row)
+	}
+	if !strings.Contains(row, "? help") {
+		t.Errorf("240-col title row lost its right side:\n%s", row)
+	}
+}
+
+// TestSwitchViewCarriesTheRoadmapWalk: the two exits from the roadmap must
+// agree about the cursor. esc (closeRoadmap) carries the walked-to row; a
+// tab switch used to restore the pre-roadmap board cursor instead — and a
+// roadmap→roadmap re-press snapped the walk back (found by review; the
+// keys.View comment records the same curTask trap).
+func TestSwitchViewCarriesTheRoadmapWalk(t *testing.T) {
+	m := New(memstore.New(), Options{Views: []views.View{
+		{Name: "締切", Layout: "roadmap"},
+		{Name: "表", Layout: "table"},
+	}})
+	if c := pressKey(m, '1'); c != nil {
+		c()
+	}
+	if m.view != viewRoadmap || m.roadLay == nil || len(m.roadLay.Rows) < 2 {
+		t.Fatalf("setup: roadmap did not open with rows (lay=%v)", m.roadLay)
+	}
+	m.roadMove(+1) // walk one row: roadSel now differs from the board cursor
+	walked := m.roadSel
+	if walked == "" {
+		t.Fatal("setup: the walk did not land on a row")
+	}
+
+	// roadmap → roadmap (re-press): the walk must survive the rebuild.
+	if c := pressKey(m, '1'); c != nil {
+		c()
+	}
+	if m.roadSel != walked {
+		t.Errorf("re-pressing the roadmap tab snapped the walk back: got %s, want %s", m.roadSel, walked)
+	}
+
+	// roadmap → table: the cursor the user SEES is the walked row.
+	if c := pressKey(m, '2'); c != nil {
+		c()
+	}
+	if got := m.curTask(); got == nil || got.ID != walked {
+		id := "<nil>"
+		if got != nil {
+			id = got.ID
+		}
+		t.Errorf("leaving by tab restored an invisible cursor: got %s, want %s", id, walked)
+	}
+}
+
+// TestHelpAdvertisesViewKeysOnlyWhereTheyWork: the overlay composites in
+// every full-screen view, and 1-9/V are dead in the graph/map/boxes — the
+// t-84r1 class this repo pins.
+func TestHelpAdvertisesViewKeysOnlyWhereTheyWork(t *testing.T) {
+	const marker = "saved views (1-9/V)"
+	m := New(memstore.New(), Options{})
+	m.fullHelp = true
+	m.w, m.h = 240, 50
+
+	frame := func() string { return ansiStrip(m.View().Content) }
+	if !strings.Contains(frame(), marker) {
+		t.Errorf("board help lacks %q", marker)
+	}
+	m.openMap("")
+	if strings.Contains(frame(), marker) {
+		t.Errorf("dep-map help advertises %q where the keys are dead", marker)
+	}
+	m.view = viewBoard
+	m.openRoadmap()
+	if !strings.Contains(frame(), marker) {
+		t.Errorf("roadmap help lacks %q — the keys DO work there", marker)
+	}
+}
+
+// TestSaveViewRefusesATenthTab: the digits are the only way to reach a tab,
+// so a tenth would be born unreachable with the session parked on it.
+func TestSaveViewRefusesATenthTab(t *testing.T) {
+	nine := make([]views.View, 9)
+	for i := range nine {
+		nine[i] = views.View{Name: fmt.Sprintf("v%d", i+1)}
+	}
+	calls := 0
+	m := New(memstore.New(), Options{
+		Views:     nine,
+		SaveViews: func([]views.View) error { calls++; return nil },
+	})
+	if c := pressKey(m, 'V'); c != nil {
+		c()
+	}
+	if calls != 0 || len(m.views) != 9 || m.viewIdx != -1 {
+		t.Errorf("tenth-tab save went through: calls=%d len=%d idx=%d", calls, len(m.views), m.viewIdx)
+	}
+	if !m.statusErr || !strings.Contains(m.status, "digit budget") {
+		t.Errorf("status (%q, err=%v) does not refuse with the reason", m.status, m.statusErr)
+	}
+}
+
+// TestFixtureEmptyViewsNoteDoesNotAdvertiseV: the two messages one keystroke
+// apart must not contradict — a session that refuses V must not sell it.
+func TestFixtureEmptyViewsNoteDoesNotAdvertiseV(t *testing.T) {
+	m := New(memstore.New(), Options{}) // SaveViews nil
+	if c := pressKey(m, '1'); c != nil {
+		c()
+	}
+	if strings.Contains(m.status, "V saves") {
+		t.Errorf("fixture note %q advertises the V it will refuse", m.status)
+	}
+	m = New(memstore.New(), Options{SaveViews: func([]views.View) error { return nil }})
+	if c := pressKey(m, '1'); c != nil {
+		c()
+	}
+	if !strings.Contains(m.status, "V saves") {
+		t.Errorf("real-session note %q should teach V", m.status)
 	}
 }
 
