@@ -376,12 +376,10 @@ func (p *Store) PersistCheck(id string, i int, done bool) error {
 //
 // `furrow edit --body -` would be better — it replaces the body AND stamps the
 // entity's `updated` in one command, where a direct write leaves `updated`
-// stale. It is implemented (t-8q8c, 2026-08-10) but NOT RELEASED: the newest
-// furrow release is v4.0.0 (2026-08-09), and the contract job — which pins a
-// release precisely so ridge cannot drift ahead of one — answers
-// `unknown flag: --body`. Switching now would work only against a
-// source-built furrow and break every released one, so it waits for the
-// release that carries it.
+// stale. The release wait is over (v5.0.0 carries it; v4.0.0 answered
+// `unknown flag: --body`), so what is left is ridge-side: furrowClient has no
+// stdin path (exec.go wires stdout/stderr only) and `--body ""` is exit 2
+// where a direct write accepts an empty body. t-t9ac.
 func (p *Store) PersistBody(id, body string) error {
 	out, err := p.c.run("edit", "edit", id, "--json")
 	if err != nil {
@@ -549,10 +547,18 @@ func (p *Store) PersistDepRm(id, dep string) error {
 //
 // Store-first (board.Provider's epic family): nothing is applied locally, so
 // these compose argv, run one furrow command and report its verdict. Every
-// argv fact below was measured against furrow v4.0.0 — the release
-// .github/workflows/build.yml pins for the contract job — because the dev
-// binary on a workstation runs ahead of it (`epic reopen` exists there and not
-// in v4.0.0, which is why `epic done`/`reopen` are absent from this family).
+// argv fact below was measured against the release
+// .github/workflows/build.yml pins for the contract job — v4.0.0 originally,
+// re-measured on v5.0.0 when the pin moved. Measure against the PIN, never
+// `which furrow`: the two overtake each other in BOTH directions (`epic
+// reopen` landed in furrow on 2026-08-11, two days after v4.0.0 shipped and
+// sixteen before v5.0.0 carried it; and on the day v5.0.0 shipped the
+// workstation build was the OLDER one), and a flag that exists on only one of
+// them is a green local test and a red contract job.
+//
+// `epic done`/`reopen` stay absent from this family even though the pin now
+// carries both: ridge's epic read is open-only, so a closed box leaves the
+// board entirely and `done` alone is a one-way door (t-sq02).
 
 // epicEnvelope is the {before,after,changed} reply every epic mutation answers
 // with. Only `previous` is read: `after` would be a second, narrower source of

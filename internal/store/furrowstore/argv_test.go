@@ -2,9 +2,7 @@ package furrowstore
 
 import (
 	"encoding/json"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -94,8 +92,7 @@ func TestContractAddMapsTheDetailFlags(t *testing.T) {
 // The lab store gets a `default_repo` FIRST, because without one every add is
 // repo-less and the draft assertions hold vacuously — the first cut of this
 // test passed with the `--draft` argv line deleted (found by review: furrow's
-// auto-attach is the board config's `default_repo`, not the git remote; the
-// key must sit ABOVE the [sections], v4.0.0 board_scope_test's TOML rule).
+// auto-attach is the board config's `default_repo`, not the git remote).
 // With it set, the control arm proves the flag bites: a plain add lands
 // repo-attached, the --draft one lands repo-less, the default `furrow ls`
 // hides only the draft, the empty-`-r` load serves both, `is:draft` passes
@@ -106,16 +103,10 @@ func TestContractAddMapsTheDetailFlags(t *testing.T) {
 func TestContractAddDraftAndPromoteByRepoAttach(t *testing.T) {
 	p, dir := newLabProvider(t)
 
-	// `furrow config set` is not in the pinned release, so the key is written
-	// directly; prepending keeps the bare key above any [section].
-	cfg := filepath.Join(dir, ".furrow", "config.toml")
-	raw, err := os.ReadFile(cfg) //nolint:gosec // editing the throwaway store's own config IS the seed
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(cfg, append([]byte("default_repo = \"lab/lab\"\n"), raw...), 0o600); err != nil { //nolint:gosec // same throwaway path
-		t.Fatal(err)
-	}
+	// `furrow config set` is the file's one documented writer, and the pinned
+	// release carries it (new in v5.0.0). The hand-rolled prepend this
+	// replaces existed only because v4.0.0 had no such verb.
+	lab(t, dir, "furrow", "config", "set", "default_repo", "lab/lab")
 
 	plain, err := p.Add("素の起票", board.AddOptions{})
 	if err != nil {

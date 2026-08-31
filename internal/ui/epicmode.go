@@ -31,11 +31,10 @@ import (
 // second keypress queue a duplicate write, and it must say what it is waiting
 // for.
 //
-// `epic done` / `epic reopen` are absent on purpose. reopen does not exist in
-// the furrow release .github/workflows/build.yml pins (v4.0.0 — the dev binary
-// on a workstation is ahead of it), and shipping `done` without it would make
-// closing a box a one-way door: ridge's epic read is open-only, so a closed box
-// leaves the board entirely. Both land with the closed population, in t-sq02.
+// `epic done` / `epic reopen` are absent on purpose. The pinned furrow release
+// carries both (v5.0.0), but ridge's epic read is open-only, so a closed box
+// leaves the board entirely and shipping `done` alone would make closing one a
+// one-way door. Both land with the closed population, in t-sq02.
 
 type epicStage int
 
