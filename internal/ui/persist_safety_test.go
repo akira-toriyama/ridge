@@ -174,6 +174,129 @@ func TestRefusedGestureKeepsTheRefusalOnTheStatusLine(t *testing.T) {
 	}
 }
 
+// The gestures below are one contract (t-74y3, t-6fvd): while the window is
+// open, nothing the rollback cannot take back may happen — no m.b mutation, and
+// no modal closing over typed text. refuseWhileRollingBack's doc carries the
+// why; what matters here is that removing a guard reddens only the board and
+// text assertions, never the status ones (measured), which is why each test
+// keeps both.
+
+// `d` reaches enqueuePersist only after Board.Close has already moved the card
+// into the done lane.
+func TestDoneIsRefusedWhileRollingBack(t *testing.T) {
+	m, p := scriptedModel(t)
+	p.moveErr = errors.New("schema gate says no")
+
+	_, cmd, _ := m.commitMove("a", "ready", "ready", 3)
+	m.onPersistDone(cmd().(persistDoneMsg)) // rollingBack armed
+	if !m.rollingBack {
+		t.Fatal("a refused write must arm the rollback window")
+	}
+
+	if !m.selectID("b", false) {
+		t.Fatal("b must be selectable")
+	}
+	before, writes := laneIDs(m.b, "ready"), len(p.calls)
+
+	if _, c := m.Update(keyMsg("d")); c != nil {
+		t.Error("done must not enqueue a write inside the rollback window")
+	}
+	if got := laneIDs(m.b, "ready"); got != before {
+		t.Errorf("a refused gesture must not touch the board: %s -> %s", before, got)
+	}
+	if got := m.b.Task("b").Status; got == m.b.DoneLane() {
+		t.Errorf("b was closed anyway (status %q) — the refusal came too late", got)
+	}
+	if !m.statusErr || !strings.Contains(m.status, "dropped") {
+		t.Errorf("status = %q, want the refusal — a success note must not overwrite it", m.status)
+	}
+	if got := p.calls[writes:]; len(got) != 0 {
+		t.Errorf("the store was written to inside the window: %v", got)
+	}
+}
+
+// applyPatch is the funnel for every FIELD gesture in the edit overlay — title,
+// due, value, effort, epic, and the label/repo/ref rows — so the guard there
+// covers all of them; the retitle path stands in for the set.
+//
+// A commit from an INPUT is refused one step earlier still, before the Commit
+// branch blurs and drops the stage, because hand-typed text the modal has
+// closed over cannot be recovered. inputNote has always been refused that
+// early; the rest are now too, which is the second half of this test.
+func TestFieldEditIsRefusedWhileRollingBack(t *testing.T) {
+	m := editModel(t, "t-9sa6")
+	before := m.b.Task("t-9sa6").Title
+
+	press(m, "enter") // menu row 0 = title, opens the input
+	m.edit.input.SetValue("巻き戻し中の幽霊タイトル")
+	m.rollingBack = true
+	press(m, "enter")
+
+	if got := m.b.Task("t-9sa6").Title; got != before {
+		t.Errorf("the retitle landed on a rolling-back board: %q", got)
+	}
+	if m.inflight || len(m.pending) > 0 {
+		t.Error("nothing must reach the persist queue in the rollback window")
+	}
+	if !m.statusErr {
+		t.Error("the refusal must land on the status row")
+	}
+	if m.edit == nil || m.edit.stage != stageInput {
+		t.Fatal("the input must stay open — a closed one loses the typed text")
+	}
+	if got := m.edit.input.Value(); strings.TrimSpace(got) != "巻き戻し中の幽霊タイトル" {
+		t.Errorf("the typed text was eaten by the refusal: %q", got)
+	}
+}
+
+// The pick stage reaches applyPatch with no input in the way, so it is what
+// covers that funnel's own guard — the retitle above is stopped one layer
+// earlier, at the input commit, and so cannot.
+func TestValuePickIsRefusedWhileRollingBack(t *testing.T) {
+	m := editModel(t, "t-9sa6")
+	before := m.b.Task("t-9sa6").Value
+
+	m.edit.menuIdx = int(fieldValue)
+	press(m, "enter") // into the value pick
+	if m.edit.stage != stagePick {
+		t.Fatalf("the value pick did not open: stage=%d", m.edit.stage)
+	}
+	m.rollingBack = true
+	press(m, "3")
+
+	if got := m.b.Task("t-9sa6").Value; got != before {
+		t.Errorf("the pick landed on a rolling-back board: value %d -> %d", before, got)
+	}
+	if m.inflight || len(m.pending) > 0 {
+		t.Error("nothing must reach the persist queue in the rollback window")
+	}
+	if !m.statusErr {
+		t.Error("the refusal must land on the status row")
+	}
+}
+
+// applyCheck is applyPatch's twin for the checklist and dep ops. Same funnel
+// argument: dep rm stands in for check add/rm/reword/toggle and dep add.
+func TestChecklistAndDepEditsAreRefusedWhileRollingBack(t *testing.T) {
+	m := editModel(t, "t-jv3j") // waits on t-ehk7 (open) and t-t38k (done)
+	before := strings.Join(m.b.Task("t-jv3j").Deps, ",")
+
+	m.edit.menuIdx = int(fieldDeps)
+	press(m, "enter") // into the deps list
+	m.rollingBack = true
+	press(m, "enter") // ⏎ on a row removes the edge
+
+	if got := strings.Join(m.b.Task("t-jv3j").Deps, ","); got != before {
+		t.Errorf("the edge was cut on a rolling-back board: %q -> %q", before, got)
+	}
+	if m.inflight || len(m.pending) > 0 {
+		t.Error("nothing must reach the persist queue in the rollback window")
+	}
+	if !m.statusErr {
+		t.Error("the refusal must land on the status row")
+	}
+}
+
 // A refusal landing while the user is in the graph view must not reopen the
 // modal: the graph shares modeNormal but never composites addLayer, so the
 // reopen would put the keyboard inside an invisible input.

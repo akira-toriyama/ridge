@@ -914,6 +914,12 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 	case key.Matches(msg, m.keys.Done):
 		if t := m.curTask(); t != nil {
 			id := t.ID
+			// Board.Close moves the card out of its lane before enqueuePersist
+			// can refuse, and that jump is what survives the window (t-8nyd's
+			// shape, on the close path).
+			if m.refuseWhileRollingBack("done " + id) {
+				return nil
+			}
 			unblocked := len(m.g.OpenBlocks(id))
 			if err := m.b.Close(id); err != nil {
 				m.fail("%v", err)

@@ -975,6 +975,42 @@ func TestEpicWriteRefusedInsideTheRollbackWindowKeepsTheReason(t *testing.T) {
 	}
 }
 
+// A box's typed draft must survive the window too. The store-first funnel
+// refuses late enough that the Commit branch has already blurred and dropped
+// the stage, so the goal the user was writing would be gone — the same defect
+// the task overlay's inputs had (t-6fvd), on the box side.
+func TestEpicInputKeepsItsDraftInsideTheRollbackWindow(t *testing.T) {
+	m, _ := storeFirstModel(t)
+	sliceOnEpicAxis(t, m, "e-one")
+	press(m, "m")
+	if m.epic == nil {
+		t.Fatal("the overlay did not open")
+	}
+	m.epic.menuIdx = int(epicFieldGoal)
+	press(m, "enter")
+	if m.epic.stage != epicInput {
+		t.Fatalf("the goal input did not open: stage=%d", m.epic.stage)
+	}
+
+	draft := "巻き戻し中に書こうとするゴール"
+	m.epic.input.SetValue(draft)
+	m.rollingBack = true
+	press(m, "enter")
+
+	if len(m.pending) != 0 {
+		t.Errorf("pending = %d, want 0 — the write must not be queued", len(m.pending))
+	}
+	if m.epic == nil || m.epic.stage != epicInput {
+		t.Fatal("the input must stay open — a closed one loses the draft")
+	}
+	if got := m.epic.input.Value(); got != draft {
+		t.Errorf("the draft was eaten by the refusal: %q", got)
+	}
+	if !m.statusErr {
+		t.Error("the refusal must land on the status row")
+	}
+}
+
 // The frames a regression could blank. Each string below is the reason its
 // -demo exists, so an overlay that renders an empty box still fails here.
 func TestEpicDemoFramesCarryWhatTheyExistFor(t *testing.T) {
