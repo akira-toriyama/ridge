@@ -595,9 +595,12 @@ func (m *Model) helpLayer() *lg.Layer {
 	if _, ok := layoutOf(m.view); ok {
 		// The 1-9/V bindings cannot carry the FILE, and the file is the
 		// rename/delete surface — this is the one place in the app to learn
-		// it. Gated on the views where the keys actually answer: the overlay
-		// composites in the graph/map/boxes too, and a global line would
-		// advertise keys that are silently dead there (t-84r1's class).
+		// it. Gated on the views where the keys actually answer: unlike the
+		// SECTIONED key rows above (read under the mode that answers them —
+		// the doctrine HelpSections spells out), a footer line reads as
+		// "here and now", so in the graph/map/boxes it would be t-84r1's
+		// advertised-but-dead class. The filter-syntax line stays ungated on
+		// the same doctrine: it documents a language, not a key.
 		viewsLine := wrapJoin([]string{"saved views (1-9/V):",
 			"named {layout, q, sort, slice} bundles from ~/.config/ridge/views.toml — V saves, the file renames"}, " ", inner)
 		foot += "\n" + m.th.dim.Render(viewsLine)

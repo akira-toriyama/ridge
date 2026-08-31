@@ -472,12 +472,23 @@ func (m *Model) roadPanBy(d int) {
 // deliberately not placed here: roadXOff's sentinel defers it to the first
 // render, the one place the real terminal width is known (renderRoadmap).
 func (m *Model) startRoadmap() string {
+	seed := ""
+	if t := m.curTask(); t != nil {
+		seed = t.ID
+	}
+	return m.startRoadmapFrom(seed)
+}
+
+// startRoadmapFrom is startRoadmap with the seed made explicit. A tab
+// switch must carry roadSel directly: the roadmap MUTES what the filter
+// hides rather than dropping it, so its cursor is routinely on a task the
+// board cols do not contain — a round trip through the board cursor
+// (selectID, then curTask inside this function) dropped exactly those rows
+// and snapped the walk back (found by review, on the second pass).
+func (m *Model) startRoadmapFrom(seed string) string {
 	m.cancelDrag()
 	m.roadScroll, m.roadXOff, m.roadMoved, m.roadAnchored = 0, 0, false, false
-	m.roadSel = ""
-	if t := m.curTask(); t != nil {
-		m.roadSel = t.ID
-	}
+	m.roadSel = seed
 	m.view = viewRoadmap
 	l := m.buildRoad()
 	m.roadLay = l

@@ -380,10 +380,62 @@ func TestSwitchViewCarriesTheRoadmapWalk(t *testing.T) {
 	}
 }
 
-// TestHelpAdvertisesViewKeysOnlyWhereTheyWork: the overlay composites in
-// every full-screen view, and 1-9/V are dead in the graph/map/boxes — the
-// t-84r1 class this repo pins.
-func TestHelpAdvertisesViewKeysOnlyWhereTheyWork(t *testing.T) {
+// TestSwitchViewCarriesTheFilterHiddenWalk is the second review's blocking
+// find: the roadmap MUTES filter-hidden rows rather than dropping them, so
+// roadSel is routinely a task the board cols do not contain — and the first
+// fix round-tripped the seed through the board cursor, which loses exactly
+// those rows. The seed must travel explicitly.
+func TestSwitchViewCarriesTheFilterHiddenWalk(t *testing.T) {
+	m := New(memstore.New(), Options{Views: []views.View{
+		{Name: "絞", Layout: "roadmap", Q: "label:bbq"},
+		{Name: "表", Layout: "table", Q: "label:bbq"},
+	}})
+	if c := pressKey(m, '1'); c != nil {
+		c()
+	}
+	if m.view != viewRoadmap || m.roadLay == nil || len(m.roadLay.Rows) < 2 {
+		t.Fatalf("setup: roadmap did not open with rows")
+	}
+	// Walk until the cursor stands on a row the filter hides (muted, still
+	// walkable) — the fixture's dated set guarantees one under label:bbq.
+	hidden := ""
+	for range m.roadLay.Rows {
+		if m.taskHidden(m.roadSel) {
+			hidden = m.roadSel
+			break
+		}
+		m.roadMove(+1)
+	}
+	if hidden == "" {
+		t.Fatal("setup: no filter-hidden dated row on the fixture — the test lost its subject")
+	}
+
+	// roadmap → roadmap: the muted row survives the rebuild.
+	if c := pressKey(m, '1'); c != nil {
+		c()
+	}
+	if m.roadSel != hidden {
+		t.Errorf("re-press snapped the filter-hidden walk back: got %s, want %s", m.roadSel, hidden)
+	}
+
+	// roadmap → table under the same filter: prev cannot be shown, and the
+	// tab deliberately does NOT pin it past its own filter (a saved view
+	// shows exactly its named population — closeRoadmap's esc pin is the
+	// other exit's contract, and they diverge on purpose).
+	if c := pressKey(m, '2'); c != nil {
+		c()
+	}
+	if len(m.pinned) != 0 {
+		t.Errorf("a tab switch smuggled %d pin(s) into the saved view", len(m.pinned))
+	}
+}
+
+// TestHelpFooterAdvertisesViewKeysOnlyWhereTheyWork: the overlay composites
+// in every full-screen view, and 1-9/V are dead in the graph/map/boxes —
+// the t-84r1 class this repo pins. Scoped to the FOOTER line on purpose:
+// the sectioned key rows are read under the mode that answers them
+// (HelpSections' doctrine) and render everywhere unconditionally.
+func TestHelpFooterAdvertisesViewKeysOnlyWhereTheyWork(t *testing.T) {
 	const marker = "saved views (1-9/V)"
 	m := New(memstore.New(), Options{})
 	m.fullHelp = true

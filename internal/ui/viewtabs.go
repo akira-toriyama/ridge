@@ -224,17 +224,23 @@ func (m *Model) switchView(i int) tea.Cmd {
 	// re-packs when it does — the same contract as typing `/` inside it.
 	switch target := viewKindOf(v.Layout); {
 	case target == viewRoadmap:
-		// Seed the walk from prev BEFORE the rebuild: startRoadmap reads the
-		// board cursor, and on a roadmap→roadmap switch that cursor is the
-		// one the user has not seen since the first roadmap tab opened.
+		// The seed is passed EXPLICITLY: prev may be a task the filter hides
+		// from the board cols (the roadmap mutes such rows, it does not drop
+		// them), so a round trip through the board cursor loses it.
+		seed := ""
 		if prev != nil {
-			m.selectID(prev.ID, false)
+			seed = prev.ID
 		}
-		if s := m.startRoadmap(); s != "" {
+		if s := m.startRoadmapFrom(seed); s != "" {
 			// The seed-fallback sentence (why the cursor moved) still applies.
 			m.note("%s", s)
 		}
 	case m.view != target:
+		// Landing on a board/table tab deliberately does NOT pin prev past
+		// the tab's own filter (closeRoadmap's esc does): a saved view shows
+		// exactly its named population, and a filter-defying exemption
+		// smuggled in by the previous view would falsify it. The cursor
+		// follows prev only when the new view can show it (selectID below).
 		m.view = target
 		if target == viewTable {
 			m.tableIdx = 0

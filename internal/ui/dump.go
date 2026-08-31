@@ -14,7 +14,7 @@ import (
 // unknown-name error and the tests all read this slice, because the list was
 // duplicated in three places and adding two states updated two of them —
 // `ridge -h` then advertised eight of ten.
-var DemoNames = []string{"move", "drag", "add", "adddraft", "edit", "editpick", "editinput", "editdeps", "editrefs", "note", "refs", "graph", "graphall", "map", "mapall", "mapfiltered", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicshut", "epicdone", "epicreopen", "sliceepicall", "epicnew", "boxes", "boxesall", "roadmapweek", "roadmapmonth", "views", "viewsroad", "fail"}
+var DemoNames = []string{"move", "drag", "add", "adddraft", "edit", "editpick", "editinput", "editdeps", "editrefs", "note", "refs", "graph", "graphall", "map", "mapall", "mapfiltered", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicshut", "epicdone", "epicreopen", "sliceepicall", "epicnew", "boxes", "boxesall", "roadmapweek", "roadmapmonth", "views", "viewsroad", "viewsmany", "fail"}
 
 // Options configures a freshly-constructed Model. The zero value is the
 // default TUI: dark palette, board view, no filter.
@@ -653,6 +653,24 @@ func (m *Model) demoState(kind string) error {
 		}
 		if m.viewDirty() {
 			return fmt.Errorf("demo viewsroad: a freshly applied view is already dirty")
+		}
+
+	case "viewsmany":
+		// Nine tabs at their full name budget, active tab LAST: the roadmap
+		// title row is the one in-spec surface where the strip must elide at
+		// the 240 floor (its six-tab fullTabs prefix eats what the board's
+		// Board|Table pair leaves), so this frame proves the +N markers and
+		// the never-elided active tab — the state the second review found no
+		// demo behind.
+		m.views = make([]views.View, 9)
+		for i := range m.views {
+			m.views[i] = views.View{Name: fmt.Sprintf("保存済みビューの長い名前%d", i+1), Layout: "roadmap"}
+		}
+		if c := m.onNormalKey(tea.KeyPressMsg{Code: '9', Text: "9"}); c != nil {
+			_ = c
+		}
+		if m.view != viewRoadmap {
+			return fmt.Errorf("demo viewsmany: 9 did not open the saved roadmap view")
 		}
 
 	case "fail":

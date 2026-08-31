@@ -216,6 +216,67 @@ func TestSaveWritesThroughASymlink(t *testing.T) {
 	}
 }
 
+// TestSavePreservesAnExistingFilesMode: the atomic rename must not widen a
+// target someone deliberately chmod'ed tighter (a 0600 dotfiles target went
+// 0644 — found by review). New files still get the shareable 0644.
+func TestSavePreservesAnExistingFilesMode(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "views.toml")
+	if err := Save(path, []View{{Name: "a"}}); err != nil {
+		t.Fatalf("first Save: %v", err)
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Save(path, []View{{Name: "b"}}); err != nil {
+		t.Fatalf("second Save: %v", err)
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fi.Mode().Perm(); got != 0o600 {
+		t.Errorf("mode after re-save: got %o, want the owner's 600 kept", got)
+	}
+}
+
+// TestSaveRefusesADanglingSymlink: replacing a link that does not resolve
+// would silently disconnect the dotfiles target it pointed at.
+func TestSaveRefusesADanglingSymlink(t *testing.T) {
+	dir := t.TempDir()
+	link := filepath.Join(dir, "views.toml")
+	if err := os.Symlink(filepath.Join(dir, "gone", "views.toml"), link); err != nil {
+		t.Fatal(err)
+	}
+	err := Save(link, []View{{Name: "x"}})
+	if err == nil || !strings.Contains(err.Error(), "does not resolve") {
+		t.Fatalf("dangling link: got err %v, want a refusal naming the link", err)
+	}
+	if fi, lerr := os.Lstat(link); lerr != nil || fi.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("the dangling link was clobbered (mode %v, err %v)", fi.Mode(), lerr)
+	}
+}
+
+// TestSaveStripsControlCharacters: the frame-safety invariant runs in both
+// directions — a session holding a raw newline (reachable via -filter) must
+// not write it into the file at all, so the next Load has nothing to warn
+// about.
+func TestSaveStripsControlCharacters(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "views.toml")
+	if err := Save(path, []View{{Name: "a\nb", Q: "x\x1by"}}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	vs, warns, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(warns) != 0 {
+		t.Errorf("the saved file still needed repairs: %q", warns)
+	}
+	if vs[0].Name != "a b" || vs[0].Q != "x y" {
+		t.Errorf("control characters reached the file: %+v", vs[0])
+	}
+}
+
 func TestSplitSort(t *testing.T) {
 	cases := []struct {
 		in       string

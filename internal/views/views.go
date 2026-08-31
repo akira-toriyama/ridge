@@ -79,10 +79,14 @@ func Load(path string) ([]View, []string, error) {
 	if err := toml.Unmarshal(b, &f); err != nil {
 		return nil, nil, fmt.Errorf("%s: %w", path, err)
 	}
-	warns := unknownKeyWarnings(b)
+	var warns []string
 	for i := range f.View {
 		f.View[i] = clamp(f.View[i], i, &warns)
 	}
+	// Unknown-key warnings LAST: the status line the ui joins these into
+	// truncates from the right, and a clamp that changed what a view means
+	// outranks a key that changed nothing.
+	warns = append(warns, unknownKeyWarnings(b)...)
 	return f.View, warns, nil
 }
 
@@ -164,7 +168,10 @@ func clamp(v View, i int, warns *[]string) View {
 }
 
 // stripControl replaces C0/C1 control characters and DEL with spaces,
-// reporting whether anything changed.
+// reporting whether anything changed. Layout needs no pass: it is either a
+// vocabulary member or emptied. Format-scrambling but width-safe marks
+// (bidi overrides, zero-width joiners) are deliberately out of scope — they
+// cannot shear a frame, which is the failure this guards.
 func stripControl(s string) (string, bool) {
 	changed := false
 	out := strings.Map(func(r rune) rune {
@@ -201,16 +208,30 @@ func SplitSort(s string) (key, dir string, ok bool) {
 // the old file, never half of the new one. Whole-file rewrite also means
 // LAST WRITER WINS across concurrent sessions — no merge is attempted.
 func Save(path string, vs []View) error {
+	// The frame-safety invariant runs in BOTH directions: Load repairs what
+	// the file carries, and Save refuses to put a control character there in
+	// the first place (a raw newline can reach a session via -filter).
+	// Silent, unlike Load's warning — the session asked to save what it has,
+	// and the next Load would repair it anyway.
+	vs = append([]View(nil), vs...)
+	for i := range vs {
+		for _, p := range []*string{&vs[i].Name, &vs[i].Q, &vs[i].Sort, &vs[i].Slice} {
+			*p, _ = stripControl(*p)
+		}
+	}
 	b, err := toml.Marshal(file{View: vs})
 	if err != nil {
 		return err
 	}
 	// Write THROUGH a symlinked views.toml (dotfiles-managed configs), not
 	// over it: a bare rename would replace the link with a regular file and
-	// orphan the target. A path that does not resolve (first save) stays
-	// as given.
+	// orphan the target. A DANGLING link is refused rather than clobbered —
+	// replacing it would silently disconnect the dotfiles target the user
+	// pointed it at. A plain missing file (first save) stays as given.
 	if resolved, err := filepath.EvalSymlinks(path); err == nil {
 		path = resolved
+	} else if fi, lerr := os.Lstat(path); lerr == nil && fi.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("%s is a symlink that does not resolve — fix the link before saving", path)
 	}
 	dir := filepath.Dir(path)
 	// 0700, not 0750: when the config ROOT itself is missing, MkdirAll
@@ -234,10 +255,17 @@ func Save(path string, vs []View) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	// CreateTemp opens 0600; this file is a shareable view list, not a
-	// keystroke log (-debuglog's 0600 is for the latter), so it gets the
-	// ordinary config mode a hand-written one would have.
-	if err := os.Chmod(tmp.Name(), 0o644); err != nil { //nolint:gosec // G302: deliberately 0644, see above
+	// CreateTemp opens 0600. A NEW file gets the ordinary config mode a
+	// hand-written one would have — this is a shareable view list, not a
+	// keystroke log (-debuglog's 0600 is for the latter). An EXISTING file
+	// keeps its own mode: the rename must not widen a target someone
+	// deliberately chmod'ed tighter (a 0600 dotfiles target went 0644 —
+	// found by review).
+	mode := os.FileMode(0o644)
+	if fi, err := os.Stat(path); err == nil {
+		mode = fi.Mode().Perm()
+	}
+	if err := os.Chmod(tmp.Name(), mode); err != nil { //nolint:gosec // G302: deliberately up to 0644, see above
 		return err
 	}
 	return os.Rename(tmp.Name(), path)
