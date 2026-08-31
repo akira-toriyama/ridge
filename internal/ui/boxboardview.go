@@ -111,11 +111,7 @@ func (m *Model) selectedBox(l *boxLayout) *board.EpicInfo {
 func (m *Model) boxTitleBar(l *boxLayout) string {
 	th := m.th
 	left := th.title.Render("furrow board") + th.crumb.Render("  ·  ") +
-		th.tabOff.Render("Board") + th.dim.Render(" │ ") +
-		th.tabOff.Render("Table") + th.dim.Render(" │ ") +
-		th.tabOff.Render("Graph") + th.dim.Render(" │ ") +
-		th.tabOff.Render("Map") + th.dim.Render(" │ ") +
-		th.tabOn.Render("Boxes")
+		m.fullTabs(viewBoxes)
 	right := th.crumb.Render(fmt.Sprintf("%d repos · %d rows  ·  ",
 		len(l.Groups), len(l.Rows))) + th.accent.Render("⟨BOXES⟩") +
 		th.dim.Render("  ·  ? help")

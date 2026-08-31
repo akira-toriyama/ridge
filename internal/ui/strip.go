@@ -7,9 +7,9 @@ import (
 	"github.com/akira-toriyama/ridge/internal/board"
 )
 
-// Geometry shared by the FULL-SCREEN views (graph, dep map, box overview). All
-// are laid out as title bar / header / drawing / strip / status, so the numbers
-// that separate those bands belong to none of them.
+// Geometry shared by the FULL-SCREEN views (graph, dep map, box overview,
+// roadmap). All are laid out as title bar / header / drawing / strip / status,
+// so the numbers that separate those bands belong to none of them.
 const (
 	fullTop = 2 // title bar + header: the first row the drawing may use
 	stripH  = 8 // the detail strip, border included
@@ -27,7 +27,8 @@ const (
 // (addmode.go, epicmode.go) are conservative rather than required, since
 // neither modal can be submitted from that view in the first place.
 func (m *Model) fullScreen() bool {
-	return m.view == viewGraph || m.view == viewMap || m.view == viewBoxes
+	return m.view == viewGraph || m.view == viewMap || m.view == viewBoxes ||
+		m.view == viewRoadmap
 }
 
 // stripHeight shrinks the detail strip on a short terminal rather than letting
@@ -49,8 +50,9 @@ func (m *Model) stripHeight() int {
 // never elided, always on screen, so the drawing above it is free to be a MAP
 // rather than a document.
 //
-// Both full-screen views share it: the graph's node boxes and the dependency
-// map's rows have exactly the same problem and must not answer it twice.
+// The task-rowed full-screen views share it: the graph's node boxes, the
+// dependency map's rows and the roadmap's pane have exactly the same problem
+// and must not answer it three times.
 func (m *Model) taskStrip(t *board.Task, hidden bool, h int) string {
 	th := m.th
 	inner := maxInt(10, m.w-4)

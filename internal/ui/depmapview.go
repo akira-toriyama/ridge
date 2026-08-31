@@ -291,10 +291,7 @@ func (m *Model) taskHidden(id string) bool {
 func (m *Model) mapTitleBar(l *mapLayout) string {
 	th := m.th
 	left := th.title.Render("furrow board") + th.crumb.Render("  ·  ") +
-		th.tabOff.Render("Board") + th.dim.Render(" │ ") +
-		th.tabOff.Render("Table") + th.dim.Render(" │ ") +
-		th.tabOff.Render("Graph") + th.dim.Render(" │ ") +
-		th.tabOn.Render("Map")
+		m.fullTabs(viewMap)
 	right := th.crumb.Render(fmt.Sprintf("%d clusters · %d nodes  ·  ",
 		len(l.Panels), len(l.Rows))) + th.accent.Render("⟨MAP⟩") +
 		th.dim.Render("  ·  ? help")

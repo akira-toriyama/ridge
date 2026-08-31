@@ -160,6 +160,26 @@ ego graph も連結成分も、149 個の孤立ノードを並べて本体を埋
 実測の詰まり方（153 箱 / 31 repo）: 240桁 = 4カラム×58セル、320桁 = 6×51、
 400桁 = 6×64。
 
+### Roadmap — due タイムライン
+
+`C`（calendar — `R` は sync が持っている）。**due を持つ open な task を
+due 昇順に並べ、横軸 = 時間に `◆` を置く**。「何がいつ切れるか」を答えるビューで、
+`furrow brief` の due 先頭・`-q is:overdue` の時間軸版にあたる。
+
+- 横軸は 1 セル = 1 日（`z` で 週 / 月。境界は暦どおり — 月曜始まりの週・月初）
+- `┊` = today の縦線。overdue の `◆` は danger 色、today と同セルは warn 色
+- due 無しは出さない（GH も date 無しは帯に出ない）。done も出さない —
+  果たされた約束は約束ではない
+- `◆` の右に所属 epic の `▤` chip（epic は日付を持たないので、GH の vertical
+  marker の代わりはこの行内 chip）
+- filter は Map と同契約: 隠さず **mute** して header で数える
+- `h`/`l` で窓を pan。窓の外へ出た `◆` は行端の `▸`/`◂` になる — 日付付きの行が
+  無日付に見えてはいけない
+- **読み専用**（v1）。drag での due 変更は読みの価値検証後（t-7t28）
+
+`ridge -roadmap` で実盤面をこのビューから開ける。headless は
+`-dump -roadmap`（day）と `-demo roadmapweek` / `-demo roadmapmonth`。
+
 ## キー
 
 **全キーは `?` が正典。** 起動して `?` を押すと、その時点で有効なキーが全部出る
@@ -174,6 +194,7 @@ ego graph も連結成分も、149 個の孤立ノードを並べて本体を埋
 | `S` | 依存グラフ（1タスク起点。`o` で上下 / 左右） |
 | `T` | 依存マップ（全クラスタ俯瞰） |
 | `E` | 箱の俯瞰（全 epic を repo 別に。`⏎` でその箱に絞る・`z` で closed 込み） |
+| `C` | roadmap（due タイムライン。`z` で day/week/month・`h`/`l` で pan） |
 | `Enter` | move mode（`Enter` 確定・`Esc` 取消）。**peek を開いていると / Table では編集メニュー** |
 | `q` | 終了 |
 
@@ -210,6 +231,7 @@ go run ./cmd/ridge -demo drag -dump          # 一時状態の例: ドラッグ�
 go run ./cmd/ridge -h                        # -demo 全状態の一覧（正本 = ui.DemoNames）
 go run ./cmd/ridge -readonly -dump           # schema gate で read-only の盤面
 go run ./cmd/ridge -graphlr -dump -demo graphall  # 依存グラフを左右向きで（`o` と同じ状態）
+go run ./cmd/ridge -dump -roadmap            # due タイムライン（週/月軸は -demo roadmapweek / roadmapmonth）
 ```
 
 `-demo` の名前をここに列挙しない: 写しは必ず古くなる（実際、この節の旧一覧は

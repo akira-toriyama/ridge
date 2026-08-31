@@ -424,10 +424,7 @@ func (m *Model) graphRankColumn(row []*egoNode, f graphFrame, h int) []string {
 func (m *Model) graphTitleBar(l *egoLayout) string {
 	th := m.th
 	left := th.title.Render("furrow board") + th.crumb.Render("  ·  ") +
-		th.tabOff.Render("Board") + th.dim.Render(" │ ") +
-		th.tabOff.Render("Table") + th.dim.Render(" │ ") +
-		th.tabOn.Render("Graph") + th.dim.Render(" │ ") +
-		th.tabOff.Render("Map")
+		m.fullTabs(viewGraph)
 	// `? help` here too: the graph is a full-screen mode, so once its footer
 	// went this row became the only pointer to the key surface from inside it.
 	right := th.crumb.Render(fmt.Sprintf("%d nodes · %d edges  ·  ",

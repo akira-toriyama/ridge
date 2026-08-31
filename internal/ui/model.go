@@ -64,6 +64,10 @@ const (
 	// rows are epics rather than tasks. The other three answer questions about
 	// work; this one answers "what is each repo working out of".
 	viewBoxes
+	// viewRoadmap is the ROADMAP — full-screen, the open tasks that carry a
+	// due placed on one time axis. The others answer "what and in which
+	// order"; this one answers "by when".
+	viewRoadmap
 )
 
 func (v viewKind) String() string {
@@ -78,6 +82,8 @@ func (v viewKind) String() string {
 		return "map"
 	case viewBoxes:
 		return "boxes"
+	case viewRoadmap:
+		return "roadmap"
 	}
 	return "unknown"
 }
@@ -237,6 +243,30 @@ type Model struct {
 	mapMoved  bool
 	mapScroll int
 	mapLay    *mapLayout
+
+	// The roadmap view (roadmap.go). roadSel is the row the cursor is on;
+	// roadZoom is the axis unit; roadXOff is the window's pan over the axis,
+	// in cells; roadMoved carries the walk back to the board on close, the
+	// way mapMoved does and for the same reason. roadAnchored reports that
+	// the opening window has been PLACED — render only places it on a frame
+	// whose size is real (m.sized), because the interactive program draws
+	// one frame before the terminal reports a size, and a window placed
+	// against the constructor's default width put today off screen on every
+	// other terminal (found by review, twice: first against the flag path,
+	// then against the pre-size frame).
+	roadZoom     roadZoom
+	roadSel      string
+	roadMoved    bool
+	roadAnchored bool
+	roadScroll   int
+	roadXOff     int
+	roadLay      *roadLayout
+
+	// sized reports that the terminal has told us who it is: a WindowSizeMsg
+	// landed, or -dump set the size by hand. Until then w/h are newModel's
+	// defaults, and geometry that must not survive them (the roadmap's
+	// opening window) waits for it.
+	sized bool
 
 	lay       *layout
 	status    string
@@ -428,6 +458,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.w, m.h = msg.Width, msg.Height
+		m.sized = true
 		m.help.SetWidth(msg.Width)
 		// The filter input is deliberately NOT sized here: its width depends
 		// on the chips sharing its row, so chromeLayers derives it per frame.
@@ -581,6 +612,10 @@ func (m *Model) onKey(msg tea.KeyPressMsg) tea.Cmd {
 	// The box overview, likewise.
 	if m.view == viewBoxes {
 		return m.onBoxesKey(msg)
+	}
+	// The roadmap, likewise.
+	if m.view == viewRoadmap {
+		return m.onRoadKey(msg)
 	}
 	return m.onNormalKey(msg)
 }
@@ -772,6 +807,9 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	case key.Matches(msg, m.keys.Boxes):
 		m.openBoxes()
+
+	case key.Matches(msg, m.keys.Roadmap):
+		m.openRoadmap()
 
 	case key.Matches(msg, m.keys.Peek):
 		m.peekOpen = !m.peekOpen

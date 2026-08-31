@@ -26,14 +26,16 @@
 | **Graph** | **依存グラフ**。1タスクを起点に、blocker と「閉じると動き出すもの」を軸の両側に分けた階層図（どちらの軸に並べるかは **orientation**）。`S` / `Shift+Space`。 |
 | **orientation**（Graph の向き） | Graph の階層をどの画面軸に並べるか。**top-down**（既定・上が blocker / 下が「閉じると動き出すもの」）と **left-right**（左が blocker / 右）の2値で、`o` で切替（`-graphlr` で headless）。**位置と矢頭の両方**が常に同じ方向を指す（矢頭は `▼` / `▶`）ので、向きを変えても矢印の意味を覚え直さなくていい。与えられた軸を使い切り**もう一方を交渉する**関係も入れ替わる: top-down は幅が与えられてタイトル行数を交渉し、left-right は高さが与えられて箱の**幅**を交渉する。幅に入り切らない段は落として件数をヘッダに出し、**描く窓はカーソルに追随する**（選択が窓の外へ出ない）。セッションを跨いで保存しない（hop radius と同じ）。 |
 | **Map**（依存マップ） | **全依存クラスタを一画面で俯瞰するビュー**。Graph が「1タスク起点」なのに対し、こちらは起点を持たない。`T`（`t` = そのタスクの依存ツリー、の全体版）。線は引かず、**インデント = 深さ・`←` = blocker の名指し**で表す。 |
+| **Roadmap** | **due タイムライン**。due を持つ **open** な task を due 昇順の行にし、横軸 = 時間に `◆` を置く全画面ビュー。`C`（calendar — `R` は sync、`D` は小文字 `d`=done が write なので不採用）。due 無しは出さない（GH 同）・done も出さない（果たされた約束は約束ではない）。`┊` = today 縦線、`◆` の右に所属 epic の `▤` chip（epic は日付を持たないので GH の vertical marker は成立しない — 行内 chip が最小形）。filter は Map と同契約（隠さず mute + header で件数）。読み専用 — due の drag 変更は価値検証後（t-7t28）。 |
+| **zoom**（Roadmap の） | 1 セルが暦のどれだけか。day（既定）/ week / month の 3 値で、境界は**暦どおり**（月曜始まりの週・月初）。`z` で循環 — 全画面ビューの `z` = 「どれだけ画面に載るか」の踏襲。h/l で窓を pan（1 押し = zoom の自然な一期間: 7日/4週/3月）。セッションを跨いで保存しない（hop radius と同じ）。 |
 | **peek**（詳細ペイン） | 選択中タスクの詳細を横に出すオーバーレイ。`Space`。 |
 | **cluster**（依存クラスタ） | 依存辺で繋がったタスクの連結成分。Map のパネル 1 枚 = 1 クラスタ。実データでは未完了分で 9 個・中央値 2 ノード。正本は `internal/board/cluster.go`（`Graph.Clusters`）— furrow に同形の口が無いので ridge が topology だけ自前で出す。 |
 | **scope**（Map の） | Map が何を数えるか。`open` = done を辺ごと落とす（既定 — 終わった依存は blocker ではない）/ `all` = 全部。`z` で切替。 |
 
 ## mode（キーボードの所有者）
 
-現在 mode はタイトル行右端の ⟨…⟩ トークンで**常時**表示される（full-screen の 2 つ —
-graph と Map — だけは自前のタイトル行 = Graph/Map タブ + ⟨GRAPH⟩ / ⟨MAP⟩）。`?` help はこの mode 名で節分けされ、今いる mode の節に
+現在 mode はタイトル行右端の ⟨…⟩ トークンで**常時**表示される（full-screen の 4 つ —
+graph・Map・Boxes・Roadmap — だけは自前のタイトル行 = 全ビューのタブ帯 + 自分のトークン）。`?` help はこの mode 名で節分けされ、今いる mode の節に
 「you are here」が付く。トークンの正式語はこの表が正本。
 
 | 用語 | トークン | 意味 |
@@ -47,6 +49,8 @@ graph と Map — だけは自前のタイトル行 = Graph/Map タブ + ⟨GRAP
 | **epic mode** | ⟨EPIC⟩ | epic オーバーレイが専有（`epicmode.go`）。slice パネルの epic 軸から入り、`esc` はパネルに戻る。 |
 | **graph** | ⟨GRAPH⟩ | mode enum 外だがキーボードを専有する full-screen view — 実質 8 つ目。 |
 | **dep map** | ⟨MAP⟩ | 同じく mode enum 外の full-screen view（`T`）。`?` の節名はこの行の語**そのまま**（`keys.go` の `helpSection.title`）。 |
+| **box overview** | ⟨BOXES⟩ | 同じく mode enum 外の full-screen view（`E`）。PR #60 で入ったがこの表への追記が漏れていた（Roadmap の PR で補記）。 |
+| **roadmap** | ⟨ROADMAP⟩ | 同じく mode enum 外の full-screen view（`C`）。 |
 | **drag** | ⟨DRAG⟩ | mode ではない（`dragState`）が、gesture 中はトークンが出る。 |
 
 ## 操作
@@ -83,6 +87,7 @@ graph と Map — だけは自前のタイトル行 = Graph/Map タブ + ⟨GRAP
 | `▶` / `◆` / `v` | slice パネルの epic 行の lifecycle 印。`▶` = その repo が今それで作業している box（`furrow brief` と同じ字）、`◆` = pinned、`v` = closed（`z` で広げたときだけ出る。印は排他ではない — furrow は close 時に `active` は落とすが `pinned` は残す（実測）ので `v ◆` は正当な並び）。どれも `epic ls --all --json` の `active`/`pinned`/`closed` をそのまま出す。 |
 | `▤` | **epic チップ**。epic は lane を持たない別エンティティ（`EpicInfo`）で、カードには所属 epic のタイトルを解決して表示する。epic が stuck なら warn 色。peek には `(done/total)` と STUCK、epic が open な dep を待つ間は resolved な `epic waits on` 行（open は `id (d/t) title`・stuck なら `id (d/t) STUCK title`（warn 色）・furrow が `open_deps` から解決済みの dep は、**盤面がその箱を closed として持っていれば `(closed)`・持っていなければ furrow のより弱い語 `(satisfied)`**。open/満了の判定は furrow 導出値で、ridge は再計算しない）。 |
 | `v` | done。 |
+| `◆`（Roadmap の行内） / `┊` | due の位置（overdue = danger 色・today と同セル = warn 色）/ today の縦線。窓の外へ pan された `◆` は行端の `▸`/`◂` になる — 日付付きの行が無日付に見えてはいけない。 |
 | `[0/7]` | チェックリストの進捗。 |
 | `v5 e4` | value / effort（各 1..5）。 |
 | `◉ focus` | Graph の起点ノード。 |

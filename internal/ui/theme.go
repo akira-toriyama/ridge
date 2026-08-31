@@ -38,6 +38,15 @@ const (
 	glyphEpicActive = "▶"
 	glyphEpicPinned = "◆"
 
+	// The roadmap's two timeline glyphs. glyphDue shares glyphEpicPinned's
+	// character on the arrowheads' licence: a diamond on a DATE AXIS is the
+	// milestone convention (GH draws its markers so), on an epic row it is
+	// the pin, and the two never label the same surface. glyphToday is
+	// deliberately NOT the │ the pane separator uses: colour is exactly what
+	// -plain strips, so the two verticals must differ by shape.
+	glyphDue   = "◆"
+	glyphToday = "┊"
+
 	// The two graph arrowheads. Every edge in one picture points the same way —
 	// down when the graph runs top-down, right when it runs left-right, always
 	// in the direction unblocking flows. Position and arrowhead carry the same

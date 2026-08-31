@@ -13,7 +13,7 @@ import (
 // unknown-name error and the tests all read this slice, because the list was
 // duplicated in three places and adding two states updated two of them —
 // `ridge -h` then advertised eight of ten.
-var DemoNames = []string{"move", "drag", "add", "adddraft", "edit", "editpick", "editinput", "editdeps", "editrefs", "note", "refs", "graph", "graphall", "map", "mapall", "mapfiltered", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicshut", "epicdone", "epicreopen", "sliceepicall", "epicnew", "boxes", "boxesall", "fail"}
+var DemoNames = []string{"move", "drag", "add", "adddraft", "edit", "editpick", "editinput", "editdeps", "editrefs", "note", "refs", "graph", "graphall", "map", "mapall", "mapfiltered", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicshut", "epicdone", "epicreopen", "sliceepicall", "epicnew", "boxes", "boxesall", "roadmapweek", "roadmapmonth", "fail"}
 
 // Options configures a freshly-constructed Model. The zero value is the
 // default TUI: dark palette, board view, no filter.
@@ -21,6 +21,12 @@ type Options struct {
 	Light  bool   // light palette
 	Filter string // initial filter query
 	Table  bool   // open on the table view
+	// Roadmap opens on the roadmap view — a view setting like Table, not a
+	// -demo name, so it composes with the demos and with the interactive TUI
+	// (`ridge -roadmap` against the real store is the "what expires this
+	// week" glance the view exists for). Day zoom; the week/month axes are
+	// the roadmapweek/roadmapmonth demos.
+	Roadmap bool
 	// GraphLR opens the dependency graph with its layers running left to
 	// right. It is a view SETTING, not a transient gesture, so it is a flag
 	// like Table rather than a -demo name — which also means it composes with
@@ -51,6 +57,15 @@ func New(p board.Provider, o Options) *Model {
 	}
 	if o.Table {
 		m.view = viewTable
+	}
+	if o.Roadmap {
+		// startRoadmap, NOT openRoadmap: the note-free half. openRoadmap's
+		// status line would land exactly where the read-only warning below
+		// protects itself by writing nothing — the first cut used the full
+		// open and `-readonly -roadmap` lost the warning (found by review;
+		// the same regression this switch's own comment records shipping
+		// once before).
+		m.startRoadmap()
 	}
 	if o.GraphLR {
 		m.graphOrient = orientLeftRight
@@ -92,6 +107,10 @@ func New(p board.Provider, o Options) *Model {
 // puts the model into a transient mid-gesture state first.
 func (m *Model) Dump(w, h int, demo string, plain bool) (string, error) {
 	m.w, m.h = w, h
+	// -cols/-rows ARE the terminal here: geometry gated on a real size (the
+	// roadmap's opening window) must not wait for a WindowSizeMsg that will
+	// never come.
+	m.sized = true
 	m.help.SetWidth(w)
 	m.recompute()
 	m.relayout()
@@ -546,6 +565,38 @@ func (m *Model) demoState(kind string) error {
 			return fmt.Errorf("demo boxesall: z did not widen the population")
 		}
 		m.boxesSel = boxKey("tomo/kyushu-trip", "e-2b7h")
+
+	case "roadmapweek":
+		// The week axis: a month compresses to ~4 cells, so this frame proves
+		// the sparse labels and ◆s sharing cells they did not share at day
+		// zoom. Driven through the real key handlers so it also proves `C`
+		// and `z` are BOUND (the trap the epicnew demo documents); the day
+		// axis itself needs no demo — it is `-dump -roadmap`.
+		if c := m.onNormalKey(tea.KeyPressMsg{Code: 'C', Text: "C"}); c != nil {
+			_ = c
+		}
+		if m.view != viewRoadmap {
+			return fmt.Errorf("demo roadmapweek: C did not open the roadmap")
+		}
+		if c := m.onRoadKey(tea.KeyPressMsg{Code: 'z', Text: "z"}); c != nil {
+			_ = c
+		}
+		if m.roadZoom != zoomWeek {
+			return fmt.Errorf("demo roadmapweek: z did not zoom to week")
+		}
+
+	case "roadmapmonth":
+		// The month axis — the labels' third shape, and the frame where the
+		// fixture's every ◆ crowds into a handful of cells.
+		if err := m.demoState("roadmapweek"); err != nil {
+			return err
+		}
+		if c := m.onRoadKey(tea.KeyPressMsg{Code: 'z', Text: "z"}); c != nil {
+			_ = c
+		}
+		if m.roadZoom != zoomMonth {
+			return fmt.Errorf("demo roadmapmonth: z did not zoom to month")
+		}
 
 	case "fail":
 		// A refused write. The ⚠ styling has its own colour and its own row,
