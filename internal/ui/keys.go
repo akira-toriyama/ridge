@@ -77,6 +77,21 @@ type keyMap struct {
 	MapScope key.Binding
 	MapGraph key.Binding
 
+	// Boxes opens the BOX OVERVIEW. Uppercase like the other two full-screen
+	// views (S graph, T map), because those are the keys that replace the whole
+	// screen and the lowercase letters are the board's own edits. `E` is the
+	// initial of the entity furrow calls an epic, which is the word its CLI
+	// uses even though this repo's UI calls the thing a box.
+	//
+	// Inside the view MapScope does its own job again: `z` decides how much of
+	// the population is on screen, exactly as it decides how much of the
+	// dependency structure is on screen in the other two.
+	Boxes key.Binding
+	// BoxSlice is ⏎ inside the overview, bound separately from Commit for the
+	// reason MapGraph is bound separately from it: the help text is read as a
+	// claim about what the key does, and "commit" is not what ⏎ does here.
+	BoxSlice key.Binding
+
 	// The slice panel's two epic-management keys (epicmode.go). EpicEdit is
 	// `m`-only on purpose: keys.Move is ("enter","m") and the panel's ⏎ SLICES,
 	// so reusing Move here would shadow the panel's own commit key. `e` was the
@@ -170,6 +185,8 @@ func defaultKeys() keyMap {
 		GraphOrient: key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "top-down / left-right")),
 
 		Map:      key.NewBinding(key.WithKeys("T"), key.WithHelp("T", "dep map")),
+		Boxes:    key.NewBinding(key.WithKeys("E"), key.WithHelp("E", "box overview")),
+		BoxSlice: key.NewBinding(key.WithKeys("enter"), key.WithHelp("⏎", "slice to this box")),
 		MapScope: key.NewBinding(key.WithKeys("z"), key.WithHelp("z", "scope open/all")),
 		// "graph here", not "dep graph": TestHelpAdvertisesThePortableGraphKey
 		// reads the FIRST line carrying "dep graph" and requires it to name the
@@ -234,6 +251,15 @@ func (k keyMap) HelpSections(enterEdits bool) []helpSection {
 			{k.Up, k.Down, k.Left, k.Right},
 			{k.MapGraph, k.MapScope},
 			{k.PeekScroll, k.Map, k.View, k.Cancel},
+		}},
+		// The box overview's surface. Same rule as the other two full-screen
+		// sections: every key onBoxesKey acts on, because the section is read
+		// as "your keys right now".
+		{"box overview", [][]key.Binding{
+			{k.Up, k.Down, k.Left, k.Right},
+			{k.BoxSlice, k.EpicEdit, k.MapScope},
+			{k.Top, k.Bottom, k.PeekScroll},
+			{k.Boxes, k.View, k.Cancel},
 		}},
 		{"graph", [][]key.Binding{
 			// Sharpest omission of the three: re-rooting answers "is already

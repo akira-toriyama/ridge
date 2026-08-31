@@ -7,20 +7,28 @@ import (
 	"github.com/akira-toriyama/ridge/internal/board"
 )
 
-// Geometry shared by the two FULL-SCREEN views (graph, dep map). Both are
-// laid out as title bar / header / drawing / strip / status, so the numbers
-// that separate those bands belong to neither of them.
+// Geometry shared by the FULL-SCREEN views (graph, dep map, box overview). All
+// are laid out as title bar / header / drawing / strip / status, so the numbers
+// that separate those bands belong to none of them.
 const (
 	fullTop = 2 // title bar + header: the first row the drawing may use
 	stripH  = 8 // the detail strip, border included
 )
 
 // fullScreen reports whether a view that OWNS the whole terminal is up. The
-// board's overlays — peek, slice panel, quick-add, epic — composite nothing in
+// board's own chrome — the peek and the slice panel — composites nothing in
 // these views, so every guard that means "the board's chrome is not on screen"
 // asks this rather than naming one of them. Naming just the graph is how a
 // reopened modal ended up holding the keyboard while rendering nowhere.
-func (m *Model) fullScreen() bool { return m.view == viewGraph || m.view == viewMap }
+//
+// It does NOT mean "modals composite nothing". The box overview draws
+// modalLayers, because it is the one full-screen view with a key that opens
+// one; the two guards that still refuse to REOPEN a refused modal here
+// (addmode.go, epicmode.go) are conservative rather than required, since
+// neither modal can be submitted from that view in the first place.
+func (m *Model) fullScreen() bool {
+	return m.view == viewGraph || m.view == viewMap || m.view == viewBoxes
+}
 
 // stripHeight shrinks the detail strip on a short terminal rather than letting
 // it push the drawing off the screen entirely.

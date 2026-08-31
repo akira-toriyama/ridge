@@ -30,6 +30,17 @@ func newLabProvider(t *testing.T) (*Store, string) {
 	if _, err := exec.LookPath("furrow"); err != nil {
 		t.Skip("furrow binary not on PATH")
 	}
+	// The throwaway store is only throwaway if furrow cannot be pointed
+	// somewhere else, and every command below inherits this process's env.
+	// FURROW_DIR outranks the working directory outright; FURROW_BOARD outranks
+	// it only for `init`, which is enough, because init is what decides where
+	// the store the rest of the suite asserts against gets made. Measured on
+	// v5.0.0: under an exported FURROW_DIR, `furrow init` seeds THAT directory
+	// or refuses at it, so a developer with one exported would have this suite
+	// asserting about — and mutating — a real board. Empty reads as unset.
+	t.Setenv("FURROW_DIR", "")
+	t.Setenv("FURROW_BOARD", "")
+
 	dir := t.TempDir()
 	lab(t, dir, "git", "init", "-q")
 	lab(t, dir, "furrow", "init")
@@ -466,10 +477,12 @@ func TestContractAddMapsTheContext(t *testing.T) {
 	}
 }
 
-// Epic deps travel `epic ls --json`'s deps array, and open_deps arrives
+// Epic deps travel `epic ls --all --json`'s deps array, and open_deps arrives
 // alongside as a furrow-DERIVED field (like progress and stuck): the deps
 // still waiting, with deps on closed epics already resolved away. ridge
-// consumes both verbatim and recomputes neither.
+// consumes both verbatim and recomputes neither — and, since the read is
+// --all, the closed dep this seeds is a row ridge can point at rather than an
+// id it has to shrug about.
 //
 // bite-exempt: execs a real furrow binary and always skips where furrow is
 // not on PATH — which is CI, so the gate can never judge it there
@@ -504,8 +517,16 @@ func TestContractEpicDepsReachTheSnapshot(t *testing.T) {
 	if len(e.Deps) != 2 || !contains(e.Deps, dep) || !contains(e.Deps, closedDep) {
 		t.Errorf("Deps = %v, want both %s and %s", e.Deps, dep, closedDep)
 	}
-	if b.Epic(closedDep) != nil {
-		t.Errorf("%s is closed and must be absent from the open-epic read", closedDep)
+	// The closed dep RESOLVES — that is what `epic ls --all` buys — but it must
+	// not join the default population, which surfaces index as a picker.
+	cd := b.Epic(closedDep)
+	if cd == nil || cd.Closed.IsZero() {
+		t.Errorf("%s is closed and must reach the snapshot WITH its stamp: %+v", closedDep, cd)
+	}
+	for _, x := range b.Epics() {
+		if x.ID == closedDep {
+			t.Errorf("%s is closed and must not reach Epics()", closedDep)
+		}
 	}
 	if len(e.OpenDeps) != 1 || e.OpenDeps[0] != dep {
 		t.Errorf("OpenDeps = %v, want [%s] — furrow resolves the closed dep away", e.OpenDeps, dep)

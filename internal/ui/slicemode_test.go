@@ -92,8 +92,8 @@ func TestSliceEpicRowsCarryProgressAndClickSelects(t *testing.T) {
 		t.Errorf("the epic row must carry the store's progress: %q", rows[0].display)
 	}
 	// The dep readout: →N is furrow's derived open_deps, verbatim.
-	// e-fw2m waits on the open e-p3dx; e-c4mt declares two deps but furrow
-	// already resolved e-2b7h away (a dep on a closed epic is satisfied) —
+	// e-fw2m waits on the open e-p3dx; e-c4mt declares THREE deps but furrow
+	// resolved two away — e-2b7h is closed and e-x0k9 resolves to nothing —
 	// so both rows read →1, and the dep-less e-p3dx row carries no arrow.
 	for i, want := range map[int]string{0: "6/18 →1", 3: "0/1 →1"} {
 		if !strings.Contains(rows[i].display, want) {

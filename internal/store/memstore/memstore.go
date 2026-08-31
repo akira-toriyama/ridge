@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/akira-toriyama/ridge/internal/board"
 )
@@ -65,7 +66,7 @@ func NewWith(b *board.Board) *Store {
 func NewGated(schema string) *Store {
 	f := func() *board.Board {
 		b := board.NewBoard(fixtureTasks(), fixtureEpics()...)
-		return board.NewStoreBoard(b.Lanes(), b.Tasks(), b.Epics(), false, schema)
+		return board.NewStoreBoard(b.Lanes(), b.Tasks(), b.EpicsAll(), false, schema)
 	}
 	return &Store{
 		b:    f(),
@@ -140,13 +141,16 @@ func (p *Store) rebuild() *board.Board {
 func withTask(b *board.Board, extra *board.Task) *board.Board {
 	tasks := append([]*board.Task(nil), b.Tasks()...)
 	tasks = append(tasks, extra)
-	return board.NewStoreBoard(b.Lanes(), tasks, cloneEpics(b.Epics()), b.Writable(), b.SchemaState())
+	return board.NewStoreBoard(b.Lanes(), tasks, cloneEpics(b.EpicsAll()), b.Writable(), b.SchemaState())
 }
 
-// withEpics returns a NEW board carrying the given epic set. Board.Epics()
-// hands out its internal slice and NewStoreBoard indexes into it by address, so
-// an epic edit applied in place would mutate the very snapshot the UI thread is
-// rendering — the one thing the port contract forbids a provider to do.
+// withEpics returns a NEW board carrying the given epic set. It takes the WHOLE
+// population, open and closed: every caller reads it back with EpicsAll, because
+// rebuilding from Epics() would drop every closed box on the first epic write.
+// Board.EpicsAll() hands out its internal slice and NewStoreBoard indexes into it
+// by address, so an epic edit applied in place would mutate the very snapshot the
+// UI thread is rendering — the one thing the port contract forbids a provider to
+// do.
 func withEpics(b *board.Board, epics []board.EpicInfo) *board.Board {
 	return board.NewStoreBoard(b.Lanes(), b.Tasks(), epics, b.Writable(), b.SchemaState())
 }
@@ -383,26 +387,34 @@ func (p *Store) PersistDepRm(id, _ string) error {
 // clones the epic set, hands fn the box to edit, and swaps a fresh board in.
 //
 // Two properties, both load-bearing. The clone means no write ever touches a
-// board already handed out (the port forbids it, and Board.Epics() returns the
-// internal slice that NewStoreBoard indexes by address). Holding the lock across
+// board already handed out (the port forbids it, and Board.EpicsAll() returns
+// the internal slice that NewStoreBoard indexes by address). Holding the lock across
 // the whole read-modify-write means an edit cannot be lost to an interleaving
 // one — the same atomicity Add has. fn returning an error swaps NOTHING, so a
 // refused edit leaves the board exactly as it was.
 func (p *Store) editEpic(id string, fn func(*board.EpicInfo) error) error {
+	return p.editEpicSet(func(epics []board.EpicInfo) error {
+		for i := range epics {
+			if epics[i].ID == id {
+				return fn(&epics[i])
+			}
+		}
+		return fmt.Errorf("unknown epic %q", id)
+	})
+}
+
+// editEpicSet is the same clone-under-lock and atomic swap over the WHOLE set,
+// for the writes whose effect is not confined to one box: closing a box also
+// settles every other box's wait on it, and reopening revives them.
+func (p *Store) editEpicSet(fn func([]board.EpicInfo) error) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	epics := cloneEpics(p.b.Epics())
-	for i := range epics {
-		if epics[i].ID != id {
-			continue
-		}
-		if err := fn(&epics[i]); err != nil {
-			return err
-		}
-		p.b = withEpics(p.b, epics)
-		return nil
+	epics := cloneEpics(p.b.EpicsAll())
+	if err := fn(epics); err != nil {
+		return err
 	}
-	return fmt.Errorf("unknown epic %q", id)
+	p.b = withEpics(p.b, epics)
+	return nil
 }
 
 // EpicAdd appends a box and swaps in a board that contains it
@@ -423,7 +435,7 @@ func (p *Store) EpicAdd(title string, o board.EpicAddOptions) (string, error) {
 		Labels: append([]string(nil), o.Labels...),
 		Repos:  append([]string(nil), o.Repos...),
 	}
-	p.b = withEpics(p.b, append(cloneEpics(p.b.Epics()), e))
+	p.b = withEpics(p.b, append(cloneEpics(p.b.EpicsAll()), e))
 	p.mu.Unlock()
 	return e.ID, nil
 }
@@ -523,14 +535,83 @@ func (p *Store) EpicDeactivate(id string) (board.EpicPrevious, error) {
 	return board.EpicPrevious{}, err
 }
 
+// EpicDone stamps the box closed and drops the active flag with it, because
+// furrow does both in the one write and a box that is closed AND active is a
+// board furrow cannot produce (board.Provider). It names no previous box, for
+// the reason EpicDeactivate names none.
+//
+// It also settles every OTHER box's wait on it, which is the rule EpicDepRm
+// already follows: OpenDeps is furrow-derived and never RECOMPUTED here, but
+// leaving a wait on a box just closed in the `→N` readout is not "not
+// recomputing", it is stale.
+//
+// Closing an already-closed box is not refused. Mirroring furrow's refusal
+// prose is not this store's job (see the family comment above); the states it
+// does keep out are the ones furrow could not produce, and a re-stamped
+// closing time is not one of those.
+func (p *Store) EpicDone(id string) (board.EpicPrevious, error) {
+	if err := p.gate(); err != nil {
+		return board.EpicPrevious{}, err
+	}
+	err := p.editEpicSet(func(epics []board.EpicInfo) error {
+		target := indexEpic(epics, id)
+		if target < 0 {
+			return fmt.Errorf("unknown epic %q", id)
+		}
+		epics[target].Closed = time.Now().UTC().Truncate(time.Second)
+		epics[target].Active = false
+		for i := range epics {
+			epics[i].OpenDeps = removeStr(epics[i].OpenDeps, id)
+		}
+		return nil
+	})
+	return board.EpicPrevious{}, err
+}
+
+// EpicReopen clears the closing stamp (board.Provider). The box comes back
+// open and INACTIVE — furrow refuses to chain the two — and every edge pointing
+// at it waits again, the mirror of what EpicDone settled.
+func (p *Store) EpicReopen(id string) error {
+	if err := p.gate(); err != nil {
+		return err
+	}
+	return p.editEpicSet(func(epics []board.EpicInfo) error {
+		target := indexEpic(epics, id)
+		if target < 0 {
+			return fmt.Errorf("unknown epic %q", id)
+		}
+		epics[target].Closed = time.Time{}
+		for i := range epics {
+			if i == target || !containsStr(epics[i].Deps, id) {
+				continue
+			}
+			if !containsStr(epics[i].OpenDeps, id) {
+				epics[i].OpenDeps = append(epics[i].OpenDeps, id)
+			}
+		}
+		return nil
+	})
+}
+
+func indexEpic(epics []board.EpicInfo, id string) int {
+	for i := range epics {
+		if epics[i].ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
 // EpicDepAdd appends an epic dep edge (board.Provider).
 //
-// The new edge joins OpenDeps too. That is NOT recomputing furrow's derivation —
-// it is keeping the two hand-kept fields consistent for the one edge just added.
-// Under ridge's open-only epic read every box on the board is open, so a wait on
-// a served box is by definition still waiting; and an edge on an id this read
-// does not serve cannot be proven satisfied either. Leaving it out instead made
-// the deps list render a wait added one keystroke ago as "(satisfied)".
+// The new edge joins OpenDeps unless it lands on a box this read serves as
+// CLOSED. That is NOT recomputing furrow's derivation — it is keeping the two
+// hand-kept fields consistent for the one edge just added. Leaving it out
+// unconditionally made the deps list render a wait added one keystroke ago as
+// already settled; adding it unconditionally would do the opposite now that the
+// read serves closed boxes and the overlay can name one. An edge on an id this
+// read does not serve at all still counts as waiting: it cannot be proven
+// satisfied.
 func (p *Store) EpicDepAdd(id, dep string) error {
 	if err := p.gate(); err != nil {
 		return err
@@ -541,6 +622,9 @@ func (p *Store) EpicDepAdd(id, dep string) error {
 	return p.editEpic(id, func(e *board.EpicInfo) error {
 		if !containsStr(e.Deps, dep) {
 			e.Deps = append(e.Deps, dep)
+		}
+		if de := p.b.Epic(dep); de != nil && !de.Closed.IsZero() {
+			return nil
 		}
 		if !containsStr(e.OpenDeps, dep) {
 			e.OpenDeps = append(e.OpenDeps, dep)

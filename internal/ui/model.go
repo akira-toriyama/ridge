@@ -60,6 +60,10 @@ const (
 	// viewMap is the dependency MAP — also full-screen. The graph is rooted on
 	// one task; this one is rooted on nothing and shows every cluster at once.
 	viewMap
+	// viewBoxes is the BOX OVERVIEW — full-screen, and the only view whose
+	// rows are epics rather than tasks. The other three answer questions about
+	// work; this one answers "what is each repo working out of".
+	viewBoxes
 )
 
 func (v viewKind) String() string {
@@ -72,6 +76,8 @@ func (v viewKind) String() string {
 		return "graph"
 	case viewMap:
 		return "map"
+	case viewBoxes:
+		return "boxes"
 	}
 	return "unknown"
 }
@@ -114,6 +120,21 @@ type Model struct {
 	sliceVal   string     // selected value; "" = not slicing
 	sliceIdx   int        // the panel's cursor row
 	sliceOff   int        // the panel's scroll offset (sliceViewport)
+	// sliceEpicAll widens the epic axis to the CLOSED boxes as well. Off by
+	// default: the real board carries 36 closed boxes against 117 open ones,
+	// and a 26-cell panel is a picker, not an archive. It is a view setting,
+	// not a slice term — the `-q epic:` the panel emits is unaffected.
+	sliceEpicAll bool
+
+	// The box overview's state (boxboard.go). boxesSel is a boxKey rather than
+	// an epic id because a box naming two repos is placed under both, and an
+	// id alone cannot say which of the two rows the cursor is on. boxesLay is
+	// the pack the last frame drew — the key handlers walk it rather than
+	// repacking, exactly as the dep map does.
+	boxesAll    bool
+	boxesSel    string
+	boxesScroll int
+	boxesLay    *boxLayout
 
 	pinned map[string]bool // ids forced visible despite the filter (jump targets)
 	cols   map[string][]*board.Task
@@ -557,6 +578,10 @@ func (m *Model) onKey(msg tea.KeyPressMsg) tea.Cmd {
 	if m.view == viewMap {
 		return m.onMapKey(msg)
 	}
+	// The box overview, likewise.
+	if m.view == viewBoxes {
+		return m.onBoxesKey(msg)
+	}
 	return m.onNormalKey(msg)
 }
 
@@ -744,6 +769,9 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 			id = t.ID
 		}
 		m.openMap(id)
+
+	case key.Matches(msg, m.keys.Boxes):
+		m.openBoxes()
 
 	case key.Matches(msg, m.keys.Peek):
 		m.peekOpen = !m.peekOpen

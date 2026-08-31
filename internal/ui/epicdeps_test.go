@@ -3,6 +3,7 @@ package ui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -12,10 +13,13 @@ import (
 
 // The peek resolves the selected task's epic deps — furrow's "open after
 // those close" edge, in `furrow epic dep --list`'s own "waits on" wording.
-// t-y4st's box (e-c4mt) waits on the open e-fw2m and carries e-2b7h, a dep
-// furrow has already resolved away (outside open_deps). The satisfied one
-// says "(satisfied)", never "(closed)": the open-only read cannot tell a
-// closed dep from a dangling one, so the line must not claim to.
+// t-y4st's box (e-c4mt) waits on the open e-fw2m and carries two deps furrow
+// has already resolved away (outside open_deps): e-2b7h, which the --all read
+// shows CLOSED, and e-x0k9, which it cannot resolve at all. Those are furrow's
+// own three states — `epic dep --list` prints [open]/[closed]/[?] — and the
+// line must keep them apart. Collapsing them is the failure this pins, and
+// calling the third one "satisfied" is the specific collapse that puts a
+// reassuring word on what furrow lints as an error.
 func TestPeekResolvesTheEpicsOwnDeps(t *testing.T) {
 	m := boardModel(t, 240, 50)
 	if !m.selectID("t-y4st", false) {
@@ -30,8 +34,11 @@ func TestPeekResolvesTheEpicsOwnDeps(t *testing.T) {
 	if !strings.Contains(out, "e-fw2m (6/18) 九州") {
 		t.Error("an OPEN dep must resolve to id, progress, title — progress first, so a truncated CJK title cannot eat it")
 	}
-	if !strings.Contains(out, "e-2b7h (satisfied)") {
-		t.Error("a dep outside open_deps is satisfied — say that, and nothing more specific")
+	if !strings.Contains(out, "e-2b7h (0/0)") || !strings.Contains(out, "(closed)") {
+		t.Error("a resolved-away dep the board shows CLOSED resolves like any other and says so")
+	}
+	if !strings.Contains(out, "e-x0k9 (missing)") {
+		t.Error("a dep that resolves to nothing is furrow's epic-dep-missing — never a reassuring word")
 	}
 }
 
@@ -107,9 +114,49 @@ func TestEpicDepsDemoCarriesTheDepLine(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"epic waits on", "e-fw2m (6/18)", "e-2b7h (satisfied)"} {
+	for _, want := range []string{"epic waits on", "e-fw2m (6/18)", "(closed)", "e-x0k9 (missing)"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("-demo epicdeps: %q is missing from the frame", want)
 		}
+	}
+}
+
+// An open task filed under a CLOSED box is a state furrow keeps and lints
+// (epic-closed, a warning): `epic done` does not archive or unfile the members
+// (measured on v5.0.0 — the member stays in its lane, still attached, and the
+// box reports 0/1). The --all read is what lets ridge resolve that membership
+// at all, and resolving it is exactly what would make it render like a live
+// one on every surface that shows an epic by title.
+//
+// A constructed board rather than the fixture: the fixture's closed box is the
+// archived-members shape, which is the OTHER real ending, and one fixture
+// cannot be both.
+func TestAClosedBoxIsMarkedEverywhereATaskNamesIt(t *testing.T) {
+	b := board.NewBoard(
+		[]*board.Task{{ID: "t-under", Title: "閉じた箱に残っている一枚",
+			Status: "backlog", Priority: 10, Epic: "e-shut"}},
+		board.EpicInfo{ID: "e-shut", Title: "終わった箱", Total: 1,
+			Closed: time.Date(2026, 7, 15, 9, 12, 7, 0, time.UTC)},
+	)
+	for _, tc := range []struct{ name, want string }{
+		{"card", glyphDone + " 終わった箱"},
+		{"peek", "(closed)"},
+		{"table", glyphDone + " 終わった箱"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := New(memstore.NewWith(b), Options{Table: tc.name == "table"})
+			m.w, m.h = 240, 50
+			m.recompute()
+			m.relayout()
+			if !m.selectID("t-under", false) {
+				t.Fatal("t-under is not on the board")
+			}
+			if tc.name == "peek" {
+				press(m, "space")
+			}
+			if out := frame(m); !strings.Contains(out, tc.want) {
+				t.Errorf("the %s surface must mark a membership furrow lints; %q is missing", tc.name, tc.want)
+			}
+		})
 	}
 }

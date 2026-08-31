@@ -298,7 +298,10 @@ func runBenchload(stdout, stderr io.Writer, extra func(op string, d time.Duratio
 		_, _ = fmt.Fprintf(stdout, "%-8s %4dms (concurrent)\n", s.op, s.ms)
 	}
 	_, _ = fmt.Fprintf(stdout, "%-8s %4dms  %d tasks · %d epics · %d bodies read\n",
-		"total", total, len(b.Tasks()), len(b.Epics()), bodies)
+		// EpicsAll: this line reports what the READ cost, and the read is
+		// `epic ls --all`. Counting the open subset would under-report the
+		// work by however many boxes are closed.
+		"total", total, len(b.Tasks()), len(b.EpicsAll()), bodies)
 	return CodeOK
 }
 

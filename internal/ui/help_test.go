@@ -155,6 +155,9 @@ func TestHelpListsEveryKeyItsSectionsModesHandle(t *testing.T) {
 		// onMapKey (depmapview.go)
 		"dep map": {k.Up, k.Down, k.Left, k.Right, k.MapGraph, k.MapScope,
 			k.PeekScroll, k.Map, k.View, k.Cancel},
+		// onBoxesKey (boxboardview.go)
+		"box overview": {k.Up, k.Down, k.Left, k.Right, k.BoxSlice, k.EpicEdit,
+			k.MapScope, k.Top, k.Bottom, k.PeekScroll, k.Boxes, k.View, k.Cancel},
 	}
 	for title, bindings := range want {
 		sec, ok := byTitle[title]

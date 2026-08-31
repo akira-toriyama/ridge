@@ -282,16 +282,43 @@ func (m *Model) openField(f editField, t *board.Task) tea.Cmd {
 			// is a reversible toggle, so opening on it is harmless there and is
 			// a trap here — open on the task's current epic instead, and only
 			// fall back to row 0 when the task really is unfiled.
-			e.listIdx = epicRow(m.b.Epics(), t.Epic)
+			e.listIdx = epicRow(m.epicPickList(t.Epic), t.Epic)
 		}
 		m.noteEditStage()
 	}
 	return nil
 }
 
+// epicPickList is the population the epic picker offers, and the ONE source
+// its three index users share — the rows, the cursor's landing row, and the
+// commit that reads the row back. Getting them from different slices is how the
+// cursor ends up pointing at a different box than the one it renders.
+//
+// It is the OPEN boxes, plus the task's own box when that box is CLOSED.
+// furrow permits a task to stay filed under a closed box — it lints it
+// epic-closed, a warning, not an error — and a picker that cannot represent the
+// current value lands its cursor on row 0, "(unfiled)", whose ⏎ silently
+// unfiles the task. That is the exact trap the landing rule below exists for.
+func (m *Model) epicPickList(cur string) []board.EpicInfo {
+	open := m.b.Epics()
+	if cur == "" {
+		return open
+	}
+	for _, e := range open {
+		if e.ID == cur {
+			return open
+		}
+	}
+	box := m.b.Epic(cur)
+	if box == nil {
+		return open // a membership no read serves: nothing to represent
+	}
+	return append(append([]board.EpicInfo(nil), open...), *box)
+}
+
 // epicRow is the list-stage row index of an epic membership. Row 0 is
-// "(unfiled)", so a filed task sits at its position in Epics() plus one; an id
-// the board cannot resolve (a stale membership) falls back to row 0.
+// "(unfiled)", so a filed task sits at its position in the pick list plus one;
+// an id the board cannot resolve (a stale membership) falls back to row 0.
 func epicRow(epics []board.EpicInfo, id string) int {
 	if id == "" {
 		return 0
@@ -403,8 +430,8 @@ func (m *Model) editListSelect(t *board.Task) tea.Cmd {
 		return m.applyPatch("repo", p)
 	case fieldEpic:
 		id := ""
-		if e.listIdx > 0 {
-			id = m.b.Epics()[e.listIdx-1].ID
+		if picks := m.epicPickList(t.Epic); e.listIdx > 0 && e.listIdx <= len(picks) {
+			id = picks[e.listIdx-1].ID
 		}
 		e.stage = stageMenu
 		return m.applyPatch("epic", board.FieldPatch{Epic: &id})
@@ -450,8 +477,12 @@ func (m *Model) editListRows(t *board.Task) []string {
 		return vocabUnion(m.repoVocab(), t.Repos)
 	case fieldEpic:
 		rows := []string{"(unfiled)"}
-		for _, e := range m.b.Epics() {
-			rows = append(rows, e.ID+" "+e.Title)
+		for _, e := range m.epicPickList(t.Epic) {
+			row := e.ID + " " + e.Title
+			if !e.Closed.IsZero() {
+				row += " (closed)"
+			}
+			rows = append(rows, row)
 		}
 		return rows
 	case fieldDeps:
@@ -772,6 +803,12 @@ func (m *Model) renderEditMenu(t *board.Task, inner int) string {
 		epicLabel = t.Epic
 		if e := m.b.Epic(t.Epic); e != nil {
 			epicLabel = ansi.Truncate(e.Title, 24, "…")
+			// A closed box resolves now, so without this the membership reads
+			// like any other and the one thing worth noticing about it — that
+			// furrow lints it, epic-closed — is the only thing not shown.
+			if !e.Closed.IsZero() {
+				epicLabel += " (closed)"
+			}
 		}
 	}
 	due := "—"

@@ -116,7 +116,7 @@ type taskJSON struct {
 	Due      *time.Time `json:"due"`
 }
 
-// epicJSON is one `furrow epic ls --json` row, and it doubles as the epic
+// epicJSON is one `furrow epic ls --all --json` row, and it doubles as the epic
 // mutation replies' payload — minus progress/stuck, which the add reply does
 // not carry. The reply shapes differ per verb (measured on furrow dev
 // 60074b8): `epic add` answers ONE bare row with a top-level id, while
@@ -133,7 +133,11 @@ type epicJSON struct {
 	Labels   []string          `json:"labels"`
 	Repos    []string          `json:"repos"`
 	Meta     map[string]string `json:"meta"`
-	Deps     []string          `json:"deps"`
+	// closed is null on an open box and an RFC3339 stamp on a closed one; it
+	// is on the wire whether or not --all is passed, so it needs no scope of
+	// its own.
+	Closed *time.Time `json:"closed"`
+	Deps   []string   `json:"deps"`
 	// open_deps is furrow-derived, like progress and stuck: the deps still
 	// waiting, with deps on closed epics already resolved away (omitted
 	// entirely when none remain). ridge never recomputes it.
@@ -151,7 +155,8 @@ func (e epicJSON) toEpicInfo() board.EpicInfo {
 		ID: e.ID, Title: e.Title, Goal: e.Goal,
 		Active: e.Active, Standing: e.Standing, Pinned: e.Pinned,
 		Labels: e.Labels, Repos: e.Repos, Meta: e.Meta,
-		Done: e.Progress.Done, Total: e.Progress.Total,
+		Closed: fromPtr(e.Closed),
+		Done:   e.Progress.Done, Total: e.Progress.Total,
 		Stuck: e.Stuck, Deps: e.Deps, OpenDeps: e.OpenDeps,
 	}
 }
@@ -161,7 +166,9 @@ func (e epicJSON) toEpicInfo() board.EpicInfo {
 var wipDefaults = map[string]int{"ready": 2, "in-progress": 1}
 
 // load runs the three reads concurrently — lane vocabulary, every task
-// (drafts included: that needs the empty -r), every epic — and assembles a
+// (drafts included: that needs the empty -r), every epic OPEN OR CLOSED (that
+// needs --all, and it is why board.Board carries two epic populations rather
+// than one) — and assembles a
 // Board. Measured on the real 914-task store: 63-77ms wall warm, 181ms cold,
 // bodies included.
 func (p *Store) load() (*board.Board, error) {
@@ -191,7 +198,7 @@ func (p *Store) load() (*board.Board, error) {
 	}()
 	go func() {
 		defer wg.Done()
-		out, err := p.c.run("epic-ls", "epic", "ls", "-r", "", "--json")
+		out, err := p.c.run("epic-ls", "epic", "ls", "-r", "", "--all", "--json")
 		if err == nil {
 			err = json.Unmarshal(out, &boxes)
 		}
@@ -376,12 +383,10 @@ func (p *Store) PersistCheck(id string, i int, done bool) error {
 //
 // `furrow edit --body -` would be better — it replaces the body AND stamps the
 // entity's `updated` in one command, where a direct write leaves `updated`
-// stale. It is implemented (t-8q8c, 2026-08-10) but NOT RELEASED: the newest
-// furrow release is v4.0.0 (2026-08-09), and the contract job — which pins a
-// release precisely so ridge cannot drift ahead of one — answers
-// `unknown flag: --body`. Switching now would work only against a
-// source-built furrow and break every released one, so it waits for the
-// release that carries it.
+// stale. The release wait is over (v5.0.0 carries it; v4.0.0 answered
+// `unknown flag: --body`), so what is left is ridge-side: furrowClient has no
+// stdin path (exec.go wires stdout/stderr only) and `--body ""` is exit 2
+// where a direct write accepts an empty body. t-t9ac.
 func (p *Store) PersistBody(id, body string) error {
 	out, err := p.c.run("edit", "edit", id, "--json")
 	if err != nil {
@@ -549,10 +554,14 @@ func (p *Store) PersistDepRm(id, dep string) error {
 //
 // Store-first (board.Provider's epic family): nothing is applied locally, so
 // these compose argv, run one furrow command and report its verdict. Every
-// argv fact below was measured against furrow v4.0.0 — the release
-// .github/workflows/build.yml pins for the contract job — because the dev
-// binary on a workstation runs ahead of it (`epic reopen` exists there and not
-// in v4.0.0, which is why `epic done`/`reopen` are absent from this family).
+// argv fact below was measured against the release
+// .github/workflows/build.yml pins for the contract job — v4.0.0 originally,
+// re-measured on v5.0.0 when the pin moved. Measure against the PIN, never
+// `which furrow`: the two overtake each other in BOTH directions (`epic
+// reopen` landed in furrow on 2026-08-11, two days after v4.0.0 shipped and
+// sixteen before v5.0.0 carried it; and on the day v5.0.0 shipped the
+// workstation build was the OLDER one), and a flag that exists on only one of
+// them is a green local test and a red contract job.
 
 // epicEnvelope is the {before,after,changed} reply every epic mutation answers
 // with. Only `previous` is read: `after` would be a second, narrower source of
@@ -646,13 +655,39 @@ func (p *Store) EpicActivate(id, reason string) error {
 // EpicDeactivate steps away from the box via `furrow epic deactivate` and
 // returns furrow's previous-active suggestion (board.Provider).
 func (p *Store) EpicDeactivate(id string) (board.EpicPrevious, error) {
-	out, err := p.c.run("epic-deactivate", "epic", "deactivate", id, "--json")
+	return p.epicVacate("epic-deactivate", "deactivate", id)
+}
+
+// EpicDone closes the box via `furrow epic done` and returns furrow's
+// previous-active suggestion (board.Provider). Closing an ACTIVE box vacates
+// the slot in the SAME write (measured on v5.0.0: changed = [active closed]),
+// which is why this answers the envelope `deactivate` answers rather than a
+// bare error.
+func (p *Store) EpicDone(id string) (board.EpicPrevious, error) {
+	return p.epicVacate("epic-done", "done", id)
+}
+
+// EpicReopen clears the closing stamp via `furrow epic reopen`
+// (board.Provider). No envelope is read, so no --json: reopening vacates no
+// slot and names no successor (measured on v5.0.0: changed = [closed],
+// `previous` absent from the reply, after.active false).
+func (p *Store) EpicReopen(id string) error {
+	_, err := p.c.run("epic-reopen", "epic", "reopen", id)
+	return err
+}
+
+// epicVacate runs one of the two verbs that can give up the active slot —
+// `deactivate` and `done` — and decodes furrow's previous-active suggestion.
+// An absent `previous` is furrow answering that its activation log decides
+// nobody, which is a legitimate answer and not a failure.
+func (p *Store) epicVacate(op, verb, id string) (board.EpicPrevious, error) {
+	out, err := p.c.run(op, "epic", verb, id, "--json")
 	if err != nil {
 		return board.EpicPrevious{}, err
 	}
 	var env epicEnvelope
 	if err := json.Unmarshal(out, &env); err != nil {
-		return board.EpicPrevious{}, fmt.Errorf("furrow epic deactivate: undecodable envelope: %v", err)
+		return board.EpicPrevious{}, fmt.Errorf("furrow epic %s: undecodable envelope: %v", verb, err)
 	}
 	if env.Previous == nil {
 		return board.EpicPrevious{}, nil

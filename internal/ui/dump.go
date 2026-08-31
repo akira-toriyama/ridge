@@ -13,7 +13,7 @@ import (
 // unknown-name error and the tests all read this slice, because the list was
 // duplicated in three places and adding two states updated two of them —
 // `ridge -h` then advertised eight of ten.
-var DemoNames = []string{"move", "drag", "add", "adddraft", "edit", "editpick", "editinput", "editdeps", "editrefs", "note", "refs", "graph", "graphall", "map", "mapall", "mapfiltered", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicnew", "fail"}
+var DemoNames = []string{"move", "drag", "add", "adddraft", "edit", "editpick", "editinput", "editdeps", "editrefs", "note", "refs", "graph", "graphall", "map", "mapall", "mapfiltered", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicshut", "epicdone", "epicreopen", "sliceepicall", "epicnew", "boxes", "boxesall", "fail"}
 
 // Options configures a freshly-constructed Model. The zero value is the
 // default TUI: dark palette, board view, no filter.
@@ -415,8 +415,9 @@ func (m *Model) demoState(kind string) error {
 		m.epic.menuIdx = int(epicFieldActive)
 
 	case "epiclist":
-		// The deps sub-editor, both resolutions in one frame: e-c4mt waits on
-		// an OPEN box and carries a dep furrow already resolved away.
+		// The deps sub-editor, all three resolutions in one frame: e-c4mt waits
+		// on an OPEN box, on one the board holds CLOSED, and on an id no read
+		// serves.
 		if err := m.demoEpicPanel("e-c4mt"); err != nil {
 			return err
 		}
@@ -448,6 +449,57 @@ func (m *Model) demoState(kind string) error {
 			_ = c
 		}
 
+	case "epicshut":
+		// The MENU on a closed box — the only frame where the `closed` row
+		// reads its own state back. Without it the row could say "no — open"
+		// on a box whose ⏎ reopens, and nothing would catch it.
+		m.sliceEpicAll = true
+		if err := m.demoEpicPanel("e-2b7h"); err != nil {
+			return err
+		}
+		m.epic.menuIdx = int(epicFieldClosed)
+
+	case "epicdone":
+		// The close gate on the ACTIVE box, which is also the one with the
+		// most work still under it. furrow closes such a box at exit 0, so
+		// this frame is the only warning there is — and closing the active box
+		// vacates its repo slot in the same write, which is the other half the
+		// gate owes the user.
+		if err := m.demoEpicPanel("e-fw2m"); err != nil {
+			return err
+		}
+		m.epic.menuIdx = int(epicFieldClosed)
+		if c := m.openEpicField(epicFieldClosed); c != nil {
+			_ = c
+		}
+
+	case "epicreopen":
+		// The same row on the CLOSED box, which is the other verb and the
+		// other wording. Reaching it needs the widened scope, which is the
+		// point: without it the box `reopen` targets is not on any list.
+		m.sliceEpicAll = true
+		if err := m.demoEpicPanel("e-2b7h"); err != nil {
+			return err
+		}
+		m.epic.menuIdx = int(epicFieldClosed)
+		if c := m.openEpicField(epicFieldClosed); c != nil {
+			_ = c
+		}
+
+	case "sliceepicall":
+		// The epic axis widened to the closed boxes. Driven through the panel's
+		// own key handler rather than the field, so the frame also proves `z`
+		// is BOUND here — the trap the epicnew demo documents.
+		m.toggleSlice()
+		m.sliceField = sliceEpic
+		m.noteSliceAxis()
+		if c := m.onSliceKey(tea.KeyPressMsg{Code: 'z', Text: "z"}); c != nil {
+			_ = c
+		}
+		if !m.sliceEpicAll {
+			return fmt.Errorf("demo sliceepicall: z did not widen the epic axis")
+		}
+
 	case "epicnew":
 		// The new-box modal under a typed repo: filter, so the frame PROVES
 		// the inheritance: the filter's repo lands in the chip, not silently
@@ -468,6 +520,32 @@ func (m *Model) demoState(kind string) error {
 			return fmt.Errorf("demo epicnew: A did not open the new-box modal")
 		}
 		m.epic.input.SetValue("薪ストーブ導入")
+
+	case "boxes":
+		// The overview at its default scope, driven through the board's own key
+		// handler so the frame also proves `E` is BOUND — the trap the epicnew
+		// demo documents.
+		if c := m.onNormalKey(tea.KeyPressMsg{Code: 'E', Text: "E"}); c != nil {
+			_ = c
+		}
+		if m.view != viewBoxes {
+			return fmt.Errorf("demo boxes: E did not open the box overview")
+		}
+
+	case "boxesall":
+		// The widened scope, cursor parked on the closed box — the row whose
+		// dim styling and done marker have no other frame, and the proof that
+		// a closed box keeps its repo group rather than collecting in one.
+		m.openBoxes()
+		if c := m.onBoxesKey(tea.KeyPressMsg{Code: 'z', Text: "z"}); c != nil {
+			_ = c
+		}
+		l := m.buildBoxes()
+		m.boxesLay = l
+		if l.Row(boxKey("tomo/kyushu-trip", "e-2b7h")) == nil {
+			return fmt.Errorf("demo boxesall: z did not widen the population")
+		}
+		m.boxesSel = boxKey("tomo/kyushu-trip", "e-2b7h")
 
 	case "fail":
 		// A refused write. The ⚠ styling has its own colour and its own row,

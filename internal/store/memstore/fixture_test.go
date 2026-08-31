@@ -16,10 +16,12 @@ func TestGraphAgreesWithFixtureFacts(t *testing.T) {
 	b, g := fixtureGraph(t)
 
 	// Epics are ENTITIES — no lane, no card — and their hand-written
-	// Done/Total mirror `furrow epic ls`, so EVERY epic's numbers must agree
-	// with the member lanes the fixture actually holds (a count edited on one
-	// side only is exactly how a hand-kept snapshot rots).
-	for _, e := range b.Epics() {
+	// Done/Total mirror `furrow epic ls --all`, so EVERY epic's numbers must
+	// agree with the member lanes the fixture actually holds (a count edited on
+	// one side only is exactly how a hand-kept snapshot rots). EpicsAll, not
+	// Epics: the closed box is the one nothing else on this board looks at, so
+	// it is the one that would rot unwatched.
+	for _, e := range b.EpicsAll() {
 		var members, membersDone int
 		for _, task := range b.Tasks() {
 			if task.Epic != e.ID {
@@ -40,10 +42,13 @@ func TestGraphAgreesWithFixtureFacts(t *testing.T) {
 	}
 
 	// OpenDeps is hand-written the way Done/Total is, so the same rot check
-	// applies: over THIS fixture's fully-listed population it must equal
-	// what furrow would derive — the deps that resolve to a served (open)
-	// epic. A mismatch means one side of the hand-kept pair was edited alone.
-	for _, e := range b.Epics() {
+	// applies — and over the --all read the rule is an EQUIVALENCE, not a
+	// one-way implication: measured on furrow v5.0.0 with one box carrying an
+	// open dep, a closed dep and a dangling one at once, open_deps was exactly
+	// the open dep. So a dep is in OpenDeps if and only if it resolves here to
+	// a box that is not closed. Anything weaker leaves the dangling shape
+	// unpinned in both directions, which is where a wrong hand-edit would sit.
+	for _, e := range b.EpicsAll() {
 		open := map[string]bool{}
 		for _, d := range e.OpenDeps {
 			open[d] = true
@@ -52,20 +57,33 @@ func TestGraphAgreesWithFixtureFacts(t *testing.T) {
 			}
 		}
 		for _, d := range e.Deps {
-			if (b.Epic(d) != nil) != open[d] {
-				t.Errorf("%s: dep %s — hand-written OpenDeps disagrees with the served epic set", e.ID, d)
+			de := b.Epic(d)
+			if (de != nil && de.Closed.IsZero()) != open[d] {
+				t.Errorf("%s: dep %s — hand-written OpenDeps disagrees with what furrow would derive "+
+					"(resolves=%t, waiting=%t)", e.ID, d, de != nil, open[d])
 			}
 		}
 	}
-	// The edges cover every rendering state the UI distinguishes: a wait on
-	// an OPEN box, a dep furrow already resolved away (outside open_deps AND
-	// absent from the open-only read — the closed-dep shape), and a stuck
-	// epic below.
+	// The edges cover every rendering state the UI distinguishes: a wait on an
+	// OPEN box, a resolved-away dep the read shows CLOSED, a resolved-away dep
+	// it cannot resolve at all, and a stuck epic below.
 	if e := b.Epic("e-c4mt"); len(e.OpenDeps) != 1 || e.OpenDeps[0] != "e-fw2m" {
-		t.Errorf("e-c4mt OpenDeps = %v, want [e-fw2m] — e-2b7h stays satisfied", e.OpenDeps)
+		t.Errorf("e-c4mt OpenDeps = %v, want [e-fw2m] — e-2b7h closed, e-x0k9 unresolvable", e.OpenDeps)
 	}
-	if b.Epic("e-2b7h") != nil {
-		t.Error("e-2b7h must stay ABSENT from the epic set: it is the fixture's closed-dep shape")
+	if b.Epic("e-x0k9") != nil {
+		t.Error("e-x0k9 must stay UNRESOLVABLE: it is the fixture's dangling-edge shape")
+	}
+	// The closed box: served, resolvable, and out of the default population.
+	// All three at once — resolvable-but-listed would put a finished box in the
+	// file-under picker, and served-but-unresolvable would be the old bug.
+	closed := b.Epic("e-2b7h")
+	if closed == nil || closed.Closed.IsZero() {
+		t.Fatalf("e-2b7h must be served as a CLOSED box: %+v", closed)
+	}
+	for _, e := range b.Epics() {
+		if e.ID == "e-2b7h" {
+			t.Error("a closed box must not reach Epics() — that slice is indexed as a picker")
+		}
 	}
 	stuck := false
 	for _, e := range b.Epics() {
@@ -126,7 +144,7 @@ func TestGraphAgreesWithFixtureFacts(t *testing.T) {
 			vocab[r] = true
 		}
 	}
-	for _, e := range b.Epics() {
+	for _, e := range b.EpicsAll() {
 		for _, r := range e.Repos {
 			if !vocab[r] {
 				t.Errorf("%s names repo %q, which no fixture task carries", e.ID, r)
