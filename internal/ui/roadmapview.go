@@ -536,8 +536,15 @@ func (m *Model) cycleRoadZoom() {
 		anchor = r.X
 	}
 	// A deliberate absolute placement counts as the anchor — pressing z is
-	// the user acting on a window, so render must not re-place it.
-	m.roadAnchored = true
+	// the user acting on a window, so render must not re-place it. Gated on
+	// sized like every other anchoring path: a z racing ahead of the first
+	// WindowSizeMsg would otherwise anchor against the constructor's default
+	// width, and the offset below stays a provisional value the sized render
+	// overwrites (found by review — latent, but the invariant is "nothing
+	// anchors against an unreal size", without exceptions).
+	if m.sized {
+		m.roadAnchored = true
+	}
 	m.roadXOff = 0
 	if l.Cells > tlW {
 		m.roadXOff = clamp(anchor-tlW/2, 0, l.Cells-tlW)
