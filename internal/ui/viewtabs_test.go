@@ -430,6 +430,69 @@ func TestSwitchViewCarriesTheFilterHiddenWalk(t *testing.T) {
 	}
 }
 
+// TestRoadmapTabSwitchKeepsTheWalkForEsc: a roadmap→roadmap switch carries
+// the walk, so esc afterwards must still pin-and-carry it — losing the
+// roadMoved flag made closeRoadmap skip that while its note claimed "the
+// cursor followed the roadmap" (third review pass, measured against esc's
+// own baseline).
+func TestRoadmapTabSwitchKeepsTheWalkForEsc(t *testing.T) {
+	m := New(memstore.New(), Options{Views: []views.View{
+		{Name: "絞1", Layout: "roadmap", Q: "label:bbq"},
+		{Name: "絞2", Layout: "roadmap", Q: "label:bbq"},
+	}})
+	if c := pressKey(m, '1'); c != nil {
+		c()
+	}
+	// Hunt for a row that is filter-hidden AND was WALKED to: the seed can
+	// open on a hidden row already (the board cursor is dated on this
+	// fixture), and esc's pin-and-carry only fires for a walk.
+	hidden := ""
+	for range m.roadLay.Rows {
+		if m.roadMoved && m.taskHidden(m.roadSel) {
+			hidden = m.roadSel
+			break
+		}
+		m.roadMove(+1)
+	}
+	if hidden == "" || !m.roadMoved {
+		t.Fatalf("setup: no walked filter-hidden row (hidden=%q moved=%v)", hidden, m.roadMoved)
+	}
+	if c := pressKey(m, '2'); c != nil {
+		c()
+	}
+	if m.roadSel != hidden || !m.roadMoved {
+		t.Fatalf("tab switch dropped the walk (sel=%s moved=%v), want %s carried", m.roadSel, m.roadMoved, hidden)
+	}
+	m.onRoadKey(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if got := m.curTask(); got == nil || got.ID != hidden {
+		id := "<nil>"
+		if got != nil {
+			id = got.ID
+		}
+		t.Errorf("esc after a tab switch landed on %s, want the walked %s pinned past the filter", id, hidden)
+	}
+}
+
+// TestSaveViewHoldsExactlyWhatTheFileGot: Save strips control characters on
+// the way out, and a model keeping the unstripped twin would read clean
+// under viewDirty while the file says something else (third review pass).
+func TestSaveViewHoldsExactlyWhatTheFileGot(t *testing.T) {
+	var got [][]views.View
+	m := New(memstore.New(), Options{
+		SaveViews: func(vs []views.View) error { got = append(got, vs); return nil },
+	})
+	m.qRaw = "a\nb" // reachable via `ridge -filter $'a\nb'`
+	if c := pressKey(m, 'V'); c != nil {
+		c()
+	}
+	if len(got) != 1 {
+		t.Fatalf("save calls: got %d, want 1", len(got))
+	}
+	if m.views[0].Q != "a b" || got[0][0].Q != "a b" {
+		t.Errorf("memory %q / handed to Save %q — want both scrubbed to %q", m.views[0].Q, got[0][0].Q, "a b")
+	}
+}
+
 // TestHelpFooterAdvertisesViewKeysOnlyWhereTheyWork: the overlay composites
 // in every full-screen view, and 1-9/V are dead in the graph/map/boxes —
 // the t-84r1 class this repo pins. Scoped to the FOOTER line on purpose:

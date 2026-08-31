@@ -202,6 +202,17 @@ func SplitSort(s string) (key, dir string, ok bool) {
 	return f[0], dir, true
 }
 
+// Scrub is Save's outbound control-character pass over one view, exported
+// so a caller that keeps the slice in memory can hold exactly what the file
+// received — a memory/file divergence would read as clean while the next
+// session loads something else.
+func Scrub(v View) View {
+	for _, p := range []*string{&v.Name, &v.Q, &v.Sort, &v.Slice} {
+		*p, _ = stripControl(*p)
+	}
+	return v
+}
+
 // Save rewrites the whole file atomically (temp + rename in the same
 // directory), creating the directory on first save. The atomic dance is not
 // ceremony: the file is hand-edited too, and a crash mid-write must leave
@@ -215,9 +226,7 @@ func Save(path string, vs []View) error {
 	// and the next Load would repair it anyway.
 	vs = append([]View(nil), vs...)
 	for i := range vs {
-		for _, p := range []*string{&vs[i].Name, &vs[i].Q, &vs[i].Sort, &vs[i].Slice} {
-			*p, _ = stripControl(*p)
-		}
+		vs[i] = Scrub(vs[i])
 	}
 	b, err := toml.Marshal(file{View: vs})
 	if err != nil {
@@ -265,7 +274,7 @@ func Save(path string, vs []View) error {
 	if fi, err := os.Stat(path); err == nil {
 		mode = fi.Mode().Perm()
 	}
-	if err := os.Chmod(tmp.Name(), mode); err != nil { //nolint:gosec // G302: deliberately up to 0644, see above
+	if err := os.Chmod(tmp.Name(), mode); err != nil { //nolint:gosec // G302: deliberately non-0600 — new files 0644, existing files keep their own mode
 		return err
 	}
 	return os.Rename(tmp.Name(), path)

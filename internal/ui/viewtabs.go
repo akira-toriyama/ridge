@@ -227,6 +227,7 @@ func (m *Model) switchView(i int) tea.Cmd {
 		// The seed is passed EXPLICITLY: prev may be a task the filter hides
 		// from the board cols (the roadmap mutes such rows, it does not drop
 		// them), so a round trip through the board cursor loses it.
+		walked := m.view == viewRoadmap && m.roadMoved
 		seed := ""
 		if prev != nil {
 			seed = prev.ID
@@ -234,6 +235,16 @@ func (m *Model) switchView(i int) tea.Cmd {
 		if s := m.startRoadmapFrom(seed); s != "" {
 			// The seed-fallback sentence (why the cursor moved) still applies.
 			m.note("%s", s)
+		}
+		if walked && m.roadSel == seed {
+			// A roadmap→roadmap switch CARRIES the user's walk (the seed),
+			// so the walked-ness must ride along too: startRoadmapFrom
+			// resets it for fresh entries, and losing it here made the next
+			// esc skip its pin-and-carry while still claiming "the cursor
+			// followed the roadmap" (found by review, third pass). Gated on
+			// the seed surviving — a walk the new axis could not place is
+			// not a walk any more.
+			m.roadMoved = true
 		}
 	case m.view != target:
 		// Landing on a board/table tab deliberately does NOT pin prev past
@@ -272,7 +283,10 @@ func (m *Model) saveView() {
 		m.fail("this session has no views.toml — saved views ride the real store, not the fixture")
 		return
 	}
-	b := m.currentBundle()
+	// Scrubbed BEFORE it is stored or written: Save strips control
+	// characters on its own, and a model holding the unstripped twin would
+	// read clean under viewDirty while the file says something else.
+	b := views.Scrub(m.currentBundle())
 	created := false
 	if m.viewIdx >= 0 && m.viewIdx < len(m.views) {
 		b.Name = m.views[m.viewIdx].Name
