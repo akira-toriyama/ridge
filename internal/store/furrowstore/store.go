@@ -562,9 +562,6 @@ func (p *Store) PersistDepRm(id, dep string) error {
 // sixteen before v5.0.0 carried it; and on the day v5.0.0 shipped the
 // workstation build was the OLDER one), and a flag that exists on only one of
 // them is a green local test and a red contract job.
-//
-// `epic done`/`reopen` are not in this family yet: the pin carries both and the
-// read now serves closed boxes, so only the UI surface is missing (t-sq02).
 
 // epicEnvelope is the {before,after,changed} reply every epic mutation answers
 // with. Only `previous` is read: `after` would be a second, narrower source of
@@ -658,13 +655,39 @@ func (p *Store) EpicActivate(id, reason string) error {
 // EpicDeactivate steps away from the box via `furrow epic deactivate` and
 // returns furrow's previous-active suggestion (board.Provider).
 func (p *Store) EpicDeactivate(id string) (board.EpicPrevious, error) {
-	out, err := p.c.run("epic-deactivate", "epic", "deactivate", id, "--json")
+	return p.epicVacate("epic-deactivate", "deactivate", id)
+}
+
+// EpicDone closes the box via `furrow epic done` and returns furrow's
+// previous-active suggestion (board.Provider). Closing an ACTIVE box vacates
+// the slot in the SAME write (measured on v5.0.0: changed = [active closed]),
+// which is why this answers the envelope `deactivate` answers rather than a
+// bare error.
+func (p *Store) EpicDone(id string) (board.EpicPrevious, error) {
+	return p.epicVacate("epic-done", "done", id)
+}
+
+// EpicReopen clears the closing stamp via `furrow epic reopen`
+// (board.Provider). No envelope is read, so no --json: reopening vacates no
+// slot and names no successor (measured on v5.0.0: changed = [closed],
+// `previous` absent from the reply, after.active false).
+func (p *Store) EpicReopen(id string) error {
+	_, err := p.c.run("epic-reopen", "epic", "reopen", id)
+	return err
+}
+
+// epicVacate runs one of the two verbs that can give up the active slot —
+// `deactivate` and `done` — and decodes furrow's previous-active suggestion.
+// An absent `previous` is furrow answering that its activation log decides
+// nobody, which is a legitimate answer and not a failure.
+func (p *Store) epicVacate(op, verb, id string) (board.EpicPrevious, error) {
+	out, err := p.c.run(op, "epic", verb, id, "--json")
 	if err != nil {
 		return board.EpicPrevious{}, err
 	}
 	var env epicEnvelope
 	if err := json.Unmarshal(out, &env); err != nil {
-		return board.EpicPrevious{}, fmt.Errorf("furrow epic deactivate: undecodable envelope: %v", err)
+		return board.EpicPrevious{}, fmt.Errorf("furrow epic %s: undecodable envelope: %v", verb, err)
 	}
 	if env.Previous == nil {
 		return board.EpicPrevious{}, nil

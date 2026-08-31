@@ -112,7 +112,11 @@ func (m *Model) noteSliceAxis() {
 		return // never over-write a refusal nobody has read yet
 	}
 	if m.sliceField == sliceEpic {
-		m.note("slice by epic — tab switches the axis · ⏎ slices · m manages the box · A new box · esc leaves")
+		scope := "open only"
+		if m.sliceEpicAll {
+			scope = "open + closed"
+		}
+		m.note("slice by epic (%s) — tab switches the axis · ⏎ slices · m manages the box · A new box · z scope · esc leaves", scope)
 		return
 	}
 	m.note("slice by %s — tab switches the axis · ⏎ slices · esc leaves the panel", m.sliceField)
@@ -181,6 +185,20 @@ func (m *Model) onSliceKey(msg tea.KeyPressMsg) tea.Cmd {
 			return nil
 		}
 		return m.enterEpicNew()
+
+	// The same key and the same word the dep map's scope toggle uses: one
+	// meaning across two surfaces. It exists so a box closed in an earlier
+	// session can be found at all — `epic reopen` lives behind `m`, and the
+	// default population deliberately hides its target.
+	case key.Matches(msg, m.keys.MapScope):
+		if m.sliceField != sliceEpic {
+			m.note("z widens the BOX list — switch to the epic axis with tab")
+			return nil
+		}
+		m.sliceEpicAll = !m.sliceEpicAll
+		m.sliceIdx = 0
+		m.ensureSliceVisible()
+		m.noteSliceAxis()
 
 	case key.Matches(msg, m.keys.Commit), key.Matches(msg, m.keys.Check):
 		if m.sliceIdx < len(rows) {
@@ -258,7 +276,11 @@ func (m *Model) sliceRows() []sliceRow {
 				display: fmt.Sprintf("%s %d", l, counts[l])})
 		}
 	case sliceEpic:
-		for _, e := range m.b.Epics() {
+		boxes := m.b.Epics()
+		if m.sliceEpicAll {
+			boxes = m.b.EpicsAll()
+		}
+		for _, e := range boxes {
 			// Build the suffix FIRST and give the title whatever is left. The
 			// old `slicePanelW-11` hard-coded a 7-cell suffix budget, which
 			// only holds for single-digit counts with no stuck marker: the
@@ -273,6 +295,14 @@ func (m *Model) sliceRows() []sliceRow {
 			// survive the CJK title's ellipsis. ▶ = the box this repo is
 			// working out of (furrow's own brief marker), ◆ = pinned.
 			suffix := ""
+			if !e.Closed.IsZero() {
+				// Additive, not exclusive: furrow clears `active` when it
+				// closes a box but leaves `pinned` alone (measured on v5.0.0 —
+				// `epic done` on a pinned box answers changed:[closed] and
+				// after.pinned true), so a closed box can still carry ◆ and the
+				// row must be able to say both.
+				suffix += " " + glyphDone
+			}
 			if e.Active {
 				suffix += " " + glyphEpicActive
 			}

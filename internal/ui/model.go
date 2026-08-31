@@ -114,6 +114,11 @@ type Model struct {
 	sliceVal   string     // selected value; "" = not slicing
 	sliceIdx   int        // the panel's cursor row
 	sliceOff   int        // the panel's scroll offset (sliceViewport)
+	// sliceEpicAll widens the epic axis to the CLOSED boxes as well. Off by
+	// default: the real board carries 36 closed boxes against 117 open ones,
+	// and a 26-cell panel is a picker, not an archive. It is a view setting,
+	// not a slice term — the `-q epic:` the panel emits is unaffected.
+	sliceEpicAll bool
 
 	pinned map[string]bool // ids forced visible despite the filter (jump targets)
 	cols   map[string][]*board.Task

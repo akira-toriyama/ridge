@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/akira-toriyama/ridge/internal/board"
 	"github.com/akira-toriyama/ridge/internal/store/memstore"
@@ -32,7 +33,7 @@ func TestEpicKeysExplainThemselvesOnTheOtherAxes(t *testing.T) {
 		name  string
 		field sliceField
 	}{{"repo", sliceRepo}, {"label", sliceLabel}} {
-		for _, k := range []string{"m", "A"} {
+		for _, k := range []string{"m", "A", "z"} {
 			m := boardModel(t, 240, 50)
 			m.toggleSlice()
 			m.sliceField = axis.field
@@ -40,6 +41,9 @@ func TestEpicKeysExplainThemselvesOnTheOtherAxes(t *testing.T) {
 			press(m, k)
 			if m.mode == modeEpic {
 				t.Errorf("%s on the %s axis opened the epic overlay", k, axis.name)
+			}
+			if m.sliceEpicAll {
+				t.Errorf("%s on the %s axis widened the epic axis anyway", k, axis.name)
 			}
 			if m.status == "" {
 				t.Errorf("%s on the %s axis did nothing and said nothing", k, axis.name)
@@ -49,6 +53,47 @@ func TestEpicKeysExplainThemselvesOnTheOtherAxes(t *testing.T) {
 					k, axis.name, m.status)
 			}
 		}
+	}
+}
+
+// A box closed in an earlier session is reachable ONLY through the widened
+// axis: the default population hides it, and `m` is the only door to the
+// overlay that owns `reopen`. Without this the reopen verb ships unreachable.
+func TestTheWidenedEpicAxisIsWhatReachesAClosedBox(t *testing.T) {
+	m := boardModel(t, 240, 50)
+	m.toggleSlice()
+	m.sliceField = sliceEpic
+
+	has := func() bool {
+		for _, r := range m.sliceRows() {
+			if r.value == "e-2b7h" {
+				return true
+			}
+		}
+		return false
+	}
+	if has() {
+		t.Fatal("the default epic axis must not list a closed box")
+	}
+	press(m, "z")
+	if !m.sliceEpicAll || !has() {
+		t.Fatal("z must widen the epic axis to the closed boxes")
+	}
+	// The row has to SAY it is closed, or the widened list is 153 rows of
+	// which the user cannot tell which are finished.
+	var row string
+	for _, r := range m.sliceRows() {
+		if r.value == "e-2b7h" {
+			row = r.display
+		}
+	}
+	if !strings.Contains(row, glyphDone) {
+		t.Errorf("closed row = %q, want the closed marker %q", row, glyphDone)
+	}
+	// And back: it is a toggle, not a one-way widening.
+	press(m, "z")
+	if m.sliceEpicAll || has() {
+		t.Error("z must narrow the axis again")
 	}
 }
 
@@ -536,10 +581,11 @@ func TestEpicGestureWaitsForTheReReadAfterAWriteLands(t *testing.T) {
 func TestEachEpicGestureReachesItsOwnProviderCall(t *testing.T) {
 	cases := []struct {
 		name  string
+		box   string // "" = e-one
 		want  string
 		drive func(*Model)
 	}{
-		{"retitle", "epicset e-one", func(m *Model) {
+		{"retitle", "", "epicset e-one", func(m *Model) {
 			m.epic.menuIdx = int(epicFieldTitle)
 			if c := m.openEpicField(epicFieldTitle); c != nil {
 				_ = c
@@ -547,7 +593,7 @@ func TestEachEpicGestureReachesItsOwnProviderCall(t *testing.T) {
 			m.epic.input.SetValue("改名した箱")
 			m.onEpicInputKey(keyMsg("enter"))
 		}},
-		{"activate carries the reason", "epicactivate e-one reason=ユーザー依頼", func(m *Model) {
+		{"activate carries the reason", "", "epicactivate e-one reason=ユーザー依頼", func(m *Model) {
 			m.epic.menuIdx = int(epicFieldActive)
 			if c := m.openEpicField(epicFieldActive); c != nil {
 				_ = c
@@ -555,14 +601,14 @@ func TestEachEpicGestureReachesItsOwnProviderCall(t *testing.T) {
 			m.epic.input.SetValue("ユーザー依頼")
 			m.onEpicInputKey(keyMsg("enter"))
 		}},
-		{"pinned", "epicset e-one", func(m *Model) {
+		{"pinned", "", "epicset e-one", func(m *Model) {
 			m.epic.menuIdx = int(epicFieldPinned)
 			if c := m.openEpicField(epicFieldPinned); c != nil {
 				_ = c
 			}
 			m.commitEpicConfirm()
 		}},
-		{"dep add", "epicdep e-one e-two", func(m *Model) {
+		{"dep add", "", "epicdep e-one e-two", func(m *Model) {
 			m.epic.menuIdx = int(epicFieldDeps)
 			if c := m.openEpicField(epicFieldDeps); c != nil {
 				_ = c
@@ -573,13 +619,42 @@ func TestEachEpicGestureReachesItsOwnProviderCall(t *testing.T) {
 			m.epic.input.SetValue("e-two")
 			m.onEpicInputKey(keyMsg("enter"))
 		}},
+		// The lifecycle row is ONE row reading the box's own state, so each
+		// direction has to be driven separately to prove it picks the right
+		// verb. Both go through the confirm stage, like standing/pinned.
+		{"close", "", "epicdone e-one", func(m *Model) {
+			m.epic.menuIdx = int(epicFieldClosed)
+			if c := m.openEpicField(epicFieldClosed); c != nil {
+				_ = c
+			}
+			m.commitEpicConfirm()
+		}},
+		{"reopen", "e-shut", "epicreopen e-shut", func(m *Model) {
+			m.epic.menuIdx = int(epicFieldClosed)
+			if c := m.openEpicField(epicFieldClosed); c != nil {
+				_ = c
+			}
+			m.commitEpicConfirm()
+		}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			m, p := storeFirstModel(t)
-			sliceOnEpicAxis(t, m, "e-one")
-			press(m, "m")
-			before := *m.b.Epic("e-one")
+			id := tc.box
+			if id == "" {
+				id = "e-one"
+			}
+			if id == "e-one" {
+				sliceOnEpicAxis(t, m, id)
+				press(m, "m")
+			} else {
+				// A closed box is not on the panel's default axis, which is the
+				// point of the scope toggle — reach it the way `z` does.
+				m.sliceEpicAll = true
+				sliceOnEpicAxis(t, m, id)
+				press(m, "m")
+			}
+			before := *m.b.Epic(id)
 			tc.drive(m)
 
 			if len(m.pending) != 1 {
@@ -593,9 +668,10 @@ func TestEachEpicGestureReachesItsOwnProviderCall(t *testing.T) {
 			}
 			// Store-first for EVERY gesture, not just the retitle: the board must
 			// be untouched until the re-read.
-			if got := *m.b.Epic("e-one"); got.Title != before.Title || got.Goal != before.Goal ||
+			if got := *m.b.Epic(id); got.Title != before.Title || got.Goal != before.Goal ||
 				got.Active != before.Active || got.Pinned != before.Pinned ||
-				got.Standing != before.Standing || len(got.Deps) != len(before.Deps) ||
+				got.Standing != before.Standing || !got.Closed.Equal(before.Closed) ||
+				len(got.Deps) != len(before.Deps) ||
 				len(got.Labels) != len(before.Labels) || len(got.Repos) != len(before.Repos) {
 				t.Errorf("the board changed before furrow answered:\n got %+v\nwant %+v", got, before)
 			}
@@ -928,6 +1004,26 @@ func TestEpicDemoFramesCarryWhatTheyExistFor(t *testing.T) {
 		// the cards behind the overlay carry that repo too, so the marker has to
 		// be the chip's own text.
 		{"epicnew", []string{"new box", "薪ストーブ導入", "repo tomo/kyushu-trip", "⏎ creates"}},
+		// The close gate, on the ACTIVE box so one frame proves both halves the
+		// gate owes: furrow closes a box with open members at exit 0, and
+		// closing the active one vacates its repo slot in the same write.
+		// Every string here is BODY text — the status line repeats some of it,
+		// and an assertion the note alone satisfies pins nothing about the
+		// panel (found by review).
+		{"epicdone", []string{"box e-fw2m", "close this box", "12 still open under it",
+			"reads `reopen` once it is closed", "vacates its repo slot"}},
+		// The other verb on the same row, and the only frames that reach a
+		// CLOSED box at all — which takes the widened epic axis to find.
+		{"epicreopen", []string{"box e-2b7h", "reopen this box",
+			"choosing it again is a separate act"}},
+		// The menu on a closed box: the `closed` row reading its own state
+		// back, and the activate precondition that outranks every other.
+		{"epicshut", []string{"box e-2b7h", "closed", "yes — 2026-07-15",
+			"no — closed; reopen it first"}},
+		// The widened axis itself: the closed marker, and the note saying which
+		// scope is in force (the panel is modal, so the note is the only place
+		// that can).
+		{"sliceepicall", []string{"open + closed", "z scope", glyphDone + " 0/0"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.demo, func(t *testing.T) {
@@ -949,5 +1045,10 @@ func scriptedEpicBoard() *board.Board {
 		[]*board.Task{{ID: "t-a", Title: "a", Status: "ready", Priority: 10, Repos: []string{"lab/lab"}}},
 		board.EpicInfo{ID: "e-one", Title: "最初の箱", Repos: []string{"lab/lab"}, Total: 1},
 		board.EpicInfo{ID: "e-two", Title: "二番目の箱", Repos: []string{"lab/lab"}, Active: true},
+		// The closed box. It stays out of Epics(), so no test that walks the
+		// panel sees it — but Epic() resolves it, which is the only way the
+		// reopen gesture has anything to aim at.
+		board.EpicInfo{ID: "e-shut", Title: "閉じた箱", Repos: []string{"lab/lab"},
+			Closed: time.Date(2026, 7, 15, 9, 12, 7, 0, time.UTC)},
 	)
 }

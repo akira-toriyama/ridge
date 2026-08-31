@@ -62,6 +62,11 @@ func (p *liveQueryProvider) EpicDeactivate(string) (board.EpicPrevious, error) {
 	return board.EpicPrevious{}, nil
 }
 
+func (p *liveQueryProvider) EpicDone(string) (board.EpicPrevious, error) {
+	return board.EpicPrevious{}, nil
+}
+func (p *liveQueryProvider) EpicReopen(string) error { return nil }
+
 func liveModel(t *testing.T) (*Model, *liveQueryProvider) {
 	t.Helper()
 	p := &liveQueryProvider{b: memstore.New().Board()}

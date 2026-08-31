@@ -289,6 +289,12 @@ func (m *Model) renderTable() string {
 		epic := t.Epic
 		if e := m.b.Epic(t.Epic); e != nil {
 			epic = e.Title
+			// Same reason as the card chip: a closed box resolves now, so the
+			// column would otherwise render a membership furrow lints exactly
+			// like a live one. The marker leads so it survives truncation.
+			if !e.Closed.IsZero() {
+				epic = glyphDone + " " + epic
+			}
 		}
 		due, overdue := "", false
 		if !t.Due.IsZero() {

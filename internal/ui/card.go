@@ -144,6 +144,15 @@ func cardLines(t *board.Task, g *board.Graph, th *theme, w int) []string {
 			if e.Stuck {
 				chip = th.warn
 			}
+			// An open task under a CLOSED box is a state furrow lints
+			// (epic-closed, warn). The --all read made that membership resolve
+			// like any other, so without the glyph the card is the one surface
+			// that hides it. The marker leads: a 14-cell chip truncates the
+			// title, and the state must survive the ellipsis.
+			if !e.Closed.IsZero() {
+				label = glyphDone + " " + label
+				chip = th.dim
+			}
 		}
 		left += " " + chip.Render(glyphEpic) + th.muted.Render(" "+ansi.Truncate(label, 14, "…"))
 	}
