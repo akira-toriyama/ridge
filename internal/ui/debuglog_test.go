@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -102,6 +103,66 @@ func TestDebugLogRecordsAllFourLayers(t *testing.T) {
 		}
 	}
 	t.Fatal("no apply/enqueue event found")
+}
+
+// The stamp is taken under the lock, so the file's write order IS its stamp
+// order and a reader can reconstruct "I did X and the board showed Y" by
+// reading down. Hoisting time.Now() above the mutex is the standard "shrink
+// the critical section" edit; it leaves -race clean (the map is still only
+// touched under the lock) and every other test green, so this is what catches
+// it — two goroutines interleave between reading the clock and taking the
+// lock, and the file goes backwards.
+func TestDebugLogStampsRunForwardWithTheFile(t *testing.T) {
+	var buf bytes.Buffer
+	d := NewDebugLog(&buf)
+
+	const writers, each = 4, 500
+	var wg sync.WaitGroup
+	for w := 0; w < writers; w++ {
+		wg.Add(1)
+		go func(w int) {
+			defer wg.Done()
+			for i := 0; i < each; i++ {
+				d.event("apply", "enqueue", map[string]any{"w": w, "i": i})
+			}
+		}(w)
+	}
+	wg.Wait()
+
+	evs := debugLines(t, &buf)
+	if want := writers*each + 1; len(evs) != want { // +1 for session/start
+		t.Fatalf("wrote %d lines, want %d — a concurrent write was lost", len(evs), want)
+	}
+	var prev time.Time
+	var subsecond bool
+	for i, ev := range evs {
+		raw, ok := ev["t"].(string)
+		if !ok {
+			t.Fatalf("line %d: stamp is %T, want a string", i, ev["t"])
+		}
+		got, err := time.Parse(time.RFC3339Nano, raw)
+		if err != nil {
+			t.Fatalf("line %d: unparsable stamp %q: %v", i, raw, err)
+		}
+		// Parsed, never compared as text: RFC3339Nano trims trailing zeros and
+		// a UTC clock's 'Z' sorts ABOVE the digits, so "…21.9Z" > "…21.95Z"
+		// while being the earlier instant. A string comparison passes on a
+		// +09:00 machine ('+' sorts below the digits) and fails in a UTC
+		// runner (measured both ways).
+		if got.Before(prev) {
+			t.Fatalf("line %d goes backwards (%s after %s) — the stamp escaped the lock",
+				i, raw, prev.Format(time.RFC3339Nano))
+		}
+		prev = got
+		subsecond = subsecond || strings.ContainsRune(raw, '.')
+	}
+	// The check above is blind at second precision: formatting with RFC3339
+	// instead truncates the reordering away and passes vacuously (measured).
+	// One line suffices — RFC3339Nano drops an all-zero fraction, so an exact
+	// second is legal and a per-line assertion would be flaky.
+	if !subsecond {
+		t.Fatal("no stamp carried a fractional second — the ordering check above is blind at this precision")
+	}
 }
 
 // A refused write records the failure, the dropped tail, and the refusals
