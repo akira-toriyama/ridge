@@ -127,6 +127,58 @@ func TestDanglingDepIsNamedButGroupsNothing(t *testing.T) {
 	}
 }
 
+// Top()'s two documented edges, neither of which a unique maximum can reach:
+// ties go to the first in draw order, and a cluster that frees nothing names
+// nobody. Both hold under `>` and both break under `>=` — a swap that reads
+// like a cleanup. Every other Top() assertion misses both: the board-building
+// ones hand Top a unique maximum, and the fixture sweep in
+// ui.TestTheHeadlineNumbersMatchTheRowsTheySitUnder only asserts Top is not
+// done, behind a top.ID != "" guard that excludes the frees-nothing edge.
+func TestTopBreaksTiesByDrawOrderAndNamesNobodyWhenNothingFrees(t *testing.T) {
+	// a and b each free x and y, so Blocking ties at 2. Nodes are ordered by
+	// (Depth, ID), which puts a first.
+	tied := NewGraph(NewBoard([]*Task{
+		mk("a", "backlog"),
+		mk("b", "backlog"),
+		mk("x", "backlog", "a", "b"),
+		mk("y", "backlog", "a", "b"),
+	})).Clusters(ClusterAll)[0]
+	for _, id := range []string{"a", "b"} {
+		if got := node(t, tied, id).Blocking; got != 2 {
+			t.Fatalf("setup: %s frees %d, want the tie at 2", id, got)
+		}
+	}
+	if got := tied.Top().ID; got != "a" {
+		t.Errorf("Top() = %q, want a — a tie goes to the first in draw order", got)
+	}
+
+	// Draw order is (Depth, ID), not ID alone, and the two only coincide when
+	// the tied nodes share a depth as a and b do above. A done blocker pushes
+	// s to depth 1 while u stays at 0, so "lowest id among the maxima" — the
+	// rule a sort-based rewrite most easily lands on — picks s and is wrong.
+	split := NewGraph(NewBoard([]*Task{
+		mk("xdone", "done"),
+		mk("s", "backlog", "xdone"),
+		mk("u", "backlog"),
+		mk("t", "backlog", "s", "u"),
+	})).Clusters(ClusterAll)[0]
+	for _, id := range []string{"s", "u"} {
+		if got := node(t, split, id).Blocking; got != 1 {
+			t.Fatalf("setup: %s frees %d, want the tie at 1", id, got)
+		}
+	}
+	if got := split.Top().ID; got != "u" {
+		t.Errorf("Top() = %q, want u — the depth-0 node is drawn first", got)
+	}
+
+	// A task waiting on a phantom is a cluster of one that frees nothing;
+	// naming it would put "p frees 0" on the panel.
+	none := NewGraph(NewBoard([]*Task{mk("p", "backlog", "ghost")})).Clusters(ClusterOpen)[0]
+	if got := none.Top(); got.ID != "" {
+		t.Errorf("Top() = %q, want the zero value — this cluster frees nothing", got.ID)
+	}
+}
+
 // Blocking is "how many tasks closing this frees", so a node reachable by two
 // paths counts ONCE. Counting paths instead of nodes inflates every diamond.
 func TestBlockingCountsMembersNotPaths(t *testing.T) {
