@@ -13,7 +13,7 @@ import (
 // unknown-name error and the tests all read this slice, because the list was
 // duplicated in three places and adding two states updated two of them —
 // `ridge -h` then advertised eight of ten.
-var DemoNames = []string{"move", "drag", "add", "adddraft", "edit", "editpick", "editinput", "editdeps", "editrefs", "note", "refs", "graph", "graphall", "map", "mapall", "mapfiltered", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicshut", "epicdone", "epicreopen", "sliceepicall", "epicnew", "fail"}
+var DemoNames = []string{"move", "drag", "add", "adddraft", "edit", "editpick", "editinput", "editdeps", "editrefs", "note", "refs", "graph", "graphall", "map", "mapall", "mapfiltered", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicshut", "epicdone", "epicreopen", "sliceepicall", "epicnew", "boxes", "boxesall", "fail"}
 
 // Options configures a freshly-constructed Model. The zero value is the
 // default TUI: dark palette, board view, no filter.
@@ -520,6 +520,32 @@ func (m *Model) demoState(kind string) error {
 			return fmt.Errorf("demo epicnew: A did not open the new-box modal")
 		}
 		m.epic.input.SetValue("薪ストーブ導入")
+
+	case "boxes":
+		// The overview at its default scope, driven through the board's own key
+		// handler so the frame also proves `E` is BOUND — the trap the epicnew
+		// demo documents.
+		if c := m.onNormalKey(tea.KeyPressMsg{Code: 'E', Text: "E"}); c != nil {
+			_ = c
+		}
+		if m.view != viewBoxes {
+			return fmt.Errorf("demo boxes: E did not open the box overview")
+		}
+
+	case "boxesall":
+		// The widened scope, cursor parked on the closed box — the row whose
+		// dim styling and done marker have no other frame, and the proof that
+		// a closed box keeps its repo group rather than collecting in one.
+		m.openBoxes()
+		if c := m.onBoxesKey(tea.KeyPressMsg{Code: 'z', Text: "z"}); c != nil {
+			_ = c
+		}
+		l := m.buildBoxes()
+		m.boxesLay = l
+		if l.Row(boxKey("tomo/kyushu-trip", "e-2b7h")) == nil {
+			return fmt.Errorf("demo boxesall: z did not widen the population")
+		}
+		m.boxesSel = boxKey("tomo/kyushu-trip", "e-2b7h")
 
 	case "fail":
 		// A refused write. The ⚠ styling has its own colour and its own row,

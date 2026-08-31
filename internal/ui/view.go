@@ -37,6 +37,8 @@ func (m *Model) View() tea.View {
 		content = m.renderGraph()
 	case viewMap:
 		content = m.renderMap()
+	case viewBoxes:
+		content = m.renderBoxes()
 	default:
 		content = m.renderBoard()
 	}
@@ -489,6 +491,8 @@ func (m *Model) helpLayer() *lg.Layer {
 		now = "graph"
 	case m.view == viewMap:
 		now = "dep map"
+	case m.view == viewBoxes:
+		now = "box overview"
 	}
 
 	// Render each section as its own block first…

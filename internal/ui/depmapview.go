@@ -223,9 +223,13 @@ func (m *Model) mapNodeRow(n board.ClusterNode, w int) string {
 // blockerTag names the node's blockers, dropping ids rather than cutting one
 // in half: "←t-a,t-b +2" is true, "←t-a,t-b,t-c…" names a task that does not
 // exist. It is the map's substitute for drawing a line, so it may never lie.
-func (m *Model) blockerTag(ids []string, budget int) string {
+// depTag composes the tag and reports how many ids it managed to NAME. The
+// colouring is deliberately not here: what a named id means differs per
+// caller — a task blocker is live or done, an epic dep is open, closed or
+// missing — and a shared colour rule would have to know both.
+func depTag(ids []string, budget int) (string, int) {
 	if len(ids) == 0 {
-		return ""
+		return "", 0
 	}
 	shown := 0
 	width := 1 // the leading arrow
@@ -243,6 +247,14 @@ func (m *Model) blockerTag(ids []string, budget int) string {
 	tag := "←" + strings.Join(ids[:shown], ",")
 	if rest := len(ids) - shown; rest > 0 {
 		tag += fmt.Sprintf(" +%d", rest)
+	}
+	return tag, shown
+}
+
+func (m *Model) blockerTag(ids []string, budget int) string {
+	tag, shown := depTag(ids, budget)
+	if shown == 0 {
+		return ""
 	}
 	// Colour by what the named ids actually DO right now. In scope=all the tag
 	// also names deps that are already satisfied, and painting those as live

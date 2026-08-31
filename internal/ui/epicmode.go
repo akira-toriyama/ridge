@@ -189,7 +189,11 @@ func (m *Model) reopenRefusedEpicAdd(op persistOp) tea.Cmd {
 // would leave it rendered but unfocused.
 func (m *Model) exitEpic() {
 	m.epic = nil
-	if m.sliceOpen {
+	// …unless the panel is not on screen. A full-screen view renders no slice
+	// panel, so handing the keyboard back to it there is the same invisible-
+	// owner bug the overlay itself just had: the box overview opens this
+	// overlay, and `s` before `E` leaves sliceOpen true underneath it.
+	if m.sliceOpen && !m.fullScreen() {
 		m.mode = modeSlice
 		// The panel's note is the only place its keys are advertised, and the
 		// overlay's own note ("box e-… — ⏎ pick a field · esc closes") is a FALSE
