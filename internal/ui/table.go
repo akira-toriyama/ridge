@@ -301,7 +301,7 @@ func (m *Model) renderTable() string {
 			// Local, not UTC: an evening-local due formatted in UTC reads one
 			// day early (the peek learnt this the hard way — t-qve3 rides it).
 			due = t.Due.Local().Format("2006-01-02")
-			overdue = t.Due.Before(nowFn()) && t.Closed.IsZero()
+			overdue = isOverdue(t)
 		}
 		cur := " "
 		if i == m.tableIdx {

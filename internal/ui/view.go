@@ -39,6 +39,8 @@ func (m *Model) View() tea.View {
 		content = m.renderMap()
 	case viewBoxes:
 		content = m.renderBoxes()
+	case viewRoadmap:
+		content = m.renderRoadmap()
 	default:
 		content = m.renderBoard()
 	}
@@ -127,6 +129,31 @@ func (m *Model) modalLayers() []*lg.Layer {
 		out = append(out, m.helpLayer())
 	}
 	return out
+}
+
+// fullTabs is the tab strip the full-screen views carry in their title bars:
+// every view, the current one lit. Spelled ONCE for DemoNames' reason — the
+// strip was hand-written per view and drifted: the graph's and the map's
+// never learned the box overview existed (three copies; PR #60 grew one).
+// The board's own chrome keeps its two-tab strip on purpose: Board|Table is
+// its interactive toggle (`v`), not a listing of everywhere a key could go.
+func (m *Model) fullTabs(active viewKind) string {
+	th := m.th
+	parts := make([]string, 0, 6)
+	for _, tab := range []struct {
+		v    viewKind
+		name string
+	}{
+		{viewBoard, "Board"}, {viewTable, "Table"}, {viewGraph, "Graph"},
+		{viewMap, "Map"}, {viewBoxes, "Boxes"}, {viewRoadmap, "Roadmap"},
+	} {
+		if tab.v == active {
+			parts = append(parts, th.tabOn.Render(tab.name))
+		} else {
+			parts = append(parts, th.tabOff.Render(tab.name))
+		}
+	}
+	return strings.Join(parts, th.dim.Render(" │ "))
 }
 
 // minFilterInputW is the floor under the filter input when the chips squeeze
@@ -493,6 +520,8 @@ func (m *Model) helpLayer() *lg.Layer {
 		now = "dep map"
 	case m.view == viewBoxes:
 		now = "box overview"
+	case m.view == viewRoadmap:
+		now = "roadmap"
 	}
 
 	// Render each section as its own block first…

@@ -121,6 +121,29 @@ func TestBenchloadRefusesFlagsItCannotHonour(t *testing.T) {
 	}
 }
 
+// -roadmap is a view setting like -table: it must reach a -dump frame.
+func TestRoadmapFlagOpensTheTimelineHeadless(t *testing.T) {
+	code, out, errb := runArgs(t, "-dump", "-roadmap", "-plain")
+	if code != CodeOK {
+		t.Fatalf("-dump -roadmap exited %d, want %d; stderr=%q", code, CodeOK, errb)
+	}
+	if !strings.Contains(out, "⟨ROADMAP⟩") {
+		t.Errorf("the frame does not carry the roadmap's badge:\n%s", out)
+	}
+}
+
+// Two flags that each name the opening view have no coherent composition —
+// last-flag-wins would make one of them a silent no-op.
+func TestTableAndRoadmapTogetherAreRefused(t *testing.T) {
+	code, _, errb := runArgs(t, "-table", "-roadmap")
+	if code != CodeUsage {
+		t.Errorf("-table -roadmap exited %d, want %d", code, CodeUsage)
+	}
+	if !strings.Contains(errb, "-table") || !strings.Contains(errb, "-roadmap") {
+		t.Errorf("the refusal did not name both flags: %q", errb)
+	}
+}
+
 // An unopenable -perflog is fatal: a measurement run that silently measures
 // nothing is worse than no run.
 func TestUnopenablePerflogIsAUsageError(t *testing.T) {

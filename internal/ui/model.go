@@ -64,6 +64,10 @@ const (
 	// rows are epics rather than tasks. The other three answer questions about
 	// work; this one answers "what is each repo working out of".
 	viewBoxes
+	// viewRoadmap is the ROADMAP — full-screen, the open tasks that carry a
+	// due placed on one time axis. The others answer "what and in which
+	// order"; this one answers "by when".
+	viewRoadmap
 )
 
 func (v viewKind) String() string {
@@ -78,6 +82,8 @@ func (v viewKind) String() string {
 		return "map"
 	case viewBoxes:
 		return "boxes"
+	case viewRoadmap:
+		return "roadmap"
 	}
 	return "unknown"
 }
@@ -237,6 +243,17 @@ type Model struct {
 	mapMoved  bool
 	mapScroll int
 	mapLay    *mapLayout
+
+	// The roadmap view (roadmap.go). roadSel is the row the cursor is on;
+	// roadZoom is the axis unit; roadXOff is the window's pan over the axis,
+	// in cells; roadMoved carries the walk back to the board on close, the
+	// way mapMoved does and for the same reason.
+	roadZoom   roadZoom
+	roadSel    string
+	roadMoved  bool
+	roadScroll int
+	roadXOff   int
+	roadLay    *roadLayout
 
 	lay       *layout
 	status    string
@@ -582,6 +599,10 @@ func (m *Model) onKey(msg tea.KeyPressMsg) tea.Cmd {
 	if m.view == viewBoxes {
 		return m.onBoxesKey(msg)
 	}
+	// The roadmap, likewise.
+	if m.view == viewRoadmap {
+		return m.onRoadKey(msg)
+	}
 	return m.onNormalKey(msg)
 }
 
@@ -772,6 +793,9 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	case key.Matches(msg, m.keys.Boxes):
 		m.openBoxes()
+
+	case key.Matches(msg, m.keys.Roadmap):
+		m.openRoadmap()
 
 	case key.Matches(msg, m.keys.Peek):
 		m.peekOpen = !m.peekOpen

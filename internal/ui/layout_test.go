@@ -28,6 +28,7 @@ func TestGlyphsAreSingleWidth(t *testing.T) {
 		"unknown": glyphUnknown, "wipOver": glyphWIPOver, "drop": glyphDrop,
 		"dropL": glyphDropL, "dropR": glyphDropR, "laneDot": glyphLaneDot,
 		"lift": glyphLift, "sortAsc": glyphSortAsc, "sortDesc": glyphSortDesc,
+		"due": glyphDue, "today": glyphToday,
 	}
 	for name, g := range glyphs {
 		if w := lg.Width(g); w != 1 {

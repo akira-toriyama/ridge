@@ -64,6 +64,9 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 		peek   = fs.Bool("peek", false, "-dump with the detail side-peek open")
 		tree   = fs.Bool("tree", false, "-dump with the dep tree overlay open (implies -peek)")
 		table  = fs.Bool("table", false, "-dump the table view")
+		// A view setting like -table, not a -demo name: it composes with the
+		// demos and it opens the interactive TUI on the timeline too.
+		roadmap = fs.Bool("roadmap", false, "open on the roadmap view: every open task that carries a due, on a time axis")
 		// No back quotes in this usage string: flag reads the first back-quoted
 		// word as the operand NAME, so "the graph's `o` key" rendered as
 		// `-graphlr o` — the one bool in -h that looks like it takes a value.
@@ -117,7 +120,7 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 		// refusal — two steps to learn the combination was never going to work.
 		for _, name := range []string{
 			"mock", "readonly", "dump", "demo", "plain", "cols", "rows",
-			"filter", "peek", "tree", "table", "light", "graphlr", "debuglog",
+			"filter", "peek", "tree", "table", "roadmap", "light", "graphlr", "debuglog",
 		} {
 			if set[name] {
 				_, _ = fmt.Fprintf(stderr,
@@ -131,6 +134,13 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 			return CodeUsage
 		}
 		return runBenchload(stdout, stderr, perf)
+	}
+
+	// Two flags that each name the OPENING VIEW have no coherent composition —
+	// last-flag-wins would make one of them a silent no-op.
+	if *table && *roadmap {
+		_, _ = fmt.Fprintln(stderr, "error: -table and -roadmap both name the opening view; pick one")
+		return CodeUsage
 	}
 
 	// -demo is a -dump modifier (glossary), and it used to be READ only inside
@@ -231,6 +241,7 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 		Light:   *light,
 		Filter:  *filter,
 		Table:   *table,
+		Roadmap: *roadmap,
 		GraphLR: *graphlr,
 		Peek:    *peek,
 		Tree:    *tree,

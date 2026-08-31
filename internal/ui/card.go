@@ -57,6 +57,15 @@ func cardMarker(t *board.Task, g *board.Graph) (glyph string, style func(*theme)
 	return " ", func(th *theme) lg.Style { return th.dim }
 }
 
+// isOverdue is the one overdue predicate: a promise in the past on a task
+// that is not closed — the same meaning as furrow's `is:overdue`. Spelled
+// once because three surfaces colour by it (the table's due column, the
+// peek's due line, the roadmap's ◆), and two copies had already grown before
+// the third reader arrived.
+func isOverdue(t *board.Task) bool {
+	return !t.Due.IsZero() && t.Due.Before(nowFn()) && t.Closed.IsZero()
+}
+
 // wrapLines wraps to width w, hard-wrapping runs with no breakpoints (a
 // Japanese title has no spaces at all) and returns unpadded lines.
 func wrapLines(s string, w int) []string {

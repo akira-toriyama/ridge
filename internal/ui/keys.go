@@ -92,6 +92,19 @@ type keyMap struct {
 	// claim about what the key does, and "commit" is not what ⏎ does here.
 	BoxSlice key.Binding
 
+	// Roadmap opens the DUE TIMELINE — uppercase like the other full-screen
+	// views. `C` (calendar), and neither of the two letters the view's own
+	// words suggest: `R` is sync's, and `D` sits one missed shift from `d`,
+	// the one lowercase twin in this row that WRITES (it closes the selected
+	// task — every other view key's twin is a read). `c` is unbound, so a
+	// missed shift here does nothing at all.
+	Roadmap key.Binding
+	// RoadZoom reuses `z` on the licence MapScope spells out: in every
+	// full-screen view `z` is the one knob for how much is on screen — hops
+	// in the graph, population in the map and the overview, calendar per
+	// cell here.
+	RoadZoom key.Binding
+
 	// The slice panel's two epic-management keys (epicmode.go). EpicEdit is
 	// `m`-only on purpose: keys.Move is ("enter","m") and the panel's ⏎ SLICES,
 	// so reusing Move here would shadow the panel's own commit key. `e` was the
@@ -193,6 +206,9 @@ func defaultKeys() keyMap {
 		// portable half of the gesture, and that line is normal mode's.
 		MapGraph: key.NewBinding(key.WithKeys("enter", "S", "shift+space"), key.WithHelp("⏎/S", "graph here")),
 
+		Roadmap:  key.NewBinding(key.WithKeys("C"), key.WithHelp("C", "roadmap")),
+		RoadZoom: key.NewBinding(key.WithKeys("z"), key.WithHelp("z", "zoom day/week/month")),
+
 		EpicEdit: key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "manage box")),
 		EpicNew:  key.NewBinding(key.WithKeys("A"), key.WithHelp("A", "new box")),
 	}
@@ -229,7 +245,11 @@ func (k keyMap) HelpSections(enterEdits bool) []helpSection {
 			{k.Up, k.Down, k.Left, k.Right, k.NextCol, k.PrevCol, k.Top, k.Bottom},
 			{open, k.QuickUp, k.QuickDown, k.LaneBack, k.LaneFwd, k.Done, k.Edit, k.Note, k.Add},
 			{k.Peek, k.Tree, k.PeekScroll, k.Filter, k.OnlyBlock, k.Slice, k.View, k.Sort},
-			{k.Graph, k.Map, k.JumpBlock, k.JumpBack, k.Reload, k.Sync, k.Mouse, k.Cancel, k.Help, k.Quit},
+			// Boxes was absent from this section for two releases: `E` worked
+			// while the one canonical key list denied it existed. Every
+			// full-screen view's opener belongs here — the section is "your
+			// keys right now", and normal mode is where they are pressed.
+			{k.Graph, k.Map, k.Boxes, k.Roadmap, k.JumpBlock, k.JumpBack, k.Reload, k.Sync, k.Mouse, k.Cancel, k.Help, k.Quit},
 		}},
 		{"move mode", [][]key.Binding{
 			// The arrows come first because they are how the lifted card is
@@ -260,6 +280,12 @@ func (k keyMap) HelpSections(enterEdits bool) []helpSection {
 			{k.BoxSlice, k.EpicEdit, k.MapScope},
 			{k.Top, k.Bottom, k.PeekScroll},
 			{k.Boxes, k.View, k.Cancel},
+		}},
+		// The roadmap's surface. Same rule again: every key onRoadKey acts on.
+		{"roadmap", [][]key.Binding{
+			{k.Up, k.Down, k.Left, k.Right},
+			{k.RoadZoom, k.Top, k.Bottom, k.PeekScroll},
+			{k.Roadmap, k.View, k.Cancel},
 		}},
 		{"graph", [][]key.Binding{
 			// Sharpest omission of the three: re-rooting answers "is already

@@ -56,6 +56,8 @@ func TestModeBadgeAlwaysNamesTheMode(t *testing.T) {
 				want = "⟨MAP⟩"
 			case m.view == viewBoxes:
 				want = "⟨BOXES⟩"
+			case m.view == viewRoadmap:
+				want = "⟨ROADMAP⟩"
 			default:
 				var ok bool
 				if want, ok = badgeTokens[m.mode]; !ok {
