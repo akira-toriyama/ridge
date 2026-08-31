@@ -90,17 +90,19 @@ func (m *Model) renderRoadmap() string {
 	m.roadScroll = clamp(m.roadScroll, 0, maxInt(0, len(l.Rows)-rowsH))
 	m.roadScroll = m.scrollRoadToSel(l, len(l.Rows), rowsH)
 	tlW := m.roadTLW()
-	if m.roadXOff < 0 {
-		// The opening window, placed at first RENDER rather than in
-		// startRoadmap: the -roadmap flag opens the view inside New(), before
-		// the terminal has reported a size, and a window placed against the
-		// constructor's default width put today off screen on any other
-		// terminal (found by review). Today lands a third of the way in —
-		// the promises just behind and just ahead of it are the ones that
-		// need attention, and GH's roadmap opens the same way. The seed may
-		// sit outside this window: its row is still the selection (the strip
-		// shows it, its ◆ leaves an edge arrow), and the first cursor move
-		// pans to it.
+	if !m.roadAnchored && m.sized {
+		// The opening window, placed on the first frame whose size is REAL —
+		// not in startRoadmap (the -roadmap flag runs it inside New(), before
+		// any size exists) and not on the interactive program's very first
+		// frame either, which bubbletea draws before the WindowSizeMsg
+		// arrives (found by review: the first two cuts each anchored against
+		// the constructor's 240×60 on one of those paths). Today lands a
+		// third of the way in — the promises just behind and just ahead of
+		// it are the ones that need attention, and GH's roadmap opens the
+		// same way. The seed may sit outside this window: its row is still
+		// the selection (the strip shows it, its ◆ leaves an edge arrow),
+		// and the first cursor move pans to it.
+		m.roadAnchored = true
 		m.roadXOff = 0
 		if l.Cells > tlW {
 			m.roadXOff = clamp(l.TodayX-tlW/3, 0, l.Cells-tlW)
@@ -395,10 +397,9 @@ func (m *Model) roadJump(last bool) {
 // (ensureVisible's rule).
 func (m *Model) roadEnsureX() {
 	l := m.roadLay
-	// A negative offset is the not-yet-placed sentinel: the first render owns
-	// the placement, and nudging the sentinel would pan a window that does
-	// not exist yet.
-	if l == nil || m.roadXOff < 0 {
+	// An unanchored window does not exist yet — render owns the placement,
+	// and nudging the offset before it would pan nothing.
+	if l == nil || !m.roadAnchored {
 		return
 	}
 	r := l.Row(m.roadSel)
@@ -406,13 +407,17 @@ func (m *Model) roadEnsureX() {
 		return
 	}
 	tlW := m.roadTLW()
+	// The pad cell exists only when the window can spare it: at tlW==1 a ±1
+	// pad IS the whole window, and both branches parked the ◆ one cell
+	// outside it (found by review, in two rounds — the first fix stopped the
+	// branches chaining and still overshot).
+	pad := minInt(1, tlW-1)
 	// else-if, deliberately: the second test must read the offset the FIRST
-	// one was judged against, or at tlW==1 the branches chain and park the ◆
-	// one cell outside the window (found by review).
+	// one was judged against.
 	if r.X < m.roadXOff {
-		m.roadXOff = maxInt(0, r.X-1)
+		m.roadXOff = maxInt(0, r.X-pad)
 	} else if r.X >= m.roadXOff+tlW {
-		m.roadXOff = minInt(r.X-tlW+2, maxInt(0, l.Cells-tlW))
+		m.roadXOff = minInt(r.X-tlW+1+pad, maxInt(0, l.Cells-tlW))
 	}
 }
 
@@ -439,9 +444,8 @@ func (m *Model) scrollRoadToSel(l *roadLayout, total, rowsH int) int {
 
 func (m *Model) roadPanBy(d int) {
 	l := m.roadLay
-	if l == nil || m.roadXOff < 0 {
-		// Panning before the first render would move the sentinel, not a
-		// window (roadEnsureX's rule).
+	if l == nil || !m.roadAnchored {
+		// Panning an unplaced window would move nothing (roadEnsureX's rule).
 		return
 	}
 	m.roadXOff = clamp(m.roadXOff+d*roadPan(m.roadZoom), 0, maxInt(0, l.Cells-m.roadTLW()))
@@ -464,7 +468,7 @@ func (m *Model) roadPanBy(d int) {
 // render, the one place the real terminal width is known (renderRoadmap).
 func (m *Model) startRoadmap() string {
 	m.cancelDrag()
-	m.roadScroll, m.roadXOff, m.roadMoved = 0, -1, false
+	m.roadScroll, m.roadXOff, m.roadMoved, m.roadAnchored = 0, 0, false, false
 	m.roadSel = ""
 	if t := m.curTask(); t != nil {
 		m.roadSel = t.ID
@@ -531,6 +535,9 @@ func (m *Model) cycleRoadZoom() {
 	if r := l.Row(m.roadSel); r != nil {
 		anchor = r.X
 	}
+	// A deliberate absolute placement counts as the anchor — pressing z is
+	// the user acting on a window, so render must not re-place it.
+	m.roadAnchored = true
 	m.roadXOff = 0
 	if l.Cells > tlW {
 		m.roadXOff = clamp(anchor-tlW/2, 0, l.Cells-tlW)

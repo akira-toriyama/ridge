@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	lg "charm.land/lipgloss/v2"
 
 	"github.com/akira-toriyama/ridge/internal/board"
@@ -20,12 +21,15 @@ func roadModel(t *testing.T, w, h int) *Model {
 	fixedZone(t, "TEST", 9)
 	fixedNow(t, time.Date(2026, 8, 31, 12, 0, 0, 0, time.Local))
 	m := boardModel(t, w, h)
+	// The real program's order: the terminal reports its size, then keys
+	// arrive, and a frame follows every Update. The window is only placed on
+	// a sized frame, so a test that skips the WindowSizeMsg is testing a
+	// program that does not exist (found by review).
+	m.Update(tea.WindowSizeMsg{Width: w, Height: h})
 	press(m, "C")
 	if m.view != viewRoadmap {
 		t.Fatal("C did not open the roadmap")
 	}
-	// One render, as bubbletea guarantees after every Update: the first frame
-	// is what places the window (roadXOff's sentinel).
 	_ = frame(m)
 	return m
 }
@@ -99,7 +103,7 @@ func TestRoadmapDiamondColoursByOverdue(t *testing.T) {
 		{ID: "t-now", Status: "ready", Title: "today", Due: nowFn().Add(2 * time.Hour)},
 	})
 	m2 := New(memstore.NewWith(b), Options{})
-	m2.w, m2.h = 240, 40
+	m2.Update(tea.WindowSizeMsg{Width: 240, Height: 40})
 	m2.openRoadmap()
 	_ = frame(m2)
 	l2 := m2.roadLay
@@ -370,13 +374,15 @@ func TestRoadmapTodayGridlineSurvivesTheEpicChip(t *testing.T) {
 	}
 }
 
-// The opening window is placed at the first RENDER, against the real width:
-// today a third of the way in, even when the seeded selection is a year of
-// cells away — the seed keeps the selection and degrades to an edge arrow
-// rather than dragging the window off the one anchor a timeline opens on.
-// Found by review: the first cut let the seed win and derived the window
-// from the constructor's default width, and a 240-column frame opened with
-// no ┊ anywhere.
+// The opening window is placed only on a frame whose size is REAL: the
+// interactive program draws one frame before the WindowSizeMsg arrives, and
+// anchoring on it derives the window from the constructor's default width —
+// today then sat off screen on any other terminal. When the anchor does
+// land, today is a third of the way in, and a seeded selection a year of
+// cells away keeps the selection but degrades to its edge arrow rather than
+// dragging the window off the one anchor a timeline opens on. Found by
+// review, in two rounds: the first cut let the seed win, the second anchored
+// on the pre-size frame.
 func TestRoadmapOpensWithTodayPlacedAgainstTheRealWidth(t *testing.T) {
 	fixedZone(t, "TEST", 9)
 	fixedNow(t, time.Date(2026, 8, 31, 12, 0, 0, 0, time.Local))
@@ -385,10 +391,15 @@ func TestRoadmapOpensWithTodayPlacedAgainstTheRealWidth(t *testing.T) {
 		{ID: "t-soon", Status: "ready", Title: "soon", Due: at(2026, 9, 2, 12)},
 	})
 	m := New(memstore.NewWith(b), Options{Roadmap: true})
-	m.w, m.h = 240, 40
-	m.recompute()
-	out := frame(m)
 
+	// The pre-size frame the real program draws: it must not burn the anchor.
+	_ = frame(m)
+	if m.roadAnchored {
+		t.Fatal("the window anchored against the constructor's default size")
+	}
+
+	m.Update(tea.WindowSizeMsg{Width: 90, Height: 30})
+	out := frame(m)
 	l, tlW := m.roadLay, m.roadTLW()
 	if l.Cells <= tlW {
 		t.Fatalf("setup: axis %d cells must overflow the %d-cell window", l.Cells, tlW)
@@ -397,7 +408,7 @@ func TestRoadmapOpensWithTodayPlacedAgainstTheRealWidth(t *testing.T) {
 		t.Fatalf("seed = %q, want the board cursor's t-old", m.roadSel)
 	}
 	if got, want := m.roadXOff, clamp(l.TodayX-tlW/3, 0, l.Cells-tlW); got != want {
-		t.Errorf("roadXOff = %d, want today a third in (%d)", got, want)
+		t.Errorf("roadXOff = %d, want today a third into the REAL %d-cell window (%d)", got, tlW, want)
 	}
 	if tx := l.TodayX - m.roadXOff; tx < 0 || tx >= tlW {
 		t.Errorf("today sits at window column %d of %d — the window opened away from it", tx, tlW)

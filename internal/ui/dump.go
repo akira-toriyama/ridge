@@ -107,6 +107,10 @@ func New(p board.Provider, o Options) *Model {
 // puts the model into a transient mid-gesture state first.
 func (m *Model) Dump(w, h int, demo string, plain bool) (string, error) {
 	m.w, m.h = w, h
+	// -cols/-rows ARE the terminal here: geometry gated on a real size (the
+	// roadmap's opening window) must not wait for a WindowSizeMsg that will
+	// never come.
+	m.sized = true
 	m.help.SetWidth(w)
 	m.recompute()
 	m.relayout()
