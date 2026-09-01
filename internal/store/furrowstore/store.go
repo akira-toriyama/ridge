@@ -378,28 +378,19 @@ func (p *Store) PersistCheck(id string, i int, done bool) error {
 	return err
 }
 
-// PersistBody asks furrow for the body path (`edit` prints it when there is no
-// TTY) and replaces the file.
-//
-// `furrow edit --body -` would be better — it replaces the body AND stamps the
-// entity's `updated` in one command, where a direct write leaves `updated`
-// stale. The release wait is over (v5.0.0 carries it; v4.0.0 answered
-// `unknown flag: --body`), so what is left is ridge-side: furrowClient has no
-// stdin path (exec.go wires stdout/stderr only) and `--body ""` is exit 2
-// where a direct write accepts an empty body. t-t9ac.
+// PersistBody records an already-applied body replacement via `furrow edit
+// --body -`, the body on stdin — one write that replaces the file AND stamps
+// the entity's `updated` (the direct file write this replaced left `updated`
+// stale, so other machines' newness checks missed body edits). Two v5.0.0
+// facts the caller leans on: an empty replacement — whitespace-only included,
+// furrow trims first — is exit 2, mirrored upstream by Board.SetBody so it
+// never queues; and furrow normalizes the tail (TrimRight of "\n" plus one —
+// a missing final newline is added, trailing blank lines are collapsed), a
+// drift from the optimistic bytes that the post-drain reconcile re-read
+// converges.
 func (p *Store) PersistBody(id, body string) error {
-	out, err := p.c.run("edit", "edit", id, "--json")
-	if err != nil {
-		return err
-	}
-	var resp struct {
-		Path string `json:"path"`
-	}
-	if err := json.Unmarshal(out, &resp); err != nil || resp.Path == "" {
-		return fmt.Errorf("furrow edit: no body path in %q", string(out))
-	}
-	// 0600 matches the mode furrow itself creates body files with.
-	return os.WriteFile(resp.Path, []byte(body), 0o600)
+	_, err := p.c.runStdin("edit-body", []byte(body), "edit", id, "--body", "-")
+	return err
 }
 
 var _ board.Provider = (*Store)(nil)

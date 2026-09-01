@@ -19,6 +19,13 @@ type editorDoneMsg struct {
 // window (model.go: heldBody) replays through the same path.
 func (m *Model) applyEditorBody(msg editorDoneMsg) tea.Cmd {
 	if err := m.b.SetBody(msg.id, msg.body); err != nil {
+		// The refusal is terminal for a flush the way a failed write is
+		// (quitOrFlush cancels on those): a quit armed on THIS body as the
+		// held write must not stay armed once the refusal removes it from
+		// the drain — the queue is empty, nothing is left to fire tea.Quit,
+		// and the armed flag would turn the next unrelated write into a
+		// surprise exit.
+		m.quitting = false
 		m.fail("%v", err)
 		return nil
 	}

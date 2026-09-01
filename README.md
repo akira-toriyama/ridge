@@ -312,10 +312,6 @@ event loop を通らない。他人に渡す前に中身を確認すること。
 
 ## 既知の課題
 
-- 本文編集はファイル直書きなので shard の `updated` が進まない。furrow 側の
-  `edit --body`（t-8q8c・2026-08-10 着地）が正しい経路で、v5.0.0 でリリース済み。
-  残りは ridge 側の作業（furrowClient に stdin 経路が無い・空 body が exit 2）で
-  t-t9ac。
 - swimlane（group by）未実装。task の group by であって、`E` の箱の俯瞰とは別物。
 - Table ビューに横スクロールが無い（ワイド前提の設計判断。要るなら既存依存の
   bubbles viewport v2 の `SoftWrap=false` + `XOffset` を配線する — 新規実装不要と

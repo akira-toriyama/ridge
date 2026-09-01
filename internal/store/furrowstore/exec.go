@@ -50,12 +50,24 @@ func newFurrowClient() *furrowClient {
 // run execs one furrow command and returns its stdout. op labels the call for
 // the perf hook only — args carry the real command.
 func (c *furrowClient) run(op string, args ...string) ([]byte, error) {
-	return c.runTimeout(op, c.timeout, args...)
+	return c.execute(op, c.timeout, nil, args...)
 }
 
 // runTimeout is run with an explicit deadline, for the commands that hit the
 // network (sync) rather than the local store.
 func (c *furrowClient) runTimeout(op string, timeout time.Duration, args ...string) ([]byte, error) {
+	return c.execute(op, timeout, nil, args...)
+}
+
+// runStdin is run with stdin bytes attached, for the flags that read furrow's
+// `-`=stdin convention (`edit --body -`). Every other run keeps a nil stdin —
+// os/exec then hands the child /dev/null, which PersistNote's refusal of a
+// bare `-` note depends on.
+func (c *furrowClient) runStdin(op string, stdin []byte, args ...string) ([]byte, error) {
+	return c.execute(op, c.timeout, stdin, args...)
+}
+
+func (c *furrowClient) execute(op string, timeout time.Duration, stdin []byte, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -63,6 +75,9 @@ func (c *furrowClient) runTimeout(op string, timeout time.Duration, args ...stri
 	// a CLI/JSON client by contract (G204).
 	cmd := exec.CommandContext(ctx, c.bin, args...) //nolint:gosec
 	cmd.Dir = c.dir
+	if stdin != nil {
+		cmd.Stdin = bytes.NewReader(stdin)
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 

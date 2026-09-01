@@ -125,3 +125,38 @@ func TestAppendNoteRefusesWhatFurrowWould(t *testing.T) {
 		t.Error("AppendNote on an unknown id must refuse")
 	}
 }
+
+// SetBody mirrors `furrow edit --body`'s refusal (measured on v5.0.0): an
+// empty replacement — whitespace-only included, furrow trims before judging —
+// is exit 2, never a silent clear. Refusing before the optimistic apply keeps
+// a wiped $EDITOR buffer from landing on screen and then getting yanked by
+// the rollback.
+func TestSetBodyRefusesWhatFurrowWould(t *testing.T) {
+	b := NewBoard([]*Task{{ID: "a", Title: "a", Status: "backlog", Body: "本文\n"}})
+
+	for _, body := range []string{"", "   ", " \n\t"} {
+		if err := b.SetBody("a", body); err == nil {
+			t.Errorf("SetBody(%q) must refuse like furrow would", body)
+		}
+	}
+	if got := b.Task("a").Body; got != "本文\n" {
+		t.Errorf("a refused replacement must leave the body untouched: %q", got)
+	}
+	if !b.Task("a").Updated.IsZero() {
+		t.Error("a refused replacement must not stamp Updated")
+	}
+
+	if err := b.SetBody("a", "書き換え\n"); err != nil {
+		t.Fatal(err)
+	}
+	if got := b.Task("a").Body; got != "書き換え\n" {
+		t.Errorf("body = %q, want the replacement", got)
+	}
+	if b.Task("a").Updated.IsZero() {
+		t.Error("SetBody must stamp Updated — that is the point of `edit --body`")
+	}
+
+	if err := b.SetBody("t-nope", "x"); err == nil {
+		t.Error("SetBody on an unknown id must refuse")
+	}
+}
