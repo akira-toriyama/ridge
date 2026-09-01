@@ -105,6 +105,28 @@ type keyMap struct {
 	// cell here.
 	RoadZoom key.Binding
 
+	// The SWIMLANE's four keys. `W` is the opener — uppercase like the other
+	// four full-screen views (S graph, T map, E boxes, C roadmap), and chosen
+	// by the same test `C` passed: `w` is unbound, so a missed shift does
+	// nothing at all. The letters the view's own words suggest are all taken
+	// or unsafe — `G` is Bottom, `L` carries a card a lane over, and `X`/`N`
+	// each sit one missed shift from a key that WRITES (`x` toggles a
+	// checklist item, `n` appends a note).
+	//
+	// SwimFold reuses `space` on the licence GraphOrient states for reusing
+	// `o`: the board's Peek and this view are never on screen together (the
+	// peek composites nothing under fullScreen()), and each section's help
+	// string names its own meaning, so no line of the overlay is false.
+	// SwimSlice is bound separately from Commit and BoxSlice for BoxSlice's
+	// own stated reason — the help text is read as a claim about what the key
+	// does, and neither "commit" nor "slice to this box" is what ⏎ does here.
+	// SwimAxis is likewise not NextCol/PrevCol, whose help says "next column":
+	// tab moves the GROUPING axis, and the columns are lanes.
+	Swim      key.Binding
+	SwimFold  key.Binding
+	SwimSlice key.Binding
+	SwimAxis  key.Binding
+
 	// The saved-view tabs (viewtabs.go). ViewSave is the uppercase of `v` by
 	// the K/J/H/L relation: `v` toggles the layout of the state you are in,
 	// `V` names/saves the WHOLE state as a view. The digits are free on the
@@ -217,6 +239,12 @@ func defaultKeys() keyMap {
 		Roadmap:  key.NewBinding(key.WithKeys("C"), key.WithHelp("C", "roadmap")),
 		RoadZoom: key.NewBinding(key.WithKeys("z"), key.WithHelp("z", "zoom day/week/month")),
 
+		Swim:      key.NewBinding(key.WithKeys("W"), key.WithHelp("W", "swimlane")),
+		SwimFold:  key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "fold/unfold band")),
+		SwimSlice: key.NewBinding(key.WithKeys("enter"), key.WithHelp("⏎", "slice to this band")),
+		SwimAxis: key.NewBinding(key.WithKeys("tab", "shift+tab"),
+			key.WithHelp("tab", "group by repo/label/box")),
+
 		ViewTab: key.NewBinding(key.WithKeys("1", "2", "3", "4", "5", "6", "7", "8", "9"),
 			key.WithHelp("1-9", "saved view")),
 		ViewSave: key.NewBinding(key.WithKeys("V"), key.WithHelp("V", "save view")),
@@ -261,7 +289,7 @@ func (k keyMap) HelpSections(enterEdits bool) []helpSection {
 			// while the one canonical key list denied it existed. Every
 			// full-screen view's opener belongs here — the section is "your
 			// keys right now", and normal mode is where they are pressed.
-			{k.Graph, k.Map, k.Boxes, k.Roadmap, k.JumpBlock, k.JumpBack, k.Reload, k.Sync, k.Mouse, k.Cancel, k.Help, k.Quit},
+			{k.Graph, k.Map, k.Boxes, k.Roadmap, k.Swim, k.JumpBlock, k.JumpBack, k.Reload, k.Sync, k.Mouse, k.Cancel, k.Help, k.Quit},
 		}},
 		{"move mode", [][]key.Binding{
 			// The arrows come first because they are how the lifted card is
@@ -302,6 +330,15 @@ func (k keyMap) HelpSections(enterEdits bool) []helpSection {
 			{k.RoadZoom, k.Top, k.Bottom, k.PeekScroll},
 			{k.ViewTab, k.ViewSave},
 			{k.Roadmap, k.View, k.Cancel},
+		}},
+		// The swimlane's surface. Same rule as the other full-screen sections:
+		// every key onSwimKey acts on, because the section is read as "your
+		// keys right now".
+		{"swimlane", [][]key.Binding{
+			{k.Up, k.Down, k.Left, k.Right},
+			{k.SwimFold, k.SwimSlice, k.SwimAxis, k.MapScope},
+			{k.Top, k.Bottom, k.PeekScroll},
+			{k.Swim, k.View, k.Cancel},
 		}},
 		{"graph", [][]key.Binding{
 			// Sharpest omission of the three: re-rooting answers "is already

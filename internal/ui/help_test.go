@@ -158,6 +158,15 @@ func TestHelpListsEveryKeyItsSectionsModesHandle(t *testing.T) {
 		// onBoxesKey (boxboardview.go)
 		"box overview": {k.Up, k.Down, k.Left, k.Right, k.BoxSlice, k.EpicEdit,
 			k.MapScope, k.Top, k.Bottom, k.PeekScroll, k.Boxes, k.View, k.Cancel},
+		// onRoadKey (roadmapview.go). Absent since the roadmap shipped: the
+		// map is hand-written, so a full-screen view whose section nobody
+		// added here was never checked against its own handler.
+		"roadmap": {k.Up, k.Down, k.Left, k.Right, k.RoadZoom, k.Top, k.Bottom,
+			k.PeekScroll, k.ViewTab, k.ViewSave, k.Roadmap, k.View, k.Cancel},
+		// onSwimKey (swimlaneview.go)
+		"swimlane": {k.Up, k.Down, k.Left, k.Right, k.SwimFold, k.SwimSlice,
+			k.SwimAxis, k.MapScope, k.Top, k.Bottom, k.PeekScroll, k.Swim,
+			k.View, k.Cancel},
 	}
 	for title, bindings := range want {
 		sec, ok := byTitle[title]
