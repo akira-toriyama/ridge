@@ -237,6 +237,51 @@ func TestContractPersistDoneCheckBody(t *testing.T) {
 	}
 }
 
+// The reason PersistBody execs `edit --body -` instead of writing the body
+// file directly: the direct write left the shard's `updated` stale, so other
+// machines' newness checks missed body edits (t-t9ac).
+//
+// bite-exempt: execs a real furrow binary and always skips where furrow is not
+// on PATH — which is CI, so the gate can never judge it there
+func TestContractPersistBodyAdvancesUpdated(t *testing.T) {
+	p, dir := newLabProvider(t)
+	id := labAdd(t, dir, "本文の対象")
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	before := p.Board().Task(id).Updated
+	if before.IsZero() {
+		t.Fatal("the add must stamp updated")
+	}
+
+	// furrow stamps at second resolution and truncates, so the add above and
+	// the edit below can share a second; wait out the boundary or "advanced"
+	// is a coin flip.
+	time.Sleep(time.Until(before.Add(1100 * time.Millisecond)))
+
+	if err := p.PersistBody(id, "# 本文の対象\n\n置換後の本文\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	x := p.Board().Task(id)
+	if !x.Updated.After(before) {
+		t.Errorf("updated did not advance: %v -> %v", before, x.Updated)
+	}
+	if !strings.Contains(x.Body, "置換後の本文") {
+		t.Errorf("body did not persist: %q", x.Body)
+	}
+
+	// The refusal Board.SetBody mirrors: an empty replacement — whitespace
+	// included, furrow trims before judging — is exit 2, never a clear. If
+	// this ever starts passing, the mirror upstream is refusing a write
+	// furrow takes.
+	if err := p.PersistBody(id, " \n"); err == nil {
+		t.Error("a whitespace-only replacement must be furrow's refusal, not a write")
+	}
+}
+
 // The full loop, for real: a live Program over a real store, a keyboard
 // gesture, and the store itself as the assertion target. This is the one test
 // where the optimistic queue's Cmd actually runs inside bubbletea's loop and

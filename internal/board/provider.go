@@ -56,7 +56,10 @@ type Provider interface {
 	// the state AFTER the local toggle, so the write is idempotent.
 	PersistCheck(id string, i int, done bool) error
 
-	// PersistBody records id's already-applied body replacement.
+	// PersistBody records id's already-applied body replacement. body is
+	// non-empty after trimming: furrow refuses an empty replacement (a body
+	// is never cleared, exit 2), and Board.SetBody mirrors that refusal
+	// before anything queues.
 	PersistBody(id, body string) error
 
 	// PersistFields records id's already-applied metadata edit. Everything

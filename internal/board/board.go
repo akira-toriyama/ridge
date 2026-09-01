@@ -514,12 +514,19 @@ func (b *Board) ToggleCheck(id string, i int) error {
 	return nil
 }
 
-// SetBody replaces a task's prose and stamps Updated, the way `furrow note`
-// does (a bare file edit would leave Updated stale).
+// SetBody replaces a task's prose and stamps Updated — the optimistic half of
+// Provider.PersistBody. An empty replacement, whitespace-only included, is
+// `furrow edit --body`'s refusal (exit 2, "a body is never cleared this way";
+// measured on v5.0.0, which trims before judging), so the same gesture is
+// unreachable here and a wiped $EDITOR buffer keeps the old body instead of
+// landing optimistically and getting yanked by the rollback.
 func (b *Board) SetBody(id, body string) error {
 	t := b.Task(id)
 	if t == nil {
 		return fmt.Errorf("unknown task %q", id)
+	}
+	if strings.TrimSpace(body) == "" {
+		return fmt.Errorf("replacement body is empty — a body is never cleared, the old one is kept")
 	}
 	t.Body = body
 	t.Updated = nowFn().UTC().Truncate(time.Second)
