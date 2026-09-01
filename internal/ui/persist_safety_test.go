@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/akira-toriyama/ridge/internal/board"
+
+	tea "charm.land/bubbletea/v2"
 )
 
 // The rollback window and the refused-add contract (t-74y3). Between a
@@ -377,6 +379,56 @@ func TestEditorBodyIsHeldThroughTheRollbackWindow(t *testing.T) {
 	}
 	if len(m.pending) == 0 && !m.inflight {
 		t.Fatal("the replay must queue the store write")
+	}
+}
+
+// A held body whose replay is REFUSED (a wiped $EDITOR buffer: SetBody
+// mirrors furrow's empty-replacement refusal) is removed from the drain
+// without queueing anything — so a quit armed on it must be cancelled, or
+// nothing is left to fire tea.Quit and the armed flag turns the next
+// unrelated write into a surprise exit (found by the PR #66 refute review).
+func TestRefusedHeldBodyCancelsTheQuitItArmed(t *testing.T) {
+	m, p := scriptedModel(t)
+	p.moveErr = errors.New("schema gate says no")
+
+	_, cmd, _ := m.commitMove("a", "ready", "ready", 3)
+	rb := m.onPersistDone(cmd().(persistDoneMsg)) // rollingBack armed
+
+	m.Update(editorDoneMsg{id: "b", body: " \n"}) // a wiped $EDITOR buffer
+	if m.heldBody == nil {
+		t.Fatal("the body must be held through the window — it is judged at replay, not here")
+	}
+	if q := m.quitOrFlush(); q != nil {
+		t.Fatal("quit must wait for the held body")
+	}
+
+	m.Update(rb()) // the window closes; the replay is refused
+	if m.heldBody != nil {
+		t.Fatal("the hold must be consumed even when the replay is refused")
+	}
+	if !m.statusErr {
+		t.Error("the refusal must surface as an error")
+	}
+	// That the refusal keeps the old body is Board.SetBody's contract, proved
+	// in board's TestSetBodyRefusesWhatFurrowWould — the fixture reload here
+	// rebuilds the board, so asserting it again on m.b would be vacuous.
+	if len(m.pending) != 0 || m.inflight {
+		t.Fatal("a refused replay must queue nothing")
+	}
+	if m.quitting {
+		t.Fatal("the refused replay must cancel the quit it armed — nothing is left to fire tea.Quit")
+	}
+
+	// The second-order failure the strand caused: a later unrelated write
+	// draining an empty queue must reconcile, not fire a stale tea.Quit.
+	p.mu.Lock()
+	p.moveErr = nil
+	p.mu.Unlock()
+	_, cmd2, _ := m.commitMove("a", "ready", "ready", 3)
+	if done := m.onPersistDone(cmd2().(persistDoneMsg)); done != nil {
+		if _, quit := done().(tea.QuitMsg); quit {
+			t.Fatal("a later write fired the quit the refused replay left armed")
+		}
 	}
 }
 

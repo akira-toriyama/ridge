@@ -526,7 +526,7 @@ func (b *Board) SetBody(id, body string) error {
 		return fmt.Errorf("unknown task %q", id)
 	}
 	if strings.TrimSpace(body) == "" {
-		return fmt.Errorf("replacement body is empty — a body is never cleared, the old one is kept")
+		return fmt.Errorf("%s: replacement body is empty — a body is never cleared", id)
 	}
 	t.Body = body
 	t.Updated = nowFn().UTC().Truncate(time.Second)

@@ -278,7 +278,9 @@ func (m *Model) onPersistDone(msg persistDoneMsg) tea.Cmd {
 // would race the store (the child process would finish, but nothing would be
 // left to report a failure), so quit waits for the drain instead — saying so,
 // because with the store's 15s timeout in the worst case a silent wait reads
-// as a hang. Only a FAILED write cancels the quit.
+// as a hang. Only a FAILED write cancels the quit — and the held body's
+// refused replay (applyEditorBody), which removes from the drain the very
+// write the quit was armed on.
 func (m *Model) quitOrFlush() tea.Cmd {
 	if m.inflight || len(m.pending) > 0 || m.heldBody != nil {
 		if !m.quitting {

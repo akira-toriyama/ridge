@@ -384,8 +384,10 @@ func (p *Store) PersistCheck(id string, i int, done bool) error {
 // stale, so other machines' newness checks missed body edits). Two v5.0.0
 // facts the caller leans on: an empty replacement — whitespace-only included,
 // furrow trims first — is exit 2, mirrored upstream by Board.SetBody so it
-// never queues; and a body missing its trailing newline gets one from furrow,
-// a drift the post-drain reconcile re-read converges.
+// never queues; and furrow normalizes the tail (TrimRight of "\n" plus one —
+// a missing final newline is added, trailing blank lines are collapsed), a
+// drift from the optimistic bytes that the post-drain reconcile re-read
+// converges.
 func (p *Store) PersistBody(id, body string) error {
 	_, err := p.c.runStdin("edit-body", []byte(body), "edit", id, "--body", "-")
 	return err
