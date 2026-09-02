@@ -541,6 +541,10 @@ func TestGraphBoxBordersAlignAndFrameKeepsItsFooter(t *testing.T) {
 // at ┏ was the graph's. The corner is bound to the selected CARD's measured
 // box, both axes: an X-only bound let the ring sit on the neighbouring card
 // in the same column (the independent review re-measured that mutant green).
+//
+// bite-exempt: deliberately pins behaviour main already has — the cardSel
+// rounded-revert and ring-on-neighbour mutants were each applied by hand and
+// fail against this test (t-2twq).
 func TestSelectedCardKeepsItsThickBorderWithoutColour(t *testing.T) {
 	m := boardModel(t, 140, 30)
 	sel := m.curTask()
@@ -581,6 +585,10 @@ func TestSelectedCardKeepsItsThickBorderWithoutColour(t *testing.T) {
 // Reverting graphNodeFocus or graphNodeSel to rounded kept every gate green
 // (measured on t-2twq). One frame with the selection moved off the root must
 // carry both shapes at once — double = the root, thick = the selection.
+//
+// bite-exempt: deliberately pins behaviour main already has — the
+// graphNodeFocus and graphNodeSel rounded-revert mutants were each applied
+// by hand and fail against this test (t-2twq).
 func TestGraphRootAndSelectionKeepDistinctBorderShapes(t *testing.T) {
 	m := boardModel(t, 240, 40)
 	if err := m.demoState("graph"); err != nil {
