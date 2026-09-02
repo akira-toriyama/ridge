@@ -535,6 +535,95 @@ func TestGraphBoxBordersAlignAndFrameKeepsItsFooter(t *testing.T) {
 	}
 }
 
+// theme.go's declared contract: the selection ring is a THICK border, not just
+// a blue one, because -plain strips colour. Reverting cardSel to the rounded
+// base kept every gate green (measured on t-2twq) — the only test that looked
+// at ┏ was the graph's. The corner is bound to the selected CARD's measured
+// box, both axes: an X-only bound let the ring sit on the neighbouring card
+// in the same column (the independent review re-measured that mutant green).
+//
+// bite-exempt: deliberately pins behaviour main already has — the cardSel
+// rounded-revert and ring-on-neighbour mutants were each applied by hand and
+// fail against this test (t-2twq).
+func TestSelectedCardKeepsItsThickBorderWithoutColour(t *testing.T) {
+	m := boardModel(t, 140, 30)
+	sel := m.curTask()
+	if sel == nil {
+		t.Fatal("the board opened without a selection")
+	}
+	lines := strings.Split(frame(m), "\n")
+	top := -1
+	for i, ln := range lines {
+		if strings.Contains(ln, "┏") {
+			top = i
+			break
+		}
+	}
+	if top < 0 {
+		t.Fatal("no thick border in the frame — the selection ring is colour-only")
+	}
+	left := lg.Width(lines[top][:strings.Index(lines[top], "┏")])
+	var want *cardBox
+	for i, b := range m.lay.Col(m.curLaneName()).Cards {
+		if b.Idx == m.curPos() {
+			want = &m.lay.Col(m.curLaneName()).Cards[i]
+			break
+		}
+	}
+	if want == nil {
+		t.Fatalf("the selected card %s has no measured box", sel.ID)
+	}
+	if left != want.X || top != want.Y {
+		t.Errorf("the thick roof is at (%d,%d); the selected card %s sits at (%d,%d)",
+			left, top, sel.ID, want.X, want.Y)
+	}
+}
+
+// The other half of the graph's border contract, which
+// TestGraphBoxBordersAlignAndFrameKeepsItsFooter cannot see: it pins the
+// OPENED state, where the root is the selection and the thick ring wins.
+// Reverting graphNodeFocus or graphNodeSel to rounded kept every gate green
+// (measured on t-2twq). One frame with the selection moved off the root must
+// carry both shapes at once — double = the root, thick = the selection.
+//
+// bite-exempt: deliberately pins behaviour main already has — the
+// graphNodeFocus and graphNodeSel rounded-revert mutants were each applied
+// by hand and fail against this test (t-2twq).
+func TestGraphRootAndSelectionKeepDistinctBorderShapes(t *testing.T) {
+	m := boardModel(t, 240, 40)
+	if err := m.demoState("graph"); err != nil {
+		t.Fatal(err)
+	}
+	// At open, root == selection: one node, nothing to tell apart, the
+	// selection ring wins. A double ring here would mean the coincidence
+	// stopped resolving in the selection's favour.
+	if strings.Contains(frame(m), "╔") {
+		t.Error("at open the root IS the selection — the thick ring must win, not the double")
+	}
+	l := m.graphLay // cached by the render above; the key handlers read the same
+	if l == nil {
+		t.Fatal("no graph layout after a render")
+	}
+	moved := false
+	for _, n := range l.Real() {
+		if n.Key != l.Focus {
+			m.graphSel = n.Key
+			moved = true
+			break
+		}
+	}
+	if !moved {
+		t.Fatal("the demo graph has a single real node; it cannot prove the two rings")
+	}
+	out := frame(m)
+	if !strings.Contains(out, "╔") {
+		t.Error("the root lost its double border — in -plain nothing marks it now")
+	}
+	if !strings.Contains(out, "┏") {
+		t.Error("the selection lost its thick border — in -plain nothing marks it now")
+	}
+}
+
 func TestEmptyLaneIsFocusableSoItCanReceiveADrop(t *testing.T) {
 	m := boardModel(t, 140, 40)
 	if len(m.cols["inbox"]) != 0 {

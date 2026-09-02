@@ -111,6 +111,11 @@ type theme struct {
 	// The graph view. Node borders carry state REDUNDANTLY with colour —
 	// double = the root, thick = the selection — because in -plain, on a
 	// 16-colour TTY and for a colourblind reader a hue is not a signal.
+	// The one exception is the state the graph opens in: root and selection
+	// are the same node, the thick selection ring wins, and only colour
+	// separates graphNodeFocusSel from graphNodeSel. That is deliberate —
+	// when the two coincide there is nothing to tell apart, and the double
+	// ring appears on the first move away.
 	edge              lg.Style
 	graphNode         lg.Style
 	graphNodeSel      lg.Style
