@@ -180,6 +180,41 @@ due 昇順に並べ、横軸 = 時間に `◆` を置く**。「何がいつ切�
 `ridge -roadmap` で実盤面をこのビューから開ける。headless は
 `-dump -roadmap`（day）と `-demo roadmapweek` / `-demo roadmapmonth`。
 
+### Swim — swimlane（group by）
+
+`W`。**盤面のレーンを横軸、group by の値を縦軸の「帯」にした2次元グリッド**。
+`furrow ls --tree`（epic 別グルーピング）に2つ目の軸を与えたもので、既定の軸も
+その `--tree` に合わせて **box**（`tab` で repo / label へ）。
+
+- **帯は既定で畳んである。** 畳んだ帯 = 1 行で、各レーン列にその帯の件数が並ぶ
+  — つまりフレームは盤面全体のヒストグラム（実盤面の epic 軸は 56 箱 + 値無しの
+  1 帯 = 57 行で、296 タスクではない）。`space` で開くとその帯のタスクが同じ
+  レーン列に落ちる。**`W` で開いたときだけ**、盤面のカーソルが居た帯を 1 つ開いて
+  そのカードを選ぶ（開いた先が「今どこに居るか」を答えるため。その 1 帯以外は畳んだまま）
+- **帯ヘッダは畳んでも開いても同一**（印だけが `[+]`/`[-]`）。畳むたびに数字が
+  動いたら、縦に読んでいるヒストグラムが比較にならない
+- 値を持たないタスクは**最後の1帯**にまとまる（`(unfiled — no box)` /
+  `(draft — no repo)` / `(no label)`）。実盤面では unfiled が open 296 件中 119 件
+  で、落とすと盤面の4割が「どこにも無い」ことになる
+- 2つの repo / label を持つタスクは**両方の帯に出る**（片方から消すとその帯が
+  黙って不完全になる — 箱の俯瞰と同じ規則）。レーン列上部の件数は**タスク数**、
+  帯の件数の合計は**配置数**で、両者が食い違うときだけ header が `N placements`
+  と言う
+- `⏎` は箱の俯瞰と同じく既存の slice term（`epic:` / `repo:` / `label:`）を
+  発行して盤面に戻る。値の無い帯は**発行せず**、打つべき query（`no:epic` /
+  `is:draft` / `no:label`）を名指して断る
+- `z` で scope open/all。open では done レーンが定義上 空になるが**列は消さない**
+  — scope で列幅が動くグリッドは盤面と突き合わせられない
+- filter は Map / Roadmap と同契約: 隠さず **mute** して header で数える
+- **読み専用。** 帯はレーンの部分集合なので、帯内の隣接カードを `--before` の
+  anchor にすると盤面が一度も見せていない priority を書くことになる（K/J・
+  drag・マウスは全部この理由で無い）
+- 幅が足りないときはレーンを**末尾から落として** header で言う
+  （`lanes 1-4 of 6`）。黙って狭い列を並べない
+
+headless は `-dump -demo swim`（既定）/ `swimopen`（帯を開いた状態）/
+`swimrepo`（repo 軸）/ `swimall`（scope all）。
+
 ### 保存ビュー — タブ + views.toml
 
 GitHub Projects の view タブ相当。**view = {layout, q, sort, slice} の束に
@@ -233,6 +268,7 @@ slice = "epic:e-xxxx" # repo|label|epic :値（slice パネルの選択と同じ
 | `T` | 依存マップ（全クラスタ俯瞰） |
 | `E` | 箱の俯瞰（全 epic を repo 別に。`⏎` でその箱に絞る・`z` で closed 込み） |
 | `C` | roadmap（due タイムライン。`z` で day/week/month・`h`/`l` で pan） |
+| `W` | swimlane（レーン×group by。`space` で帯を開閉・`tab` で軸・`⏎` でその帯に絞る） |
 | `1`-`9` / `V` | 保存ビューの切替 / 保存（views.toml が正本。タブ無しの `V` = 新規） |
 | `Enter` | move mode（`Enter` 確定・`Esc` 取消）。**peek を開いていると / Table では編集メニュー** |
 | `q` | 終了 |
@@ -312,7 +348,10 @@ event loop を通らない。他人に渡す前に中身を確認すること。
 
 ## 既知の課題
 
-- swimlane（group by）未実装。task の group by であって、`E` の箱の俯瞰とは別物。
+- swimlane（`W`）は**保存ビューの layout に入っていない**。束が
+  `{layout, q, sort, slice}` なのに対し、このビューの状態は軸と scope を持つので、
+  `layout = "swim"` だけ保存すると「保存したビューが復元されない」保存になる
+  （map / boxes を除いてあるのと同じ理由）。
 - Table ビューに横スクロールが無い（ワイド前提の設計判断。要るなら既存依存の
   bubbles viewport v2 の `SoftWrap=false` + `XOffset` を配線する — 新規実装不要と
   確認済み。罠: `SetXOffset` は `SoftWrap=true` だと黙って no-op）。

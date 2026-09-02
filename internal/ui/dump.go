@@ -14,7 +14,7 @@ import (
 // unknown-name error and the tests all read this slice, because the list was
 // duplicated in three places and adding two states updated two of them —
 // `ridge -h` then advertised eight of ten.
-var DemoNames = []string{"move", "drag", "add", "adddraft", "edit", "editpick", "editinput", "editdeps", "editrefs", "note", "refs", "graph", "graphall", "map", "mapall", "mapfiltered", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicshut", "epicdone", "epicreopen", "sliceepicall", "epicnew", "boxes", "boxesall", "roadmapweek", "roadmapmonth", "views", "viewsroad", "viewsmany", "fail"}
+var DemoNames = []string{"move", "drag", "add", "adddraft", "edit", "editpick", "editinput", "editdeps", "editrefs", "note", "refs", "graph", "graphall", "map", "mapall", "mapfiltered", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicshut", "epicdone", "epicreopen", "sliceepicall", "epicnew", "boxes", "boxesall", "roadmapweek", "roadmapmonth", "swim", "swimopen", "swimrepo", "swimall", "views", "viewsroad", "viewsmany", "fail"}
 
 // Options configures a freshly-constructed Model. The zero value is the
 // default TUI: dark palette, board view, no filter.
@@ -584,6 +584,70 @@ func (m *Model) demoState(kind string) error {
 			return fmt.Errorf("demo boxesall: z did not widen the population")
 		}
 		m.boxesSel = boxKey("tomo/kyushu-trip", "e-2b7h")
+
+	case "swim":
+		// The swimlane as `W` opens it: every band folded to its per-lane
+		// counts EXCEPT the one holding the board's cursor, which openSwim
+		// opens so the view answers "where am I" on entry. Driven through the
+		// board's own key handler so the frame also proves `W` is BOUND — the
+		// trap the epicnew demo documents.
+		if c := m.onNormalKey(tea.KeyPressMsg{Code: 'W', Text: "W"}); c != nil {
+			_ = c
+		}
+		if m.view != viewSwim {
+			return fmt.Errorf("demo swim: W did not open the swimlane")
+		}
+
+	case "swimopen":
+		// One band UNFOLDED — the only state in which the view is a grid, and
+		// the frame that proves the cells line up under the counts the header
+		// line already printed.
+		if err := m.demoState("swim"); err != nil {
+			return err
+		}
+		l := m.buildSwim()
+		m.swimLay = l
+		if len(l.Bands) == 0 {
+			return fmt.Errorf("demo swimopen: the fixture grouped into no bands")
+		}
+		// The band with the most tasks, so the frame shows ragged columns
+		// rather than one row.
+		best := 0
+		for i, b := range l.Bands {
+			if b.Total > l.Bands[best].Total {
+				best = i
+			}
+		}
+		m.swimOpen = map[string]bool{l.Bands[best].Key: true}
+		m.swimSel = swimKey(l.Bands[best].Key, "")
+		m.swimLay = nil
+
+	case "swimrepo":
+		// The repo axis. Its bands are the axis with the most lanes actually
+		// spanned on the real board, and the one place a task carrying two
+		// repos is drawn twice — which the header states as `placements`.
+		if err := m.demoState("swim"); err != nil {
+			return err
+		}
+		if c := m.onSwimKey(tea.KeyPressMsg{Code: tea.KeyTab}); c != nil {
+			_ = c
+		}
+		if m.swimAxis != sliceRepo {
+			return fmt.Errorf("demo swimrepo: tab did not reach the repo axis, got %s", m.swimAxis)
+		}
+
+	case "swimall":
+		// Scope widened to the done lane: the one frame where the Done column
+		// carries numbers, so `z`'s effect has a render site.
+		if err := m.demoState("swim"); err != nil {
+			return err
+		}
+		if c := m.onSwimKey(tea.KeyPressMsg{Code: 'z', Text: "z"}); c != nil {
+			_ = c
+		}
+		if !m.swimAll {
+			return fmt.Errorf("demo swimall: z did not widen the scope")
+		}
 
 	case "roadmapweek":
 		// The week axis: a month compresses to ~4 cells, so this frame proves

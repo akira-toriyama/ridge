@@ -70,6 +70,53 @@ func BenchmarkRecomputeAtBoardSize(b *testing.B) {
 	}
 }
 
+// swimTasks is scaledTasks with the clones spread over DISTINCT boxes, so a
+// band-per-box view is measured against a realistic band count. The plain
+// clone shares its original's epic, which would give a 658-task board the
+// fixture's five bands and measure nothing the real board's 57 would.
+func swimTasks(n int) []*board.Task {
+	out := scaledTasks(n)
+	for i, t := range out {
+		if t.Epic != "" {
+			t.Epic = fmt.Sprintf("%s-%d", t.Epic, i/12)
+		}
+	}
+	return out
+}
+
+// BenchmarkSwimAtBoardSize is the swimlane's half of the frame budget. It has
+// its own entry because the view composes ONLY the visible window where the dep
+// map and the box overview render every line and slice afterwards — so a later
+// "simplification" back to that pattern is a regression this measures and the
+// board's own benchmark cannot see. Folded and unfolded should cost the same;
+// if the unfolded row ever grows with the number of bands, the window is gone.
+func BenchmarkSwimAtBoardSize(b *testing.B) {
+	for _, n := range []int{658, 2000} {
+		for _, open := range []bool{false, true} {
+			name := fmt.Sprintf("tasks=%d/folded", n)
+			if open {
+				name = fmt.Sprintf("tasks=%d/unfolded", n)
+			}
+			b.Run(name, func(b *testing.B) {
+				m := New(memstore.NewWith(board.NewBoard(swimTasks(n))), Options{})
+				m.w, m.h = 240, 60
+				m.recompute()
+				m.openSwim()
+				if open {
+					for _, band := range m.buildSwim().Bands {
+						m.swimOpen[band.Key] = true
+					}
+					m.swimLay = nil
+				}
+				b.ReportAllocs()
+				for b.Loop() {
+					_ = m.View()
+				}
+			})
+		}
+	}
+}
+
 // TestScalesToARealBoard is the assertion, not just a measurement: a full-size
 // board must still render a sane frame.
 //

@@ -28,6 +28,9 @@
 | **Map**（依存マップ） | **全依存クラスタを一画面で俯瞰するビュー**。Graph が「1タスク起点」なのに対し、こちらは起点を持たない。`T`（`t` = そのタスクの依存ツリー、の全体版）。線は引かず、**インデント = 深さ・`←` = blocker の名指し**で表す。 |
 | **Roadmap** | **due タイムライン**。due を持つ **open** な task を due 昇順の行にし、横軸 = 時間に `◆` を置く全画面ビュー。`C`（calendar — `R` は sync、`D` は小文字 `d`=done が write なので不採用）。due 無しは出さない（GH 同）・done も出さない（果たされた約束は約束ではない）。`┊` = today 縦線、`◆` の右に所属 epic の `▤` chip（epic は日付を持たないので GH の vertical marker は成立しない — 行内 chip が最小形）。filter は Map と同契約（隠さず mute + header で件数）。読み専用 — due の drag 変更は価値検証後（t-7t28）。 |
 | **zoom**（Roadmap の） | 1 セルが暦のどれだけか。day（既定）/ week / month の 3 値で、境界は**暦どおり**（月曜始まりの週・月初）。`z` で循環 — 全画面ビューの `z` = 「どれだけ画面に載るか」の踏襲。h/l で窓を pan（1 押し = zoom の自然な一期間: 7日/4週/3月）。セッションを跨いで保存しない（hop radius と同じ）。 |
+| **Swimlane** | **レーン×group by の2次元グリッド**。横軸 = 盤面のレーン、縦軸 = group by の値の「帯」で、`furrow ls --tree`（epic 別グルーピング）に2つ目の軸を与えたもの。`W`（`w` は未割り当てなので shift を外しても何も起きない — `C` と同じ licence）。軸は slice パネルと同じ repo / label / epic の3つ（既定 = epic。`tab` で循環し、**slice の選択には触らない** — group by は絞り込みではない）。帯は既定で**畳んである**（畳んだ帯 = 各レーンの件数が並ぶ1行。開くとタスクが同じ列に落ちる）。ヘッダ行は畳んでも開いても同一で、変わるのは `[+]`/`[-]` だけ。値の無いタスクは**末尾の1帯**（`(unfiled — no box)` / `(draft — no repo)` / `(no label)`）。複数 repo / label のタスクは**全部の帯に出る**（箱の俯瞰と同じ）。`⏎` は既存の slice term を発行（値の無い帯は打つべき query を名指して断る）、`z` で scope open/all、`^u/^d` でページ。filter は Map と同契約（隠さず mute + header で件数）。**読み専用** — 帯はレーンの部分集合なので、帯内の隣接を `--before` anchor にすると盤面が見せていない priority を書くことになる。 |
+| **帯**（band・Swimlane の） | Swimlane の1行群 = group by の1値。**畳む/開く**は `space`（開いている集合だけを持つ — 既定が畳みなので 57 帯でも空 map）。畳むとカーソルはその帯のヘッダへ退避する（消える行にカーソルを残すと次フレームで先頭へ飛ばされ、勝手にスクロールしたように見える）。 |
+| **rail**（Swimlane の） | 帯ヘッダの左端の固定幅領域。ヘッダ行では `[±]` + 印 + ラベル + 総数、タスク行では選択バーと帯の継続罫。これが無いと帯ラベルはレーン0の件数の手前で終わる（240桁で約25セル）ので、CJK の epic タイトルが載らない。 |
 | **保存ビュー**（saved view） | **{layout, q, sort, slice} の束に名前を付けたもの**（GH Projects の view タブ相当）。正本は `~/.config/ridge/views.toml` の `[[view]]` — **ridge が書く唯一のファイル**で、書くのは明示の `V` だけ（config でなく保存データ、の整理）。タイトル行の Board\|Table の右がタブ帯: `1`-`9` 切替・`V` 保存（roadmap ビュー内でも効く）。layout は board\|table\|roadmap の 3 値（graph は起点 task が要り、map/boxes は population 切替なので対象外）。 |
 | **未保存ドット**（●） | active な保存ビューのタブに付く「現在の状態が保存済みの束からずれている」印（GH の青ドット相当）。digit 再押下 = 保存済みの束へ巻き戻し・`V` = ずれた側を保存。 |
 | **peek**（詳細ペイン） | 選択中タスクの詳細を横に出すオーバーレイ。`Space`。 |
@@ -53,6 +56,7 @@ graph・Map・Boxes・Roadmap — だけは自前のタイトル行 = 全ビュ�
 | **dep map** | ⟨MAP⟩ | 同じく mode enum 外の full-screen view（`T`）。`?` の節名はこの行の語**そのまま**（`keys.go` の `helpSection.title`）。 |
 | **box overview** | ⟨BOXES⟩ | 同じく mode enum 外の full-screen view（`E`）。PR #60 で入ったがこの表への追記が漏れていた（Roadmap の PR で補記）。 |
 | **roadmap** | ⟨ROADMAP⟩ | 同じく mode enum 外の full-screen view（`C`）。 |
+| **swimlane** | ⟨SWIM⟩ | 同じく mode enum 外の full-screen view（`W`）。`?` の節名はこの行の語そのまま。 |
 | **drag** | ⟨DRAG⟩ | mode ではない（`dragState`）が、gesture 中はトークンが出る。 |
 
 ## 操作
@@ -90,6 +94,8 @@ graph・Map・Boxes・Roadmap — だけは自前のタイトル行 = 全ビュ�
 | `▤` | **epic チップ**。epic は lane を持たない別エンティティ（`EpicInfo`）で、カードには所属 epic のタイトルを解決して表示する。epic が stuck なら warn 色。peek には `(done/total)` と STUCK、epic が open な dep を待つ間は resolved な `epic waits on` 行（open は `id (d/t) title`・stuck なら `id (d/t) STUCK title`（warn 色）・furrow が `open_deps` から解決済みの dep は、**盤面がその箱を closed として持っていれば `(closed)`・持っていなければ furrow のより弱い語 `(satisfied)`**。open/満了の判定は furrow 導出値で、ridge は再計算しない）。 |
 | `v` | done。 |
 | `◆`（Roadmap の行内） / `┊` | due の位置（overdue = danger 色・today と同セル = warn 色）/ today の縦線。窓の外へ pan された `◆` は行端の `▸`/`◂` になる — 日付付きの行が無日付に見えてはいけない。 |
+| `[+]` / `[-]` | Swimlane の帯が畳まれている / 開いている。ASCII なのは `▸`（actionable）・`▶`（active な箱）・`◆`（pinned）・`▼`/`▶`（Graph の矢頭）で**三角が全部埋まっている**から（初版はここに「`⊞`/`⊟` は East-Asian Ambiguous」と書いたが、実測すると両者は Narrow で理由として**逆**だった — レビューで訂正）。 |
+| `·`（Swimlane の帯ヘッダ） | そのレーンに1件も無い。0 と書かないのは、縦に読むヒストグラムで目が拾うべきものが数字であって不在ではないから。U+00B7 は East-Asian Ambiguous だが、盤面が既に使っている `◆`/`┊`/`▤` と同じ族で、`lipgloss.Width` は幅1として測る。 |
 | `[0/7]` | チェックリストの進捗。 |
 | `v5 e4` | value / effort（各 1..5）。 |
 | `◉ focus` | Graph の起点ノード。 |

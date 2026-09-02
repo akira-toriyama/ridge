@@ -72,6 +72,11 @@ const (
 	// due placed on one time axis. The others answer "what and in which
 	// order"; this one answers "by when".
 	viewRoadmap
+	// viewSwim is the SWIMLANE — full-screen, the board's lanes across and a
+	// grouping axis down. The board answers "what is in each lane"; this one
+	// answers "which of my boxes / repos / labels is work sitting in", which
+	// is `furrow ls --tree` given a second dimension.
+	viewSwim
 )
 
 func (v viewKind) String() string {
@@ -88,6 +93,8 @@ func (v viewKind) String() string {
 		return "boxes"
 	case viewRoadmap:
 		return "roadmap"
+	case viewSwim:
+		return "swimlane"
 	}
 	return "unknown"
 }
@@ -278,6 +285,24 @@ type Model struct {
 	roadXOff     int
 	roadLay      *roadLayout
 
+	// The swimlane view (swimlane.go). swimAxis is the grouping axis and is
+	// deliberately SEPARATE from sliceField: that one carries the active
+	// filter, and re-grouping a read-only view must not rewrite the query.
+	// swimOpen is the unfolded set — the OPEN side is stored because bands
+	// are folded by default, so a 57-band board carries an empty map rather
+	// than 57 entries. swimLane is the cursor's desired COLUMN, carried
+	// alongside the key because a band header spans every column and so
+	// cannot say which one a vertical walk was descending. Like the graph's
+	// radius and the roadmap's zoom, none of it survives the session.
+	swimAxis   sliceField
+	swimAll    bool
+	swimOpen   map[string]bool
+	swimSel    string
+	swimLane   int
+	swimMoved  bool
+	swimScroll int
+	swimLay    *swimLayout
+
 	// sized reports that the terminal has told us who it is: a WindowSizeMsg
 	// landed, or -dump set the size by hand. Until then w/h are newModel's
 	// defaults, and geometry that must not survive them (the roadmap's
@@ -306,19 +331,24 @@ func newModel(p board.Provider, dbg *DebugLog) *Model {
 	vp.MouseWheelEnabled = true
 
 	m := &Model{
-		prov:        p,
-		dbg:         dbg,
-		th:          newTheme(true),
-		ms:          newMeasurer(nil, nil),
-		keys:        defaultKeys(),
-		help:        help.New(),
-		ti:          ti,
-		vp:          vp,
-		w:           240,
-		h:           60,
-		mouseOn:     true,
-		tableSort:   sortCanonical, // sortKey's zero value is sortNone (fail-safe)
-		viewIdx:     -1,            // no saved view is active until one is chosen
+		prov:      p,
+		dbg:       dbg,
+		th:        newTheme(true),
+		ms:        newMeasurer(nil, nil),
+		keys:      defaultKeys(),
+		help:      help.New(),
+		ti:        ti,
+		vp:        vp,
+		w:         240,
+		h:         60,
+		mouseOn:   true,
+		tableSort: sortCanonical, // sortKey's zero value is sortNone (fail-safe)
+		// The swimlane opens grouped by BOX, not by sliceField's zero value:
+		// the parity audit filed this view as `furrow ls --tree`'s analogue,
+		// and that command groups by epic. tab reaches the other two.
+		swimAxis:    sliceEpic,
+		swimOpen:    map[string]bool{},
+		viewIdx:     -1, // no saved view is active until one is chosen
 		pinned:      map[string]bool{},
 		curIdx:      map[string]int{},
 		scroll:      map[string]int{},
@@ -409,6 +439,12 @@ func (m *Model) recompute() {
 			m.epic.listIdx = clamp(m.epic.listIdx, 0, maxInt(0, len(m.epicListRows(box))-1))
 		}
 	}
+	// The swimlane's pack is rebuilt from the board, so a re-read invalidates
+	// it. Dropped here rather than clamped: the key handlers walk m.swimLay
+	// when it is non-nil, and a pack built over the PREVIOUS board would hand
+	// them rows the store no longer has. clampSwimSel then moves the cursor on
+	// the next frame if its row went away.
+	m.swimLay = nil
 	m.dropDragIfCardLeftLane()
 	m.ensureVisible()
 	m.syncPeek()
@@ -634,6 +670,10 @@ func (m *Model) onKey(msg tea.KeyPressMsg) tea.Cmd {
 	if m.view == viewRoadmap {
 		return m.onRoadKey(msg)
 	}
+	// The swimlane, likewise.
+	if m.view == viewSwim {
+		return m.onSwimKey(msg)
+	}
 	return m.onNormalKey(msg)
 }
 
@@ -833,6 +873,9 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	case key.Matches(msg, m.keys.Roadmap):
 		m.openRoadmap()
+
+	case key.Matches(msg, m.keys.Swim):
+		m.openSwim()
 
 	case key.Matches(msg, m.keys.Peek):
 		m.peekOpen = !m.peekOpen
