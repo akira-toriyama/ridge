@@ -538,8 +538,9 @@ func TestGraphBoxBordersAlignAndFrameKeepsItsFooter(t *testing.T) {
 // theme.go's declared contract: the selection ring is a THICK border, not just
 // a blue one, because -plain strips colour. Reverting cardSel to the rounded
 // base kept every gate green (measured on t-2twq) — the only test that looked
-// at ┏ was the graph's. The corner is bound to the selected lane's column so
-// the assertion cannot be satisfied by some other box going thick.
+// at ┏ was the graph's. The corner is bound to the selected CARD's measured
+// box, both axes: an X-only bound let the ring sit on the neighbouring card
+// in the same column (the independent review re-measured that mutant green).
 func TestSelectedCardKeepsItsThickBorderWithoutColour(t *testing.T) {
 	m := boardModel(t, 140, 30)
 	sel := m.curTask()
@@ -558,10 +559,19 @@ func TestSelectedCardKeepsItsThickBorderWithoutColour(t *testing.T) {
 		t.Fatal("no thick border in the frame — the selection ring is colour-only")
 	}
 	left := lg.Width(lines[top][:strings.Index(lines[top], "┏")])
-	col := m.lay.Col(m.curLaneName())
-	if left < col.X || left >= col.X+m.lay.ColW {
-		t.Errorf("the thick roof is at cell %d, outside the selected %s column [%d,%d)",
-			left, m.curLaneName(), col.X, col.X+m.lay.ColW)
+	var want *cardBox
+	for i, b := range m.lay.Col(m.curLaneName()).Cards {
+		if b.Idx == m.curPos() {
+			want = &m.lay.Col(m.curLaneName()).Cards[i]
+			break
+		}
+	}
+	if want == nil {
+		t.Fatalf("the selected card %s has no measured box", sel.ID)
+	}
+	if left != want.X || top != want.Y {
+		t.Errorf("the thick roof is at (%d,%d); the selected card %s sits at (%d,%d)",
+			left, top, sel.ID, want.X, want.Y)
 	}
 }
 
