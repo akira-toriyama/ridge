@@ -13,7 +13,7 @@
 | **vista** | furrow の GUI front-end（Tauri v2 + React）。ridge の兄弟。 |
 | **front-end** | furrow を **CLI/JSON 経由で**駆動するもの。furrow の Go パッケージは import しない。 |
 | **Provider** | ridge がタスクを読み書きする唯一の口（interface）。port は `internal/board` が宣言し、adapter は `internal/store/furrowstore`（`furrow` を exec する実装）と `internal/store/memstore`（fixture）の 2 つ。mutation は Persist 契約 — **Model がローカル適用済みの変更を store に記録するだけ**で、適用そのものはしない。例外は **store-first** の族（下）。 |
-| **store-first**（書き込み） | 楽観適用を**しない**書き込み。quick add と epic 族（`EpicAdd`/`EpicSet`/`EpicActivate`/`EpicDeactivate`/`EpicDepAdd`/`EpicDepRm`）が該当。理由は「その書き込みが何を意味するかが furrow 側にある」こと — activate は repo ごとの枠を**奪わず拒否**する・add は id を発行する・progress/stuck/open_deps は furrow 導出。よって盤面は何も変えず、persist キューに載せて**着地後の再読で収束**する。拒否時のロールバックは不要（適用していない）が、**同じ排出内で先に着地した store-first 書き込みがあるなら再読は必要** — でないとその変更は次の `r` まで盤面に出ない（`persistOp.noLocal` / `unreadLanded`）。 |
+| **store-first**（書き込み） | 楽観適用を**しない**書き込み。quick add と epic 族（`EpicAdd`/`EpicSet`/`EpicActivate`/`EpicDeactivate`/`EpicDone`/`EpicReopen`/`EpicDepAdd`/`EpicDepRm` — 一覧の正本は `internal/board/provider.go` の store-first 節）が該当。理由は「その書き込みが何を意味するかが furrow 側にある」こと — activate は repo ごとの枠を**奪わず拒否**する・add は id を発行する・progress/stuck/open_deps は furrow 導出。よって盤面は何も変えず、persist キューに載せて**着地後の再読で収束**する。拒否時のロールバックは不要（適用していない）が、**同じ排出内で先に着地した store-first 書き込みがあるなら再読は必要** — でないとその変更は次の `r` まで盤面に出ない（`persistOp.noLocal` / `unreadLanded`）。 |
 | **persist キュー** | 楽観的書き込みの直列キュー（`internal/ui/persist.go`）。同時 in-flight は 1 本 — 並べ替えの anchor（`--before <id>`）が直前の書き込みの結果に依存するため。失敗したら残りを破棄して store 再読 = ロールバック。quit は排出を待つ。 |
 | **reconcile** | persist キュー排出後の無言の store 再読。respace された priority・closed 刻印など store 側の真実に盤面を収束させる。 |
 
@@ -34,13 +34,13 @@
 | **保存ビュー**（saved view） | **{layout, q, sort, slice} の束に名前を付けたもの**（GH Projects の view タブ相当）。正本は `~/.config/ridge/views.toml` の `[[view]]` — **ridge が書く唯一のファイル**で、書くのは明示の `V` だけ（config でなく保存データ、の整理）。タイトル行の Board\|Table の右がタブ帯: `1`-`9` 切替・`V` 保存（roadmap ビュー内でも効く）。layout は board\|table\|roadmap の 3 値（graph は起点 task が要り、map/boxes は population 切替なので対象外）。 |
 | **未保存ドット**（●） | active な保存ビューのタブに付く「現在の状態が保存済みの束からずれている」印（GH の青ドット相当）。digit 再押下 = 保存済みの束へ巻き戻し・`V` = ずれた側を保存。 |
 | **peek**（詳細ペイン） | 選択中タスクの詳細を横に出すオーバーレイ。`Space`。 |
-| **cluster**（依存クラスタ） | 依存辺で繋がったタスクの連結成分。Map のパネル 1 枚 = 1 クラスタ。実データでは未完了分で 9 個・中央値 2 ノード。正本は `internal/board/cluster.go`（`Graph.Clusters`）— furrow に同形の口が無いので ridge が topology だけ自前で出す。 |
+| **cluster**（依存クラスタ） | 依存辺で繋がったタスクの連結成分。Map のパネル 1 枚 = 1 クラスタ。実データでは未完了分で 10 個前後・中央値 2 ノード（2026-09-03: 13 個）。正本は `internal/board/cluster.go`（`Graph.Clusters`）— furrow に同形の口が無いので ridge が topology だけ自前で出す。 |
 | **scope**（Map の） | Map が何を数えるか。`open` = done を辺ごと落とす（既定 — 終わった依存は blocker ではない）/ `all` = 全部。`z` で切替。 |
 
 ## mode（キーボードの所有者）
 
-現在 mode はタイトル行右端の ⟨…⟩ トークンで**常時**表示される（full-screen の 4 つ —
-graph・Map・Boxes・Roadmap — だけは自前のタイトル行 = 全ビューのタブ帯 + 自分のトークン）。`?` help はこの mode 名で節分けされ、今いる mode の節に
+現在 mode はタイトル行右端の ⟨…⟩ トークンで**常時**表示される（full-screen の 5 つ —
+graph・Map・Boxes・Roadmap・Swimlane — だけは自前のタイトル行 = 全ビューのタブ帯 + 自分のトークン）。`?` help はこの mode 名で節分けされ、今いる mode の節に
 「you are here」が付く。トークンの正式語はこの表が正本。
 
 | 用語 | トークン | 意味 |
@@ -72,7 +72,7 @@ graph・Map・Boxes・Roadmap — だけは自前のタイトル行 = 全ビュ�
 | **sync（`R`）** | `furrow sync`（git の commit/pull/push）→ store 再読。自動では走らない — v1 の決定（t-s86r）。`r` は再読のみ。 |
 | **filter（-q パススルー）** | filter bar は furrow `-q` への素通し。ridge は raw 文字列と store の返した id 集合（verdict）だけを持ち、文法は furrow 一本（t-ehk7）。タイプ中・拒否時は直前の verdict を保持して ⚠ を出す（盤面を空にしない）。memstore は -dump/テスト用の evaluator。語彙（`furrow vocab query-is`/`query-presence`）と一致規則は実 furrow で実測して合わせてあり、honour できない構文（ordinal/date 比較・graph qualifier）は furrow 同様に**拒否**する — 黙って 0 件を返さない。 |
 | **編集メニュー（edit overlay）** | peek/Table の `Enter`／`m` で開く field 編集 modal（`editmode.go`）。menu → sub-editor（1..5 picker / toggle list / deps list / refs list / text input / checklist カーソル）の2段。適用は楽観的 + persist キュー、`furrow set` 相当は 1 write に合成。deps は一方通行の list（⏎/x で外す・`a` + task id で張る。acyclic/存在検査は furrow が正本で、ridge はミラー検証のみ）。refs も同型の一方通行 list（⏎/x で外す・`a` + file:line/URL。furrow `ref` 相当 — 並びは追加順の sequence で、sort しない）。 |
-| **箱の俯瞰（box overview）** | `E` で開く全画面ビュー（`boxboard.go` / `boxboardview.go`）。**全部の箱を repo 別に並べる**。graph ではないのは実測が理由 — 2026-08-28 の実盤面は箱 153 個（open 117 / closed 36）に対し epic 間 dep edge が **4 本**（2 箱）しかなく、ego graph も連結成分も 149 個の孤立ノードを埋めるだけになる。4 本は dep map と同じ `←id` インライン tag で足りる。repo で括るのは、全箱が持つ唯一の軸であり（実盤面で repo 無しは 0・repo は 31）、furrow が repo あたり active を1つに制限するので `▶` が縦に「各 repo が今どの箱で作業しているか」のチェックリストになるから。2 repo にまたがる箱は**両方に出る**（片方から消すとその repo の一覧が黙って不完全になる）。行は `slice パネル` と同じ文法（suffix を先に測り、残りを title に渡す）。`⏎` は既存の `epic:` slice term を発行するだけ（新しい絞り込み機構を作らない。closed な箱でも効く）、`m` でオーバーレイ、`z` で closed 込み、`^u/^d` でページ。 |
+| **箱の俯瞰（box overview）** | `E` で開く全画面ビュー（`boxboard.go` / `boxboardview.go`）。**全部の箱を repo 別に並べる**。graph ではないのは実測が理由 — 実盤面は箱 150 余りに対し epic 間 dep edge が**一桁**（2026-08-28: 153 箱に 4 本 / 2026-09-03: 163 箱に 5 本）しかなく、ego graph も連結成分も孤立ノードを埋めるだけになる。数本は dep map と同じ `←id` インライン tag で足りる。repo で括るのは、全箱が持つ唯一の軸であり（実盤面で repo 無しは 0・repo は 31）、furrow が repo あたり active を1つに制限するので `▶` が縦に「各 repo が今どの箱で作業しているか」のチェックリストになるから。2 repo にまたがる箱は**両方に出る**（片方から消すとその repo の一覧が黙って不完全になる）。行は `slice パネル` と同じ文法（suffix を先に測り、残りを title に渡す）。`⏎` は既存の `epic:` slice term を発行するだけ（新しい絞り込み機構を作らない。closed な箱でも効く）、`m` でオーバーレイ、`z` で closed 込み、`^u/^d` でページ。 |
 | **epic 母集団** | epic の読みは `epic ls --all` で、**closed な箱も盤面に載る**（`EpicInfo.Closed`、ゼロ値 = open）。ただし面ごとに見せる母集団が違う: `Board.Epics()` は **open のみ**（task の epic 付け替えリストがこの slice を**添字で引く**ので、closed が混じると終わった箱を行き先に出し、以降の id が全部ずれる。slice パネルは id で引くが、終わった箱を既定で並べない理由は同じ）、`Board.EpicsAll()` が全部、`Board.Epic(id)` は closed も解決する。closed を持つ理由は2つ — dep が「閉じた箱」なのか「解決できない id」なのか区別できること、`epic reopen` に指す先ができること。 |
 | **slice パネル** | `s` で開く左パネル（`slicemode.go`）。軸は repo / label / epic（既定は **open な box のみ**。`z` で closed 込みに広げる — dep map の scope 切替と同じキー・同じ語で、**前のセッションで閉じた箱に辿り着く唯一の道**。closed 行は `v` 印。epic 行は store の progress/stuck つき + `▶` active / `◆` pinned。epic dep が open な box を待つ間は `→N` — furrow 導出の `open_deps` をそのまま数える。「open after those close」の情報エッジで、強制ではない）。選択 = -q term の発行で、typed filter と AND 合成（GH の slice 仕様）。radio 動作（再選択で解除・軸切替で解除）。パネルを閉じても選択は残り、filter bar に `slice <term>` として見える。`g`/`G` で端へ。epic 軸では `m` で epic オーバーレイ・`A` で新規 box（他の軸では**理由を述べて断る** — dead key を作らない）。キーの告知はパネルの note が唯一の場所（modal なので `?` が打てず HelpSections も modal を載せない）なので、軸切替のたびに書き直す。 |
 | **epic オーバーレイ** | slice パネルの epic 軸から `m` で開く box 管理 modal（`epicmode.go`）。`furrow epic add/set/activate/deactivate/dep` 相当。行は title / goal / active / standing / pinned / labels / repos / deps / meta で、上に furrow 導出の `d/t done` と STUCK（編集不能なので行にしない）。書き込みは全部 **store-first** — 盤面は着地まで古い値のまま見せ、note が「何を待っているか」を言う。in-flight 中の二度押しは拒否する（行がまだ書き込み前の値なので、二度目は見えていない盤面を狙うことになる。furrow 側は同じ box の再 activate を exit 0・`changed:[]` で受けるので、拒否の理由は furrow ではなく画面）。`active` 行は押す**前**に前提条件を出す（`no — slot held by <id>` / `no — attach a repo first`）— furrow は repo ごとの枠を奪わず拒否するので、exit 2 が初耳になってはいけない。activate は `--reason` の入力が確認も兼ね（本文の activation log に残る）、deactivate は確認ステージ + furrow の `previous` 提案を note に出す。`closed` 行は **1 行で `done`/`reopen` の両方**を担う（箱の状態を読んでどちらの verb かを決める。2行にすると常にどちらかが死に行になる）。confirm 段は furrow が言わないことを言う — **furrow は member が open のままの箱を exit 0 で閉じる**ので、残数を出すのはこの行だけの仕事。`reopen` の文言は furrow 自身の「OPEN and INACTIVE」で、活性化は連鎖しない。`done` した箱は `Epic()` が解決し続けるのでオーバーレイは自分の書き込みで閉じず、`reopen` が1キーで届く。 |
@@ -110,7 +110,7 @@ graph・Map・Boxes・Roadmap — だけは自前のタイトル行 = 全ビュ�
 | 用語 | 意味 |
 |---|---|
 | **measurer** | カード高さのキャッシュ。**フレームを跨いで持つ**（フレーム単位だと 658タスクで 36ms/frame）。`recompute()` で破棄。 |
-| **ego-graph**（起点グラフ） | あるタスクから N ホップ以内の依存部分グラフ。実データでは最大12ノード・最大5段・1段の最大幅4。 |
+| **ego-graph**（起点グラフ） | あるタスクから N ホップ以内の依存部分グラフ。設計時（2026-08）の実データでは最大12ノード・最大5段・1段の最大幅4（盤面と共に動く数字 — 2026-09-03 の open scope では最大 10 ノード・4 段）。 |
 | **hop radius** | ego-graph を何ホップまで辿るか。`z` / `1` `2` `3` `0` で切替。Graph のもう1つのつまみが **orientation**（`o`）。 |
 | **re-root** | Graph 上のノードを新しい起点にすること（`Enter`）。「読む」ではなく「歩く」ための操作で、静止画にはできない。 |
 | **`-dump`** | TTY 無しで1フレームを標準出力に書いて終了するフラグ。headless 検証の土台。 |

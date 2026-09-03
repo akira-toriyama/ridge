@@ -11,8 +11,8 @@ import (
 // The shape is the board's lanes across and one BAND per value of a grouping
 // axis down: `furrow ls --tree` given a second dimension. A band is FOLDED by
 // default and its header line carries a count per lane, so a folded frame is a
-// histogram of the whole board — the real board's epic axis is 56 boxes plus
-// the sentinel, 57 lines against 296 tasks. Unfolding drops that band's tasks
+// histogram of the whole board — the real board's epic axis is one line per
+// box plus the sentinel, a fifth of its open-task count. Unfolding drops that band's tasks
 // into the same lane columns underneath, which is the state where the view is
 // actually a grid. (openSwim opens the cursor's own band on entry, so `W`
 // answers "where am I" too; every other band stays folded.)
@@ -129,7 +129,8 @@ func swimKey(band, id string) string { return band + "\x00" + id }
 // swimKeys is the set of bands a task belongs to on this axis, deduped. A task
 // with no value at all lands in the one sentinel band ("") rather than being
 // dropped: the swimlane claims to be a partition of the population, and
-// dropping the unfiled would lose 119 tasks of the real board's 296.
+// dropping the unfiled would lose close to four in ten of the real board's
+// open tasks (2026-09-03: 118 of 313).
 func swimKeys(t *board.Task, axis sliceField) []string {
 	var vals []string
 	switch axis {

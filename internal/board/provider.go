@@ -116,6 +116,10 @@ type Provider interface {
 
 	// --- epic writes: store-first, NOT the Persist* contract ---------------
 	//
+	// The store-first members are exactly: Add, and the eight Epic* methods
+	// below. Every other write is Persist*-shaped. (glossary.md points here
+	// for the list — a copy of it there once omitted two of the eight.)
+	//
 	// The Persist* family records a change the model already applied to the
 	// board on the UI thread. The epic family deliberately does not join it:
 	// what an epic write MEANS is furrow's, not ridge's — activate refuses a

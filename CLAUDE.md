@@ -20,11 +20,12 @@
 ## Go
 
 - `go build ./...` / `go test ./...` が通ることを終了前に確認する。
-  Go 1.25+ では `GOTOOLCHAIN=local`。
+  `GOTOOLCHAIN=local`（go.mod の版が正本）。
 - house style は go-dev skill に従う（薄い main + `internal/`、typed exit code、
   stdlib のみのテスト）。構成: `cmd/ridge`（3行 main）/ `internal/cli`（flag・
   exit code）/ `internal/board`（純粋 core + Provider port）/
-  `internal/store/{furrowstore,memstore}`（adapter）/ `internal/ui`（TUI 全部）。
+  `internal/store/{furrowstore,memstore}`（adapter）/ `internal/ui`（TUI 全部）/
+  `internal/views`（保存ビューの on-disk 語彙と views.toml I/O — ridge が書く唯一のファイル）。
   filter は furrow `-q` パススルー — ridge 側に query 文法を持たない
   （memstore の近似 evaluator は -dump/テスト専用）。層契約は各 package 冒頭の doc comment が正本。
 - テストは stdlib のみ（testify を入れない）。
@@ -61,7 +62,7 @@ v1 から大きく変わっている。以下は実際に踏んで確認済み:
 ## CJK — 日本語が主体のボードである
 
 - **幅は必ず `lipgloss.Width`（表示幅）で測る。`len()` は禁止。**
-  タスクタイトルは日本語で、依存を持つものは中央値82セル・p90 133セル。
+  タスクタイトルは日本語で、依存を持つものは表示幅で中央値 85 セル・p90 141 セル（2026-09-03）。
   1文字で2セル食うので、`len()` は必ず枠を壊す。
 - 切り詰めもバイト単位で切らない（`ansi.Truncate` などを使う）。
 - **枠付きの箱を並べるときは必ず複数幅で `-dump` して桁揃えを目視する。**
@@ -110,6 +111,7 @@ v1 から大きく変わっている。以下は実際に踏んで確認済み:
 
 ## Commits
 
-gitmoji-driven（`<:gitmoji:>[(<scope>)][!] <subject>`）。
-[CONTRIBUTING.md](https://github.com/akira-toriyama/.github/blob/main/CONTRIBUTING.md)。
+gitmoji-driven。書式（sigil を含む）は暗唱せず
+[docs/commit-convention.md](docs/commit-convention.md) → `glyph.toml` を開く
+（この文書に写した `[!]` だけの書式が drift した実績）。
 subject / body は英語。1件 = 1 PR（squash）、docs は同一 PR で更新。
