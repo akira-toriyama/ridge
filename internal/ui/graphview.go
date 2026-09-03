@@ -856,7 +856,7 @@ func (m *Model) graphBack() {
 func (m *Model) cycleGraphRadius() {
 	for i, r := range graphRadii {
 		if r == m.graphRadius {
-			// The graph header prints the radius every frame; see model.go.
+			// The graph header prints the radius every frame; see onGraphKey below.
 			m.graphRadius = graphRadii[(i+1)%len(graphRadii)]
 			return
 		}

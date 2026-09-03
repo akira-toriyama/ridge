@@ -63,7 +63,7 @@ graph・Map・Boxes・Roadmap — だけは自前のタイトル行 = 全ビュ�
 
 | 用語 | 意味 |
 |---|---|
-| **move mode** | GitHub Projects 由来の並べ替え操作。`Enter`/`m` で持ち上げ（**ただし peek が開いている / Table ビューでは同じキーが編集メニューを開く** — `model.go` の分岐が正本）→ 矢印・hjkl で 1 歩、大文字 K/J/H/L でその方向の端まで → `Enter` 確定 / `Esc` 取消。furrow の sparse priority 並べ替えに 1:1 対応。 |
+| **move mode** | GitHub Projects 由来の並べ替え操作。`Enter`/`m` で持ち上げ（**ただし peek が開いている / Table ビューでは同じキーが編集メニューを開く** — `normalkeys.go` の分岐が正本）→ 矢印・hjkl で 1 歩、大文字 K/J/H/L でその方向の端まで → `Enter` 確定 / `Esc` 取消。furrow の sparse priority 並べ替えに 1:1 対応。 |
 | **drag**（DnD） | マウスでカードを掴んで運ぶ。move mode のマウス版で、確定経路は同一（`commitMove`）。 |
 | **ghost** | ドラッグ中にカーソルに追従する半透明のカード。lipgloss の Layer（Z=99）。 |
 | **drop indicator** | ドロップ先を示す印。Layer だが **ID を持たない**ので `Compositor.Hit` に拾われない（＝クリックを吸わない）。 |
