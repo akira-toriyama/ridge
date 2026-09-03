@@ -2,7 +2,8 @@ package ui
 
 import (
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -418,13 +419,13 @@ func (m *Model) editListSelect(t *board.Task) tea.Cmd {
 	switch e.field {
 	case fieldLabels:
 		p := board.FieldPatch{AddLabels: []string{val}}
-		if containsStrUI(t.Labels, val) {
+		if slices.Contains(t.Labels, val) {
 			p = board.FieldPatch{RmLabels: []string{val}}
 		}
 		return m.applyPatch("label", p)
 	case fieldRepos:
 		p := board.FieldPatch{AddRepos: []string{val}}
-		if containsStrUI(t.Repos, val) {
+		if slices.Contains(t.Repos, val) {
 			p = board.FieldPatch{RmRepos: []string{val}}
 		}
 		return m.applyPatch("repo", p)
@@ -486,9 +487,9 @@ func (m *Model) editListRows(t *board.Task) []string {
 		}
 		return rows
 	case fieldDeps:
-		// A copy, not the live slice: DepRm's removeStr shrinks the backing
+		// A copy, not the live slice: DepRm's slices.DeleteFunc shrinks the backing
 		// array in place, so a caller holding these rows across a removal
-		// would read duplicated tails.
+		// would read zeroed tails.
 		return append([]string(nil), t.Deps...)
 	case fieldRefs:
 		// A copy for the same reason: SetFields' RmRefs shrinks in place.
@@ -693,7 +694,7 @@ func (m *Model) labelVocab() []string {
 			set[l] = true
 		}
 	}
-	return sortedKeys(set)
+	return slices.Sorted(maps.Keys(set))
 }
 
 // repoVocab is every repo attached anywhere on the board, sorted.
@@ -704,16 +705,7 @@ func (m *Model) repoVocab() []string {
 			set[r] = true
 		}
 	}
-	return sortedKeys(set)
-}
-
-func sortedKeys(set map[string]bool) []string {
-	out := make([]string, 0, len(set))
-	for k := range set {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
+	return slices.Sorted(maps.Keys(set))
 }
 
 func vocabUnion(vocab, own []string) []string {
@@ -724,16 +716,7 @@ func vocabUnion(vocab, own []string) []string {
 	for _, v := range own {
 		set[v] = true
 	}
-	return sortedKeys(set)
-}
-
-func containsStrUI(hay []string, needle string) bool {
-	for _, h := range hay {
-		if h == needle {
-			return true
-		}
-	}
-	return false
+	return slices.Sorted(maps.Keys(set))
 }
 
 // ---- rendering --------------------------------------------------------------
@@ -904,7 +887,7 @@ func (m *Model) renderEditList(t *board.Task, inner, budget int) string {
 		hdr, foot = "labels", "⏎/x toggle · a new label · esc back"
 		mark = func(_ int, row string) string {
 			box := "[ ] "
-			if containsStrUI(t.Labels, row) {
+			if slices.Contains(t.Labels, row) {
 				box = "[x] "
 			}
 			return box + row
@@ -913,7 +896,7 @@ func (m *Model) renderEditList(t *board.Task, inner, budget int) string {
 		hdr, foot = "repos", "⏎/x attach/detach · a new repo · esc back"
 		mark = func(_ int, row string) string {
 			box := "[ ] "
-			if containsStrUI(t.Repos, row) {
+			if slices.Contains(t.Repos, row) {
 				box = "[x] "
 			}
 			return box + row

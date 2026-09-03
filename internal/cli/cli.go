@@ -229,7 +229,7 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 		// -perflog's op/ms pairs, this file carries every keystroke verbatim
 		// (titles, filter text), so it is created 0600 — sharing it is a copy
 		// the user makes on purpose, not a mode bit they forgot.
-		f, err := os.OpenFile(*debuglog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec
+		f, err := os.OpenFile(*debuglog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec // G304: the -debuglog path is the user's own choice, see above
 		if err != nil {
 			_, _ = fmt.Fprintln(stderr, "error: -debuglog:", err)
 			return CodeUsage
@@ -369,8 +369,7 @@ func perfHook(path string) (func(op string, d time.Duration), error) {
 	if path == "" {
 		return nil, nil
 	}
-	// The path is the -perflog flag: the user chose where their own log goes (G304).
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644) //nolint:gosec
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644) //nolint:gosec // G304: the -perflog path is the user's own choice
 	if err != nil {
 		return nil, err
 	}

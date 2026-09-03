@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -470,13 +471,13 @@ func (m *Model) epicListSelect(box *board.EpicInfo, rows []string) tea.Cmd {
 	switch e.field {
 	case epicFieldLabels:
 		p := board.EpicPatch{AddLabels: []string{val}}
-		if containsStrUI(box.Labels, val) {
+		if slices.Contains(box.Labels, val) {
 			p = board.EpicPatch{RmLabels: []string{val}}
 		}
 		return m.epicPatch("label", p)
 	case epicFieldRepos:
 		p := board.EpicPatch{AddRepos: []string{val}}
-		if containsStrUI(box.Repos, val) {
+		if slices.Contains(box.Repos, val) {
 			p = board.EpicPatch{RmRepos: []string{val}}
 		}
 		return m.epicPatch("repo", p)
@@ -968,7 +969,7 @@ func (m *Model) renderEpicList(box *board.EpicInfo, inner, budget int) string {
 	case epicFieldLabels:
 		foot = "⏎/x toggle · a new label · esc back"
 		mark = func(_ int, row string) string {
-			if containsStrUI(box.Labels, row) {
+			if slices.Contains(box.Labels, row) {
 				return "[x] " + row
 			}
 			return "[ ] " + row
@@ -977,7 +978,7 @@ func (m *Model) renderEpicList(box *board.EpicInfo, inner, budget int) string {
 		hdr = "repos — a box with none cannot be activated"
 		foot = "⏎/x attach/detach · a new repo · esc back"
 		mark = func(_ int, row string) string {
-			if containsStrUI(box.Repos, row) {
+			if slices.Contains(box.Repos, row) {
 				return "[x] " + row
 			}
 			return "[ ] " + row
