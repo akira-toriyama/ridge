@@ -285,7 +285,7 @@ type helpSection struct {
 // keeps dead keys out — their keys live inside their overlays, and `?` cannot
 // even be typed there.
 // enterEdits says whether ⏎/m would open the EDIT overlay rather than lift the
-// card — it diverts with the peek open or on a table row (model.go). The one
+// card — it diverts with the peek open or on a table row (normalkeys.go). The one
 // canonical key list has to name the thing the next press actually does.
 func (k keyMap) HelpSections(enterEdits bool) []helpSection {
 	open := k.Move

@@ -2,9 +2,12 @@ package ui
 
 import (
 	"fmt"
-	"github.com/akira-toriyama/ridge/internal/board"
 	"strings"
 
+	"github.com/akira-toriyama/ridge/internal/board"
+
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 	lg "charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -853,7 +856,7 @@ func (m *Model) graphBack() {
 func (m *Model) cycleGraphRadius() {
 	for i, r := range graphRadii {
 		if r == m.graphRadius {
-			// The graph header prints the radius every frame; see model.go.
+			// The graph header prints the radius every frame; see onGraphKey below.
 			m.graphRadius = graphRadii[(i+1)%len(graphRadii)]
 			return
 		}
@@ -915,4 +918,80 @@ func (m *Model) closeGraph() {
 		}
 	}
 	m.note("board view — the cursor followed the graph walk")
+}
+
+// onGraphKey is the graph view's whole keyboard surface. Everything the board
+// does to the BOARD is deliberately absent — the graph is a reading and walking
+// tool, and a stray `d` closing a task you were only looking at would be a
+// nasty surprise.
+func (m *Model) onGraphKey(msg tea.KeyPressMsg) tea.Cmd {
+	switch {
+	case key.Matches(msg, m.keys.Quit):
+		return m.quitOrFlush()
+
+	case key.Matches(msg, m.keys.Help):
+		m.fullHelp = !m.fullHelp
+
+	case key.Matches(msg, m.keys.Cancel):
+		if m.fullHelp {
+			m.fullHelp = false
+			return nil
+		}
+		m.closeGraph()
+
+	case key.Matches(msg, m.keys.GraphRoot):
+		m.rerootGraph()
+
+	case key.Matches(msg, m.keys.JumpBack):
+		m.graphBack()
+
+	case key.Matches(msg, m.keys.GraphRadius):
+		switch msg.String() {
+		// No note: the graph header states the radius on every frame.
+		case "1", "2", "3":
+			m.graphRadius = int(msg.String()[0] - '0')
+		case "0":
+			m.graphRadius = graphAllRadius
+		default:
+			m.cycleGraphRadius()
+		}
+		m.graphScroll = 0
+
+	case key.Matches(msg, m.keys.GraphOrient):
+		// No note, same as the radius: the header names the direction on every
+		// frame, in the two words that are half the redundancy contract.
+		m.cycleGraphOrient()
+
+	case key.Matches(msg, m.keys.Graph):
+		// ⇧space on the node you are already on is a no-op re-root; treat it as
+		// "root here", which is what the gesture means on the board.
+		m.rerootGraph()
+
+	case key.Matches(msg, m.keys.Map):
+		// Zoom out: the ego graph's neighbourhood seen inside every cluster.
+		// Seeded with the graph's own selection, not the board cursor, which
+		// has not moved since the graph opened.
+		m.openMap(m.graphSel)
+
+	case key.Matches(msg, m.keys.PeekScroll):
+		if msg.String() == "ctrl+d" {
+			m.graphScroll += maxInt(1, m.graphCanvasH()/2)
+		} else {
+			m.graphScroll -= maxInt(1, m.graphCanvasH()/2)
+		}
+		m.graphScroll = maxInt(0, m.graphScroll)
+
+	case key.Matches(msg, m.keys.View):
+		m.closeGraph()
+
+	case key.Matches(msg, m.keys.Up):
+		m.graphMove(0, -1)
+	case key.Matches(msg, m.keys.Down):
+		m.graphMove(0, +1)
+	case key.Matches(msg, m.keys.Left):
+		m.graphMove(-1, 0)
+	case key.Matches(msg, m.keys.Right):
+		m.graphMove(+1, 0)
+	}
+	return nil
 }
