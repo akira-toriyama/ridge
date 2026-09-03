@@ -233,6 +233,11 @@ func (m *Model) chromeLayers() []*lg.Layer {
 		chips += th.dim.Render("  sort ") +
 			th.accent.Render(m.tableSort.String()+" "+sortArrow(m.tableSortAsc))
 	}
+	if m.revisitOn {
+		// The lens narrows the board with no query text to show for it, so
+		// this chip is the one place the narrowing is visible while it lasts.
+		chips += th.dim.Render("  ") + th.warn.Render(glyphRevisit+" revisit")
+	}
 	var filter string
 	switch {
 	case m.mode == modeFilter:

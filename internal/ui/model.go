@@ -123,6 +123,12 @@ type Model struct {
 	qMatched map[string]bool // the store's verdict; nil = no verdict yet
 	qErr     string          // furrow's refusal for the current text, "" when clean
 	qSeq     int             // debounce + staleness fence (filter.go)
+	// The revisit lens (filter.go): while on, the verdict comes from `furrow
+	// revisit -q` instead of `ls -q`, so the board shows only the flagged
+	// tasks and revisitWhy carries furrow's reasons for the peek. Not part
+	// of a saved view — it is a question about the board, not a view of it.
+	revisitOn  bool
+	revisitWhy map[string][]board.RevisitReason
 
 	// The saved-view tabs (viewtabs.go). viewIdx is the active tab, -1 until
 	// the first switch or save — the session's own flag-shaped state is not a
@@ -975,6 +981,9 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.ti.SetValue(m.qRaw)
 		return cmd
 
+	case key.Matches(msg, m.keys.Revisit):
+		return m.toggleRevisit()
+
 	case key.Matches(msg, m.keys.JumpBlock):
 		m.jumpToBlocker()
 	case key.Matches(msg, m.keys.JumpBack):
@@ -1044,6 +1053,9 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 		if t := m.curTask(); t != nil {
 			return m.editCmd(t)
 		}
+
+	case key.Matches(msg, m.keys.Review):
+		return m.reviewCmd()
 
 	case key.Matches(msg, m.keys.Note):
 		m.fullHelp = false // same rule as Filter: a modal never inherits the overlay
@@ -1323,4 +1335,29 @@ func boolToInt(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// reviewCmd is the `i` key: stamp the selected task reviewed. Optimistic like
+// done — Board.Review sets the clock, `furrow review` records it — and the
+// note is the only visible change on the board itself: the peek's stamps line
+// is where the clock shows.
+func (m *Model) reviewCmd() tea.Cmd {
+	t := m.curTask()
+	if t == nil {
+		m.note("nothing selected — a review stamps a task")
+		return nil
+	}
+	id := t.ID
+	if m.refuseWhileRollingBack("review " + id) {
+		return nil
+	}
+	if err := m.b.Review(id); err != nil {
+		m.fail("%v", err)
+		return nil
+	}
+	m.syncPeek()
+	m.note("reviewed %s", id)
+	return m.enqueuePersist("review "+id, func() ([]string, error) {
+		return nil, m.prov.PersistReview(id)
+	})
 }

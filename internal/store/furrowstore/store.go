@@ -506,6 +506,52 @@ func (p *Store) PersistNote(id, text string) error {
 	return err
 }
 
+// PersistReview records an already-applied review stamp via `furrow review
+// <id>` (board.Provider). No --json: the mutation envelope names the one field
+// that changed, and the model already applied it.
+func (p *Store) PersistReview(id string) error {
+	_, err := p.c.run("review", "review", id)
+	return err
+}
+
+// revisitRow is one `furrow revisit --json` row, narrowed to what the model
+// keeps: the id and furrow's reasons. The rest of the row is the ls shape,
+// which the Board() snapshot already holds.
+type revisitRow struct {
+	ID      string `json:"id"`
+	Revisit []struct {
+		Code   string `json:"code"`
+		Detail string `json:"detail"`
+	} `json:"revisit"`
+}
+
+// Revisit evaluates `furrow revisit -q` over the whole board (board.Provider).
+// The empty -r is load's: drafts surface regardless, and a repo-scoped read
+// would hide the flagged tasks of every other repo the board carries.
+func (p *Store) Revisit(q string) ([]board.Revisit, error) {
+	args := []string{"revisit", "-r", "", "--json"}
+	if q != "" {
+		args = append(args, "-q", q)
+	}
+	out, err := p.c.run("revisit", args...)
+	if err != nil {
+		return nil, err
+	}
+	var rows []revisitRow
+	if err := json.Unmarshal(out, &rows); err != nil {
+		return nil, fmt.Errorf("furrow revisit: undecodable rows: %v", err)
+	}
+	res := make([]board.Revisit, 0, len(rows))
+	for _, r := range rows {
+		rv := board.Revisit{ID: r.ID}
+		for _, x := range r.Revisit {
+			rv.Reasons = append(rv.Reasons, board.RevisitReason{Code: x.Code, Detail: x.Detail})
+		}
+		res = append(res, rv)
+	}
+	return res, nil
+}
+
 // PersistCheckAdd records an already-appended checklist item via `furrow
 // check --add` (board.Provider).
 func (p *Store) PersistCheckAdd(id, text string) error {

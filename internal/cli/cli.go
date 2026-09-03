@@ -68,6 +68,7 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 		// A view setting like -table, not a -demo name: it composes with the
 		// demos and it opens the interactive TUI on the timeline too.
 		roadmap = fs.Bool("roadmap", false, "open on the roadmap view: every open task that carries a due, on a time axis")
+		revisit = fs.Bool("revisit", false, "open with the revisit lens on: only what furrow revisit flags (the f key)")
 		// No back quotes in this usage string: flag reads the first back-quoted
 		// word as the operand NAME, so "the graph's `o` key" rendered as
 		// `-graphlr o` — the one bool in -h that looks like it takes a value.
@@ -121,7 +122,7 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 		// refusal — two steps to learn the combination was never going to work.
 		for _, name := range []string{
 			"mock", "readonly", "dump", "demo", "plain", "cols", "rows",
-			"filter", "peek", "tree", "table", "roadmap", "light", "graphlr", "debuglog",
+			"filter", "peek", "tree", "table", "roadmap", "revisit", "light", "graphlr", "debuglog",
 		} {
 			if set[name] {
 				_, _ = fmt.Fprintf(stderr,
@@ -276,6 +277,7 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 		Filter:       *filter,
 		Table:        *table,
 		Roadmap:      *roadmap,
+		Revisit:      *revisit,
 		GraphLR:      *graphlr,
 		Peek:         *peek,
 		Tree:         *tree,

@@ -53,6 +53,10 @@ func fixtureTasks() []*board.Task {
 			Deps:     []string{"t-ehk7", "t-t38k"},
 			Created:  ts("2026-07-16T08:35:54Z"),
 			Updated:  ts("2026-07-16T15:47:40Z"),
+			// Not from the snapshot either: the one review stamp on the board,
+			// so the peek's "reviewed" stamp and has:reviewed have a frame.
+			// Keep it the only one — the presence test pins exactly it.
+			Reviewed: ts("2026-07-20T09:00:00Z"),
 			// The four Due values in this fixture are NOT from the snapshot
 			// (the real board had none in 2026-07); they exist so the table's
 			// due column and `-demo sort` have dates to show. Each is furrow's

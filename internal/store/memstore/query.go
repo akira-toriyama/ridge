@@ -66,6 +66,13 @@ import (
 // measures against. The fixture reads no config, so the default is the value.
 const staleDays = 30
 
+// isStale is furrow's ONE definition of stale (core.IsStale: at least
+// staleDays without an update), shared by is:stale and Revisit's stale
+// signal so the fixture cannot answer the two differently at the boundary.
+func isStale(t *board.Task, now time.Time) bool {
+	return !t.Updated.IsZero() && now.Sub(t.Updated) >= staleDays*24*time.Hour
+}
+
 // nowFn is indirected so the clock-dependent predicates (is:stale,
 // is:overdue) are testable, matching board's own test clock.
 var nowFn = time.Now
@@ -531,7 +538,7 @@ func (t term) matchIs(task *board.Task, g *board.Graph, v string) bool {
 	case "stale":
 		// Measured: furrow flags a DONE task too — is:stale is the update
 		// window alone, not "open and forgotten".
-		return !task.Updated.IsZero() && nowFn().Sub(task.Updated) > staleDays*24*time.Hour
+		return isStale(task, nowFn())
 	}
 	return false
 }

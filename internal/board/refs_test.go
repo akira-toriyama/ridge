@@ -3,6 +3,7 @@ package board
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // Refs are a SEQUENCE (furrow ref --help): adds append at the end in the
@@ -158,5 +159,27 @@ func TestSetBodyRefusesWhatFurrowWould(t *testing.T) {
 
 	if err := b.SetBody("t-nope", "x"); err == nil {
 		t.Error("SetBody on an unknown id must refuse")
+	}
+}
+
+// Review stamps the review clock ALONE. furrow's ReviewTask writes `reviewed`
+// and leaves `updated` where it was ("a review changes no content"), so the
+// optimistic half must not bump Updated either — the contract test on the
+// real binary pins the store side of the same fact.
+func TestReviewStampsReviewedAndLeavesUpdated(t *testing.T) {
+	was := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	b := NewBoard([]*Task{{ID: "a", Title: "a", Status: "backlog", Updated: was}})
+	if err := b.Review("a"); err != nil {
+		t.Fatal(err)
+	}
+	got := b.Task("a")
+	if got.Reviewed.IsZero() {
+		t.Error("Review must stamp Reviewed")
+	}
+	if !got.Updated.Equal(was) {
+		t.Errorf("Review moved Updated to %v; a review changes no content", got.Updated)
+	}
+	if err := b.Review("nope"); err == nil {
+		t.Error("an unknown id must be refused, not stamped into nothing")
 	}
 }

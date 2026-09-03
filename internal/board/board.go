@@ -709,6 +709,20 @@ func (b *Board) AppendNote(id, text string) error {
 	return nil
 }
 
+// Review stamps Reviewed and nothing else — the optimistic half of
+// Provider.PersistReview. Updated is deliberately untouched: furrow's
+// ReviewTask writes the review clock alone ("a review changes no content"),
+// and a local Updated bump would make the card look edited until the re-read
+// took it back.
+func (b *Board) Review(id string) error {
+	t := b.Task(id)
+	if t == nil {
+		return fmt.Errorf("unknown task %q", id)
+	}
+	t.Reviewed = nowFn().UTC().Truncate(time.Second)
+	return nil
+}
+
 // DepAdd makes id wait on dep and stamps Updated — the optimistic half of
 // Provider.PersistDepAdd. It mirrors `furrow dep`'s contract the way ParseDue
 // mirrors --due: every dep must exist, adding is acyclic and idempotent. Keep
