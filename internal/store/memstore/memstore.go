@@ -308,11 +308,19 @@ func (p *Store) PersistReview(id string) error {
 	return nil
 }
 
+// terminalLanes is furrow's default terminal set (config DefaultTerminal:
+// done, icebox, waiting), the lanes App.Revisit skips. Hard-coded like
+// staleDays: the fixture has no config, and `furrow board --json` exposes no
+// terminal flag for a Lane to carry. Done alone was the first cut, and it
+// let the fixture's icebox draft survive a lens the real binary drops it
+// from (found by review).
+var terminalLanes = map[string]bool{"done": true, "icebox": true, "waiting": true}
+
 // Revisit stands in for `furrow revisit -q` over the fixture (board.Provider):
-// the open tasks carrying at least one signal, reasons in furrow's order and
-// wording (core/revisit.go RevisitReasons, v5.0.0). Done-lane tasks are not
-// eligible — revisit lists the OPEN tasks worth a fresh judgment — and q is
-// the same fixture evaluator Query uses, refused the same way.
+// the tasks outside a TERMINAL lane carrying at least one signal, reasons in
+// furrow's order and wording (core/revisit.go RevisitReasons, app/revisit.go
+// eligibility, v5.0.0), and q is the same fixture evaluator Query uses,
+// refused the same way.
 func (p *Store) Revisit(q string) ([]board.Revisit, error) {
 	b := p.snapshot()
 	parsed := parseQuery(q, boardVocab(b))
@@ -323,7 +331,7 @@ func (p *Store) Revisit(q string) ([]board.Revisit, error) {
 	now := nowFn()
 	var out []board.Revisit
 	for _, t := range b.Tasks() {
-		if g.IsDone(t.ID) || !parsed.match(t, g) {
+		if terminalLanes[t.Status] || !parsed.match(t, g) {
 			continue
 		}
 		var rs []board.RevisitReason

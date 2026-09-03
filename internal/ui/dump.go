@@ -87,9 +87,12 @@ func New(p board.Provider, o Options) *Model {
 		m.graphOrient = orientLeftRight
 	}
 	if o.Revisit {
-		// The same Init hand-off as -filter: on a live store the verdict is
-		// a Cmd, and only the fixture answers inside the constructor.
-		m.startupFilter = tea.Batch(m.startupFilter, m.toggleRevisit())
+		// setRevisit, NOT toggleRevisit: the note-free half, so the read-only
+		// warning below survives (`-readonly -revisit` lost it — the same
+		// regression -roadmap's startRoadmap comment records). The same Init
+		// hand-off as -filter: on a live store the verdict is a Cmd, and only
+		// the fixture answers inside the constructor.
+		m.startupFilter = tea.Batch(m.startupFilter, m.setRevisit(true))
 	}
 	if o.Peek || o.Tree {
 		m.peekOpen = true
@@ -410,7 +413,9 @@ func (m *Model) demoState(kind string) error {
 		// the filter row, the board narrowed to what furrow revisit flags,
 		// and the peek's reason line. t-jv3j carries the dep_done signal
 		// (its dep t-t38k is done) on top of the fixture-wide staleness.
-		if c := m.toggleRevisit(); c != nil {
+		// setRevisit(true), not a toggle: -revisit may already have turned
+		// the lens on, and `-revisit -demo revisit` used to cancel it.
+		if c := m.setRevisit(true); c != nil {
 			return fmt.Errorf("demo revisit: the fixture lens must answer synchronously")
 		}
 		if !m.selectID("t-jv3j", false) {

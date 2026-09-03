@@ -197,16 +197,36 @@ func (m *Model) applyVerdict(msg filterResultMsg) {
 	m.refilter(m.curTask())
 }
 
-// toggleRevisit is the `f` key. Turning the lens on re-asks the store at
-// once (a deliberate gesture, like a slice switch — no debounce); turning it
-// off drops the reasons and falls back to the query alone, or to no verdict
-// at all when nothing else narrows the board. The note says what the lens
-// shows only on the way in: on the way out the filter row's chip vanishes,
-// which is the same statement.
+// toggleRevisit is the `f` key. The note says what the lens shows only on
+// the way in: on the way out the filter row's chip vanishes, which is the
+// same statement.
 func (m *Model) toggleRevisit() tea.Cmd {
-	m.revisitOn = !m.revisitOn
-	if m.revisitOn {
+	on := !m.revisitOn
+	if on {
 		m.note("revisit lens on — only what furrow revisit flags; the peek says why")
+	}
+	return m.setRevisit(on)
+}
+
+// setRevisit is the note-free half of the toggle, and the one -revisit uses
+// from the constructor: the read-only warning is set once per session and
+// restored by nothing, so a startup note would erase it (the -roadmap
+// precedent — startRoadmap exists for the same reason).
+//
+// Turning the lens on re-asks the store at once (a deliberate gesture, like a
+// slice switch — no debounce). Turning it off tears down everything the lens
+// owned BEFORE the refire: the reasons (a refused re-query keeps the last good
+// verdict, so applyVerdict would never clear them) and, when nothing else
+// narrows the board, the jump pins — applyFilter's own rule, which the toggle
+// bypasses. A stale reason line under a vanished chip, and "+1 pinned" over
+// an unfiltered board, were both measured before this.
+func (m *Model) setRevisit(on bool) tea.Cmd {
+	m.revisitOn = on
+	if !on {
+		m.revisitWhy = nil
+		if !m.lensOn() {
+			m.pinned = map[string]bool{}
+		}
 	}
 	return m.refire(m.curTask(), false)
 }

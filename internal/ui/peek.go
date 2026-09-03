@@ -183,7 +183,7 @@ func (m *Model) peekContent(w int) string {
 	}
 	// wrapJoin like the meta lines: three stamps overflow a narrow peek.
 	b.WriteString(th.dim.Render(wrapJoin(stamps, " · ", w)) + "\n")
-	if why := m.revisitWhy[t.ID]; len(why) > 0 {
+	if why := m.revisitWhy[t.ID]; m.revisitOn && len(why) > 0 {
 		// The revisit lens's "why": furrow's own code and detail per signal,
 		// in its order. The card only shows that the task survived the lens;
 		// this line is where the reason lives.

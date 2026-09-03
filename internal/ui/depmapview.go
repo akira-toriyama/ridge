@@ -278,10 +278,12 @@ func (m *Model) blockerTag(ids []string, budget int) string {
 // dependency structure is drawn whole and filtered rows are MARKED, never
 // dropped — and two copies of that predicate could disagree about which rows.
 //
-// effectiveQuery, not qRaw: the slice term filters these views exactly as it
-// filters the board, which is taskVisible's contract mirrored for off-board ids.
+// lensOn, not qRaw: the slice term and the revisit lens filter these views
+// exactly as they filter the board, which is taskVisible's contract mirrored
+// for off-board ids. The lens narrows with an EMPTY query, so testing the
+// query alone here muted nothing while the board hid 19 of 34 (measured).
 func (m *Model) taskHidden(id string) bool {
-	if id == "" || m.effectiveQuery() == "" || m.pinned[id] || m.qMatched == nil {
+	if id == "" || !m.lensOn() || m.pinned[id] || m.qMatched == nil {
 		return false
 	}
 	t := m.b.Task(id)

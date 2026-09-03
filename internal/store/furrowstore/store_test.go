@@ -734,6 +734,19 @@ func TestContractRevisitCarriesFurrowsReasons(t *testing.T) {
 	if _, ok := by[blocker]; ok {
 		t.Errorf("%s is done; revisit lists open tasks", blocker)
 	}
+	// Every TERMINAL lane is skipped, not just done: the same estimate-less
+	// task drops out of revisit the moment it is parked in icebox. memstore's
+	// terminalLanes mirrors this set.
+	lab(t, dir, "furrow", "move", bare, "icebox")
+	rows, err = p.Revisit("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range rows {
+		if r.ID == bare {
+			t.Errorf("%s is in icebox and still surfaced: %+v", bare, r.Reasons)
+		}
+	}
 
 	narrowed, err := p.Revisit("label:sized")
 	if err != nil {
