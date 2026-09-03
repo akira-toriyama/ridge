@@ -271,6 +271,8 @@ slice = "epic:e-xxxx" # repo|label|epic :値（slice パネルの選択と同じ
 | `W` | swimlane（レーン×group by。`space` で帯を開閉・`tab` で軸・`⏎` でその帯に絞る） |
 | `1`-`9` / `V` | 保存ビューの切替 / 保存（views.toml が正本。タブ無しの `V` = 新規） |
 | `Enter` | move mode（`Enter` 確定・`Esc` 取消）。**peek を開いていると / Table では編集メニュー** |
+| `f` | revisit lens（`furrow revisit` が flag した open task だけに絞る。peek に理由。`-revisit` で headless） |
+| `i` | 選択タスクを reviewed に stamp（`furrow review <id>`。`updated` は動かない） |
 | `q` | 終了 |
 
 画面下部は1行だけで、そこに出るのは**画面に出ていないこと**（今入ったモードの

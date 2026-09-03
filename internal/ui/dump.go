@@ -14,7 +14,7 @@ import (
 // unknown-name error and the tests all read this slice, because the list was
 // duplicated in three places and adding two states updated two of them —
 // `ridge -h` then advertised eight of ten.
-var DemoNames = []string{"move", "drag", "add", "adddraft", "edit", "editpick", "editinput", "editdeps", "editrefs", "note", "refs", "graph", "graphall", "map", "mapall", "mapfiltered", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicshut", "epicdone", "epicreopen", "sliceepicall", "epicnew", "boxes", "boxesall", "roadmapweek", "roadmapmonth", "swim", "swimopen", "swimrepo", "swimall", "views", "viewsroad", "viewsmany", "fail"}
+var DemoNames = []string{"move", "drag", "add", "adddraft", "edit", "editpick", "editinput", "editdeps", "editrefs", "note", "refs", "graph", "graphall", "map", "mapall", "mapfiltered", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "revisit", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicshut", "epicdone", "epicreopen", "sliceepicall", "epicnew", "boxes", "boxesall", "roadmapweek", "roadmapmonth", "swim", "swimopen", "swimrepo", "swimall", "views", "viewsroad", "viewsmany", "fail"}
 
 // Options configures a freshly-constructed Model. The zero value is the
 // default TUI: dark palette, board view, no filter.
@@ -33,6 +33,10 @@ type Options struct {
 	// like Table rather than a -demo name — which also means it composes with
 	// every graph demo instead of needing a mirrored copy of each.
 	GraphLR bool
+	// Revisit opens with the revisit lens on — a view setting like Table,
+	// not a -demo name, so `ridge -revisit` is the real-store "what is worth
+	// a fresh look" glance and `-dump -revisit` its headless frame.
+	Revisit bool
 	Peek    bool // open with the detail side-peek
 	Tree    bool // open with the dep-tree overlay (implies Peek)
 	LoadMS  int  // real-store load time, for the startup note
@@ -81,6 +85,11 @@ func New(p board.Provider, o Options) *Model {
 	}
 	if o.GraphLR {
 		m.graphOrient = orientLeftRight
+	}
+	if o.Revisit {
+		// The same Init hand-off as -filter: on a live store the verdict is
+		// a Cmd, and only the fixture answers inside the constructor.
+		m.startupFilter = tea.Batch(m.startupFilter, m.toggleRevisit())
 	}
 	if o.Peek || o.Tree {
 		m.peekOpen = true
@@ -395,6 +404,20 @@ func (m *Model) demoState(kind string) error {
 		}
 		m.edit.menuIdx = int(fieldRefs)
 		m.openField(fieldRefs, m.b.Task("t-9sa6"))
+
+	case "revisit":
+		// The revisit lens with the peek on a flagged task: the ↻ chip in
+		// the filter row, the board narrowed to what furrow revisit flags,
+		// and the peek's reason line. t-jv3j carries the dep_done signal
+		// (its dep t-t38k is done) on top of the fixture-wide staleness.
+		if c := m.toggleRevisit(); c != nil {
+			return fmt.Errorf("demo revisit: the fixture lens must answer synchronously")
+		}
+		if !m.selectID("t-jv3j", false) {
+			return fmt.Errorf("demo revisit: t-jv3j is not on the fixture board")
+		}
+		m.peekOpen = true
+		m.syncPeek()
 
 	case "note":
 		// The note input, focused and holding a typed CJK paragraph — the

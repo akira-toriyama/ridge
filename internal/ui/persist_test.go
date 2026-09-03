@@ -128,6 +128,26 @@ func (p *scriptedProvider) PersistNote(id, _ string) error {
 	return nil
 }
 
+func (p *scriptedProvider) PersistReview(id string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.calls = append(p.calls, "review "+id)
+	return nil
+}
+
+// Revisit flags the scripted Query verdict, so the lens scenarios share one
+// id list with the query ones.
+func (p *scriptedProvider) Revisit(q string) ([]board.Revisit, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.queries = append(p.queries, "revisit:"+q)
+	rows := make([]board.Revisit, 0, len(p.qIDs))
+	for _, id := range p.qIDs {
+		rows = append(rows, board.Revisit{ID: id, Reasons: []board.RevisitReason{{Code: "stale", Detail: "scripted"}}})
+	}
+	return rows, nil
+}
+
 // The epic family is store-first: it records the call and, when the scenario
 // asks for it, refuses. epicFailAt is 1-based, so a test can script "the first
 // lands, the second is refused" — the drain shape the landed re-read exists for.

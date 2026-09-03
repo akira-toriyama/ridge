@@ -91,6 +91,20 @@ type Provider interface {
 	// PersistDepRm records id's already-applied dependency removal.
 	PersistDepRm(id, dep string) error
 
+	// PersistReview records id's already-applied review stamp — `furrow
+	// review <id>`, which sets `reviewed` and touches nothing else (a review
+	// changes no content, so Updated stays; the local half is Board.Review).
+	PersistReview(id string) error
+
+	// Revisit is `furrow revisit -q <q>`: the open tasks worth a fresh
+	// judgment, each with furrow's reasons. The signals (no_repo, value/effort
+	// unset, stale, dep_done) and the staleness window are furrow's — ridge
+	// never derives one of its own, exactly as Query never parses. q ANDs
+	// the same -q language onto the flagged set ("" = every flagged task);
+	// like Query it is all-or-nothing, so a refused q returns an error and
+	// no rows.
+	Revisit(q string) ([]Revisit, error)
+
 	// Add creates a task in the store and returns its id. Unlike the
 	// Persist* family this is NOT the record of an applied edit: the store
 	// owns id assignment, so the model waits for the id and re-reads instead
@@ -162,6 +176,20 @@ type Provider interface {
 	// closed or archived box leaves a removable edge behind, which is exactly
 	// the removal that matters.
 	EpicDepRm(id, dep string) error
+}
+
+// Revisit is one `furrow revisit --json` row: a task and why it surfaced.
+// Reasons keep furrow's order (`furrow vocab revisit-codes` for the codes).
+type Revisit struct {
+	ID      string
+	Reasons []RevisitReason
+}
+
+// RevisitReason is one revisit signal as furrow reports it: a code from the
+// closed vocabulary and its human detail.
+type RevisitReason struct {
+	Code   string
+	Detail string
 }
 
 // EpicAddOptions is a new box's inherited context — the same

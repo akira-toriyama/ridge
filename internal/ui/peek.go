@@ -163,7 +163,13 @@ func (m *Model) peekContent(w int) string {
 		}
 		b.WriteString(th.muted.Render(wrapJoin(parts, " · ", w)) + "\n")
 	}
-	stamps := fmt.Sprintf("updated %s · created %s", ago(t.Updated), t.Created.Format("2006-01-02"))
+	stamps := []string{"updated " + ago(t.Updated), "created " + t.Created.Format("2006-01-02")}
+	if !t.Reviewed.IsZero() {
+		// furrow's review clock, separate from updated on purpose (a review
+		// changes no content). Absent when never stamped: "reviewed never"
+		// would read as a nag on every task of a board that does not review.
+		stamps = append(stamps, "reviewed "+ago(t.Reviewed))
+	}
 	if !t.Due.IsZero() {
 		// Local: the instant furrow stores is UTC, and an evening-local due
 		// renders one day early if it is formatted in that zone.
@@ -175,7 +181,28 @@ func (m *Model) peekContent(w int) string {
 		}
 		b.WriteString(due + "\n")
 	}
-	b.WriteString(th.dim.Render(stamps) + "\n")
+	// wrapJoin like the meta lines: three stamps overflow a narrow peek.
+	b.WriteString(th.dim.Render(wrapJoin(stamps, " · ", w)) + "\n")
+	if why := m.revisitWhy[t.ID]; len(why) > 0 {
+		// The revisit lens's "why": furrow's own code and detail per signal,
+		// in its order. The card only shows that the task survived the lens;
+		// this line is where the reason lives.
+		parts := make([]string, 0, len(why))
+		for _, r := range why {
+			parts = append(parts, th.warn.Render(r.Code)+th.muted.Render(" "+r.Detail))
+		}
+		// The lead sits on the first line only; the wrap budget is what it
+		// leaves, and continuation lines indent under it — a lead prepended
+		// to an already-wrapped first line overran a narrow peek (measured).
+		lead := glyphRevisit + " revisit "
+		for i, l := range strings.Split(wrapJoin(parts, " · ", w-lg.Width(lead)), "\n") {
+			if i == 0 {
+				b.WriteString(th.warn.Render(lead) + l + "\n")
+			} else {
+				b.WriteString(strings.Repeat(" ", lg.Width(lead)) + l + "\n")
+			}
+		}
+	}
 
 	// --- dependencies: resolved, bidirectional, never raw ids ---------------
 	b.WriteString("\n" + sectionRule(th, "dependencies", w) + "\n")

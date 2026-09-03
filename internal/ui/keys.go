@@ -44,8 +44,18 @@ type keyMap struct {
 	Mouse      key.Binding
 	Check      key.Binding
 	OnlyBlock  key.Binding
-	Help       key.Binding
-	Quit       key.Binding
+	// Review stamps the selected task reviewed (`furrow review <id>`) — a
+	// WRITE, so lowercase like d/e/n/x/a. `i` because the letters the verb
+	// suggests are taken (`r` reload, `R` sync, `e` $EDITOR, `v` view) and
+	// `I` is unbound, so a missed shift does nothing at all.
+	Review key.Binding
+	// Revisit toggles the REVISIT LENS: the board narrowed to what `furrow
+	// revisit` flags, the peek naming why. A read, and a toggle over the
+	// visible set like OnlyBlock, so lowercase beside it; `f` is furrow's
+	// own word for the read ("worth a fresh look"), and `F` is unbound.
+	Revisit key.Binding
+	Help    key.Binding
+	Quit    key.Binding
 	// ForceQuit is ctrl+c alone — the escape hatch inside modal text inputs,
 	// where `q` must type. bubbletea v2's raw mode delivers ctrl+c as a
 	// normal keystroke, so every modal key handler must match this itself.
@@ -201,6 +211,8 @@ func defaultKeys() keyMap {
 		// `n` next to `e`: the light body path (one appended paragraph,
 		// `furrow note`'s contract) beside the heavy one ($EDITOR full open).
 		Note:      key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "append note")),
+		Review:    key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "stamp reviewed")),
+		Revisit:   key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "revisit lens (fresh look)")),
 		Check:     key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "toggle")),
 		Add:       key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add item")),
 		Slice:     key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "slice panel")),
@@ -283,8 +295,8 @@ func (k keyMap) HelpSections(enterEdits bool) []helpSection {
 	return []helpSection{
 		{"normal mode", [][]key.Binding{
 			{k.Up, k.Down, k.Left, k.Right, k.NextCol, k.PrevCol, k.Top, k.Bottom},
-			{open, k.QuickUp, k.QuickDown, k.LaneBack, k.LaneFwd, k.Done, k.Edit, k.Note, k.Add},
-			{k.Peek, k.Tree, k.PeekScroll, k.Filter, k.OnlyBlock, k.Slice, k.View, k.Sort, k.ViewTab, k.ViewSave},
+			{open, k.QuickUp, k.QuickDown, k.LaneBack, k.LaneFwd, k.Done, k.Edit, k.Note, k.Review, k.Add},
+			{k.Peek, k.Tree, k.PeekScroll, k.Filter, k.OnlyBlock, k.Revisit, k.Slice, k.View, k.Sort, k.ViewTab, k.ViewSave},
 			// Boxes was absent from this section for two releases: `E` worked
 			// while the one canonical key list denied it existed. Every
 			// full-screen view's opener belongs here — the section is "your

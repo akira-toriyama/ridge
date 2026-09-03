@@ -22,6 +22,7 @@ const (
 	glyphBlocked    = "x" // unsatisfied deps
 	glyphEpic       = "▤" // a container: a box, not work
 	glyphDone       = "v"
+	glyphRevisit    = "↻" // furrow revisit flagged this task: worth a fresh look
 	glyphOpen       = "o"
 	glyphUnknown    = "?" // a dep pointing at an id not on the board
 	glyphWIPOver    = "!" // over the (unenforced) WIP limit

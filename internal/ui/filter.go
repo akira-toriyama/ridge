@@ -30,6 +30,9 @@ type filterResultMsg struct {
 	seq int
 	ids []string
 	err error
+	// why is furrow's reason list per id, only when the verdict came from
+	// the revisit lens; nil for an ls -q verdict.
+	why map[string][]board.RevisitReason
 }
 
 // effectiveQuery is what the store is actually asked: the typed query AND
@@ -42,11 +45,18 @@ func (m *Model) effectiveQuery() string {
 	return m.qRaw
 }
 
+// lensOn reports whether SOMETHING narrows the board: a query (typed or
+// sliced) or the revisit lens. Every "is anything filtering" test reads this
+// rather than the query alone, because the lens narrows with an empty query.
+func (m *Model) lensOn() bool {
+	return m.effectiveQuery() != "" || m.revisitOn
+}
+
 // taskVisible is THE visibility predicate: every view (board columns, table
 // rows, graph nodes) must agree with it or the same query shows different
 // boards.
 func (m *Model) taskVisible(t *board.Task) bool {
-	if m.effectiveQuery() == "" || m.pinned[t.ID] {
+	if !m.lensOn() || m.pinned[t.ID] {
 		return true
 	}
 	if m.qMatched == nil {
@@ -62,7 +72,7 @@ func (m *Model) taskVisible(t *board.Task) bool {
 func (m *Model) applyFilter(s string) tea.Cmd {
 	prev := m.curTask()
 	m.qRaw = strings.TrimSpace(s)
-	if m.effectiveQuery() == "" {
+	if !m.lensOn() {
 		// Nothing is filtering any more (typed AND slice): jump pins have
 		// nothing to pin past. While a slice still narrows the board the
 		// pins stay — the slice paths clear their own (selectSlice).
@@ -77,15 +87,15 @@ func (m *Model) applyFilter(s string) tea.Cmd {
 func (m *Model) refire(prev *board.Task, debounce bool) tea.Cmd {
 	m.qSeq++ // fences off every in-flight tick and result
 	eq := m.effectiveQuery()
-	if eq == "" {
-		m.qMatched, m.qErr = nil, ""
+	if !m.lensOn() {
+		m.qMatched, m.qErr, m.revisitWhy = nil, "", nil
 		m.refilter(prev)
 		return nil
 	}
 	if !m.prov.Live() {
 		// The fixture evaluator is in-memory and instant: answer now, so
 		// -dump stays a single deterministic frame and tests need no loop.
-		m.onFilterResult(filterResultMsg{seq: m.qSeq}.evaluate(m.prov, eq))
+		m.onFilterResult(filterResultMsg{seq: m.qSeq}.evaluate(m.prov, eq, m.revisitOn))
 		return nil
 	}
 	if !debounce {
@@ -95,9 +105,25 @@ func (m *Model) refire(prev *board.Task, debounce bool) tea.Cmd {
 	return tea.Tick(filterDebounce, func(time.Time) tea.Msg { return filterTickMsg{seq: seq} })
 }
 
-// evaluate fills the msg with the provider's verdict, keeping the seq.
-func (msg filterResultMsg) evaluate(p board.Provider, raw string) filterResultMsg {
-	msg.ids, msg.err = p.Query(raw)
+// evaluate fills the msg with the provider's verdict, keeping the seq. With
+// the lens on the verdict is `revisit -q`'s: the flagged tasks that ALSO
+// match raw, reasons attached — furrow ANDs the two, so ridge never
+// intersects verdicts of its own.
+func (msg filterResultMsg) evaluate(p board.Provider, raw string, revisit bool) filterResultMsg {
+	if !revisit {
+		msg.ids, msg.err = p.Query(raw)
+		return msg
+	}
+	rows, err := p.Revisit(raw)
+	if err != nil {
+		msg.err = err
+		return msg
+	}
+	msg.why = make(map[string][]board.RevisitReason, len(rows))
+	for _, r := range rows {
+		msg.ids = append(msg.ids, r.ID)
+		msg.why[r.ID] = r.Reasons
+	}
 	return msg
 }
 
@@ -113,16 +139,16 @@ func (m *Model) onFilterTick(msg filterTickMsg) tea.Cmd {
 // requery re-runs the active query NOW, without the debounce — after a
 // reload the board changed under the matched set, so the verdict is stale.
 func (m *Model) requery() tea.Cmd {
-	if m.effectiveQuery() == "" {
+	if !m.lensOn() {
 		return nil
 	}
 	return m.refire(m.curTask(), false)
 }
 
 func (m *Model) queryCmd(seq int) tea.Cmd {
-	prov, raw := m.prov, m.effectiveQuery()
+	prov, raw, revisit := m.prov, m.effectiveQuery(), m.revisitOn
 	return func() tea.Msg {
-		return filterResultMsg{seq: seq}.evaluate(prov, raw)
+		return filterResultMsg{seq: seq}.evaluate(prov, raw, revisit)
 	}
 }
 
@@ -167,7 +193,22 @@ func (m *Model) applyVerdict(msg filterResultMsg) {
 		set[id] = true
 	}
 	m.qMatched = set
+	m.revisitWhy = msg.why
 	m.refilter(m.curTask())
+}
+
+// toggleRevisit is the `f` key. Turning the lens on re-asks the store at
+// once (a deliberate gesture, like a slice switch — no debounce); turning it
+// off drops the reasons and falls back to the query alone, or to no verdict
+// at all when nothing else narrows the board. The note says what the lens
+// shows only on the way in: on the way out the filter row's chip vanishes,
+// which is the same statement.
+func (m *Model) toggleRevisit() tea.Cmd {
+	m.revisitOn = !m.revisitOn
+	if m.revisitOn {
+		m.note("revisit lens on — only what furrow revisit flags; the peek says why")
+	}
+	return m.refire(m.curTask(), false)
 }
 
 // releaseHeldVerdict applies a verdict that landed mid-move — called on every

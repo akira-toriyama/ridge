@@ -42,6 +42,7 @@ func (p *liveQueryProvider) PersistDone(_ string) error                         
 func (p *liveQueryProvider) PersistCheck(_ string, _ int, _ bool) error         { return nil }
 func (p *liveQueryProvider) PersistBody(_, _ string) error                      { return nil }
 func (p *liveQueryProvider) PersistNote(_, _ string) error                      { return nil }
+func (p *liveQueryProvider) PersistReview(_ string) error                       { return nil }
 func (p *liveQueryProvider) PersistFields(_ string, _ board.FieldPatch) error   { return nil }
 func (p *liveQueryProvider) PersistCheckAdd(_, _ string) error                  { return nil }
 func (p *liveQueryProvider) PersistCheckRm(_ string, _ int) error               { return nil }
@@ -53,6 +54,22 @@ func (p *liveQueryProvider) EpicSet(string, board.EpicPatch) error              
 func (p *liveQueryProvider) EpicActivate(_, _ string) error                     { return nil }
 func (p *liveQueryProvider) EpicDepAdd(_, _ string) error                       { return nil }
 func (p *liveQueryProvider) EpicDepRm(_, _ string) error                        { return nil }
+
+// Revisit answers the same scripted ids, flagged, and logs the call under a
+// `revisit:` prefix so a test can tell which read the lens fired.
+func (p *liveQueryProvider) Revisit(q string) ([]board.Revisit, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.calls = append(p.calls, "revisit:"+q)
+	if p.err != nil {
+		return nil, p.err
+	}
+	rows := make([]board.Revisit, 0, len(p.ids))
+	for _, id := range p.ids {
+		rows = append(rows, board.Revisit{ID: id, Reasons: []board.RevisitReason{{Code: "stale", Detail: "scripted"}}})
+	}
+	return rows, nil
+}
 
 func (p *liveQueryProvider) EpicAdd(string, board.EpicAddOptions) (string, error) {
 	return "e-new", nil

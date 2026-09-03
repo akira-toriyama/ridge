@@ -296,6 +296,62 @@ func (p *Store) PersistNote(id, _ string) error {
 	return nil
 }
 
+// PersistReview validates the id and records nothing (board.Provider) — the
+// local apply (Board.Review) already stamped the same board.
+func (p *Store) PersistReview(id string) error {
+	if err := p.gate(); err != nil {
+		return err
+	}
+	if p.snapshot().Task(id) == nil {
+		return fmt.Errorf("unknown task %q", id)
+	}
+	return nil
+}
+
+// Revisit stands in for `furrow revisit -q` over the fixture (board.Provider):
+// the open tasks carrying at least one signal, reasons in furrow's order and
+// wording (core/revisit.go RevisitReasons, v5.0.0). Done-lane tasks are not
+// eligible — revisit lists the OPEN tasks worth a fresh judgment — and q is
+// the same fixture evaluator Query uses, refused the same way.
+func (p *Store) Revisit(q string) ([]board.Revisit, error) {
+	b := p.snapshot()
+	parsed := parseQuery(q, boardVocab(b))
+	if len(parsed.problems) > 0 {
+		return nil, fmt.Errorf("%s", strings.Join(parsed.problems, "; "))
+	}
+	g := board.NewGraph(b)
+	now := nowFn()
+	var out []board.Revisit
+	for _, t := range b.Tasks() {
+		if g.IsDone(t.ID) || !parsed.match(t, g) {
+			continue
+		}
+		var rs []board.RevisitReason
+		if len(t.Repos) == 0 {
+			rs = append(rs, board.RevisitReason{Code: "no_repo", Detail: "attached to no repo (draft)"})
+		}
+		if t.Value == 0 {
+			rs = append(rs, board.RevisitReason{Code: "value_unset", Detail: "value estimate missing"})
+		}
+		if t.Effort == 0 {
+			rs = append(rs, board.RevisitReason{Code: "effort_unset", Detail: "effort estimate missing"})
+		}
+		if isStale(t, now) {
+			days := int(now.Sub(t.Updated).Hours() / 24)
+			rs = append(rs, board.RevisitReason{Code: "stale", Detail: fmt.Sprintf("no update in %dd (threshold %dd)", days, staleDays)})
+		}
+		for _, dep := range t.Deps {
+			if g.IsDone(dep) {
+				rs = append(rs, board.RevisitReason{Code: "dep_done", Detail: fmt.Sprintf("dep %s is done", dep)})
+			}
+		}
+		if len(rs) > 0 {
+			out = append(out, board.Revisit{ID: t.ID, Reasons: rs})
+		}
+	}
+	return out, nil
+}
+
 // PersistCheckAdd validates the id and records nothing (board.Provider).
 func (p *Store) PersistCheckAdd(id, _ string) error {
 	if err := p.gate(); err != nil {

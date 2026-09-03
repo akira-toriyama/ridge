@@ -670,3 +670,79 @@ func TestContractRefEditsAndNoteAppend(t *testing.T) {
 		t.Errorf("updated did not advance across the note: %v (before %v)", got.Updated, before)
 	}
 }
+
+// `furrow review <id>` stamps `reviewed` and leaves `updated` alone — the
+// fact Board.Review mirrors. Second-precision stamps again, so the assertion
+// only means something across a real second.
+func TestContractReviewStampsReviewedNotUpdated(t *testing.T) {
+	p, dir := newLabProvider(t)
+	id := labAdd(t, dir, "見直し済みにする")
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	before := *p.Board().Task(id)
+	if !before.Reviewed.IsZero() {
+		t.Fatalf("a fresh task must start unreviewed, got %v", before.Reviewed)
+	}
+	time.Sleep(1100 * time.Millisecond)
+	if err := p.PersistReview(id); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	got := p.Board().Task(id)
+	if got.Reviewed.IsZero() || !got.Reviewed.After(before.Updated) {
+		t.Errorf("reviewed = %v, want a stamp after %v", got.Reviewed, before.Updated)
+	}
+	if !got.Updated.Equal(before.Updated) {
+		t.Errorf("updated moved %v -> %v across a review; a review changes no content", before.Updated, got.Updated)
+	}
+	if err := p.PersistReview("t-nope"); err == nil {
+		t.Error("reviewing a missing id was accepted")
+	}
+}
+
+// `furrow revisit --json` rows decode into ids + reasons; -q narrows on
+// furrow's side and a refused query comes back as an error with no rows.
+func TestContractRevisitCarriesFurrowsReasons(t *testing.T) {
+	p, dir := newLabProvider(t)
+	bare := labAdd(t, dir, "見積り無し")
+	sized := labAdd(t, dir, "見積り済み", "--value", "3", "--effort", "2", "-l", "sized")
+	blocker := labAdd(t, dir, "先に終わる方", "--value", "1", "--effort", "1")
+	lab(t, dir, "furrow", "done", blocker)
+	waiter := labAdd(t, dir, "終わった dep を持つ方", "--value", "2", "--effort", "2", "--dep", blocker)
+
+	rows, err := p.Revisit("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	by := map[string][]board.RevisitReason{}
+	for _, r := range rows {
+		by[r.ID] = r.Reasons
+	}
+	if rs := by[bare]; len(rs) != 2 || rs[0].Code != "value_unset" || rs[1].Code != "effort_unset" ||
+		rs[0].Detail != "value estimate missing" {
+		t.Errorf("%s reasons = %+v, want value_unset then effort_unset with furrow's detail", bare, rs)
+	}
+	if _, ok := by[sized]; ok {
+		t.Errorf("%s is sized and fresh; it must not surface", sized)
+	}
+	if rs := by[waiter]; len(rs) != 1 || rs[0].Code != "dep_done" || rs[0].Detail != "dep "+blocker+" is done" {
+		t.Errorf("%s reasons = %+v, want one dep_done naming %s", waiter, rs, blocker)
+	}
+	if _, ok := by[blocker]; ok {
+		t.Errorf("%s is done; revisit lists open tasks", blocker)
+	}
+
+	narrowed, err := p.Revisit("label:sized")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(narrowed) != 0 {
+		t.Errorf("-q label:sized must narrow to nothing (the sized task carries no signal), got %+v", narrowed)
+	}
+	if rows, err := p.Revisit("value:>"); err == nil || rows != nil {
+		t.Errorf("a half-typed query must be refused whole, got %d rows, err %v", len(rows), err)
+	}
+}
