@@ -60,8 +60,7 @@ func (m *Model) editCmd(t *board.Task) tea.Cmd {
 		ed = "vi"
 	}
 	id := t.ID
-	// Launching $EDITOR on our own temp file IS the feature (G204/G304).
-	return tea.ExecProcess(exec.Command(ed, path), func(runErr error) tea.Msg { //nolint:gosec
+	return tea.ExecProcess(exec.Command(ed, path), func(runErr error) tea.Msg { //nolint:gosec // G204: launching $EDITOR on our own temp file IS the feature
 		defer func() { _ = os.Remove(path) }()
 		if runErr != nil {
 			return editorDoneMsg{id: id, err: runErr}

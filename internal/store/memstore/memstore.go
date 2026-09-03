@@ -12,6 +12,7 @@ package memstore
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -528,20 +529,22 @@ func (p *Store) EpicSet(id string, patch board.EpicPatch) error {
 			e.Goal = *patch.Goal
 		}
 		for _, l := range patch.AddLabels {
-			if l != "" && !containsStr(e.Labels, l) {
+			if l != "" && !slices.Contains(e.Labels, l) {
 				e.Labels = append(e.Labels, l)
 			}
 		}
+		// In-place deletion is safe here and in EpicDone / EpicDepRm: editEpicSet
+		// hands the closure cloneEpics' fresh copies, never the served board's slices.
 		for _, l := range patch.RmLabels {
-			e.Labels = removeStr(e.Labels, l)
+			e.Labels = slices.DeleteFunc(e.Labels, func(s string) bool { return s == l })
 		}
 		for _, r := range patch.AddRepos {
-			if r != "" && !containsStr(e.Repos, r) {
+			if r != "" && !slices.Contains(e.Repos, r) {
 				e.Repos = append(e.Repos, r)
 			}
 		}
 		for _, r := range patch.RmRepos {
-			e.Repos = removeStr(e.Repos, r)
+			e.Repos = slices.DeleteFunc(e.Repos, func(s string) bool { return s == r })
 		}
 		for k, v := range patch.SetMeta {
 			if e.Meta == nil {
@@ -630,7 +633,7 @@ func (p *Store) EpicDone(id string) (board.EpicPrevious, error) {
 		epics[target].Closed = time.Now().UTC().Truncate(time.Second)
 		epics[target].Active = false
 		for i := range epics {
-			epics[i].OpenDeps = removeStr(epics[i].OpenDeps, id)
+			epics[i].OpenDeps = slices.DeleteFunc(epics[i].OpenDeps, func(s string) bool { return s == id })
 		}
 		return nil
 	})
@@ -651,10 +654,10 @@ func (p *Store) EpicReopen(id string) error {
 		}
 		epics[target].Closed = time.Time{}
 		for i := range epics {
-			if i == target || !containsStr(epics[i].Deps, id) {
+			if i == target || !slices.Contains(epics[i].Deps, id) {
 				continue
 			}
-			if !containsStr(epics[i].OpenDeps, id) {
+			if !slices.Contains(epics[i].OpenDeps, id) {
 				epics[i].OpenDeps = append(epics[i].OpenDeps, id)
 			}
 		}
@@ -689,13 +692,13 @@ func (p *Store) EpicDepAdd(id, dep string) error {
 		return fmt.Errorf("%s cannot wait on itself", id)
 	}
 	return p.editEpic(id, func(e *board.EpicInfo) error {
-		if !containsStr(e.Deps, dep) {
+		if !slices.Contains(e.Deps, dep) {
 			e.Deps = append(e.Deps, dep)
 		}
 		if de := p.b.Epic(dep); de != nil && !de.Closed.IsZero() {
 			return nil
 		}
-		if !containsStr(e.OpenDeps, dep) {
+		if !slices.Contains(e.OpenDeps, dep) {
 			e.OpenDeps = append(e.OpenDeps, dep)
 		}
 		return nil
@@ -711,38 +714,16 @@ func (p *Store) EpicDepRm(id, dep string) error {
 		return err
 	}
 	return p.editEpic(id, func(e *board.EpicInfo) error {
-		if !containsStr(e.Deps, dep) {
+		if !slices.Contains(e.Deps, dep) {
 			return fmt.Errorf("%q is not a dependency of %s", dep, id)
 		}
-		e.Deps = removeStr(e.Deps, dep)
+		e.Deps = slices.DeleteFunc(e.Deps, func(s string) bool { return s == dep })
 		// OpenDeps is furrow-derived and never recomputed here — but leaving a
 		// removed edge in it would make the →N readout count an edge that no
 		// longer exists, which is not "not recomputing", it is stale.
-		e.OpenDeps = removeStr(e.OpenDeps, dep)
+		e.OpenDeps = slices.DeleteFunc(e.OpenDeps, func(s string) bool { return s == dep })
 		return nil
 	})
-}
-
-func containsStr(hay []string, needle string) bool {
-	for _, h := range hay {
-		if h == needle {
-			return true
-		}
-	}
-	return false
-}
-
-// removeStr returns a NEW slice: the in-place compaction board.removeStr uses
-// is safe there because the caller owns the task, but here the slice may still
-// be reachable from a clone.
-func removeStr(hay []string, needle string) []string {
-	out := make([]string, 0, len(hay))
-	for _, h := range hay {
-		if h != needle {
-			out = append(out, h)
-		}
-	}
-	return out
 }
 
 // Add records a task and swaps in a board that contains it (board.Provider).

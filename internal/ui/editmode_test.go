@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -134,11 +135,11 @@ func TestEditLabelToggleRoundTrips(t *testing.T) {
 	}
 	m.edit.listIdx = idx
 	press(m, "x")
-	if containsStrUI(m.b.Task("t-9sa6").Labels, "bbq") {
+	if slices.Contains(m.b.Task("t-9sa6").Labels, "bbq") {
 		t.Error("toggling an owned label must remove it")
 	}
 	press(m, "x")
-	if !containsStrUI(m.b.Task("t-9sa6").Labels, "bbq") {
+	if !slices.Contains(m.b.Task("t-9sa6").Labels, "bbq") {
 		t.Error("toggling again must add it back")
 	}
 	drainPersists(m, t)

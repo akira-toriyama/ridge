@@ -7,6 +7,7 @@ package board
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -629,12 +630,12 @@ func (b *Board) SetFields(id string, p FieldPatch) error {
 		t.Effort = *p.Effort
 	}
 	for _, l := range p.AddLabels {
-		if l != "" && !containsStr(t.Labels, l) {
+		if l != "" && !slices.Contains(t.Labels, l) {
 			t.Labels = append(t.Labels, l)
 		}
 	}
 	for _, l := range p.RmLabels {
-		t.Labels = removeStr(t.Labels, l)
+		t.Labels = slices.DeleteFunc(t.Labels, func(s string) bool { return s == l })
 	}
 	if p.Epic != nil {
 		t.Epic = *p.Epic
@@ -646,23 +647,23 @@ func (b *Board) SetFields(id string, p FieldPatch) error {
 		t.Title = strings.TrimSpace(*p.Title)
 	}
 	for _, r := range p.AddRepos {
-		if r != "" && !containsStr(t.Repos, r) {
+		if r != "" && !slices.Contains(t.Repos, r) {
 			t.Repos = append(t.Repos, r)
 		}
 	}
 	for _, r := range p.RmRepos {
-		t.Repos = removeStr(t.Repos, r)
+		t.Repos = slices.DeleteFunc(t.Repos, func(s string) bool { return s == r })
 	}
 	// Append order preserved, add idempotent, rm exact-match — `furrow ref`'s
 	// contract (refs are a sequence, not a sorted set). Every add already
 	// passed the CSV-safety validation above, so nothing here narrows.
 	for _, r := range p.AddRefs {
-		if !containsStr(t.Refs, r) {
+		if !slices.Contains(t.Refs, r) {
 			t.Refs = append(t.Refs, r)
 		}
 	}
 	for _, r := range p.RmRefs {
-		t.Refs = removeStr(t.Refs, r)
+		t.Refs = slices.DeleteFunc(t.Refs, func(s string) bool { return s == r })
 	}
 	t.Updated = nowFn().UTC().Truncate(time.Second)
 	return nil
@@ -739,7 +740,7 @@ func (b *Board) DepAdd(id, dep string) error {
 	if dep == id {
 		return fmt.Errorf("%s cannot depend on itself", id)
 	}
-	if containsStr(t.Deps, dep) {
+	if slices.Contains(t.Deps, dep) {
 		return nil // idempotent, like furrow's own add
 	}
 	if b.depReaches(dep, id, map[string]bool{}) {
@@ -777,10 +778,10 @@ func (b *Board) DepRm(id, dep string) error {
 	if t == nil {
 		return fmt.Errorf("unknown task %q", id)
 	}
-	if !containsStr(t.Deps, dep) {
+	if !slices.Contains(t.Deps, dep) {
 		return fmt.Errorf("%s does not depend on %q", id, dep)
 	}
-	t.Deps = removeStr(t.Deps, dep)
+	t.Deps = slices.DeleteFunc(t.Deps, func(s string) bool { return s == dep })
 	t.Updated = nowFn().UTC().Truncate(time.Second)
 	return nil
 }
@@ -828,25 +829,6 @@ func (b *Board) CheckReword(id string, i int, text string) error {
 	t.Checklist[i].Text = text
 	t.Updated = nowFn().UTC().Truncate(time.Second)
 	return nil
-}
-
-func containsStr(hay []string, needle string) bool {
-	for _, h := range hay {
-		if h == needle {
-			return true
-		}
-	}
-	return false
-}
-
-func removeStr(hay []string, needle string) []string {
-	out := hay[:0]
-	for _, h := range hay {
-		if h != needle {
-			out = append(out, h)
-		}
-	}
-	return out
 }
 
 // Append adds an externally-created task to the snapshot (the mock store's

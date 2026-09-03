@@ -1,6 +1,7 @@
 package memstore
 
 import (
+	"slices"
 	"sync"
 	"testing"
 
@@ -45,9 +46,9 @@ func TestEpicSetAppliesTheStoredFieldsOnly(t *testing.T) {
 		t.Errorf("goal = %q, want %q", got.Goal, goal)
 	case !got.Standing:
 		t.Error("standing did not land")
-	case !containsStr(got.Labels, "onsen") || containsStr(got.Labels, "gear"):
+	case !slices.Contains(got.Labels, "onsen") || slices.Contains(got.Labels, "gear"):
 		t.Errorf("labels = %v, want [onsen]", got.Labels)
-	case !containsStr(got.Repos, "tomo/joubisai") || !containsStr(got.Repos, "tomo/kyushu-trip"):
+	case !slices.Contains(got.Repos, "tomo/joubisai") || !slices.Contains(got.Repos, "tomo/kyushu-trip"):
 		t.Errorf("repos = %v, want both", got.Repos)
 	case got.Meta["origin"] != "上書き" || got.Meta["new"] != "値":
 		t.Errorf("meta = %v", got.Meta)
@@ -151,10 +152,10 @@ func TestEpicDepAddAndRm(t *testing.T) {
 		t.Fatalf("dep add onto a closed box: %v", err)
 	}
 	box := fixtureBox(t, p, "e-9wtv")
-	if !containsStr(box.Deps, "e-2b7h") {
+	if !slices.Contains(box.Deps, "e-2b7h") {
 		t.Errorf("deps = %v, want the closed edge recorded", box.Deps)
 	}
-	if containsStr(box.OpenDeps, "e-2b7h") {
+	if slices.Contains(box.OpenDeps, "e-2b7h") {
 		t.Errorf("open deps = %v, want the closed edge absent — it waits on nothing", box.OpenDeps)
 	}
 
@@ -165,7 +166,7 @@ func TestEpicDepAddAndRm(t *testing.T) {
 	if err := p.EpicDepRm("e-c4mt", "e-x0k9"); err != nil {
 		t.Fatalf("removing a dangling epic dep: %v", err)
 	}
-	if got := fixtureBox(t, p, "e-c4mt").Deps; containsStr(got, "e-x0k9") {
+	if got := fixtureBox(t, p, "e-c4mt").Deps; slices.Contains(got, "e-x0k9") {
 		t.Errorf("deps = %v, want e-x0k9 gone", got)
 	}
 	if err := p.EpicDepRm("e-c4mt", "e-x0k9"); err == nil {
@@ -268,7 +269,7 @@ func TestConcurrentEpicSetsDoNotLoseAnEdit(t *testing.T) {
 
 	got := fixtureBox(t, p, "e-9wtv")
 	for _, l := range labels {
-		if !containsStr(got.Labels, l) {
+		if !slices.Contains(got.Labels, l) {
 			t.Errorf("label %q was lost: labels = %v", l, got.Labels)
 		}
 	}
@@ -324,7 +325,7 @@ func TestEpicWriteDoesNotRaceWithAReader(t *testing.T) {
 // readout must not count an edge that is no longer waiting.
 func TestEpicDoneClosesTheBoxAndSettlesTheWaitsOnIt(t *testing.T) {
 	p := New()
-	if got := fixtureBox(t, p, "e-c4mt").OpenDeps; !containsStr(got, "e-fw2m") {
+	if got := fixtureBox(t, p, "e-c4mt").OpenDeps; !slices.Contains(got, "e-fw2m") {
 		t.Fatalf("the fixture must start with e-c4mt waiting on e-fw2m, got %v", got)
 	}
 	if !fixtureBox(t, p, "e-fw2m").Active {
@@ -345,7 +346,7 @@ func TestEpicDoneClosesTheBoxAndSettlesTheWaitsOnIt(t *testing.T) {
 	if box.Active {
 		t.Error("done must vacate the active slot; closed AND active is a board furrow cannot produce")
 	}
-	if got := fixtureBox(t, p, "e-c4mt").OpenDeps; containsStr(got, "e-fw2m") {
+	if got := fixtureBox(t, p, "e-c4mt").OpenDeps; slices.Contains(got, "e-fw2m") {
 		t.Errorf("open deps = %v, want the wait on the just-closed box settled", got)
 	}
 	// And it leaves the default population, without leaving the board.
@@ -377,7 +378,7 @@ func TestEpicReopenRevivesTheBoxButNotItsSlot(t *testing.T) {
 	if box.Active {
 		t.Error("reopen must leave the box INACTIVE — furrow never chains the two")
 	}
-	if got := fixtureBox(t, p, "e-c4mt").OpenDeps; !containsStr(got, "e-fw2m") {
+	if got := fixtureBox(t, p, "e-c4mt").OpenDeps; !slices.Contains(got, "e-fw2m") {
 		t.Errorf("open deps = %v, want the wait on the reopened box back", got)
 	}
 	if p.Board().Epic("e-2b7h") == nil {

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -102,7 +103,7 @@ func TestQuickAddInheritsTheFilterContext(t *testing.T) {
 	if cur == nil || cur.Title != "フィルタ文脈つき" {
 		t.Fatalf("selection = %+v", cur)
 	}
-	if !containsStrUI(cur.Labels, "bbq") {
+	if !slices.Contains(cur.Labels, "bbq") {
 		t.Errorf("labels = %v, want the inherited bbq", cur.Labels)
 	}
 	// The new card must be under the cursor even though... it MATCHES here;

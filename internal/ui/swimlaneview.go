@@ -2,6 +2,8 @@ package ui
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -131,7 +133,7 @@ func (m *Model) swimVocab() []swimValue {
 				stray[t.Epic] = true
 			}
 		}
-		for _, id := range sortedKeys(stray) {
+		for _, id := range slices.Sorted(maps.Keys(stray)) {
 			out = append(out, swimValue{Key: id, Label: id})
 		}
 	}

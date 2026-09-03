@@ -71,9 +71,7 @@ func (c *furrowClient) execute(op string, timeout time.Duration, stdin []byte, a
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	// Executing the furrow binary with composed args IS the feature: ridge is
-	// a CLI/JSON client by contract (G204).
-	cmd := exec.CommandContext(ctx, c.bin, args...) //nolint:gosec
+	cmd := exec.CommandContext(ctx, c.bin, args...) //nolint:gosec // G204: executing furrow with composed args IS the feature — ridge is a CLI/JSON client by contract
 	cmd.Dir = c.dir
 	if stdin != nil {
 		cmd.Stdin = bytes.NewReader(stdin)

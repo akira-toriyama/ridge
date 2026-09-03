@@ -200,7 +200,7 @@ func TestContractEpicActivateHoldsOneSlotPerRepo(t *testing.T) {
 	// box's own body as the activation record, which is what keeps a switch
 	// visible to the next session. Dropping the flag rode the suite green.
 	// The path is this test's own t.TempDir() plus an id furrow just minted (G304).
-	body, err := os.ReadFile(filepath.Join(dir, ".furrow", "bodies", first+".md")) //nolint:gosec
+	body, err := os.ReadFile(filepath.Join(dir, ".furrow", "bodies", first+".md")) //nolint:gosec // G304: the test's own tempdir
 	if err != nil {
 		t.Fatalf("reading %s's body: %v", first, err)
 	}
