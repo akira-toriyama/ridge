@@ -248,17 +248,44 @@ func TestRevisitOffDropsReasonsAndPins(t *testing.T) {
 		t.Fatalf("why = %v, want the scripted reason for a", m.revisitWhy)
 	}
 	m.pinned["b"] = true // a jump past the lens
+
+	// Half one: with a typed query still narrowing the board, lens-off
+	// re-queries `ls -q`, the store REFUSES, and applyVerdict keeps the last
+	// good verdict — the path that stranded the reasons. Without the query
+	// refire's own short-circuit would nil them and the assertion would pass
+	// for the wrong reason (found by review).
+	m.applyFilter("is:blocked")
 	p.err = errors.New("furrow: unknown qualifier")
 	c = pressKey(m, 'f')
-	if c != nil {
-		m.Update(c())
+	if c == nil {
+		t.Fatal("lens-off under a query must re-ask the store")
 	}
-	if m.revisitOn || m.revisitWhy != nil || len(m.pinned) != 0 {
-		t.Errorf("after f off: on=%v why=%v pinned=%v — the lens must tear down whole", m.revisitOn, m.revisitWhy, m.pinned)
+	m.Update(c())
+	if m.revisitOn || m.revisitWhy != nil || m.qErr == "" {
+		t.Errorf("after f off under a refused query: on=%v why=%v qErr=%q — the reasons must go, the refusal must show",
+			m.revisitOn, m.revisitWhy, m.qErr)
+	}
+	if !m.pinned["b"] {
+		t.Error("the query still narrows the board, so the jump pin must survive (applyFilter's rule)")
 	}
 	m.peekOpen = true
 	if out := ansiStrip(m.peekContent(60)); strings.Contains(out, glyphRevisit) {
 		t.Errorf("the peek still shows a reason line with the lens off:\n%s", out)
+	}
+
+	// Half two: with nothing else narrowing, lens-off drops the pins too.
+	p.err = nil
+	m.applyFilter("")
+	c = pressKey(m, 'f')
+	if c != nil {
+		m.Update(c())
+	}
+	m.pinned["b"] = true
+	if c = pressKey(m, 'f'); c != nil {
+		m.Update(c())
+	}
+	if m.revisitOn || len(m.pinned) != 0 {
+		t.Errorf("after f off with no query: on=%v pinned=%v — nothing narrows, so the pins must go", m.revisitOn, m.pinned)
 	}
 }
 
