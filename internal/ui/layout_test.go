@@ -88,10 +88,21 @@ func TestCardTitleIsCapped(t *testing.T) {
 
 func boardModel(t *testing.T, w, h int) *Model {
 	t.Helper()
+	m := logicModel(t, w, h)
+	m.relayout()
+	return m
+}
+
+// logicModel is boardModel without the layout pass, for tests that only
+// exercise the board/column logic (commitMove, cursor arithmetic) and never
+// read m.lay. relayout is 97% of boardModel's cost (measured: 1.90ms of
+// 1.96ms), and a test that builds 1,361 models paid 39s of a 141s -race run
+// for layouts it never looked at.
+func logicModel(t *testing.T, w, h int) *Model {
+	t.Helper()
 	m := New(memstore.New(), Options{})
 	m.w, m.h = w, h
 	m.recompute()
-	m.relayout()
 	return m
 }
 

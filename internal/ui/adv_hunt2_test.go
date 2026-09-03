@@ -70,14 +70,16 @@ func TestAdvMoveArithmeticAgainstAReference(t *testing.T) {
 	lanes := []string{"inbox", "backlog", "ready", "in-progress", "done", "icebox"}
 	for _, from := range lanes {
 		for _, to := range lanes {
-			base := boardModel(t, 140, 40)
+			// logicModel: this loop reads m.cols and commits moves; it never
+			// touches m.lay, and 1,361 layouts cost 39s under -race.
+			base := logicModel(t, 140, 40)
 			src := base.cols[from]
 			if len(src) == 0 {
 				continue
 			}
 			for fi := range src {
 				for di := 0; di <= len(base.cols[to]); di++ {
-					m := boardModel(t, 140, 40)
+					m := logicModel(t, 140, 40)
 					id := m.cols[from][fi].ID
 					before := map[string][]string{}
 					for _, l := range lanes {
