@@ -3,6 +3,11 @@
 // .furrow store. The board the model mutates IS the store, so every persist
 // is a validated no-op — which is exactly what keeps tests, -dump and -demo
 // deterministic.
+//
+// query.go's -q evaluator is an approximation of furrow's grammar for THIS
+// package's consumers only: -dump, -demo and tests. Nothing outside the
+// fixture path may depend on it — the grammar's one definition is furrow's,
+// and the live store passes the string through untouched (furrowstore.Query).
 package memstore
 
 import (

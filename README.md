@@ -21,10 +21,12 @@ go run ./cmd/ridge -benchload # 実盤面の読み込みレイテンシを実測
 このリポジトリは、2026-07-20〜21 に furrow の
 [`poc/tui-bubbletea-v2`](https://github.com/akira-toriyama/furrow/tree/poc/tui-bubbletea-v2)
 ブランチで行った実現可能性検証のコードを出発点にしている。t-s86r で実 furrow に
-接続した: 読みは `board` / `ls -r ''` / `epic ls --all` の並列 3 exec + body ファイル
-（実測 63-77ms / 914 tasks・cold 181ms）、書きは**楽観的キュー** — 盤面へ先に適用し、
-`furrow set/done/check` を裏で直列に流し、失敗したら store 再読で巻き戻す
-（書き実測 85-115ms・respace 時 280ms が根拠。`internal/ui/persist.go`）。
+接続した: 読みは `board --json` / `ls -r '' --json` / `epic ls -r '' --all --json` の
+並列 3 exec + body ファイル（レイテンシは `-benchload` が実盤面で測る — 値をここに
+写すと古くなる）、書きは**楽観的キュー** — 盤面へ先に適用し、`furrow set / done /
+check / retitle / repo / ref / dep / note / review / edit --body` を裏で直列に流し、
+失敗したら store 再読で巻き戻す（`internal/ui/persist.go`。書き込みの一覧は
+`internal/board/provider.go` の Persist* が正本）。
 例外は **store-first** の書き込み（quick add と epic 管理）: 何を意味するかが
 furrow 側にあるもの（id 発行・repo ごとの active 枠・導出値）は盤面に先取り適用せず、
 着地後の再読で収束させる。
@@ -94,9 +96,9 @@ POC が答えを出した3つの問い:
 
 **制約が入れ替わるのが左右版の勘所**。上下では幅が与えられて行数を交渉するが、
 左右では高さが与えられて**幅**を交渉する — 240桁に階層をいくつ並べられるかが
-箱の幅を決める。実データの ego graph は最長でも6段（最長鎖が5辺）で、6段 ×
-下限幅がちょうど240桁に収まる。それを超える盤面では**入り切らない段を落として
-ヘッダで件数を出す**（`z` で radius を狭められる）— 右端で黙って切らない。
+箱の幅を決める。設計時（2026-08）の実データの ego graph は最長で6段（最長鎖が5辺）
+で、6段 × 下限幅がちょうど240桁に収まる。それを超える盤面では**入り切らない段を
+落としてヘッダで件数を出す**（`z` で radius を狭められる）— 右端で黙って切らない。
 
 ### Map — 依存マップ
 
@@ -137,27 +139,28 @@ POC が答えを出した3つの問い:
 `Space` で開く。解決済みの双方向依存リスト（`blocked by` / `blocks` を
 ID+タイトル+レーンまで解決）、チェックリスト、本文。`t` で推移的ツリー。
 `Enter` で**フィールド編集メニュー**: title / value / effort / labels / epic /
-due / deps / repos / checklist（カーソルで項目選択・toggle/add/delete/reword）を
-`furrow set / retitle / repo / check / dep` 相当の1書き込みで編集する（楽観的適用・
-失敗時は store 再読でロールバック）。
+due / deps / repos / refs / checklist（カーソルで項目選択・toggle/add/delete/reword）を
+`furrow set / retitle / repo / ref / check / dep` 相当で編集する（set 形の項目は
+1 書き込みに合成、title / repo / ref は各自のコマンドなので混在 patch は最大 4 書き込み
+— UI は 1 ジェスチャ 1 項目なので実際は 1。楽観的適用・失敗時は store 再読でロールバック）。
 
 ### Boxes — 箱の俯瞰
 
 `E`。**盤面の epic を全部、repo 別に並べる**。Graph / Map が task の依存を
 答えるのに対し、これは「どの repo が今どの箱で作業しているか」を答える。
 
-**graph にしないのは実測が理由。** 2026-08-28 の実盤面は箱 153 個
-（open 117 / closed 36）に対し epic 間の dep edge が **4 本**（2 箱）しか無い。
-ego graph も連結成分も、149 個の孤立ノードを並べて本体を埋めるだけになる。
-4 本は Map と同じ `←id` インライン tag で足りる。repo で括るのは、全箱が持つ
-唯一の軸だから（実盤面で repo 無しは 0・repo は 31）— そして furrow が repo
+**graph にしないのは実測が理由。** 実盤面は箱 150 余りに対し epic 間の dep edge が
+**一桁**しか無い（2026-08-28: 153 箱に 4 本 / 2026-09-03: 163 箱に 5 本）。
+ego graph も連結成分も、孤立ノードを並べて本体を埋めるだけになる。
+数本は Map と同じ `←id` インライン tag で足りる。repo で括るのは、全箱が持つ
+唯一の軸だから（実盤面で repo 無しは 0）— そして furrow が repo
 あたり active を1つに制限するので、`▶` が縦に読むだけでチェックリストになる。
 
 `⏎` は**新しい絞り込み機構を作らず**、slice パネルと同じ `epic:<id>` term を
 発行して盤面に戻る（closed な箱でも効く）。`m` でその箱のオーバーレイ、
 `z` で closed 込み、`^u/^d` でページ。
 
-実測の詰まり方（153 箱 / 31 repo）: 240桁 = 4カラム×58セル、320桁 = 6×51、
+詰まり方の実測（2026-08-28 の盤面）: 240桁 = 4カラム×58セル、320桁 = 6×51、
 400桁 = 6×64。
 
 ### Roadmap — due タイムライン
@@ -187,15 +190,15 @@ due 昇順に並べ、横軸 = 時間に `◆` を置く**。「何がいつ切�
 その `--tree` に合わせて **box**（`tab` で repo / label へ）。
 
 - **帯は既定で畳んである。** 畳んだ帯 = 1 行で、各レーン列にその帯の件数が並ぶ
-  — つまりフレームは盤面全体のヒストグラム（実盤面の epic 軸は 56 箱 + 値無しの
-  1 帯 = 57 行で、296 タスクではない）。`space` で開くとその帯のタスクが同じ
+  — つまりフレームは盤面全体のヒストグラム（実盤面の epic 軸は「箱の数 + 値無しの
+  1 帯」の行数で、open タスク数の 1/5 程度）。`space` で開くとその帯のタスクが同じ
   レーン列に落ちる。**`W` で開いたときだけ**、盤面のカーソルが居た帯を 1 つ開いて
   そのカードを選ぶ（開いた先が「今どこに居るか」を答えるため。その 1 帯以外は畳んだまま）
 - **帯ヘッダは畳んでも開いても同一**（印だけが `[+]`/`[-]`）。畳むたびに数字が
   動いたら、縦に読んでいるヒストグラムが比較にならない
 - 値を持たないタスクは**最後の1帯**にまとまる（`(unfiled — no box)` /
-  `(draft — no repo)` / `(no label)`）。実盤面では unfiled が open 296 件中 119 件
-  で、落とすと盤面の4割が「どこにも無い」ことになる
+  `(draft — no repo)` / `(no label)`）。実盤面では unfiled が open の 4 割弱
+  （2026-09-03: 313 件中 118 件）で、落とすと盤面の4割が「どこにも無い」ことになる
 - 2つの repo / label を持つタスクは**両方の帯に出る**（片方から消すとその帯が
   黙って不完全になる — 箱の俯瞰と同じ規則）。レーン列上部の件数は**タスク数**、
   帯の件数の合計は**配置数**で、両者が食い違うときだけ header が `N placements`
@@ -250,8 +253,8 @@ slice = "epic:e-xxxx" # repo|label|epic :値（slice パネルの選択と同じ
   単位で clamp して status line に警告する。symlink の views.toml へは
   link を貫通して書く（dotfiles 管理を壊さない）。
 - fixture 系（`-mock` / `-dump` / `-readonly`）は実 views.toml を読まず書けない。
-  headless 検証面は `-demo views`（table + 未保存ドット）と `-demo viewsroad`
-  （roadmap タブ）。
+  headless 検証面は `-demo views`（table + 未保存ドット）/ `-demo viewsroad`
+  （roadmap タブ）/ `-demo viewsmany`（タブ帯の詰まり）。
 
 ## キー
 

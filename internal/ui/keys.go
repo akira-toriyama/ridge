@@ -4,7 +4,7 @@ import (
 	"charm.land/bubbles/v2/key"
 )
 
-// keyMap is the whole keyboard surface. Every mouse gesture in this POC has an
+// keyMap is the whole keyboard surface. Every mouse gesture has an
 // entry here — that is a hard rule, not a nicety: a terminal user may be on a
 // mouse-less tmux, and drag-and-drop is the bonus, not the contract.
 //
