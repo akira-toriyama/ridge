@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/akira-toriyama/ridge/internal/board"
@@ -253,4 +254,25 @@ func (m *Model) refilter(prev *board.Task) {
 	if prev != nil {
 		m.selectID(prev.ID, false)
 	}
+}
+
+func (m *Model) onFilterKey(msg tea.KeyPressMsg) tea.Cmd {
+	switch {
+	case key.Matches(msg, m.keys.ForceQuit):
+		// `q` types into the filter; ctrl+c stays a way out (raw mode hands
+		// it to us as an ordinary keystroke — nobody else will quit for us).
+		return m.quitOrFlush()
+	case key.Matches(msg, m.keys.Cancel):
+		m.mode = modeNormal
+		m.ti.Blur()
+		m.ti.SetValue(m.qRaw) // discard the in-progress edit; the verdict is current
+		return nil
+	case key.Matches(msg, m.keys.Commit):
+		m.mode = modeNormal
+		m.ti.Blur()
+		return m.applyFilter(m.ti.Value())
+	}
+	var c tea.Cmd
+	m.ti, c = m.ti.Update(msg)
+	return tea.Batch(c, m.applyFilter(m.ti.Value())) // live filtering as you type
 }
