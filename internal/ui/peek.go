@@ -163,7 +163,11 @@ func (m *Model) peekContent(w int) string {
 		}
 		b.WriteString(th.muted.Render(wrapJoin(parts, " · ", w)) + "\n")
 	}
-	stamps := []string{"updated " + ago(t.Updated), "created " + t.Created.Format("2006-01-02")}
+	// Every date in this panel is the LOCAL day: created is a UTC instant off
+	// furrow's JSON exactly like due, and dating one locally and the other in
+	// UTC put "due 09-02" and "created 09-01" on the same panel for one
+	// instant (measured at UTC+9).
+	stamps := []string{"updated " + ago(t.Updated), "created " + t.Created.In(localZone()).Format("2006-01-02")}
 	if !t.Reviewed.IsZero() {
 		// furrow's review clock, separate from updated on purpose (a review
 		// changes no content). Absent when never stamped: "reviewed never"
@@ -428,5 +432,5 @@ func ago(t time.Time) string {
 	case d < 90*24*time.Hour:
 		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
 	}
-	return t.Format("2006-01-02")
+	return t.In(localZone()).Format("2006-01-02")
 }

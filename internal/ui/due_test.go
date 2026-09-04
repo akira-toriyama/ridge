@@ -80,3 +80,30 @@ func TestEditDueAcceptsFurrowsOffsetForms(t *testing.T) {
 		})
 	}
 }
+
+// The same instant, every stamp on the panel: created and the ago() fallback
+// date the LOCAL day exactly like due does. One instant, 2026-09-01T23:00Z, is
+// 09-02 at UTC+9; a panel that said "due 09-02" beside "created 09-01" for it
+// was measured before this test existed.
+func TestPeekDatesCreatedAndOldUpdatedOnTheLocalDay(t *testing.T) {
+	fixedZone(t, "TEST", 9)
+	// 200 days on, so ago() takes its date fallback instead of "Nd ago".
+	fixedNow(t, eveningDue().Add(200*24*time.Hour))
+	b := board.NewBoard([]*board.Task{
+		{ID: "a", Status: "ready", Title: "promise", Created: eveningDue(), Updated: eveningDue()},
+	})
+	m := New(memstore.NewWith(b), Options{})
+	m.w, m.h = 120, 30
+	m.peekOpen = true
+	m.recompute()
+	out := ansiStrip(m.peekContent(60))
+
+	for _, want := range []string{"created 2026-09-02", "updated 2026-09-02"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the peek must date %q by its LOCAL day:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "2026-09-01") {
+		t.Errorf("a stamp was dated in UTC, one day early:\n%s", out)
+	}
+}
