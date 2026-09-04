@@ -611,7 +611,7 @@ func (m *Model) renderGraphNode(n *egoNode, w, titleLines int) string {
 	if t.Value > 0 || t.Effort > 0 {
 		bits = append(bits, th.muted.Render(fmt.Sprintf("v%d e%d", t.Value, t.Effort)))
 	}
-	if nb := len(m.g.BlockedBy(t.ID)); nb > 0 {
+	if nb := len(m.g.OpenBlockedBy(t.ID)); nb > 0 {
 		bits = append(bits, th.danger.Render(fmt.Sprintf("%s%d blocked", glyphBlocked, nb)))
 	}
 	if m.g.Actionable(t.ID) {
