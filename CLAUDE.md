@@ -1,115 +1,132 @@
 # ridge — repo conventions for Claude Code
 
-用語は [glossary.md](glossary.md) が正本（追加・改名はコード変更と同一 PR）。
-何のリポジトリかは [README.md](README.md)。
+Terms are canonical in [glossary.md](glossary.md) (add or rename a term in the
+same PR as the code change). What this repository is: [README.md](README.md).
 
-## この repo の立ち位置（最初に読む）
+## Where this repo stands (read first)
 
-- **ridge は furrow の CLI/JSON クライアント。** furrow の Go パッケージを
-  **import しない**。これは好みではなく
-  [furrow の non-goals](https://github.com/akira-toriyama/furrow/blob/main/docs/non-goals.md)
-  に書かれた建て付けで、GUI 版の [vista](https://github.com/akira-toriyama/vista)
-  も同じ契約に従っている。
-- **ロジックの正本は furrow 一本。** 「ridge に書くと vista にも同じものが要るか？」
-  で迷ったら furrow へ PR。判断規範は furrow ボード `t-ehk7` の
-  「仮に TUI を作るならロジックが冗長になるか」。ridge はその規範が予言した
-  2人目の消費者であり、**front-end 側に業務ロジックを溜めない**のが本 repo の
-  存在意義に直結する。
-- **タスク管理は furrow**（`repos: akira-toriyama/ridge`）。GitHub issue は使わない。
+- **ridge is a CLI/JSON client of furrow.** It does **not import** furrow's Go
+  packages. That is not taste but the arrangement written down in
+  [furrow's non-goals](https://github.com/akira-toriyama/furrow/blob/main/docs/non-goals.md);
+  the GUI sibling [vista](https://github.com/akira-toriyama/vista) follows the
+  same contract.
+- **Logic has one home: furrow.** When torn over "if I write this in ridge,
+  does vista need the same thing?", send a PR to furrow instead. The rule of
+  thumb is furrow board `t-ehk7`: "would the logic be duplicated if someone
+  built a TUI?". ridge is the second consumer that rule predicted, and
+  **keeping business logic out of the front-end** is the reason this repo
+  exists at all.
+- **Task management lives in furrow** (`repos: akira-toriyama/ridge`). GitHub
+  issues are not used.
 
 ## Go
 
-- `go build ./...` / `go test ./...` が通ることを終了前に確認する。
-  `GOTOOLCHAIN=local`（go.mod の版が正本）。
-- house style は go-dev skill に従う（薄い main + `internal/`、typed exit code、
-  stdlib のみのテスト）。構成: `cmd/ridge`（3行 main）/ `internal/cli`（flag・
-  exit code）/ `internal/board`（純粋 core + Provider port）/
-  `internal/store/{furrowstore,memstore}`（adapter）/ `internal/ui`（TUI 全部）/
-  `internal/views`（保存ビューの on-disk 語彙と views.toml I/O — ridge が書く唯一のファイル）。
-  filter は furrow `-q` パススルー — ridge 側に query 文法を持たない
-  （memstore の近似 evaluator は -dump/テスト専用）。層契約は各 package 冒頭の doc comment が正本。
-- テストは stdlib のみ（testify を入れない）。
+- Confirm `go build ./...` / `go test ./...` pass before finishing.
+  `GOTOOLCHAIN=local` (go.mod's version is canonical).
+- House style follows the go-dev skill (thin main + `internal/`, typed exit
+  codes, stdlib-only tests). Layout: `cmd/ridge` (a three-line main) /
+  `internal/cli` (flags, exit codes) / `internal/board` (pure core + the
+  Provider port) / `internal/store/{furrowstore,memstore}` (adapters) /
+  `internal/ui` (the whole TUI) / `internal/views` (the saved views' on-disk
+  vocabulary and views.toml I/O — the one file ridge writes).
+  The filter is a furrow `-q` pass-through — ridge holds no query grammar
+  (memstore's approximate evaluator is for -dump and tests only). Layer
+  contracts are canonical in each package's head doc comment.
+- Tests use the stdlib only (no testify).
 
-## bubbletea v2 の罠（既知・再発見しないこと）
+## bubbletea v2 gotchas (known — do not rediscover)
 
-v1 から大きく変わっている。以下は実際に踏んで確認済み:
+Much changed from v1. Each of these was hit and confirmed:
 
-- **`View()` は `tea.View` 構造体を返す**（v1 は string）。`AltScreen` /
-  `MouseMode` / `KeyboardEnhancements` は **毎フレーム宣言し直すフィールド**で、
-  `NewProgram` のオプションではない。
-- **`case tea.KeyPressMsg:` を使う。** `tea.KeyMsg` は press と release 両方に
-  マッチする interface なので、type switch では `KeyPressMsg` より**後ろ**に
-  置かないと押下を飲み込む。
-- **`key.WithKeys("space")`**、`" "` ではない。**コンパイルエラーにならず黙って
-  効かなくなる。**
-- **`Shift+Space` は素の端末に届かない。** スペースは**テキストとして**送られ、
-  テキストは修飾子を持たない。`View.KeyboardEnhancements` の
-  `ReportAllKeysAsEscapeCodes`（Kitty プロトコル）を立てて初めて区別できる。
-  非対応端末があるので、**修飾キー付きジェスチャには必ず素キーの別名を用意する**
-  （グラフなら `S`）。
-- **マウス**: `MouseModeCellMotion`（1002+1006）を使う。`AllMotion`（1003）は
-  tmux/mosh でのサポートが悪く、ドラッグには不要。**ボタンは直前の
-  `MouseClickMsg` から自分で覚える** — motion イベントのボタンを報告しない端末が
-  ある。
-- **`bubbles/v2` にマウス対応はほぼ無い**（viewport のホイールのみ）。list/table は
-  ゼロ。ドラッグもヒットテストも自前。
-- **`lipgloss/v2` のコンポジタを使う**: `Layer` の X/Y/**Z** と
-  `Compositor.Hit(x,y)`。ゴースト・オーバーレイ・当たり判定がネイティブ。
-  **`bubblezone` は使わない**（作者が v2 コンポジタと併用不可と警告している）。
-- `lipgloss` v2 から `AdaptiveColor` が消えた。`DefaultStyles` 系は
-  `isDark bool` を取る。
+- **`View()` returns a `tea.View` struct** (v1: string). `AltScreen` /
+  `MouseMode` / `KeyboardEnhancements` are **fields re-declared every frame**,
+  not `NewProgram` options.
+- **Use `case tea.KeyPressMsg:`.** `tea.KeyMsg` is an interface matching both
+  press and release, so in a type switch it must come **after** `KeyPressMsg`
+  or it swallows the press.
+- **`key.WithKeys("space")`**, not `" "`. **No compile error — it silently
+  stops working.**
+- **`Shift+Space` never reaches a plain terminal.** Space is sent **as text**,
+  and text carries no modifiers. Only with `ReportAllKeysAsEscapeCodes` in
+  `View.KeyboardEnhancements` (the Kitty protocol) can the two be told apart.
+  Some terminals do not support it, so **every modifier gesture needs a
+  bare-key alias** (`S` for the graph).
+- **Mouse**: use `MouseModeCellMotion` (1002+1006). `AllMotion` (1003) is
+  poorly supported under tmux/mosh and unnecessary for drag. **Remember the
+  button yourself from the last `MouseClickMsg`** — some terminals report no
+  button on motion events.
+- **`bubbles/v2` has almost no mouse support** (only the viewport's wheel).
+  list/table: none. Drag and hit testing are hand-rolled.
+- **Use the `lipgloss/v2` compositor**: `Layer` with X/Y/**Z** and
+  `Compositor.Hit(x,y)`. Ghosts, overlays and hit testing are native.
+  **Do not use `bubblezone`** (its author warns it cannot coexist with the v2
+  compositor).
+- `lipgloss` v2 dropped `AdaptiveColor`. The `DefaultStyles` family takes
+  `isDark bool`.
 
-## CJK — 日本語が主体のボードである
+## CJK — the board is mostly Japanese
 
-- **幅は必ず `lipgloss.Width`（表示幅）で測る。`len()` は禁止。**
-  タスクタイトルは日本語で、依存を持つものは表示幅で中央値 85 セル・p90 141 セル（2026-09-03）。
-  1文字で2セル食うので、`len()` は必ず枠を壊す。
-- 切り詰めもバイト単位で切らない（`ansi.Truncate` などを使う）。
-- **枠付きの箱を並べるときは必ず複数幅で `-dump` して桁揃えを目視する。**
-  ズレは1桁ずつ蓄積するので、狭い画面では気づかず広い画面で露見する。
+- **Always measure width with `lipgloss.Width` (display width). `len()` is
+  forbidden.** Task titles are Japanese; those with dependencies have a median
+  display width of 85 cells and a p90 of 141 (2026-09-03). One character eats
+  two cells, so `len()` always breaks a frame.
+- Never truncate by bytes either (use `ansi.Truncate` or similar).
+- **When laying out bordered boxes side by side, always `-dump` at several
+  widths and eyeball the column alignment.** Drift accumulates one cell at a
+  time: invisible on a narrow screen, exposed on a wide one.
 
-## 描画とレイアウト
+## Rendering and layout
 
-- **レイアウトと当たり判定は同じ計測結果から作る**（`internal/ui/layout.go`）。
-  「描画は正しいがクリック位置がずれる」を構造的に防ぐため、カード高さは
-  実際にレンダリングして測る。
-- **カード高さのキャッシュはフレームを跨いで保持し、`recompute()` で破棄する**
-  （measurer — 実測値と、破棄を忘れたときに何がズレるかは glossary）。
-- **ワイド前提**: 想定ディスプレイは 3840×1620（32:9）。**240桁を下限・400桁を目標**とし、
-  狭い端末のフォールバックは書かない。
+- **Layout and hit testing are built from the same measurement**
+  (`internal/ui/layout.go`). Card heights are measured by actually rendering,
+  so "the drawing is right but the click lands elsewhere" is prevented
+  structurally.
+- **The card-height cache persists across frames and is discarded by
+  `recompute()`** (measurer — the measured numbers, and what drifts when the
+  discard is forgotten, are in the glossary).
+- **Wide by assumption**: the target display is 3840×1620 (32:9). **240
+  columns is the floor, 400 the target**; no fallback for narrow terminals is
+  written.
 
-## 検証（GUI/端末を人が見ないで済む形を保つ）
+## Verification (keep it checkable without a human at a GUI or terminal)
 
-- `-dump` で TTY 無しに1フレーム出せる。`-plain` は ANSI 無しなので diff 可能。
-- **フレームが変わる状態は必ず headless で1枚出せるようにする**（`-demo` / `-readonly`）。
-  出せない状態は verification の穴になる — read-only の警告を消す退行を1度通した。
-- **ジェスチャ中の状態は `-demo` で1フレームに落とす**（名前の正本は
-  `ui.DemoNames` — ここに写しを置くと必ず古くなる。実際 PR #22 が3箇所の写しを
-  1本化した後、この行だけ8/10のまま残った）。「ドロップ位置の印は出ているか」を
-  人間の目に頼らない。
-- **マウスは合成 SGR バイトを `tea.WithInput` に流して駆動できる**
-  （`\x1b[<0;X;YM` 押下 / `\x1b[<32;X;Ym` 移動 / `\x1b[<0;X;Ym` 離す）。
-  実 Program を回す e2e はこの方式。
-- 新しい UI を足したら **`-dump` を複数幅で回してフレームを目で確認**する
-  （前項の CJK 桁揃えのため）。
+- `-dump` emits one frame with no TTY. `-plain` strips ANSI, so it diffs.
+- **Every state that changes the frame must be producible headless in one
+  frame** (`-demo` / `-readonly`). A state that cannot be produced is a hole in
+  verification — a regression that erased the read-only warning once got
+  through.
+- **Mid-gesture states are frozen into one frame with `-demo`** (the names are
+  canonical in `ui.DemoNames` — a copy here always goes stale: after PR #22
+  unified three copies, this very line stayed at 8/10). "Is the drop marker
+  showing?" is not left to human eyes.
+- **The mouse can be driven by feeding synthetic SGR bytes to `tea.WithInput`**
+  (`\x1b[<0;X;YM` press / `\x1b[<32;X;Ym` move / `\x1b[<0;X;Ym` release).
+  End-to-end tests that run a real Program use this.
+- After adding UI, **run `-dump` at several widths and check the frames by
+  eye** (for the CJK column alignment above).
 
-## Merge 前ゲート（2026-08-10 セッション劣化の再発防止 — t-xmry）
+## Pre-merge gate (recurrence prevention for the 2026-08-10 session decay — t-xmry)
 
-- **lint/test は `scripts/check.sh` で回す** — CI（hub go-ci reusable）と
-  byte 同一の local mirror。素の `golangci-lint run` は default set しか回らず、
-  CI-only の revive 指摘を同一クラスで 2 回通した（PR #8, #10）。
-  linter list を変えるときは CI ログと突き合わせて byte 同一を保つ。
-- **pre-push hook が check.sh を強制する。** clone ごとに 1 回:
-  `git config core.hooksPath scripts/hooks`（緊急時のみ `git push --no-verify`）。
-- **実装 PR は merge 前に、実装した文脈から独立したレビュー 1 周が必須**
-  （別エージェント/セッションに「refute しろ」と明示。検証・レビューは Opus 側）。
-  実装者の自己検証と CI 緑は代替にならない — PR #5–#9 を自己検証のみで
-  merge し、全量の独立再レビュー（t-74y3）を招いた実績。
-  例外: ロジックに触らない docs-only、または数行の機械的修正のみ。
+- **Run lint/test through `scripts/check.sh`** — a byte-identical local mirror
+  of CI (the hub go-ci reusable). A bare `golangci-lint run` covers only the
+  default set and let CI-only revive findings of the same class through twice
+  (PR #8, #10). When the linter list changes, keep it byte-identical against
+  the CI log.
+- **The pre-push hook enforces check.sh.** Once per clone:
+  `git config core.hooksPath scripts/hooks` (`git push --no-verify` only in an
+  emergency).
+- **An implementation PR needs one review pass independent of the context that
+  implemented it before merge** (a separate agent/session told explicitly to
+  "refute"; verification and review sit on the Opus side). The implementer's
+  self-check and a green CI are no substitute — PR #5–#9 were merged on
+  self-checks alone and forced a full independent re-review (t-74y3).
+  Exceptions: docs-only changes that touch no logic, or a few-line mechanical
+  fix.
 
 ## Commits
 
-gitmoji-driven。書式（sigil を含む）は暗唱せず
-[docs/commit-convention.md](docs/commit-convention.md) → `glyph.toml` を開く
-（この文書に写した `[!]` だけの書式が drift した実績）。
-subject / body は英語。1件 = 1 PR（squash）、docs は同一 PR で更新。
+gitmoji-driven. Do not recite the format (sigil included) — open
+[docs/commit-convention.md](docs/commit-convention.md) → `glyph.toml`
+(the `[!]`-only format once copied into this document drifted).
+Subject and body in English. One change = one PR (squash); docs are updated in
+the same PR.

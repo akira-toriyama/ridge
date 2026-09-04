@@ -1,48 +1,52 @@
 # ridge
 
-**furrow の TUI front-end.** [furrow](https://github.com/akira-toriyama/furrow) を
-CLI/JSON 契約経由で読み書きする、キーボード優先のカンバン。GUI 版は
-[vista](https://github.com/akira-toriyama/vista)。furrow の Go パッケージを
-import しない契約とその理由は [CLAUDE.md](CLAUDE.md)、用語は
-[glossary.md](glossary.md) が正本。
+**The TUI front-end for furrow.** A keyboard-first kanban that reads and
+writes [furrow](https://github.com/akira-toriyama/furrow) through its CLI/JSON
+contract. The GUI sibling is [vista](https://github.com/akira-toriyama/vista).
+The contract that ridge never imports furrow's Go packages, and why, is in
+[CLAUDE.md](CLAUDE.md); terms are canonical in [glossary.md](glossary.md).
 
 ```sh
-go run ./cmd/ridge            # 起動（実 furrow の盤面。furrow が PATH に要る）
-go run ./cmd/ridge -mock      # 内蔵 fixture で起動（furrow 不要）
-go run ./cmd/ridge -dump      # TTY 無しで1フレーム出力（常に fixture）
-go run ./cmd/ridge -benchload # 実盤面の読み込みレイテンシを実測して終了（読み取りのみ）
+go run ./cmd/ridge            # start on the real furrow board (furrow must be on PATH)
+go run ./cmd/ridge -mock      # start on the built-in fixture (no furrow needed)
+go run ./cmd/ridge -dump      # emit one frame with no TTY (always the fixture)
+go run ./cmd/ridge -benchload # measure the real board's load latency and exit (read-only)
 ```
 
-## 現在地
+## Status
 
-実 furrow に接続済み（t-s86r）。読みは `board --json` / `ls -r '' --json` /
-`epic ls -r '' --all --json` の並列 3 exec + body ファイル（レイテンシは
-`-benchload` が実盤面で測る）。書きは**楽観的キュー**（glossary の
-「persist キュー」）で、`furrow set / done / check / retitle / repo / ref / dep /
-note / review / edit --body` を裏で直列に流す — 一覧は `internal/board/provider.go`
-の Persist* が正本。例外は **store-first** の書き込み（quick add と epic 管理 —
-glossary の「store-first」）。
+Connected to the real furrow (t-s86r). Reads are three parallel execs —
+`board --json` / `ls -r '' --json` / `epic ls -r '' --all --json` — plus the
+body files (`-benchload` measures the latency on the real board). Writes go
+through the **optimistic queue** (glossary: "persist queue"), which streams
+`furrow set / done / check / retitle / repo / ref / dep / note / review /
+edit --body` serially in the background — the list is canonical in the
+Persist* methods of `internal/board/provider.go`. The exception is the
+**store-first** writes (quick add and epic management — glossary:
+"store-first").
 
-## ビュー
+## Views
 
-各ビューの語義と設計理由は glossary が正本。ここは「何を答えるか」と操作だけ。
+The meaning of each view and the design reasons are canonical in the
+glossary. This section is only what each view answers, and how to drive it.
 
-### Board — カンバン
+### Board — kanban
 
-レーンが列。ヘッダに件数・WIP・value/effort 合計。カードは日本語タイトルを
-折り返して表示し、`▸` actionable / `▤` epic チップ / `x1` blocked /
-`[0/7]` チェックリスト / ラベルチップ / repo を載せる。
+Lanes are columns. The header carries counts, WIP and the value/effort sums.
+Cards wrap their Japanese titles and carry `▸` actionable / `▤` epic chip /
+`x1` blocked / `[0/7]` checklist / label chips / repo.
 
-**move mode** が中心の操作。GitHub Projects の作法（`Enter` で持ち上げ → 矢印で
-移動 → `Enter` 確定 / `Esc` 取消）で、furrow の sparse priority による
-並べ替えに 1:1 で対応する。マウスでカードを掴んでドラッグもできる。
+**Move mode** is the central gesture. It follows GitHub Projects (`Enter`
+lifts → arrows move → `Enter` commits / `Esc` cancels) and maps 1:1 onto
+furrow's sparse-priority reordering. Cards can also be dragged with the mouse.
 
-### Graph — 依存グラフ
+### Graph — dependency graph
 
-カード上で `S`（または `Shift+Space`）。そのタスクを起点に、**手前が blocker・
-奥が「閉じると動き出すもの」**の階層グラフ。`Enter` でノードを新しい起点にして
-辿れる（読むのではなく歩く）。`o` で上下 / 左右を切り替える（既定は上下。
-2 つの向きの契約は glossary の「orientation」）。
+`S` (or `Shift+Space`) on a card. A layered graph rooted at that task:
+**blockers in front, "what starts moving when this closes" behind**. `Enter`
+re-roots on a node, so you walk the graph rather than read it. `o` switches
+between top-down and left-right (top-down by default; the contract of the
+two orientations is glossary: "orientation").
 
 ```
  ╭────────────────╮   ╭────────────────╮
@@ -62,7 +66,7 @@ glossary の「store-first」）。
  ╰──────────────╯  ╰──────────────╯
 ```
 
-`o` を押すと同じグラフが左右になる（`-dump -graphlr` で headless に出せる）:
+`o` turns the same graph left-right (`-dump -graphlr` renders it headless):
 
 ```
  ╭────────────────╮                        ╭──────────────╮
@@ -74,17 +78,19 @@ glossary の「store-first」）。
  ╰────────────────╯                        ╰──────────────╯
 ```
 
-入り切らない段は落としてヘッダで件数を出す（`z` で radius を狭められる）—
-右端で黙って切らない。
+Ranks that do not fit are dropped and counted in the header (`z` narrows the
+radius) — nothing is silently clipped at the right edge.
 
-### Map — 依存マップ
+### Map — dependency map
 
-`T`（`t` = そのタスクの依存ツリー、の全体版）。**盤面の依存クラスタを全部
-一画面に並べる**。Graph が「このタスクの周り」を答えるのに対し、Map は起点を
-持たず「盤面は何と何が絡んでいるか」を答える。線は引かず、インデントが深さ・
-`←` が blocker の名指し（glossary の「Map」「cluster」「scope」）。
+`T` (the whole-board version of `t`, that task's dependency tree). **Every
+dependency cluster on the board, laid out on one screen.** Where Graph answers
+"what surrounds this task", Map has no root and answers "what on the board is
+entangled with what". No lines are drawn: indentation is depth and `←` names
+the blocker (glossary: "Map", "cluster", "scope").
 
-`-dump -demo map` の抜粋（実出力は 240 桁 3 カラム。ここは幅を詰めて 2 カラム分だけ）:
+An excerpt of `-dump -demo map` (the real output is 240 columns in three
+columns; this is narrowed to two):
 
 ```
  ── #1  4 nodes · depth 2 ────────────────────  ── #2  2 nodes · depth 1 ────────────────────
@@ -95,155 +101,168 @@ glossary の「store-first」）。
    1 unblocked · 3 blocked · t-ehk7 frees 3
 ```
 
-- `z` で scope 切替（既定 **open**・`all` で全部）。
-- `⏎` / `S` で、その行を起点にした Graph へ。`Esc` で **Map に戻る**。
-- filter が効いていても行は消さず、薄く落としてヘッダで件数を出す。
+- `z` switches scope (**open** by default; `all` for everything).
+- `⏎` / `S` opens the Graph rooted at that row. `Esc` **returns to the Map**.
+- An active filter never removes rows; they are dimmed and counted in the
+  header.
 
-### 詳細ペイン
+### Peek — the detail pane
 
-`Space` で開く。解決済みの双方向依存リスト（`blocked by` / `blocks` を
-ID+タイトル+レーンまで解決）、チェックリスト、本文。`t` で推移的ツリー。
-`Enter` で**フィールド編集メニュー**（glossary の「編集メニュー」）: title /
-value / effort / labels / epic / due / deps / repos / refs / checklist。
+`Space` opens it. Resolved two-way dependency lists (`blocked by` / `blocks`
+resolved to id, title and lane), the checklist, the body. `t` shows the
+transitive tree. `Enter` opens the **field edit menu** (glossary: "edit
+menu"): title / value / effort / labels / epic / due / deps / repos / refs /
+checklist.
 
-### Boxes — 箱の俯瞰
+### Boxes — the box overview
 
-`E`。**盤面の epic を全部、repo 別に並べる**。Graph / Map が task の依存を
-答えるのに対し、これは「どの repo が今どの箱で作業しているか」を答える
-（graph にしない理由は glossary の「箱の俯瞰」）。`⏎` でその箱に絞って盤面へ
-（`epic:<id>` の slice term）、`m` でその箱のオーバーレイ、`z` で closed 込み、
-`^u/^d` でページ。
+`E`. **Every epic on the board, grouped by repo.** Where Graph / Map answer
+task dependencies, this answers "which box is each repo working out of right
+now" (why it is not a graph: glossary, "box overview"). `⏎` slices the board
+to that box (an `epic:<id>` slice term), `m` opens the box's overlay, `z`
+includes closed boxes, `^u/^d` page.
 
-### Roadmap — due タイムライン
+### Roadmap — the due timeline
 
-`C`。**due を持つ open な task を due 昇順に並べ、横軸 = 時間に `◆` を置く**。
-「何がいつ切れるか」を答えるビューで、`furrow brief` の due 先頭・
-`-q is:overdue` の時間軸版にあたる（glossary の「Roadmap」「zoom」）。
-`z` で day / week / month、`h`/`l` で窓を pan。読み専用。
+`C`. **Open tasks with a due date, in due order, with `◆` placed on a time
+axis.** The view that answers "what expires when" — the timeline form of
+`furrow brief`'s due head and `-q is:overdue` (glossary: "Roadmap", "zoom").
+`z` cycles day / week / month, `h`/`l` pan the window. Read-only.
 
-`ridge -roadmap` で実盤面をこのビューから開ける。headless は
-`-dump -roadmap`（day）と `-demo roadmapweek` / `-demo roadmapmonth`。
+`ridge -roadmap` opens the real board in this view. Headless: `-dump -roadmap`
+(day) and `-demo roadmapweek` / `-demo roadmapmonth`.
 
-### Swim — swimlane（group by）
+### Swim — swimlanes (group by)
 
-`W`。**盤面のレーンを横軸、group by の値を縦軸の「帯」にした2次元グリッド**。
-`furrow ls --tree` に2つ目の軸を与えたもので、既定の軸も **box**（`tab` で
-repo / label へ）。帯は既定で畳んであり（畳んだフレーム = 盤面のヒストグラム）、
-`space` で開く。`⏎` でその帯に絞って盤面へ、`z` で scope open/all。読み専用
-（帯・rail の語義と読み専用の理由は glossary の「Swimlane」「帯」「rail」）。
+`W`. **A two-dimensional grid: the board's lanes across, the group-by values
+down as "bands".** `furrow ls --tree` given a second axis; the default axis is
+also **box**, matching `--tree` (`tab` cycles to repo / label). Bands start folded (a folded
+frame is a histogram of the board) and `space` unfolds one. `⏎` slices the
+board to that band, `z` switches scope open/all. Read-only (the band and rail
+terms, and why there are no writes: glossary, "Swimlane", "band", "rail").
 
-headless は `-dump -demo swim`（既定）/ `swimopen`（帯を開いた状態）/
-`swimrepo`（repo 軸）/ `swimall`（scope all）。
+Headless: `-dump -demo swim` (default) / `swimopen` (a band unfolded) /
+`swimrepo` (repo axis) / `swimall` (scope all).
 
-### 保存ビュー — タブ + views.toml
+### Saved views — tabs + views.toml
 
-GitHub Projects の view タブ相当（語義は glossary の「保存ビュー」「未保存ドット」）。
-ファイルは `~/.config/ridge/views.toml`（`XDG_CONFIG_HOME` 対応）。
+The equivalent of GitHub Projects' view tabs (terms: glossary, "saved view",
+"unsaved dot"). The file is `~/.config/ridge/views.toml` (`XDG_CONFIG_HOME`
+honoured).
 
 ```toml
 [[view]]
-name = "今週の締切"
-layout = "roadmap"    # board | table | roadmap（省略 = board）
-q = "is:actionable"   # furrow -q へそのまま渡る文字列
-sort = "due asc"      # updated|created|value|effort|due [asc|desc]（効くのは table）
-slice = "epic:e-xxxx" # repo|label|epic :値（slice パネルの選択と同じ）
+name = "今週の締切"      # "this week's deadlines"
+layout = "roadmap"    # board | table | roadmap (omitted = board)
+q = "is:actionable"   # passed to furrow -q verbatim
+sort = "due asc"      # updated|created|value|effort|due [asc|desc] (table only)
+slice = "epic:e-xxxx" # repo|label|epic :value (same as the slice panel's selection)
 ```
 
-- タブ帯はタイトル行の Board|Table の右。`1`-`9` で切替、`V` で現在の状態を
-  active タブへ保存。タブが無い状態の `V` は "view N" で新規作成（rename は
-  views.toml を編集）。上限は 9 個。
-- active タブから状態がずれるとタブに **●**。digit の再押下で保存済みの束に
-  巻き戻せる。roadmap ビューの中でも `1`-`9` / `V` は効く。
-- fixture 系（`-mock` / `-dump` / `-readonly`）は実 views.toml を読まず書けない。
-  headless 検証面は `-demo views` / `-demo viewsroad` / `-demo viewsmany`。
+- The tab strip sits right of Board|Table on the title line. `1`-`9` switch,
+  `V` saves the current state into the active tab. `V` with no tabs creates
+  "view N" (rename by editing views.toml). At most nine.
+- When the state drifts from the active tab, the tab shows **●**. Pressing the
+  digit again rewinds to the saved bundle. `1`-`9` / `V` also work inside the
+  roadmap view.
+- Fixture runs (`-mock` / `-dump` / `-readonly`) neither read nor write the
+  real views.toml. Headless surfaces: `-demo views` / `-demo viewsroad` /
+  `-demo viewsmany`.
 
-## キー
+## Keys
 
-**全キーは `?` が正典** — 一覧は `internal/ui/keys.go` の `key.Binding` から
-生成しているので、handler が照合しているものとズレない。ここは取っ掛かりだけ。
+**`?` is the canon for every key** — the list is generated from the
+`key.Binding`s in `internal/ui/keys.go`, so it cannot drift from what the
+handlers match. This table is only a foothold.
 
-| キー | 動作 |
+| Key | Action |
 |---|---|
-| `?` | **キー一覧**（ここから全部辿れる） |
-| `Space` | 詳細ペイン |
-| `S` | 依存グラフ（1タスク起点。`o` で上下 / 左右） |
-| `T` | 依存マップ（全クラスタ俯瞰） |
-| `E` | 箱の俯瞰（全 epic を repo 別に。`⏎` でその箱に絞る・`z` で closed 込み） |
-| `C` | roadmap（due タイムライン。`z` で day/week/month・`h`/`l` で pan） |
-| `W` | swimlane（レーン×group by。`space` で帯を開閉・`tab` で軸・`⏎` でその帯に絞る） |
-| `1`-`9` / `V` | 保存ビューの切替 / 保存（views.toml が正本。タブ無しの `V` = 新規） |
-| `Enter` | move mode（`Enter` 確定・`Esc` 取消）。**peek を開いていると / Table では編集メニュー** |
-| `f` | revisit lens（`furrow revisit` が flag した open task だけに絞る。peek に理由。`-revisit` で headless） |
-| `i` | 選択タスクを reviewed に stamp（`furrow review <id>`。`updated` は動かない） |
-| `q` | 終了 |
+| `?` | **Key list** (everything is reachable from here) |
+| `Space` | Peek |
+| `S` | Dependency graph (rooted at one task; `o` for top-down / left-right) |
+| `T` | Dependency map (every cluster at once) |
+| `E` | Box overview (every epic by repo; `⏎` slices to that box, `z` includes closed) |
+| `C` | Roadmap (due timeline; `z` for day/week/month, `h`/`l` pan) |
+| `W` | Swimlanes (lanes × group by; `space` folds/unfolds a band, `tab` switches axis, `⏎` slices to the band) |
+| `1`-`9` / `V` | Switch / save a saved view (views.toml is canonical; `V` with no tabs = new) |
+| `Enter` | Move mode (`Enter` commits, `Esc` cancels). **With peek open, or in Table: the edit menu** |
+| `f` | Revisit lens (only the open tasks `furrow revisit` flags; the reason in peek; `-revisit` headless) |
+| `i` | Stamp the selected task reviewed (`furrow review <id>`; `updated` does not move) |
+| `q` | Quit |
 
-画面下部は1行だけで、そこに出るのは**画面に出ていないこと**（今入ったモードの
-出口・失敗・読み込み実績）に限る。キー一覧は出さない — 部分的なキー列は、
-読んだ人に「これで全部」と思わせる分だけ無い方がましだった。
+The bottom of the screen is one line, and it carries only **what is not on
+the screen** (the exit of the mode just entered, failures, load results). It
+never lists keys — a partial key list was worse than none for exactly as much
+as it made a reader think "that is all of them".
 
-## 設計方針
+## Design rules
 
-- **ワイド前提**: 狭い端末は対象外（想定ディスプレイと桁数の下限・目標は
-  [CLAUDE.md](CLAUDE.md)）。
-- **キーボード優先**: マウスでできることには必ずキーボードの等価物がある。
-  マウス追跡中は端末のテキスト選択が効かなくなるため（回避キーは端末依存:
-  xterm/Ghostty/tmux=`Shift`、iTerm2=`Option`）、`M` で切れる。
-- **楽観的 TUI**: 書き込みの完了を待たず先に画面を更新し、quit は未完了の
-  書き込みを flush してから終了する。意味が furrow 側にある書き込みだけは
-  先取りしない（glossary の「persist キュー」「store-first」）。
-- **ロジックは furrow 側に置く**（判断規範は [CLAUDE.md](CLAUDE.md)）。
+- **Wide by assumption**: narrow terminals are out of scope (the target
+  display and the column floor and target are in [CLAUDE.md](CLAUDE.md)).
+- **Keyboard first**: everything the mouse can do has a keyboard equivalent.
+  Mouse tracking disables the terminal's own text selection (the bypass key
+  depends on the terminal: xterm/Ghostty/tmux = `Shift`, iTerm2 = `Option`),
+  so `M` turns it off.
+- **Optimistic TUI**: the screen updates before a write completes, and quit
+  flushes the pending writes first. Only writes whose meaning lives on
+  furrow's side are not applied ahead (glossary: "persist queue",
+  "store-first").
+- **Logic lives in furrow** (the rule of thumb is in [CLAUDE.md](CLAUDE.md)).
 
-## 検証
+## Verification
 
-すべて headless で確認できる（GUI や端末を人が見る必要がない）:
-
-```sh
-go test ./...                      # 全テスト（furrow が PATH にあれば contract test も回る）
-go run ./cmd/ridge -dump -plain -cols 240 -rows 60 # 1フレームを平文で出力
-go run ./cmd/ridge -dump -peek               # 詳細ペインを開いた状態
-go run ./cmd/ridge -dump -tree               # 依存ツリーを開いた状態
-go run ./cmd/ridge -demo drag -dump          # 一時状態の例: ドラッグ中の1フレーム
-go run ./cmd/ridge -h                        # -demo 全状態の一覧（正本 = ui.DemoNames）
-go run ./cmd/ridge -readonly -dump           # schema gate で read-only の盤面
-go run ./cmd/ridge -graphlr -dump -demo graphall  # 依存グラフを左右向きで（`o` と同じ状態）
-go run ./cmd/ridge -dump -roadmap            # due タイムライン（週/月軸は -demo roadmapweek / roadmapmonth）
-```
-
-`-dump` / `-demo` / `-graphlr` / `-readonly` の語義と、後二者がなぜ `-demo` でなく
-フラグかは glossary の「内部」節。各 `-demo` の1行説明は `internal/ui/dump.go` の
-`demoState`（各 case のコメント）が持つ。
-
-### `-debuglog` — 操作履歴の構造化ログ
+Everything is checkable headless (no human has to look at a GUI or terminal):
 
 ```sh
-go run ./cmd/ridge -debuglog session.jsonl        # 実盤面 + 全イベント記録
-go run ./cmd/ridge -mock -debuglog session.jsonl  # fixture でも記録できる
+go test ./...                      # every test (the contract tests run too when furrow is on PATH)
+go run ./cmd/ridge -dump -plain -cols 240 -rows 60 # one frame as plain text
+go run ./cmd/ridge -dump -peek               # with the peek open
+go run ./cmd/ridge -dump -tree               # with the dependency tree open
+go run ./cmd/ridge -demo drag -dump          # a transient state: one frame mid-drag
+go run ./cmd/ridge -h                        # the list of every -demo state (canonical: ui.DemoNames)
+go run ./cmd/ridge -readonly -dump           # a board made read-only by the schema gate
+go run ./cmd/ridge -graphlr -dump -demo graphall  # the dependency graph left-right (the same state as `o`)
+go run ./cmd/ridge -dump -roadmap            # the due timeline (week/month axes: -demo roadmapweek / roadmapmonth)
 ```
 
-「操作したら盤面がこうなった」系のバグ報告にはこのファイルを添付する
-（層と hook 点は glossary の「-debuglog」）。**打鍵は 1 文字ずつそのまま記録
-される**（modal に打った title や filter 文も含む。入らないのは body 本文だけ）—
-他人に渡す前に中身を確認すること。
+What `-dump` / `-demo` / `-graphlr` / `-readonly` mean, and why the latter two
+are flags rather than `-demo` states, is in the glossary's "Internals"
+section. The one-line description of each `-demo` state lives in
+`internal/ui/dump.go`'s `demoState` (the comment on each case).
 
-## 既知の課題
+### `-debuglog` — a structured log of the session's operations
 
-- swimlane（`W`）は**保存ビューの layout に入っていない**。束が
-  `{layout, q, sort, slice}` なのに対し、このビューの状態は軸と scope を持つので、
-  `layout = "swim"` だけ保存すると「保存したビューが復元されない」保存になる
-  （map / boxes を除いてあるのと同じ理由）。
-- Table ビューに横スクロールが無い（ワイド前提の設計判断。要るなら既存依存の
-  bubbles viewport v2 の `SoftWrap=false` + `XOffset` を配線する — 新規実装不要と
-  確認済み。罠: `SetXOffset` は `SoftWrap=true` だと黙って no-op）。
+```sh
+go run ./cmd/ridge -debuglog session.jsonl        # the real board, every event recorded
+go run ./cmd/ridge -mock -debuglog session.jsonl  # the fixture records too
+```
 
-## スタック
+Attach this file to any "I did X and the board ended up like Y" bug report
+(the layers and hook points: glossary, "-debuglog"). **Keystrokes are
+recorded one by one, verbatim** (including titles typed into modals and
+filter text; only task bodies are absent) — check the contents before handing
+it to anyone.
+
+## Known gaps
+
+- Swimlanes (`W`) are **not a saved-view layout**. The bundle is
+  `{layout, q, sort, slice}` while this view's state also has an axis and a
+  scope, so saving `layout = "swim"` alone would be a save that does not
+  restore (the same reason map / boxes are excluded).
+- The Table view has no horizontal scroll (a wide-by-assumption decision. If
+  needed, wire the existing bubbles viewport v2's `SoftWrap=false` +
+  `XOffset` — confirmed to need no new implementation. Trap: `SetXOffset` is a
+  silent no-op while `SoftWrap=true`).
+
+## Stack
 
 ```
-charm.land/bubbletea/v2      ランタイム
-charm.land/lipgloss/v2       スタイル・レイアウト・コンポジタ（Layer / Hit）
+charm.land/bubbletea/v2      runtime
+charm.land/lipgloss/v2       styles, layout, compositor (Layer / Hit)
 charm.land/bubbles/v2        help / key / textinput / viewport
-github.com/charmbracelet/x/ansi  幅を保つ切り詰め（CJK 必須。`len()` 禁止の相方）
-github.com/pelletier/go-toml/v2  views.toml の読み書き（保存ビュー）
+github.com/charmbracelet/x/ansi  width-preserving truncation (a CJK must; the partner of the `len()` ban)
+github.com/pelletier/go-toml/v2  views.toml I/O (saved views)
 ```
 
-v2 からモジュールパスが `github.com/charmbracelet/*` → `charm.land/*` に
-移転している点に注意（v1 は旧パスのまま）。
+Note that since v2 the module paths moved from `github.com/charmbracelet/*`
+to `charm.land/*` (v1 keeps the old paths).
