@@ -211,7 +211,7 @@ func (m *Model) roadRowLine(l *roadLayout, r *roadRow, tlW int) string {
 	inner := maxInt(1, paneW-mapSelGutter)
 	head := styleFor(th).Render(glyph) + " " + th.chipAlt.Render(t.ID) + " "
 	pane := gutter + joinEnds(head+titleStyle.Render(t.Title),
-		dateStyle.Render(t.Due.Local().Format("01-02")), inner)
+		dateStyle.Render(t.Due.In(localZone()).Format("01-02")), inner)
 
 	return pane + th.rule.Render("│") + m.roadCells(l, t, r, tlW)
 }

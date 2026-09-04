@@ -779,7 +779,7 @@ func epicClosedCell(box *board.EpicInfo) string {
 	if box.Closed.IsZero() {
 		return "no — open"
 	}
-	return "yes — " + box.Closed.Local().Format("2006-01-02")
+	return "yes — " + box.Closed.In(localZone()).Format("2006-01-02")
 }
 
 // epicActiveCell is the `active` row's value AND its precondition. furrow

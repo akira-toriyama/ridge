@@ -344,7 +344,7 @@ func (m *Model) boxStrip(e *board.EpicInfo, h int) string {
 
 	head := th.chipAlt.Render(e.ID) + " " + th.base.Render(e.Title)
 	if !e.Closed.IsZero() {
-		head += th.dim.Render("  closed " + e.Closed.Local().Format("2006-01-02"))
+		head += th.dim.Render("  closed " + e.Closed.In(localZone()).Format("2006-01-02"))
 	}
 	push(pad(head, inner))
 	if e.Goal != "" {

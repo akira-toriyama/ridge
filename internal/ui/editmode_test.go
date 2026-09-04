@@ -189,7 +189,7 @@ func TestEditDueRefusesGarbageAndAcceptsForms(t *testing.T) {
 	press(m, "enter")
 	m.edit.input.SetValue("2026-09-01")
 	press(m, "enter")
-	if got := m.b.Task("t-9sa6").Due.Local().Format("2006-01-02"); got != "2026-09-01" {
+	if got := m.b.Task("t-9sa6").Due.In(localZone()).Format("2006-01-02"); got != "2026-09-01" {
 		t.Errorf("due = %s, want 2026-09-01", got)
 	}
 	drainPersists(m, t)

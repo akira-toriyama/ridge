@@ -14,8 +14,16 @@ import (
 	"time"
 )
 
-// nowFn is indirected so tests get deterministic timestamps.
-var nowFn = time.Now
+// nowFn and localZone are indirected so tests get deterministic timestamps and
+// a chosen zone. Tests override THESE, never time.Local: time.Now reads
+// time.Local from the runtime's timer goroutine, so a test writing it races
+// with any timer still alive from an earlier test (measured under -race).
+// Both are plain vars read on the UI thread only; a test must not pin them
+// while a real tea.Program is running.
+var (
+	nowFn     = time.Now
+	localZone = func() *time.Location { return time.Local }
+)
 
 // priorityStep is furrow's sparse-priority spacing: reordering edits one
 // integer field rather than renumbering a lane.
@@ -563,10 +571,10 @@ func ParseDue(s string) (time.Time, error) {
 	}
 	// A bare day is a promise for the whole day, so it lands at its last local
 	// second — not at midnight, which would flag the task overdue all day.
-	if t, err := time.ParseInLocation("2006-01-02", s, time.Local); err == nil {
+	if t, err := time.ParseInLocation("2006-01-02", s, localZone()); err == nil {
 		return t.AddDate(0, 0, 1).Add(-time.Second).UTC(), nil
 	}
-	if t, err := time.ParseInLocation("2006-01-02T15:04", s, time.Local); err == nil {
+	if t, err := time.ParseInLocation("2006-01-02T15:04", s, localZone()); err == nil {
 		return t.UTC(), nil
 	}
 	if t, err := time.Parse(time.RFC3339, s); err == nil {

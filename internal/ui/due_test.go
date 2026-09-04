@@ -9,20 +9,25 @@ import (
 	"github.com/akira-toriyama/ridge/internal/store/memstore"
 )
 
-// fixedZone pins time.Local for the duration of a test. A due is stored as a
+// fixedZone pins THIS package's localZone (never time.Local — see its
+// declaration) for the duration of a test. board.localZone stays at the
+// runner's zone: a test that pins here and then parses a due through
+// board.ParseDue would compute the instant in one zone and render it in
+// another. A due is stored as a
 // UTC instant, so "which day is this?" is only a real question off UTC.
 func fixedZone(t *testing.T, name string, offsetHours int) {
 	t.Helper()
-	prev := time.Local
-	time.Local = time.FixedZone(name, offsetHours*3600)
-	t.Cleanup(func() { time.Local = prev })
+	prev := localZone
+	zone := time.FixedZone(name, offsetHours*3600)
+	localZone = func() *time.Location { return zone }
+	t.Cleanup(func() { localZone = prev })
 }
 
 // eveningDue builds the instant furrow stores for "2026-09-02 08:00 local" on a
 // UTC+9 box: 2026-09-01T23:00:00Z. Formatting that in UTC reads 2026-09-01 —
 // one day early, and it does NOT self-heal on reload, because the wrong day
 // comes straight off furrow's own JSON.
-func eveningDue() time.Time { return time.Date(2026, 9, 2, 8, 0, 0, 0, time.Local).UTC() }
+func eveningDue() time.Time { return time.Date(2026, 9, 2, 8, 0, 0, 0, localZone()).UTC() }
 
 func TestPeekRendersDueOnItsLocalDay(t *testing.T) {
 	fixedZone(t, "TEST", 9)

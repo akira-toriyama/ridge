@@ -240,7 +240,7 @@ func TestTableRendersDueEpicUpdatedColumns(t *testing.T) {
 	// The fixture's dated tasks render their LOCAL day — computed through the
 	// same conversion, so the test holds in every timezone (a hardcoded
 	// "2026-08-20" fails east of UTC+9, where that instant is the 21st).
-	if want := m.b.Task("t-ehk7").Due.Local().Format("2006-01-02"); !strings.Contains(out, want) {
+	if want := m.b.Task("t-ehk7").Due.In(localZone()).Format("2006-01-02"); !strings.Contains(out, want) {
 		t.Errorf("t-ehk7's due day %s is not in the frame", want)
 	}
 	if !strings.Contains(out, "九州キャンプ") || strings.Contains(out, "e-fw2m") {
@@ -288,11 +288,11 @@ func TestOverdueDueRendersDanger(t *testing.T) {
 	m.setPos(1) // keep the cursor OFF t-late: the inverse band drops cell styles
 	out := m.View().Content
 
-	late := m.th.danger.Render(pad(day("2026-08-01T00:00:00Z").Local().Format("2006-01-02"), 10))
+	late := m.th.danger.Render(pad(day("2026-08-01T00:00:00Z").In(localZone()).Format("2006-01-02"), 10))
 	if !strings.Contains(out, late) {
 		t.Error("an overdue due must render in the danger style")
 	}
-	fine := m.th.danger.Render(pad(day("2026-12-01T00:00:00Z").Local().Format("2006-01-02"), 10))
+	fine := m.th.danger.Render(pad(day("2026-12-01T00:00:00Z").In(localZone()).Format("2006-01-02"), 10))
 	if strings.Contains(out, fine) {
 		t.Error("a future due must NOT render in the danger style")
 	}
@@ -354,7 +354,7 @@ func TestTableColumnsAlignUnderCJKTitles(t *testing.T) {
 			}
 			want := ""
 			if !task.Due.IsZero() {
-				want = task.Due.Local().Format("2006-01-02")
+				want = task.Due.In(localZone()).Format("2006-01-02")
 			}
 			if got := cell(lines[y], dueCol); got != want {
 				t.Errorf("w=%d row %d (%s): due cell reads %q, want %q", w, i, task.ID, got, want)

@@ -11,7 +11,7 @@ import (
 // at builds a local instant inside the zone the test pinned. Every date here
 // goes through it so a test cannot accidentally mix zones.
 func at(y int, m time.Month, d, hh int) time.Time {
-	return time.Date(y, m, d, hh, 0, 0, 0, time.Local)
+	return time.Date(y, m, d, hh, 0, 0, 0, localZone())
 }
 
 // The population rule and the order in one sweep: dateless absent, done

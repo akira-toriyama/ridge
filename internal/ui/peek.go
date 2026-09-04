@@ -173,7 +173,7 @@ func (m *Model) peekContent(w int) string {
 	if !t.Due.IsZero() {
 		// Local: the instant furrow stores is UTC, and an evening-local due
 		// renders one day early if it is formatted in that zone.
-		due := "due " + t.Due.Local().Format("2006-01-02")
+		due := "due " + t.Due.In(localZone()).Format("2006-01-02")
 		if isOverdue(t) {
 			due = th.danger.Render(due + " · OVERDUE")
 		} else {
