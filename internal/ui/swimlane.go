@@ -175,9 +175,9 @@ func swimGeometry(w int, lanes int) (railW, colW, nvis int) {
 		// for one fewer overflowed the composed row by exactly one cell at every
 		// width where the division came out even — 26 of them between 240 and
 		// 400 — and renderSwim's truncate then ate the last column's count and
-		// stamped an ellipsis on it. Found by review; the alignment test could
-		// not see it because it recomputed this same formula instead of
-		// measuring against the width the frame pads to.
+		// stamped an ellipsis on it. An alignment test that recomputes this same
+		// formula cannot see that; it has to measure against the width the frame
+		// pads to.
 		colW = (avail - railW - nvis*swimLaneGap) / nvis
 		if colW >= swimLaneMinW || nvis == 1 {
 			break
@@ -239,10 +239,10 @@ func packSwim(s swimSpec) *swimLayout {
 					// population on every axis (repoVocab/labelVocab are built
 					// from these same tasks, and swimVocab adds a band for an
 					// epic id no box resolves). A guard, not an index panic —
-					// but it must never silently drop a task, which is what the
-					// first cut did: a task whose box was missing from the
-					// vocabulary left every band, the title bar's count and the
-					// lane bar at once, and said so nowhere.
+					// but it must never silently drop a task: one whose box is
+					// missing from the vocabulary would leave every band, the
+					// title bar's count and the lane bar at once, and say so
+					// nowhere.
 					continue
 				}
 				b.total[t.ID] = true

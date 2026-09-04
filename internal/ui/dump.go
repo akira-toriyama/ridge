@@ -110,10 +110,10 @@ func New(p board.Provider, o Options) *Model {
 	// The read-only case says NOTHING, on purpose. newModel has already put
 	// "board is read-only … writes will fail until `furrow upgrade`" in the
 	// status, and that warning is set exactly once per session — nothing
-	// restores it later, so anything written over it is gone for good. An
-	// earlier revision of this function overwrote it with "fixture · N tasks",
-	// which was worse than losing it: on a live store gated by the schema
-	// check, "fixture" is the one word that means nothing you do touches disk.
+	// restores it later, so anything written over it is gone for good — and
+	// "fixture · N tasks" over it would be worse than losing it: on a live store
+	// gated by the schema check, "fixture" is the one word that means nothing
+	// you do touches disk.
 	switch {
 	case !m.b.Writable():
 	case p.Live():
@@ -358,9 +358,9 @@ func (m *Model) demoState(kind string) error {
 		// The filter row under maximum load: table view sorted, an epic slice
 		// active, and the input holding the keyboard: the state in which a
 		// fixed-width input pushes the sort readout off the row (t-a54p), and
-		// no other demo can produce it — the sort chip needs the
-		// table, the slice chip needs a selection, and the input only pads the
-		// row while it is focused mid-keystroke.
+		// no other demo can produce it — the sort chip needs the table, the
+		// slice chip needs a selection, and the input only pads the row while
+		// it is focused mid-keystroke.
 		m.view = viewTable
 		m.setSort(sortUpdated, false)
 		m.toggleSlice()

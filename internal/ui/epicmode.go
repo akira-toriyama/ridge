@@ -145,8 +145,8 @@ func (m *Model) enterEpic(id string) {
 // matters more here than there: a box naming no repo cannot be activated at
 // all. NOT from the slice: `A` is only answered on the epic axis, and the
 // axis switch that got the panel there already cleared any repo-axis pick, so
-// a slice-derived repo was a branch no key sequence could reach (found by
-// review — the effective query is what survives the axis switch).
+// a slice-derived repo is a branch no key sequence can reach; the effective
+// query is what survives the axis switch.
 func (m *Model) enterEpicNew() tea.Cmd {
 	_, _, repo, _ := inheritContext(m.effectiveQuery())
 	m.epic = &epicState{stage: epicInput, inputFor: epicInputNewBox,

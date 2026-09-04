@@ -324,9 +324,8 @@ type Model struct {
 
 // newModel takes the recorder up front, not via a setter: the constructor
 // itself emits status (the read-only warning below), and a recorder attached
-// after the fact missed it — the one status set exactly once per session, so
-// a -readonly -debuglog file could not explain its own status line (found by
-// review).
+// after the fact misses it — the one status set exactly once per session, so
+// a -readonly -debuglog file could not explain its own status line.
 func newModel(p board.Provider, dbg *DebugLog) *Model {
 	ti := textinput.New()
 	ti.Prompt = "/ "

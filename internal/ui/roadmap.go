@@ -245,9 +245,8 @@ func roadTicks(z roadZoom, start, off, n int) (coarse, fine []roadTick) {
 	// The left edge must still name the period it is INSIDE when the first
 	// real label sits far in (or never comes): a panned frame otherwise opens
 	// on unlabeled cells. Prepended AFTER the real labels are placed so that
-	// a period start near the edge wins over the context — the first cut of
-	// this function placed the context first, and its collision guard then
-	// dropped "2026-08" in favour of a "2026-07" that owned two cells.
+	// a period start near the edge wins over the context (placed first, the
+	// context's collision guard drops the real label instead).
 	form := "2006"
 	if z == zoomDay {
 		form = "2006-01"

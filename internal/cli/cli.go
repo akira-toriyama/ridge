@@ -111,9 +111,9 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 	if *benchload {
 		// -benchload opens the real store, prints a latency breakdown and
 		// exits. Everything that shapes a FRAME or swaps in the fixture is
-		// meaningless to it, and accepting them silently is the harm — most
-		// damagingly -mock, which would leave `-benchload -mock` reading the
-		// REAL store. The list is hand-written, so it is only as complete as the
+		// meaningless to it, and accepting them silently is the harm — most of
+		// all -mock, which would leave `-benchload -mock` reading the REAL store.
+		// The list is hand-written, so it is only as complete as the
 		// last person to add a flag — TestBenchloadRefusesEveryFrameShapingFlag
 		// walks the real flag surface and fails on the first one missing here.
 		//
@@ -152,10 +152,10 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 		return CodeUsage
 	}
 
-	// -demo is a -dump modifier (glossary), refused without -dump: read only
-	// inside the -dump branch, a bare `-demo move` would launch an ordinary
-	// fixture TUI with the state silently dropped, and a bare `-demo bogus`
-	// would exit 0 without ever validating the name.
+	// -demo is a -dump modifier (glossary) and is refused without -dump. Were
+	// it consulted only inside the -dump branch, a bare `-demo move` would open
+	// the ordinary live-store TUI with the state silently dropped, and a bare
+	// `-demo bogus` would exit 0 without ever validating the name.
 	if *demo != "" && !*dump {
 		_, _ = fmt.Fprintf(stderr, "error: -demo %s needs -dump (it fixes one transient state into a single frame)\n", *demo)
 		return CodeUsage

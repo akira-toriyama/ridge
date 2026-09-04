@@ -27,8 +27,8 @@ import (
 // `furrow add` auto-attaches it and `--draft` suppresses it. Without this
 // mirror every quick add in the mock landed repo-less, i.e. AS A DRAFT — the
 // modal's chip said "repo (board auto)" and the created card said "draft" in
-// the same session — and the "t-dg7k is the only repo-less
-// task" invariant above broke on the first add.
+// the same session — and the "t-dg7k is the only repo-less task" invariant
+// above broke on the first add.
 const fixtureDefaultRepo = "tomo/kyushu-trip"
 
 func ts(s string) time.Time {

@@ -24,8 +24,8 @@ import (
 //     be swallowed rather than treated as a drop.
 //  4. THE RELEASE DECIDES, NOT THE LAST LANE CROSSED. A sticky dropLane
 //     commits a card yanked off the board into whatever column the pointer
-//     last brushed past — including a release on the title bar. Pulling a card
-//     away from the board is the universal escape hatch; it must cancel.
+//     last brushed past — a release on the title bar included. Pulling a
+//     card away from the board is the universal escape hatch; it must cancel.
 const dragThreshold = 2 // Chebyshev cells
 
 // dragScrollInterval is the repeat rate of the edge auto-scroll. A terminal

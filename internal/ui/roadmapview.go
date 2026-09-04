@@ -247,9 +247,8 @@ func (m *Model) roadCells(l *roadLayout, t *board.Task, r *roadRow, tlW int) str
 	// frame is a leak two views already assert against.
 	//
 	// The chip YIELDS to today's gridline: on every overdue row that belongs
-	// to a box the chip's natural span crosses today, and letting it win put
-	// a hole in the ┊ on exactly the rows the view exists to surface (found
-	// by review — all three shipped headless frames had it).
+	// to a box the chip's natural span crosses today, and letting it win puts
+	// a hole in the ┊ on exactly the rows the view exists to surface.
 	chip := ""
 	budget := rest - 3
 	if tx > x {
@@ -418,9 +417,9 @@ func (m *Model) roadPanBy(d int) {
 // flag opens the view from inside New() — where a note would overwrite the
 // read-only warning that is set exactly once per session and never restored
 // (dump.go's own switch documents that trap; -table dodges it by being a
-// bare view assignment, and this split is how -roadmap dodges it — found by
-// review). It returns the fallback sentence the interactive path owes, ""
-// when the seed landed.
+// bare view assignment, and this split is how -roadmap dodges it). It
+// returns the fallback sentence the interactive path owes, "" when the seed
+// landed.
 //
 // The seed is the caller's cursor when that task is on the axis at all —
 // arriving from a dated task and losing it would make the roadmap a place
