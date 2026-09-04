@@ -61,35 +61,10 @@ func (m *Model) renderMap() string {
 	if len(shown) > canvasH {
 		shown = shown[m.mapScroll:minInt(len(bands), m.mapScroll+canvasH)]
 	}
-	canvas := make([]string, 0, canvasH)
-	for _, s := range shown {
-		canvas = append(canvas, " "+pad(s, maxInt(1, m.w-2)))
-	}
-	for len(canvas) < canvasH {
-		canvas = append(canvas, strings.Repeat(" ", maxInt(1, m.w)))
-	}
-
-	parts := []string{
-		pad(m.mapTitleBar(l), m.w),
-		pad(m.mapHeader(l, len(bands) > canvasH), m.w),
-		strings.Join(canvas, "\n"),
-	}
-	if sh := m.stripHeight(); sh > 0 {
-		parts = append(parts, m.taskStrip(m.b.Task(m.mapSel), m.taskHidden(m.mapSel), sh))
-	}
-	parts = append(parts, pad(m.statusLine(), m.w))
-
-	frame := m.fitFrame(strings.Join(parts, "\n"))
-	// Composed as a string rather than through the compositor, exactly like
-	// the graph — so `?` must be layered on here explicitly or it would set a
-	// flag and change not one pixel while the title bar advertises it.
-	if m.fullHelp {
-		frame = m.fitFrame(lg.NewCompositor(
-			lg.NewLayer(frame).X(0).Y(0).Z(zChrome),
-			m.helpLayer(),
-		).Render())
-	}
-	return frame
+	return m.composeFullScreen(m.mapTitleBar(l), m.mapHeader(l, len(bands) > canvasH),
+		m.fillCanvas(shown, canvasH), func(h int) string {
+			return m.taskStrip(m.b.Task(m.mapSel), m.taskHidden(m.mapSel), h)
+		})
 }
 
 // mapBands renders the packed grid to one string per screen line. Every column
@@ -292,13 +267,8 @@ func (m *Model) taskHidden(id string) bool {
 }
 
 func (m *Model) mapTitleBar(l *mapLayout) string {
-	th := m.th
-	left := th.title.Render("furrow board") + th.crumb.Render("  ·  ") +
-		m.fullTabs(viewMap)
-	right := th.crumb.Render(fmt.Sprintf("%d clusters · %d nodes  ·  ",
-		len(l.Panels), len(l.Rows))) + th.accent.Render("⟨MAP⟩") +
-		th.dim.Render("  ·  ? help")
-	return joinEnds(left, right, m.w)
+	return m.fullScreenTitleBar(viewMap,
+		fmt.Sprintf("%d clusters · %d nodes", len(l.Panels), len(l.Rows)), "⟨MAP⟩")
 }
 
 // mapHeader is the one line that says what is on screen and what the board as

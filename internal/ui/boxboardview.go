@@ -67,36 +67,8 @@ func (m *Model) renderBoxes() string {
 	if len(shown) > canvasH {
 		shown = shown[m.boxesScroll:minInt(len(bands), m.boxesScroll+canvasH)]
 	}
-	canvas := make([]string, 0, canvasH)
-	for _, s := range shown {
-		canvas = append(canvas, " "+pad(s, maxInt(1, m.w-2)))
-	}
-	for len(canvas) < canvasH {
-		canvas = append(canvas, strings.Repeat(" ", maxInt(1, m.w)))
-	}
-
-	parts := []string{
-		pad(m.boxTitleBar(l), m.w),
-		pad(m.boxHeader(l, len(bands) > canvasH), m.w),
-		strings.Join(canvas, "\n"),
-	}
-	if sh := m.stripHeight(); sh > 0 {
-		parts = append(parts, m.boxStrip(m.selectedBox(l), sh))
-	}
-	parts = append(parts, pad(m.statusLine(), m.w))
-
-	frame := m.fitFrame(strings.Join(parts, "\n"))
-	// Composed as a string rather than through the compositor, like the graph
-	// and the map — so anything that OWNS THE KEYBOARD has to be layered on
-	// here explicitly. Unlike those two this view opens one: `m` hands the
-	// keyboard to the epic overlay, and without modalLayers the overlay held
-	// every keystroke while rendering not one pixel — the exact failure
-	// modalLayers exists to have exactly one home for.
-	if layers := m.modalLayers(); len(layers) > 0 {
-		frame = m.fitFrame(lg.NewCompositor(append(
-			[]*lg.Layer{lg.NewLayer(frame).X(0).Y(0).Z(zChrome)}, layers...)...).Render())
-	}
-	return frame
+	return m.composeFullScreen(m.boxTitleBar(l), m.boxHeader(l, len(bands) > canvasH),
+		m.fillCanvas(shown, canvasH), func(h int) string { return m.boxStrip(m.selectedBox(l), h) })
 }
 
 // selectedBox resolves the cursor to its box, nil when the pack is empty.
@@ -109,13 +81,8 @@ func (m *Model) selectedBox(l *boxLayout) *board.EpicInfo {
 }
 
 func (m *Model) boxTitleBar(l *boxLayout) string {
-	th := m.th
-	left := th.title.Render("furrow board") + th.crumb.Render("  ·  ") +
-		m.fullTabs(viewBoxes)
-	right := th.crumb.Render(fmt.Sprintf("%d repos · %d rows  ·  ",
-		len(l.Groups), len(l.Rows))) + th.accent.Render("⟨BOXES⟩") +
-		th.dim.Render("  ·  ? help")
-	return joinEnds(left, right, m.w)
+	return m.fullScreenTitleBar(viewBoxes,
+		fmt.Sprintf("%d repos · %d rows", len(l.Groups), len(l.Rows)), "⟨BOXES⟩")
 }
 
 // boxHeader states the scope and the four counts the overview exists to

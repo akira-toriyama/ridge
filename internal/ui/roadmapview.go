@@ -120,35 +120,10 @@ func (m *Model) renderRoadmap() string {
 			canvas = append(canvas, m.roadRowLine(l, &l.Rows[y], tlW))
 		}
 	}
-	full := make([]string, 0, roadAxisH+rowsH)
-	for _, s := range canvas {
-		full = append(full, " "+pad(s, maxInt(1, m.w-2)))
-	}
-	for len(full) < roadAxisH+rowsH {
-		full = append(full, strings.Repeat(" ", maxInt(1, m.w)))
-	}
-
-	parts := []string{
-		pad(m.roadTitleBar(l), m.w),
-		pad(m.roadHeader(l, len(l.Rows) > rowsH, l.Cells > tlW), m.w),
-		strings.Join(full, "\n"),
-	}
-	if sh := m.stripHeight(); sh > 0 {
-		parts = append(parts, m.taskStrip(m.b.Task(m.roadSel), m.taskHidden(m.roadSel), sh))
-	}
-	parts = append(parts, pad(m.statusLine(), m.w))
-
-	frame := m.fitFrame(strings.Join(parts, "\n"))
-	// Composed as a string rather than through the compositor, exactly like
-	// the map — so `?` must be layered on here explicitly or it would set a
-	// flag and change not one pixel while the title bar advertises it.
-	if m.fullHelp {
-		frame = m.fitFrame(lg.NewCompositor(
-			lg.NewLayer(frame).X(0).Y(0).Z(zChrome),
-			m.helpLayer(),
-		).Render())
-	}
-	return frame
+	return m.composeFullScreen(m.roadTitleBar(l), m.roadHeader(l, len(l.Rows) > rowsH, l.Cells > tlW),
+		m.fillCanvas(canvas, roadAxisH+rowsH), func(h int) string {
+			return m.taskStrip(m.b.Task(m.roadSel), m.taskHidden(m.roadSel), h)
+		})
 }
 
 // roadAxisRows composes the two axis label rows: a blank identity pane, the
@@ -296,14 +271,12 @@ func (m *Model) roadCells(l *roadLayout, t *board.Task, r *roadRow, tlW int) str
 }
 
 func (m *Model) roadTitleBar(l *roadLayout) string {
-	th := m.th
-	right := th.crumb.Render(fmt.Sprintf("%d dated tasks  ·  ", len(l.Rows))) +
-		th.accent.Render("⟨ROADMAP⟩") + th.dim.Render("  ·  ? help")
+	right := m.fullScreenTitleRight(fmt.Sprintf("%d dated tasks", len(l.Rows)), "⟨ROADMAP⟩")
 	// The saved-view tabs render here too: the roadmap is the one full-screen
 	// view a saved view can BE, so landing on a roadmap tab must not hide the
 	// tab strip that got you there (viewtabs.go). Right first, then the strip
 	// budgeted to what remains — chromeLayers' rule.
-	prefix := th.title.Render("furrow board") + th.crumb.Render("  ·  ") + m.fullTabs(viewRoadmap)
+	prefix := m.fullScreenTitleLeft(viewRoadmap)
 	left := prefix + m.viewTabStrip(m.w-lg.Width(prefix)-lg.Width(right)-1)
 	return joinEnds(left, right, m.w)
 }

@@ -260,38 +260,8 @@ func (m *Model) renderGraph() string {
 	if len(shown) > canvasH {
 		shown = shown[m.graphScroll:minInt(len(bands), m.graphScroll+canvasH)]
 	}
-	canvas := make([]string, 0, canvasH)
-	for _, s := range shown {
-		canvas = append(canvas, " "+pad(s, maxInt(1, m.w-2)))
-	}
-	for len(canvas) < canvasH {
-		canvas = append(canvas, strings.Repeat(" ", maxInt(1, m.w)))
-	}
-
-	parts := []string{
-		pad(m.graphTitleBar(l), m.w),
-		pad(m.graphHeader(l, f, len(bands) > canvasH), m.w),
-		strings.Join(canvas, "\n"),
-	}
-	if sh := m.stripHeight(); sh > 0 {
-		parts = append(parts, m.graphStrip(l, sh))
-	}
-	parts = append(parts, pad(m.statusLine(), m.w))
-
-	frame := m.fitFrame(strings.Join(parts, "\n"))
-	// The graph is composed as a string, not through the compositor, so `?`
-	// used to set fullHelp and change not one pixel here — the overlay was
-	// simply never drawn, and the next Esc went on clearing an invisible flag.
-	// Harmless while the graph had a footer of its own; a lie the moment this
-	// view started advertising `? help` in its title bar. It is also the only
-	// way to read the key surface from inside a full-screen mode.
-	if m.fullHelp {
-		frame = m.fitFrame(lg.NewCompositor(
-			lg.NewLayer(frame).X(0).Y(0).Z(zChrome),
-			m.helpLayer(),
-		).Render())
-	}
-	return frame
+	return m.composeFullScreen(m.graphTitleBar(l), m.graphHeader(l, f, len(bands) > canvasH),
+		m.fillCanvas(shown, canvasH), func(h int) string { return m.graphStrip(l, h) })
 }
 
 // graphBandsTopDown stacks the bands as screen lines.
@@ -425,15 +395,8 @@ func (m *Model) graphRankColumn(row []*egoNode, f graphFrame, h int) []string {
 }
 
 func (m *Model) graphTitleBar(l *egoLayout) string {
-	th := m.th
-	left := th.title.Render("furrow board") + th.crumb.Render("  ·  ") +
-		m.fullTabs(viewGraph)
-	// `? help` here too: the graph is a full-screen mode, so once its footer
-	// went this row became the only pointer to the key surface from inside it.
-	right := th.crumb.Render(fmt.Sprintf("%d nodes · %d edges  ·  ",
-		len(l.Real()), len(l.Edges))) + th.accent.Render("⟨GRAPH⟩") +
-		th.dim.Render("  ·  ? help")
-	return joinEnds(left, right, m.w)
+	return m.fullScreenTitleBar(viewGraph,
+		fmt.Sprintf("%d nodes · %d edges", len(l.Real()), len(l.Edges)), "⟨GRAPH⟩")
 }
 
 // graphHeader is the one line that says what you are looking at, which way is

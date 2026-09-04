@@ -186,7 +186,6 @@ func (m *Model) renderSwim() string {
 	m.swimScroll = clamp(m.swimScroll, 0, maxInt(0, total-canvasH))
 	m.swimScroll = m.scrollSwimToSel(l, total, canvasH)
 
-	inner := maxInt(1, m.w-2)
 	canvas := make([]string, 0, swimBarH+canvasH)
 	canvas = append(canvas, m.swimBarRows(l)...)
 	if l.Empty() {
@@ -203,37 +202,11 @@ func (m *Model) renderSwim() string {
 			canvas = append(canvas, m.swimLineText(l, l.Lines[i]))
 		}
 	}
-	full := make([]string, 0, swimBarH+canvasH)
-	for _, s := range canvas {
-		full = append(full, " "+pad(s, inner))
-	}
-	for len(full) < swimBarH+canvasH {
-		full = append(full, strings.Repeat(" ", maxInt(1, m.w)))
-	}
-
-	parts := []string{
-		pad(m.swimTitleBar(l), m.w),
-		pad(m.swimHeader(l, total > canvasH), m.w),
-		strings.Join(full, "\n"),
-	}
-	if sh := m.stripHeight(); sh > 0 {
-		id := l.IDOf(m.swimSel)
-		parts = append(parts, m.taskStrip(m.b.Task(id), m.taskHidden(id), sh))
-	}
-	parts = append(parts, pad(m.statusLine(), m.w))
-
-	frame := m.fitFrame(strings.Join(parts, "\n"))
-	// Composed as a string rather than through the compositor, exactly like the
-	// map and the roadmap — so `?` must be layered on here explicitly or it
-	// would set a flag and change not one pixel while the title bar advertises
-	// it.
-	if m.fullHelp {
-		frame = m.fitFrame(lg.NewCompositor(
-			lg.NewLayer(frame).X(0).Y(0).Z(zChrome),
-			m.helpLayer(),
-		).Render())
-	}
-	return frame
+	return m.composeFullScreen(m.swimTitleBar(l), m.swimHeader(l, total > canvasH),
+		m.fillCanvas(canvas, swimBarH+canvasH), func(h int) string {
+			id := l.IDOf(m.swimSel)
+			return m.taskStrip(m.b.Task(id), m.taskHidden(id), h)
+		})
 }
 
 func (m *Model) swimEmptyLine() string {
@@ -246,11 +219,8 @@ func (m *Model) swimEmptyLine() string {
 }
 
 func (m *Model) swimTitleBar(l *swimLayout) string {
-	th := m.th
-	left := th.title.Render("furrow board") + th.crumb.Render("  ·  ") + m.fullTabs(viewSwim)
-	right := th.crumb.Render(fmt.Sprintf("%d bands · %d tasks  ·  ", len(l.Bands), l.Tasks)) +
-		th.accent.Render("⟨SWIM⟩") + th.dim.Render("  ·  ? help")
-	return joinEnds(left, right, m.w)
+	return m.fullScreenTitleBar(viewSwim,
+		fmt.Sprintf("%d bands · %d tasks", len(l.Bands), l.Tasks), "⟨SWIM⟩")
 }
 
 func (m *Model) swimHeader(l *swimLayout, clipped bool) string {
