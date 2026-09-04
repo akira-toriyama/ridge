@@ -23,12 +23,11 @@ import (
 // Store is the fixture-backed board.Provider.
 //
 // The mutex is not decoration: persists run OFF the UI thread inside a
-// tea.Cmd, so Add used to append to the very board View() was rendering. The
-// port contract is explicit — "a provider must never mutate a Board it has
-// handed out: Reload builds a fresh one and swaps" — and furrowstore already
-// honoured it. This one now does too: every write to b/added/addSeq is under
-// the lock, and Add swaps a freshly built board in rather than growing the
-// live one.
+// tea.Cmd, so an Add that grew the board in place would race the very board
+// View() is rendering. The port contract is explicit — "a provider must never
+// mutate a Board it has handed out: Reload builds a fresh one and swaps" — so
+// every write to b/added/addSeq is under the lock, and Add swaps a freshly
+// built board in rather than growing the live one.
 type Store struct {
 	mu sync.Mutex
 
@@ -317,9 +316,8 @@ func (p *Store) PersistReview(id string) error {
 // terminalLanes is furrow's default terminal set (config DefaultTerminal:
 // done, icebox, waiting), the lanes App.Revisit skips. Hard-coded like
 // staleDays: the fixture has no config, and `furrow board --json` exposes no
-// terminal flag for a Lane to carry. Done alone was the first cut, and it
-// let the fixture's icebox draft survive a lens the real binary drops it
-// from (found by review).
+// terminal flag for a Lane to carry. Done alone is not enough: it lets the
+// fixture's icebox draft survive a lens the real binary drops it from.
 var terminalLanes = map[string]bool{"done": true, "icebox": true, "waiting": true}
 
 // Revisit stands in for `furrow revisit -q` over the fixture (board.Provider):

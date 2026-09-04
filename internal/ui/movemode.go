@@ -72,8 +72,7 @@ func (m *Model) cancelMove() {
 func (m *Model) onMoveKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
 	// `?` must work here: the move-mode title row advertises it, and the help
-	// overlay is the only listing of the K/J/H/L extremes. It used to be a dead
-	// key in exactly the mode its section documents.
+	// overlay is the only listing of the K/J/H/L extremes.
 	case key.Matches(msg, m.keys.Help):
 		m.fullHelp = !m.fullHelp
 		return nil
@@ -264,9 +263,9 @@ func withoutID(ts []*board.Task, id string) []*board.Task {
 // holds that slot. Without this, dropping "second from the top" of a filtered
 // column would silently mean "second from the top" of the unfiltered lane.
 //
-// The two edges are where it used to lie about the gesture:
+// The two edges are where a naive fallback lies about the gesture:
 //   - nothing visible at all (an empty lane, or one the filter emptied): the
-//     gesture said TOP, and the old fallback appended to the real BOTTOM.
+//     gesture said TOP, so appending to the real BOTTOM is the wrong answer.
 //   - past the last visible card: that means "after the last card you can SEE",
 //     not "after cards the filter is hiding from you".
 func boardInsertIndex(full, vis []*board.Task, visIdx int) int {

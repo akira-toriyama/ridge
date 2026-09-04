@@ -351,8 +351,8 @@ func (m *Model) onEpicNewKey(msg tea.KeyPressMsg) tea.Cmd {
 			// every write path refuses until the re-read. Checked BEFORE the
 			// modal closes — the queue's own refusal comes after exitEpic, so
 			// reaching it would eat the typed title all over again, exactly on
-			// the reopened-after-refusal retry (found by review; the quick
-			// add's onAddKey keeps the same guard for the same reason).
+			// the reopened-after-refusal retry (the quick add's onAddKey keeps
+			// the same guard for the same reason).
 			m.fail("the store refused the last write — rolling back; press ⏎ again in a moment")
 			return nil
 		}

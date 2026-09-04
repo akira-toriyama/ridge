@@ -24,9 +24,9 @@ const (
 	zGhost  = 99 // the dragged card, above everything
 )
 
-// View renders one frame. Everything that used to be a NewProgram option in
-// bubbletea v1 is now a field re-asserted here every render — which is exactly
-// what makes runtime mouse toggling (the `M` key) free.
+// View renders one frame. Every program-level switch (alt screen, mouse mode,
+// keyboard enhancements) is a field re-asserted here every render — which is
+// exactly what makes runtime mouse toggling (the `M` key) free.
 func (m *Model) View() tea.View {
 	m.relayout()
 	var content string
@@ -106,11 +106,9 @@ func (m *Model) renderBoard() string {
 }
 
 // modalLayers is every overlay that OWNS THE KEYBOARD, listed ONCE. The board
-// and the table each compose their own frame, and this list used to be written
-// out in both — so an overlay added to one of them held the keyboard while
-// rendering nowhere at all in the other. That is the same failure the slice
-// panel's own comment in table.go records ("an invisible panel that still owned
-// the keyboard ate every arrow key"). A new mode belongs here, never in a caller.
+// and the table each compose their own frame; an overlay listed in only one of
+// them holds the keyboard while rendering nowhere at all in the other. A new
+// mode belongs here, never in a caller.
 //
 // The help overlay is last because it sits above all of them (zHelp).
 func (m *Model) modalLayers() []*lg.Layer {
@@ -196,8 +194,8 @@ func (m *Model) chromeLayers() []*lg.Layer {
 		tail += "  ·  " + m.lastPersist
 	}
 	tail += "  ·  " + m.modeBadge()
-	// The mouse toggle used to share the badge slot with the modes; it is
-	// standing state of its own kind, so it gets its own token.
+	// The mouse toggle is standing state of its own kind, not a mode, so it
+	// gets its own token rather than the badge slot.
 	if !m.mouseOn {
 		tail += th.dim.Render("  ·  mouse off")
 	}

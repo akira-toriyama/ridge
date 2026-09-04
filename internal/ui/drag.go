@@ -22,11 +22,10 @@ import (
 //  3. ESC CANCELS, AND THE RELEASE THAT FOLLOWS MUST BE A NO-OP. The button is
 //     still physically down after Esc, so the release still arrives; it has to
 //     be swallowed rather than treated as a drop.
-//  4. THE RELEASE DECIDES, NOT THE LAST LANE CROSSED. dropLane used to be
-//     sticky, so yanking a card off the board and letting go still committed
-//     the move into whatever column the pointer last brushed past — including a
-//     release on the title bar. Pulling a card away from the board is the
-//     universal escape hatch; it must cancel.
+//  4. THE RELEASE DECIDES, NOT THE LAST LANE CROSSED. A sticky dropLane
+//     commits a card yanked off the board into whatever column the pointer
+//     last brushed past — including a release on the title bar. Pulling a card
+//     away from the board is the universal escape hatch; it must cancel.
 const dragThreshold = 2 // Chebyshev cells
 
 // dragScrollInterval is the repeat rate of the edge auto-scroll. A terminal

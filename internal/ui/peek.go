@@ -16,9 +16,8 @@ import (
 // panel float above content it does not have to reflow.
 
 // peekBox is the panel's place on screen. Every dimension is clamped to the
-// terminal: the old floor of 6 rows anchored at y=2 hung off the bottom of any
-// frame shorter than 8 rows, and unlike the help overlay the peek had no
-// backstop of its own.
+// terminal: a fixed floor hangs off the bottom of any frame shorter than it,
+// and unlike the help overlay the peek has no backstop of its own.
 func (m *Model) peekBox() (x, y, w, h int) {
 	tw, th := maxInt(m.w, 1), maxInt(m.h, 1)
 	w = minInt(clamp(tw/2, 46, 70), tw)

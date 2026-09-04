@@ -94,7 +94,7 @@ func Load(path string) ([]View, []string, error) {
 // to warnings: the lenient decode above deliberately ignores unknown keys
 // (forward-compat — go-dev's config rule), but a misspelled KEY is the
 // likelier hand-edit than a misspelled value, and it was the one typo with
-// no report at all (found by review).
+// no report at all.
 func unknownKeyWarnings(b []byte) []string {
 	d := toml.NewDecoder(bytes.NewReader(b))
 	d.DisallowUnknownFields()
@@ -268,8 +268,7 @@ func Save(path string, vs []View) error {
 	// hand-written one would have — this is a shareable view list, not a
 	// keystroke log (-debuglog's 0600 is for the latter). An EXISTING file
 	// keeps its own mode: the rename must not widen a target someone
-	// deliberately chmod'ed tighter (a 0600 dotfiles target went 0644 —
-	// found by review).
+	// deliberately chmod'ed tighter.
 	mode := os.FileMode(0o644)
 	if fi, err := os.Stat(path); err == nil {
 		mode = fi.Mode().Perm()

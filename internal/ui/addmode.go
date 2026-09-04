@@ -103,7 +103,7 @@ func inheritContext(raw string) (label, epic, repo string, draft bool) {
 			// EqualFold: furrow's -q matches the value case-insensitively
 			// (measured — is:DRAFT answers the same rows), so a case-exact
 			// check here would narrow the view and then silently repo-attach
-			// the add (found by review).
+			// the add.
 			if strings.EqualFold(v, "draft") {
 				draft = true
 			}
@@ -129,7 +129,7 @@ func (m *Model) onAddKey(msg tea.KeyPressMsg) tea.Cmd {
 			// Refuse in-modal, naming the first offender — the same
 			// keep-the-typed-line contract as the empty title. Checked
 			// FIRST: a tokens-only line is a token problem, and "a title
-			// cannot be empty" would name the wrong cause (found by review).
+			// cannot be empty" would name the wrong cause.
 			m.fail("%s", tk.bad[0])
 			return nil
 		}
@@ -256,7 +256,7 @@ func (m *Model) addLayer() *lg.Layer {
 	if draft && a.opts.Repo != "" {
 		// The guidance names an act the user can actually perform: a typed
 		// token can be dropped, but an inherited draft has no token in the
-		// line — only the filter can clear it (found by review).
+		// line — only the filter can clear it.
 		if tk.draft {
 			bad = append(bad, "is:draft conflicts with repo "+a.opts.Repo+" — drop it, or clear repo: from the filter")
 		} else {

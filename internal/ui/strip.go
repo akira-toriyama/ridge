@@ -133,9 +133,8 @@ func (m *Model) taskStrip(t *board.Task, hidden bool, h int) string {
 
 	// A strip too short to hold a single content row renders nothing rather
 	// than panicking: stripHeight lands on exactly 1 at m.h==7, and
-	// `make([]string, 0, h-2)` with h==1 is a negative capacity. Found by
-	// review at `-dump -demo map -rows 7`; the same arithmetic crashed the
-	// graph before this file existed.
+	// `make([]string, 0, h-2)` with h==1 is a negative capacity
+	// (`-dump -demo map -rows 7` reaches it).
 	body := maxInt(0, h-2)
 	rows := make([]string, 0, body)
 	for i := 0; i < body; i++ {

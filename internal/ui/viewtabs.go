@@ -241,7 +241,7 @@ func (m *Model) switchView(i int) tea.Cmd {
 			// so the walked-ness must ride along too: startRoadmapFrom
 			// resets it for fresh entries, and losing it here made the next
 			// esc skip its pin-and-carry while still claiming "the cursor
-			// followed the roadmap" (found by review, third pass). Gated on
+			// followed the roadmap". Gated on
 			// the seed surviving — a walk the new axis could not place is
 			// not a walk any more.
 			m.roadMoved = true
@@ -334,7 +334,7 @@ func (m *Model) saveView() {
 // the lit tab and its dot are the only signals of "which bundle is applied"
 // and "it has drifted", so they are the last cells this strip gives up.
 // (joinEnds truncates the row's LEFT end first, which is exactly where an
-// unbudgeted strip put them — found by review.) Lower digits are preferred
+// unbudgeted strip would put them.) Lower digits are preferred
 // when both neighbours fit: the digits are the reachable tabs.
 func (m *Model) viewTabStrip(budget int) string {
 	if len(m.views) == 0 {
