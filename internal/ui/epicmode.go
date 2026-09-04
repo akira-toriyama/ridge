@@ -718,7 +718,9 @@ func (m *Model) refuseWhileWriting(label string) bool {
 		// still the pre-write ones, so a toggle here recomputes from a stale
 		// value and a dep removal addresses an edge furrow has already dropped
 		// ("X is not a dependency of Y").
-		m.fail("%s — the last box write landed; waiting for the board to re-read it", label)
+		// Names the way out: `r` is not routed inside the overlay, and after
+		// a failed rollback re-read nothing else will fire one.
+		m.fail("%s — the last box write landed; waiting for the board to re-read it (esc out, then r)", label)
 	default:
 		return false
 	}

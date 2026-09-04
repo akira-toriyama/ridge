@@ -228,3 +228,98 @@ func TestAMixedChainStillRollsBack(t *testing.T) {
 		t.Error("the re-read was not marked as the rollback")
 	}
 }
+
+// A failed ROLLBACK re-read closes only the rollback window. The unread window
+// stays: a store-first write that LANDED is still unread, and the failed
+// re-read did not change that — so the epic overlay keeps refusing until a
+// re-read applies, and `r` from the board (the overlay does not route it) is
+// what reopens it. Clearing the unread flags there would let a gesture aim at
+// rows furrow has already moved.
+//
+// bite-exempt: deliberately pins behaviour main already has — the branch was
+// judged intent, not a hole (t-zk3y); clearing the window there fails this test.
+func TestFailedRollbackReReadKeepsTheUnreadWindow(t *testing.T) {
+	m, p := storeFirstModel(t)
+	sliceOnEpicAxis(t, m, "e-one")
+	press(m, "m")
+
+	// 1. A store-first write lands and is not yet re-read.
+	goal := "着地したゴール"
+	cmd := m.epicPatch("goal", board.EpicPatch{Goal: &goal})
+	if cmd == nil {
+		t.Fatal("the store-first write did not queue")
+	}
+	m.onPersistDone(cmd().(persistDoneMsg))
+	if !m.storeFirstUnread || !m.unreadLanded {
+		t.Fatalf("setup: landed write not marked unread (storeFirst=%v landed=%v)",
+			m.storeFirstUnread, m.unreadLanded)
+	}
+
+	// 2. An optimistic write is refused by the store, arming the rollback.
+	fail := m.enqueuePersist("move t-a", func() ([]string, error) {
+		return nil, errors.New("schema gate says no")
+	})
+	if fail == nil {
+		t.Fatal("setup: the optimistic write did not queue")
+	}
+	rb := m.onPersistDone(fail().(persistDoneMsg))
+	if rb == nil || !m.rollingBack {
+		t.Fatal("setup: the refused optimistic write must arm the rollback window")
+	}
+
+	// 3. The rollback re-read itself fails.
+	m.onReloadDone(reloadDoneMsg{rollback: true, err: errors.New("git lock")})
+	if m.rollingBack {
+		t.Fatal("a failed rollback re-read must close the rollback window")
+	}
+	if !m.unreadLanded || !m.storeFirstUnread {
+		t.Fatalf("the failed re-read cleared the unread window (landed=%v storeFirst=%v) — "+
+			"the landed write is still unread", m.unreadLanded, m.storeFirstUnread)
+	}
+
+	// 4. An epic gesture is refused, and the reason names the missing re-read.
+	before := len(p.calls)
+	m.status, m.statusErr = "", false
+	if c := m.epicPatch("goal", board.EpicPatch{Goal: &goal}); c != nil {
+		t.Error("an epic gesture queued against rows the board has not re-read")
+	}
+	if len(p.calls) != before {
+		t.Errorf("the store saw another call: %v", p.calls[before:])
+	}
+	if !m.statusErr || !strings.Contains(m.status, "landed; waiting for the board to re-read it") {
+		t.Errorf("status = %q — the refusal must name the LANDED write, not an in-flight one", m.status)
+	}
+	if !strings.Contains(m.status, "esc out, then r") {
+		t.Errorf("status = %q — the refusal must name the way out; r is not routed in the overlay", m.status)
+	}
+
+	// 5. `r` inside the overlay is not routed (it types nothing and fires
+	// nothing); esc out to the board and `r` fires the re-read that applies
+	// and reopens the overlay.
+	press(m, "r")
+	if m.mode != modeEpic || !m.storeFirstUnread {
+		t.Fatalf("r inside the overlay: mode = %v unread = %v — it must neither leave nor re-read",
+			m.mode, m.storeFirstUnread)
+	}
+	press(m, "esc", "esc")
+	if m.mode != modeNormal {
+		t.Fatalf("mode = %v after esc esc, want normal", m.mode)
+	}
+	_, c := m.Update(keyMsg("r"))
+	if c == nil {
+		t.Fatal("r on the board did not fire a reload")
+	}
+	reload, ok := c().(reloadDoneMsg)
+	if !ok {
+		t.Fatalf("r produced %T, want a reload", c())
+	}
+	m.onReloadDone(reload)
+	if m.unreadLanded || m.storeFirstUnread {
+		t.Error("the applied re-read did not clear the unread window")
+	}
+	sliceOnEpicAxis(t, m, "e-one")
+	press(m, "m")
+	if c := m.epicPatch("goal", board.EpicPatch{Goal: &goal}); c == nil {
+		t.Error("the overlay stayed locked after the re-read landed")
+	}
+}

@@ -224,6 +224,10 @@ type Model struct {
 	// own reconcile can be dropped by onReloadDone's in-flight guard (a keypress
 	// landing behind it), and clearing early would let the next refusal skip the
 	// re-read that the dropped one still owed.
+	//
+	// Set only through markUnread and cleared only through clearUnread, with
+	// storeFirstUnread; a failed ROLLBACK re-read leaves both standing (see
+	// onReloadDone).
 	unreadLanded bool
 	// The same window, narrowed to the STORE-FIRST writes: the overlay that
 	// issued one is still showing pre-write values until the re-read lands, so it
