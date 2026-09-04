@@ -2,16 +2,81 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	lg "charm.land/lipgloss/v2"
 )
 
-// What the full-screen views (dep map, box overview, roadmap, swimlane) share
-// below the frame: the cursor-pinned scroll, the half-page key, the filter's
-// status-line claim, and the cursor carried back to the board on close. Each
-// view keeps its own layout, keys and words; these hold the invariants once,
-// so four copies cannot drift apart. The graph is not a client — its scroll
-// follows a two-axis frame of its own.
+// What the full-screen views (graph, dep map, box overview, roadmap, swimlane)
+// share: the frame skeleton and title line above, and below it the
+// cursor-pinned scroll, the half-page key, the filter's status-line claim,
+// and the cursor carried back to the board on close. Each view keeps its own
+// layout, keys and words; these hold the invariants once, so five copies
+// cannot drift apart. There is no fullScreenView interface on purpose: the
+// layouts share no type, and inventing one would be abstraction for its own
+// sake. The graph's scroll follows a two-axis frame of its own and is not a
+// scrollToSel client.
+
+// fullScreenTitleBar is the title line a full-screen view draws in place of
+// the board's: the shared prefix and tab strip on the left; the view's counts,
+// its ⟨TOKEN⟩ and the `? help` pointer on the right. That pointer is the only
+// way to the key surface from inside a full-screen mode, since none has a
+// footer. The roadmap builds its own left half (the saved-view tab strip rides
+// there) from the two halves below.
+func (m *Model) fullScreenTitleBar(v viewKind, counts, token string) string {
+	return joinEnds(m.fullScreenTitleLeft(v), m.fullScreenTitleRight(counts, token), m.w)
+}
+
+func (m *Model) fullScreenTitleLeft(v viewKind) string {
+	return m.th.title.Render("furrow board") + m.th.crumb.Render("  ·  ") + m.fullTabs(v)
+}
+
+func (m *Model) fullScreenTitleRight(counts, token string) string {
+	return m.th.crumb.Render(counts+"  ·  ") + m.th.accent.Render(token) + m.th.dim.Render("  ·  ? help")
+}
+
+// fillCanvas gives every rendered line the one-cell left margin and the frame
+// width, and blank-fills to h lines so the strip and status line always land
+// on the same rows.
+func (m *Model) fillCanvas(lines []string, h int) []string {
+	out := make([]string, 0, h)
+	for _, s := range lines {
+		out = append(out, " "+pad(s, maxInt(1, m.w-2)))
+	}
+	for len(out) < h {
+		out = append(out, strings.Repeat(" ", maxInt(1, m.w)))
+	}
+	return out
+}
+
+// composeFullScreen is the frame every full-screen view ends in: title bar,
+// header, canvas, the task strip when the window has room for one (strip
+// renders it at that height), the status line, clipped to the window — and
+// whatever owns the keyboard layered on top. The frame is a string, not a
+// compositor scene, so those layers must be added HERE: the graph once let `?`
+// set fullHelp and change not one pixel (the next Esc went on clearing an
+// invisible flag — harmless while the graph had a footer of its own, a lie
+// once its title bar advertised `? help`), and the box overview — the one
+// view that opens a modal from inside itself (`m`) — once handed the keyboard
+// to the epic overlay while rendering none of it. modalLayers is the one home
+// for "what owns the keyboard" (the edit / add / epic overlays, then help), so
+// every view routes through it: a view need not open a modal to be inside one
+// — `-roadmap` composes with every `-demo`, so the roadmap can START under the
+// add or edit overlay, and until this funnel those frames drew no modal at all.
+func (m *Model) composeFullScreen(titleBar, header string, canvas []string, strip func(h int) string) string {
+	parts := []string{pad(titleBar, m.w), pad(header, m.w), strings.Join(canvas, "\n")}
+	if sh := m.stripHeight(); sh > 0 {
+		parts = append(parts, strip(sh))
+	}
+	parts = append(parts, pad(m.statusLine(), m.w))
+	frame := m.fitFrame(strings.Join(parts, "\n"))
+	if layers := m.modalLayers(); len(layers) > 0 {
+		frame = m.fitFrame(lg.NewCompositor(append(
+			[]*lg.Layer{lg.NewLayer(frame).X(0).Y(0).Z(zChrome)}, layers...)...).Render())
+	}
+	return frame
+}
 
 // scrollToSel returns the scroll offset that keeps the selected row on screen,
 // computed from the same line the renderer placed it at so the scroll can
