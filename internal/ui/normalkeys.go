@@ -221,7 +221,7 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.jumpBack()
 
 	case key.Matches(msg, m.keys.Reload):
-		if m.inflight || len(m.pending) > 0 {
+		if m.queueBusy() {
 			// The reload would race the queue's own furrow process, land
 			// behind the guard in onReloadDone and be dropped — leaving
 			// "reloading…" on screen forever. The drain reconciles anyway.
@@ -240,7 +240,7 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 			m.note("the fixture has no store to sync")
 			return nil
 		}
-		if m.inflight || len(m.pending) > 0 {
+		if m.queueBusy() {
 			m.note("writes in flight — sync once they land")
 			return nil
 		}

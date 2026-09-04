@@ -82,8 +82,8 @@ type reloadDoneMsg struct {
 }
 
 // refuseWhileRollingBack refuses a gesture before it commits anything the
-// window cannot take back. enqueuePersist and enqueueStoreFirstOp both refuse
-// too, but only after the caller has already mutated m.b or closed a modal over
+// window cannot take back. The three enqueue entrances refuse through it too,
+// but by then a caller may already have mutated m.b or closed a modal over
 // hand-typed text, and those outlive the message: the mutation stays on screen
 // until the rollback re-read lands, and permanently if that re-read fails,
 // since onReloadDone clears the window without restoring the board.
@@ -92,9 +92,9 @@ type reloadDoneMsg struct {
 // by the queue's fail() inside the same Update, and applyCheck never notes at
 // all, so no success is ever rendered (measured). The board is.
 //
-// Same wording and the same apply/refused debug event those two funnels emit,
-// one layer earlier: the trail a "my edit vanished" report is read from must
-// not lose the refusal because it moved.
+// Calling it one layer earlier keeps the same wording and the same
+// apply/refused debug event: the trail a "my edit vanished" report is read
+// from must not lose the refusal because it moved.
 func (m *Model) refuseWhileRollingBack(label string) bool {
 	if !m.rollingBack {
 		return false
@@ -105,24 +105,34 @@ func (m *Model) refuseWhileRollingBack(label string) bool {
 	return true
 }
 
-// enqueuePersist queues one store write whose effect is already on the board,
-// and starts the queue when it is idle. Nil when a write is in flight — the
-// queue drains itself from onPersistDone.
-func (m *Model) enqueuePersist(label string, run func() ([]string, error)) tea.Cmd {
-	if m.rollingBack {
-		// The board is showing state the store refused; this write's indices
-		// and anchors were computed against that lie. Refuse it — the
-		// rollback re-read about to land will also revert its local half.
-		m.dbg.event("apply", "refused", map[string]any{"label": label, "why": "rolling-back"})
-		m.fail("%s dropped — the store refused the last write, rolling back", label)
-		return nil
+// queueBusy reports whether a write is running or waiting — the state every
+// reload, sync and reconcile guard checks before racing the queue's own furrow
+// process.
+func (m *Model) queueBusy() bool { return m.inflight || len(m.pending) > 0 }
+
+// queueOp appends one op and starts the queue when it is idle. Nil when a
+// write is in flight — the queue drains itself from onPersistDone.
+func (m *Model) queueOp(op persistOp) tea.Cmd {
+	fields := map[string]any{"label": op.label}
+	if op.noLocal {
+		fields["storeFirst"] = true
 	}
-	m.dbg.event("apply", "enqueue", map[string]any{"label": label})
-	m.pending = append(m.pending, persistOp{label: label, run: run})
+	m.dbg.event("apply", "enqueue", fields)
+	m.pending = append(m.pending, op)
 	if m.inflight {
 		return nil
 	}
 	return m.firePersist()
+}
+
+// enqueuePersist queues one store write whose effect is already on the board.
+func (m *Model) enqueuePersist(label string, run func() ([]string, error)) tea.Cmd {
+	// This write's indices and anchors were computed against the state the
+	// store refused; the rollback re-read about to land reverts its local half.
+	if m.refuseWhileRollingBack(label) {
+		return nil
+	}
+	return m.queueOp(persistOp{label: label, run: run})
 }
 
 func (m *Model) firePersist() tea.Cmd {
@@ -282,7 +292,7 @@ func (m *Model) onPersistDone(msg persistDoneMsg) tea.Cmd {
 // refused replay (applyEditorBody), which removes from the drain the very
 // write the quit was armed on.
 func (m *Model) quitOrFlush() tea.Cmd {
-	if m.inflight || len(m.pending) > 0 || m.heldBody != nil {
+	if m.queueBusy() || m.heldBody != nil {
 		if !m.quitting {
 			m.quitting = true
 			// APPENDED to the gesture's own report, not replacing it — the
@@ -300,18 +310,15 @@ func (m *Model) quitOrFlush() tea.Cmd {
 // them it applies nothing optimistically — the store invents the id, so the
 // card appears at the reconcile that follows the drain.
 func (m *Model) enqueueAdd(title, raw string, inherited, opts board.AddOptions) tea.Cmd {
-	if m.rollingBack {
-		// Backstop only — onAddKey refuses first and keeps the modal (and
-		// the typed title) open. A future caller must not be able to slip a
-		// write into the window just because it skipped the modal.
-		m.dbg.event("apply", "refused", map[string]any{"label": "add " + title, "why": "rolling-back"})
-		m.fail("add %q dropped — the store refused the last write, rolling back", title)
+	// Backstop only — onAddKey refuses first and keeps the modal (and the
+	// typed title) open. A future caller must not be able to slip a write
+	// into the window just because it skipped the modal.
+	if m.refuseWhileRollingBack("add " + title) {
 		return nil
 	}
-	m.dbg.event("apply", "enqueue", map[string]any{"label": "add " + title, "storeFirst": true})
 	prov := m.prov
 	id := new(string)
-	m.pending = append(m.pending, persistOp{
+	return m.queueOp(persistOp{
 		label:    "add " + title,
 		noLocal:  true,
 		addedID:  id,
@@ -324,10 +331,6 @@ func (m *Model) enqueueAdd(title, raw string, inherited, opts board.AddOptions) 
 			return nil, err
 		},
 	})
-	if m.inflight {
-		return nil
-	}
-	return m.firePersist()
 }
 
 // enqueueStoreFirstOp queues a write whose effect exists ONLY in the store —
@@ -342,20 +345,13 @@ func (m *Model) enqueueStoreFirstOp(op persistOp) tea.Cmd {
 	// store-first by definition, and one that forgot the flag would be rolled
 	// back as if it had an optimistic half.
 	op.noLocal = true
-	if m.rollingBack {
-		// The board is showing state the store refused. This write's SUBJECT
-		// (an epic id) survives a rollback, but letting it through would
-		// preempt the re-read that is the rollback — the t-74y3 window.
-		m.dbg.event("apply", "refused", map[string]any{"label": op.label, "why": "rolling-back"})
-		m.fail("%s dropped — the store refused the last write, rolling back", op.label)
+	// This write's SUBJECT (an epic id) survives a rollback, but letting it
+	// through would preempt the re-read that is the rollback — the t-74y3
+	// window.
+	if m.refuseWhileRollingBack(op.label) {
 		return nil
 	}
-	m.dbg.event("apply", "enqueue", map[string]any{"label": op.label, "storeFirst": true})
-	m.pending = append(m.pending, op)
-	if m.inflight {
-		return nil
-	}
-	return m.firePersist()
+	return m.queueOp(op)
 }
 
 // storeFirstInflight reports whether a store-first write is queued or running.
@@ -446,7 +442,7 @@ func (m *Model) onReloadDone(msg reloadDoneMsg) tea.Cmd {
 		m.fail("%s: %v", label, msg.err)
 		return nil
 	}
-	if m.inflight || len(m.pending) > 0 {
+	if m.queueBusy() {
 		// A write landed behind this snapshot. Applying it now would yank the
 		// user's newer optimistic edits back; the queue's own reconcile will
 		// re-read once it drains. (A rollback re-read never skips here: while
