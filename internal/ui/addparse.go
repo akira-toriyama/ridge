@@ -23,10 +23,9 @@ import (
 // (consuming quotes anywhere would silently rewrite such titles AND swallow
 // every token behind the odd quote). Unknown keys (and anything after the
 // first `:` of a known one) stay verbatim, so `ref:ui/addmode.go:42` and a
-// bare URL both survive. The inherited keys
-// (label:/epic:/repo:) and the focus-derived ones (status:/lane:) are
-// refused with their own guidance rather than silently titled: a user typing
-// them expects them to land.
+// bare URL both survive. The inherited keys (label:/epic:/repo:) and the
+// focus-derived ones (status:/lane:) are refused with their own guidance
+// rather than silently titled: a user typing them expects them to land.
 //
 // The parse itself never fails — the chips row renders it live on every
 // keystroke, mid-word and all — so everything uncommittable lands in bad,
