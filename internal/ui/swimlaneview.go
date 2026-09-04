@@ -272,13 +272,8 @@ func (m *Model) swimHeader(l *swimLayout, clipped bool) string {
 		bits = append(bits, th.warn.Render(fmt.Sprintf("lanes 1-%d of %d — the rest need a wider terminal",
 			len(l.Lanes), l.NLane)))
 	}
-	// The hidden count is an aggregate claim ABOUT THE FILTER, so it must not
-	// be made from a verdict the store refused — the dep map's rule, and its
-	// words.
-	if m.qErr != "" {
-		bits = append(bits, th.warn.Render("filter refused — this count is from the last good verdict"))
-	} else if hidden := m.swimHiddenCount(l); hidden > 0 {
-		bits = append(bits, th.warn.Render(fmt.Sprintf("%d hidden by the filter", hidden)))
+	if bit := m.filterCountBit(m.swimHiddenCount(l)); bit != "" {
+		bits = append(bits, bit)
 	}
 	if clipped {
 		bits = append(bits, th.dim.Render("^u/^d page"))
@@ -482,35 +477,22 @@ func (m *Model) clampSwimSel(l *swimLayout) {
 	m.swimSel = l.First()
 }
 
-// scrollSwimToSel keeps the selection on screen using the SAME line number the
-// renderer places it at, so the scroll can never disagree with the drawing.
 func (m *Model) scrollSwimToSel(l *swimLayout, total, canvasH int) int {
-	if total <= canvasH {
-		return 0
-	}
-	p, ok := l.Pos(m.swimSel)
-	if !ok {
-		return clamp(m.swimScroll, 0, total-canvasH)
-	}
-	line, _ := l.LineOf(m.swimSel)
-	// Scrolling up to a band's first task row reveals the band's HEADER too: a
-	// cell is read against the band it belongs to, and stopping one line short
-	// leaves the counts just off the top. The dep map reveals a cluster's rule
-	// the same way. Read from the position the lookup already resolved — a
-	// second BandOf call would be a second chance to index a band that is not
-	// there.
-	top := line
-	if b := l.Bands[p.Band]; line == b.Y+1 {
-		top = b.Y
-	}
-	s := m.swimScroll
-	if top < s {
-		s = top
-	}
-	if line >= s+canvasH {
-		s = line - canvasH + 1
-	}
-	return clamp(s, 0, total-canvasH)
+	return scrollToSel(m.swimScroll, total, canvasH, func() (int, int, bool) {
+		p, ok := l.Pos(m.swimSel)
+		if !ok {
+			return 0, 0, false
+		}
+		line, _ := l.LineOf(m.swimSel)
+		// The band is read from the position the lookup already resolved — a
+		// second BandOf call would be a second chance to index a band that is
+		// not there.
+		top := line
+		if b := l.Bands[p.Band]; line == b.Y+1 {
+			top = b.Y
+		}
+		return top, line, true
+	})
 }
 
 func (m *Model) swimMove(dx, dy int) {
@@ -579,16 +561,9 @@ func (m *Model) noteSwim() {
 // walk ended on — the contract every full-screen view keeps.
 func (m *Model) closeSwim() {
 	m.view = viewBoard
-	// Only a cursor the USER moved is carried back, and only when it is on a
-	// task: a band header names no row the board could select.
-	if m.swimMoved && m.swimLay != nil {
-		if id := m.swimLay.IDOf(m.swimSel); id != "" {
-			// Pin only what the filter would otherwise hide, so a read-only
-			// walk leaves no permanent exemption behind.
-			if !m.selectID(id, false) {
-				m.selectID(id, true)
-			}
-		}
+	// A band header names no row the board could select: IDOf is "" there.
+	if m.swimLay != nil {
+		m.carryCursorBack(m.swimMoved, m.swimLay.IDOf(m.swimSel))
 	}
 	m.note("board view — the cursor followed the swimlane")
 }
@@ -730,25 +705,11 @@ func (m *Model) onSwimKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 
 	case key.Matches(msg, m.keys.PeekScroll):
-		// Half a page of ROWS, not of scroll offset: the window is pinned to
-		// the cursor on every frame, so nudging the offset alone snaps straight
-		// back and the key this view advertises does nothing. The box overview
-		// resolves it the same way.
-		dir := 1
-		if msg.String() != "ctrl+d" {
-			dir = -1
-		}
-		before := m.swimSel
-		for i := maxInt(1, m.swimCanvasH()/2); i > 0; i-- {
+		m.halfPage(msg, m.swimCanvasH(), func(dir int) bool {
 			at := m.swimSel
 			m.swimMove(0, dir)
-			if m.swimSel == at {
-				break
-			}
-		}
-		if m.swimSel == before {
-			m.note("already at the %s of the swimlane", endName(dir))
-		}
+			return m.swimSel != at
+		}, "the swimlane")
 
 	case key.Matches(msg, m.keys.Help):
 		m.fullHelp = !m.fullHelp

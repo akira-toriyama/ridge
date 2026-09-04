@@ -274,7 +274,8 @@ func (m *Model) blockerTag(ids []string, budget int) string {
 }
 
 // taskHidden reports whether the current board filter would hide the task.
-// BOTH full-screen views ask this one function: they make the same promise —
+// The three full-screen views with task rows (dep map, roadmap, swimlane) ask
+// this one function: they make the same promise —
 // dependency structure is drawn whole and filtered rows are MARKED, never
 // dropped — and two copies of that predicate could disagree about which rows.
 //
@@ -340,14 +341,8 @@ func (m *Model) mapHeader(l *mapLayout, clipped bool) string {
 	if unresolved > 0 {
 		bits = append(bits, th.warn.Render(fmt.Sprintf("%d dep(s) not on this board", unresolved)))
 	}
-	// The hidden count is an aggregate claim ABOUT THE FILTER, so it must not
-	// be made from a verdict the store refused: qErr's only other render site
-	// is the board's chrome, which this view replaces. Saying "3 hidden" from
-	// a stale verdict is worse than saying nothing.
-	if m.qErr != "" {
-		bits = append(bits, th.warn.Render("filter refused — this count is from the last good verdict"))
-	} else if hidden := m.mapHiddenCount(l); hidden > 0 {
-		bits = append(bits, th.warn.Render(fmt.Sprintf("%d hidden by the filter", hidden)))
+	if bit := m.filterCountBit(m.mapHiddenCount(l)); bit != "" {
+		bits = append(bits, bit)
 	}
 	if clipped {
 		bits = append(bits, th.dim.Render("^u/^d page"))
@@ -389,31 +384,18 @@ func (m *Model) mapMove(dx, dy int) {
 	}
 }
 
-// scrollMapToSel keeps the selected row on screen, using the same Y the
-// renderer placed it at, so the scroll can never disagree with the drawing.
 func (m *Model) scrollMapToSel(l *mapLayout, total, canvasH int) int {
-	if total <= canvasH {
-		return 0
-	}
-	r := l.Row(m.mapSel)
-	if r == nil {
-		return clamp(m.mapScroll, 0, total-canvasH)
-	}
-	// Scrolling UP to a panel's FIRST row reveals the panel's rule too: a row
-	// is read against the cluster it belongs to, and stopping one line short
-	// left "── #3  6 nodes · depth 2 ──" just off the top of the screen.
-	top := r.Y
-	if p := l.Panels[r.Panel]; r.Y == p.Y+mapPanelHdr {
-		top = p.Y
-	}
-	s := m.mapScroll
-	if top < s {
-		s = top
-	}
-	if r.Y >= s+canvasH {
-		s = r.Y - canvasH + 1
-	}
-	return clamp(s, 0, total-canvasH)
+	return scrollToSel(m.mapScroll, total, canvasH, func() (int, int, bool) {
+		r := l.Row(m.mapSel)
+		if r == nil {
+			return 0, 0, false
+		}
+		top := r.Y
+		if p := l.Panels[r.Panel]; r.Y == p.Y+mapPanelHdr {
+			top = p.Y
+		}
+		return top, r.Y, true
+	})
 }
 
 // ---- keys -------------------------------------------------------------------
@@ -454,16 +436,7 @@ func (m *Model) openMap(seed string) {
 // walk ended on — the same contract as closing the graph.
 func (m *Model) closeMap() {
 	m.view = viewBoard
-	// Only a cursor the USER moved is carried back. Opening the map on a task
-	// that is in no cluster lands the cursor on a fallback row nobody chose,
-	// and following THAT back to the board is a silent re-selection.
-	if m.mapMoved && m.mapSel != "" {
-		// Pin only what the filter would otherwise hide, so a walk over an
-		// unfiltered board leaves no permanent exemption behind.
-		if !m.selectID(m.mapSel, false) {
-			m.selectID(m.mapSel, true)
-		}
-	}
+	m.carryCursorBack(m.mapMoved, m.mapSel)
 	m.note("board view — the cursor followed the dep map")
 }
 
@@ -526,27 +499,11 @@ func (m *Model) onMapKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.closeMap()
 
 	case key.Matches(msg, m.keys.PeekScroll):
-		// Half a page of ROWS, not of scroll offset. The window is pinned to
-		// the cursor by scrollMapToSel on every frame, so nudging the offset
-		// alone snapped straight back and the key advertised in this view's
-		// own header did nothing. The table's ^u/^d already resolves the same
-		// conflict the same way ("the window centers on the cursor, so half a
-		// page of rows IS a cursor move").
-		dir := 1
-		if msg.String() != "ctrl+d" {
-			dir = -1
-		}
-		before := m.mapSel
-		for i := maxInt(1, m.mapCanvasH()/2); i > 0; i-- {
+		m.halfPage(msg, m.mapCanvasH(), func(dir int) bool {
 			at := m.mapSel
 			m.mapMove(0, dir)
-			if m.mapSel == at {
-				break
-			}
-		}
-		if m.mapSel == before {
-			m.note("already at the %s of this column", endName(dir))
-		}
+			return m.mapSel != at
+		}, "this column")
 
 	case key.Matches(msg, m.keys.Up):
 		m.mapMove(0, -1)

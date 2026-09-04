@@ -328,12 +328,8 @@ func (m *Model) roadHeader(l *roadLayout, clippedY, clippedX bool) string {
 	if over > 0 {
 		bits = append(bits, th.danger.Render(fmt.Sprintf("%d overdue", over)))
 	}
-	// The hidden count is an aggregate claim ABOUT THE FILTER, so it must not
-	// be made from a verdict the store refused — mapHeader's rule, verbatim.
-	if m.qErr != "" {
-		bits = append(bits, th.warn.Render("filter refused — this count is from the last good verdict"))
-	} else if hidden := m.roadHiddenCount(l); hidden > 0 {
-		bits = append(bits, th.warn.Render(fmt.Sprintf("%d hidden by the filter", hidden)))
+	if bit := m.filterCountBit(m.roadHiddenCount(l)); bit != "" {
+		bits = append(bits, bit)
 	}
 	if clippedX {
 		bits = append(bits, th.dim.Render("h/l pan"))
@@ -426,25 +422,14 @@ func (m *Model) roadEnsureX() {
 	}
 }
 
-// scrollRoadToSel keeps the selected row on screen, against the same row
-// indexes the renderer draws, so the scroll can never disagree with the
-// drawing.
 func (m *Model) scrollRoadToSel(l *roadLayout, total, rowsH int) int {
-	if total <= rowsH {
-		return 0
-	}
-	r := l.Row(m.roadSel)
-	if r == nil {
-		return clamp(m.roadScroll, 0, total-rowsH)
-	}
-	s := m.roadScroll
-	if r.Y < s {
-		s = r.Y
-	}
-	if r.Y >= s+rowsH {
-		s = r.Y - rowsH + 1
-	}
-	return clamp(s, 0, total-rowsH)
+	return scrollToSel(m.roadScroll, total, rowsH, func() (int, int, bool) {
+		r := l.Row(m.roadSel)
+		if r == nil {
+			return 0, 0, false
+		}
+		return r.Y, r.Y, true
+	})
 }
 
 func (m *Model) roadPanBy(d int) {
@@ -521,13 +506,7 @@ func (m *Model) openRoadmap() {
 // all.
 func (m *Model) closeRoadmap() {
 	m.view = viewBoard
-	if m.roadMoved && m.roadSel != "" {
-		// Pin only what the filter would otherwise hide, so a walk over an
-		// unfiltered board leaves no permanent exemption behind.
-		if !m.selectID(m.roadSel, false) {
-			m.selectID(m.roadSel, true)
-		}
-	}
+	m.carryCursorBack(m.roadMoved, m.roadSel)
 	m.note("board view — the cursor followed the roadmap")
 }
 
@@ -607,24 +586,11 @@ func (m *Model) onRoadKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.roadJump(true)
 
 	case key.Matches(msg, m.keys.PeekScroll):
-		// Half a page of ROWS, not of scroll offset — the window is pinned to
-		// the cursor by scrollRoadToSel on every frame, the same conflict the
-		// map's ^u/^d comment resolves the same way.
-		dir := 1
-		if msg.String() != "ctrl+d" {
-			dir = -1
-		}
-		before := m.roadSel
-		for i := maxInt(1, m.roadRowsH()/2); i > 0; i-- {
+		m.halfPage(msg, m.roadRowsH(), func(dir int) bool {
 			at := m.roadSel
 			m.roadMove(dir)
-			if m.roadSel == at {
-				break
-			}
-		}
-		if m.roadSel == before {
-			m.note("already at the %s of the timeline", endName(dir))
-		}
+			return m.roadSel != at
+		}, "the timeline")
 
 	case key.Matches(msg, m.keys.Up):
 		m.roadMove(-1)

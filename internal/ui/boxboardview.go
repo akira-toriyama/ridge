@@ -414,28 +414,17 @@ func (m *Model) clampBoxesSel(l *boxLayout) {
 }
 
 func (m *Model) scrollBoxesToSel(l *boxLayout, total, canvasH int) int {
-	if total <= canvasH {
-		return 0
-	}
-	r := l.Row(m.boxesSel)
-	if r == nil {
-		return clamp(m.boxesScroll, 0, total-canvasH)
-	}
-	// Scrolling UP to a group's FIRST row reveals its rule too: a row is read
-	// against the repo it belongs to, and stopping one line short leaves the
-	// header just off the top — the dep map's own lesson.
-	top := r.Y
-	if g := l.Groups[r.Group]; r.Y == g.Y+boxPanelHdr {
-		top = g.Y
-	}
-	s := m.boxesScroll
-	if top < s {
-		s = top
-	}
-	if r.Y >= s+canvasH {
-		s = r.Y - canvasH + 1
-	}
-	return clamp(s, 0, total-canvasH)
+	return scrollToSel(m.boxesScroll, total, canvasH, func() (int, int, bool) {
+		r := l.Row(m.boxesSel)
+		if r == nil {
+			return 0, 0, false
+		}
+		top := r.Y
+		if g := l.Groups[r.Group]; r.Y == g.Y+boxPanelHdr {
+			top = g.Y
+		}
+		return top, r.Y, true
+	})
 }
 
 // openBoxes enters the overview, landing the cursor on the first ACTIVE box in
@@ -544,25 +533,11 @@ func (m *Model) onBoxesKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 
 	case key.Matches(msg, m.keys.PeekScroll):
-		// Half a page of ROWS, not of scroll offset: the window is pinned to
-		// the cursor by scrollBoxesToSel on every frame, so nudging the offset
-		// alone snaps straight back and the key this view's own header
-		// advertises does nothing. The dep map resolves it the same way.
-		dir := 1
-		if msg.String() != "ctrl+d" {
-			dir = -1
-		}
-		before := m.boxesSel
-		for i := maxInt(1, m.boxCanvasH()/2); i > 0; i-- {
+		m.halfPage(msg, m.boxCanvasH(), func(dir int) bool {
 			at := m.boxesSel
 			m.boxesSel = l.step(m.boxesSel, 0, dir)
-			if m.boxesSel == at {
-				break
-			}
-		}
-		if m.boxesSel == before {
-			m.note("already at the %s of this column", endName(dir))
-		}
+			return m.boxesSel != at
+		}, "this column")
 
 	case key.Matches(msg, m.keys.Help):
 		m.fullHelp = !m.fullHelp
