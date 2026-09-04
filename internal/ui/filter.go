@@ -160,7 +160,7 @@ func (m *Model) onFilterResult(msg filterResultMsg) {
 	if msg.seq != m.qSeq {
 		return
 	}
-	if m.inflight || len(m.pending) > 0 || m.rollingBack {
+	if m.queueBusy() || m.rollingBack {
 		// The verdict was computed from store truth that predates the queued
 		// optimistic writes — applying it would blink the user's own edit off
 		// the board. The post-drain reconcile requeries without a debounce.
