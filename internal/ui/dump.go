@@ -486,7 +486,7 @@ func (m *Model) demoState(kind string) error {
 			return err
 		}
 		m.epic.menuIdx = int(epicFieldDeps)
-		if c := m.openEpicField(epicFieldDeps); c != nil {
+		if c := m.openEpicField(epicFieldDeps, m.b.Epic(m.epic.id)); c != nil {
 			_ = c
 		}
 
@@ -498,7 +498,7 @@ func (m *Model) demoState(kind string) error {
 			return err
 		}
 		m.epic.menuIdx = int(epicFieldActive)
-		if c := m.openEpicField(epicFieldActive); c != nil {
+		if c := m.openEpicField(epicFieldActive, m.b.Epic(m.epic.id)); c != nil {
 			_ = c
 		}
 		m.epic.input.SetValue("ユーザー依頼: 冬支度を先に回す")
@@ -509,7 +509,7 @@ func (m *Model) demoState(kind string) error {
 			return err
 		}
 		m.epic.menuIdx = int(epicFieldActive)
-		if c := m.openEpicField(epicFieldActive); c != nil {
+		if c := m.openEpicField(epicFieldActive, m.b.Epic(m.epic.id)); c != nil {
 			_ = c
 		}
 
@@ -533,7 +533,7 @@ func (m *Model) demoState(kind string) error {
 			return err
 		}
 		m.epic.menuIdx = int(epicFieldClosed)
-		if c := m.openEpicField(epicFieldClosed); c != nil {
+		if c := m.openEpicField(epicFieldClosed, m.b.Epic(m.epic.id)); c != nil {
 			_ = c
 		}
 
@@ -546,7 +546,7 @@ func (m *Model) demoState(kind string) error {
 			return err
 		}
 		m.epic.menuIdx = int(epicFieldClosed)
-		if c := m.openEpicField(epicFieldClosed); c != nil {
+		if c := m.openEpicField(epicFieldClosed, m.b.Epic(m.epic.id)); c != nil {
 			_ = c
 		}
 

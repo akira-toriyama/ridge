@@ -6,10 +6,8 @@ import (
 	"strings"
 
 	"charm.land/bubbles/v2/key"
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	lg "charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/akira-toriyama/ridge/internal/board"
 )
@@ -18,9 +16,9 @@ import (
 // deactivate/dep` can write, from the slice panel's epic axis — the one surface
 // that already lists boxes with the progress and stuck furrow derives.
 //
-// It looks like the task edit overlay and is deliberately NOT the same code: an
-// epic is not a task. What it shares is the two-stage shape (menu → sub-editor,
-// esc walks back out) and the list windowing.
+// It walks the same stages as the task edit overlay — overlayShell (overlay.go)
+// is the walk — and is deliberately NOT the same field code: an epic is not a
+// task.
 //
 // The write path is where they differ. Task edits are optimistic; epic writes
 // are STORE-FIRST (board.Provider's epic family), because what they mean is
@@ -41,15 +39,6 @@ import (
 // one keystroke back. Finding a box closed in an EARLIER session is the slice
 // panel's job — its epic axis lists the open ones by default and takes `z` for
 // the whole population.
-
-type epicStage int
-
-const (
-	epicMenu    epicStage = iota
-	epicList              // labels / repos / deps / meta cursor
-	epicInput             // title / goal / new label / new repo / new dep / meta / activate reason
-	epicConfirm           // one keystroke between the cursor and a lifecycle write
-)
 
 type epicField int
 
@@ -109,24 +98,47 @@ const (
 	epicInputNewBox
 )
 
+type epicShell = overlayShell[epicField, epicInputKind]
+
 type epicState struct {
-	// id is the box under edit, held for the overlay's whole life. Never the
-	// panel's row INDEX: furrow orders `epic ls` active-first, so the very
-	// write this overlay issues can move the row out from under the cursor.
-	id       string
-	stage    epicStage
-	field    epicField
-	menuIdx  int
-	listIdx  int
-	input    textinput.Model
-	inputFor epicInputKind
+	epicShell
 	// creating is the new-box modal: there is no id yet, so the overlay is one
-	// title input and nothing else until the store answers.
+	// title input and nothing else until the store answers. The shell's walk
+	// never sees it — onEpicKey answers the modal before the shell.
 	creating bool
 	// newRepo is the repo the new box will name, captured at open. Snapshotted
 	// rather than re-derived at commit so the chip the user read and the write
 	// they confirmed cannot disagree.
 	newRepo string
+}
+
+// epicHooks is the epic overlay's half of the stage machine: the shell walks
+// the stages, these say what each one does to the box under edit.
+type epicHooks struct {
+	m   *Model
+	box *board.EpicInfo
+}
+
+func (h epicHooks) note()              { h.m.noteEpicStage() }
+func (h epicHooks) exit()              { h.m.exitEpic() }
+func (h epicHooks) subject() string    { return "box " + h.box.ID }
+func (h epicHooks) fieldCount() int    { return int(epicFieldCount) }
+func (h epicHooks) listRows() []string { return h.m.epicListRows(h.box) }
+
+func (h epicHooks) openField(f epicField) tea.Cmd { return h.m.openEpicField(f, h.box) }
+func (h epicHooks) listSelect(rows []string) tea.Cmd {
+	return h.m.epicListSelect(h.box, rows)
+}
+func (h epicHooks) listKey(msg tea.KeyPressMsg) tea.Cmd { return h.m.onEpicListKey(msg, h.box) }
+func (h epicHooks) gateKey(msg tea.KeyPressMsg) tea.Cmd {
+	if key.Matches(msg, h.m.keys.Commit) {
+		return h.m.commitEpicConfirm(h.box)
+	}
+	return nil
+}
+func (h epicHooks) inputCancel(k epicInputKind) tea.Cmd { return h.m.onEpicInputCancel(k) }
+func (h epicHooks) inputCommit(k epicInputKind, v string) tea.Cmd {
+	return h.m.onEpicInputCommit(k, v)
 }
 
 // enterEpic opens the overlay on a box.
@@ -135,9 +147,22 @@ func (m *Model) enterEpic(id string) {
 		m.fail("%s is not a box on this board", id)
 		return
 	}
-	m.epic = &epicState{id: id, stage: epicMenu, input: newEpicInput()}
+	m.epic = &epicState{epicShell: epicShell{id: id, stage: stageMenu, input: newOverlayInput()}}
 	m.mode = modeEpic
 	m.noteEpicStage()
+}
+
+// newBoxModal is the creating state, seeded with the title the modal opens on
+// (empty for a fresh box; the refused one when reopening).
+func newBoxModal(repo, title string) *epicState {
+	s := &epicState{
+		epicShell: epicShell{stage: stageInput, inputFor: epicInputNewBox, input: newOverlayInput()},
+		creating:  true,
+		newRepo:   repo,
+	}
+	s.input.Placeholder = "new box — its title"
+	s.input.SetValue(title)
+	return s
 }
 
 // enterEpicNew opens the new-box modal. The repo comes from the filter
@@ -149,18 +174,10 @@ func (m *Model) enterEpic(id string) {
 // query is what survives the axis switch.
 func (m *Model) enterEpicNew() tea.Cmd {
 	_, _, repo, _ := inheritContext(m.effectiveQuery())
-	m.epic = &epicState{stage: epicInput, inputFor: epicInputNewBox,
-		creating: true, newRepo: repo, input: newEpicInput()}
+	m.epic = newBoxModal(repo, "")
 	m.mode = modeEpic
-	m.epic.input.Placeholder = "new box — its title"
 	m.noteEpicStage()
 	return m.epic.input.Focus()
-}
-
-func newEpicInput() textinput.Model {
-	ti := textinput.New()
-	ti.SetWidth(48)
-	return ti
 }
 
 // reopenRefusedEpicAdd hands a refused new box's typed title back by reopening
@@ -175,11 +192,8 @@ func (m *Model) reopenRefusedEpicAdd(op persistOp) tea.Cmd {
 	if (m.mode != modeSlice && m.mode != modeNormal) || m.fullScreen() || m.fullHelp {
 		return nil
 	}
-	m.epic = &epicState{stage: epicInput, inputFor: epicInputNewBox,
-		creating: true, newRepo: op.epicAddRepo, input: newEpicInput()}
+	m.epic = newBoxModal(op.epicAddRepo, op.epicAddTitle)
 	m.mode = modeEpic
-	m.epic.input.Placeholder = "new box — its title"
-	m.epic.input.SetValue(op.epicAddTitle)
 	// No noteEpicStage: onPersistDone's fail() runs after this returns and
 	// owns the status row — the refusal must be what the user reads.
 	return m.epic.input.Focus()
@@ -238,7 +252,7 @@ func (m *Model) noteEpicStage() {
 	switch {
 	case e.creating:
 		m.note("new box — ⏎ creates · esc cancels")
-	case e.stage == epicList:
+	case e.stage == stageList:
 		switch e.field {
 		case epicFieldDeps:
 			m.note("box %s · deps — ⏎/x remove · a add · esc back", e.id)
@@ -247,9 +261,9 @@ func (m *Model) noteEpicStage() {
 		default:
 			m.note("box %s · %s — ⏎/x toggle · a add · esc back", e.id, epicFieldName(e.field))
 		}
-	case e.stage == epicInput:
+	case e.stage == stageInput:
 		m.note("box %s · %s — ⏎ apply · esc back", e.id, epicInputTitleFor(e.inputFor))
-	case e.stage == epicConfirm && e.field == epicFieldClosed:
+	case e.stage == stageGate && e.field == epicFieldClosed:
 		box := m.b.Epic(e.id)
 		switch {
 		case box == nil:
@@ -267,7 +281,7 @@ func (m *Model) noteEpicStage() {
 			m.note("close %s — %d/%d done, %d still open · ⏎ confirms · esc backs out",
 				e.id, box.Done, box.Total, left)
 		}
-	case e.stage == epicConfirm:
+	case e.stage == stageGate:
 		m.note("box %s · %s — ⏎ confirms · esc backs out", e.id, epicFieldName(e.field))
 	default:
 		m.note("box %s — ⏎ pick a field · esc closes", e.id)
@@ -287,45 +301,11 @@ func (m *Model) onEpicKey(msg tea.KeyPressMsg) tea.Cmd {
 	if e.creating {
 		return m.onEpicNewKey(msg)
 	}
-	if m.epicBox() == nil {
+	box := m.epicBox()
+	if box == nil {
 		return nil
 	}
-	if e.stage == epicInput {
-		return m.onEpicInputKey(msg)
-	}
-
-	switch {
-	case key.Matches(msg, m.keys.Cancel):
-		if e.stage == epicMenu {
-			m.exitEpic()
-		} else {
-			e.stage, e.listIdx = epicMenu, 0
-			m.noteEpicStage()
-		}
-		return nil
-	case key.Matches(msg, m.keys.Quit) && e.stage == epicMenu:
-		m.exitEpic()
-		return nil
-	}
-
-	switch e.stage {
-	case epicMenu:
-		switch {
-		case key.Matches(msg, m.keys.Up):
-			e.menuIdx = (e.menuIdx + int(epicFieldCount) - 1) % int(epicFieldCount)
-		case key.Matches(msg, m.keys.Down):
-			e.menuIdx = (e.menuIdx + 1) % int(epicFieldCount)
-		case key.Matches(msg, m.keys.Commit):
-			return m.openEpicField(epicField(e.menuIdx))
-		}
-	case epicConfirm:
-		if key.Matches(msg, m.keys.Commit) {
-			return m.commitEpicConfirm()
-		}
-	case epicList:
-		return m.onEpicListKey(msg)
-	}
-	return nil
+	return e.onKey(m, msg, epicHooks{m, box})
 }
 
 // onEpicNewKey is the new-box modal: one input, and no board write until the
@@ -381,82 +361,55 @@ func (m *Model) onEpicNewKey(msg tea.KeyPressMsg) tea.Cmd {
 	return c
 }
 
-func (m *Model) openEpicField(f epicField) tea.Cmd {
-	e := m.epic
-	box := m.b.Epic(e.id)
-	if box == nil {
-		return nil
-	}
+func (m *Model) openEpicField(f epicField, box *board.EpicInfo) tea.Cmd {
+	e, h := m.epic, epicHooks{m, box}
 	e.field, e.listIdx = f, 0
 	switch f {
 	case epicFieldTitle:
 		// No clearing form: `epic set --title ""` is exit 2, so the input
 		// refuses an empty submission rather than queueing a doomed write.
-		return m.startEpicInput(epicInputTitle, box.Title, "the box's title")
+		return e.startInput(h, epicInputTitle, box.Title, "the box's title")
 	case epicFieldGoal:
-		return m.startEpicInput(epicInputGoal, box.Goal, "the closing condition · empty clears")
+		return e.startInput(h, epicInputGoal, box.Goal, "the closing condition · empty clears")
 	case epicFieldActive:
 		if box.Active {
 			// Deactivating is not destructive but it does drop the box `furrow
 			// next` scopes to, so it gets the same one-keystroke gate.
-			e.stage = epicConfirm
+			e.stage = stageGate
 			m.noteEpicStage()
 			return nil
 		}
 		// Activating carries furrow's --reason, which is appended to the box's
 		// own body as the activation record: the input IS the confirmation, and
 		// it collects the thing that keeps the switch visible next session.
-		return m.startEpicInput(epicInputReason, "", "who asked for this switch · empty omits it")
+		return e.startInput(h, epicInputReason, "", "who asked for this switch · empty omits it")
 	case epicFieldStanding, epicFieldPinned, epicFieldClosed:
-		e.stage = epicConfirm
+		e.stage = stageGate
 		m.noteEpicStage()
 		return nil
 	case epicFieldLabels, epicFieldRepos, epicFieldDeps, epicFieldMeta:
-		e.stage = epicList
+		e.stage = stageList
 		m.noteEpicStage()
 	}
 	return nil
 }
 
-func (m *Model) startEpicInput(kind epicInputKind, value, placeholder string) tea.Cmd {
-	e := m.epic
-	e.stage, e.inputFor = epicInput, kind
-	e.input.SetValue(value)
-	e.input.Placeholder = placeholder
-	e.input.SetWidth(48)
-	m.noteEpicStage()
-	return e.input.Focus()
-}
-
-func (m *Model) onEpicListKey(msg tea.KeyPressMsg) tea.Cmd {
-	e := m.epic
-	box := m.b.Epic(e.id)
-	if box == nil {
+// onEpicListKey is the list stage's own key, after the shell has answered the
+// cursor and ⏎/x: `a` adds.
+func (m *Model) onEpicListKey(msg tea.KeyPressMsg, box *board.EpicInfo) tea.Cmd {
+	if msg.String() != "a" {
 		return nil
 	}
-	rows := m.epicListRows(box)
-	switch {
-	case key.Matches(msg, m.keys.Up):
-		if len(rows) > 0 {
-			e.listIdx = (e.listIdx + len(rows) - 1) % len(rows)
-		}
-	case key.Matches(msg, m.keys.Down):
-		if len(rows) > 0 {
-			e.listIdx = (e.listIdx + 1) % len(rows)
-		}
-	case key.Matches(msg, m.keys.Commit), key.Matches(msg, m.keys.Check):
-		return m.epicListSelect(box, rows)
-	case msg.String() == "a":
-		switch e.field {
-		case epicFieldLabels:
-			return m.startEpicInput(epicInputNewLabel, "", "new label")
-		case epicFieldRepos:
-			return m.startEpicInput(epicInputNewRepo, "", "owner/repo")
-		case epicFieldDeps:
-			return m.startEpicInput(epicInputNewDep, "", "e-… — the box this waits on")
-		case epicFieldMeta:
-			return m.startEpicInput(epicInputNewMeta, "", "key=value")
-		}
+	e, h := m.epic, epicHooks{m, box}
+	switch e.field {
+	case epicFieldLabels:
+		return e.startInput(h, epicInputNewLabel, "", "new label")
+	case epicFieldRepos:
+		return e.startInput(h, epicInputNewRepo, "", "owner/repo")
+	case epicFieldDeps:
+		return e.startInput(h, epicInputNewDep, "", "e-… — the box this waits on")
+	case epicFieldMeta:
+		return e.startInput(h, epicInputNewMeta, "", "key=value")
 	}
 	return nil
 }
@@ -501,108 +454,93 @@ func (m *Model) epicListSelect(box *board.EpicInfo, rows []string) tea.Cmd {
 // recompute is where the cursor is pulled back in. Clamping at the gesture
 // moved it even when the write was refused.
 
-func (m *Model) onEpicInputKey(msg tea.KeyPressMsg) tea.Cmd {
+// onEpicInputCancel is esc in the input: back to the stage the input was
+// opened from.
+func (m *Model) onEpicInputCancel(k epicInputKind) tea.Cmd {
 	e := m.epic
-	switch {
-	case key.Matches(msg, m.keys.Cancel):
-		e.input.Blur()
-		switch e.inputFor {
-		case epicInputTitle, epicInputGoal, epicInputReason:
-			e.stage = epicMenu
-		default:
-			e.stage = epicList
-		}
-		m.noteEpicStage()
-		return nil
-	case key.Matches(msg, m.keys.Commit):
-		v := strings.TrimSpace(e.input.Value())
-		// Same rule as the task overlay's inputs: a store-first write never
-		// touches m.b, so enqueueStoreFirstOp's refusal is early enough for the
-		// BOARD — but not for the draft, because the blur and stage reset below
-		// run first and the modal closes over text nothing can recover.
-		// onEpicNewKey has guarded its own title this way since t-74y3.
-		if v != "" && m.refuseWhileRollingBack("box "+e.id) {
-			m.status += "; ⏎ again in a moment"
-			return e.input.Focus()
-		}
-		e.input.Blur()
-		id := e.id
-		switch e.inputFor {
-		case epicInputTitle:
-			e.stage = epicMenu
-			if v == "" {
-				// furrow answers exit 2 on an empty rename; refusing here keeps
-				// the queue clean and the message specific.
-				m.fail("a box title cannot be empty")
-				return nil
-			}
-			return m.epicPatch("retitle", board.EpicPatch{Title: &v})
-		case epicInputGoal:
-			e.stage = epicMenu
-			return m.epicPatch("goal", board.EpicPatch{Goal: &v})
-		case epicInputReason:
-			e.stage = epicMenu
-			return m.epicWrite("epic activate "+id, func(p board.Provider) error {
-				return p.EpicActivate(id, v)
-			})
-		case epicInputNewLabel:
-			e.stage = epicList
-			if v == "" {
-				m.noteEpicStage()
-				return nil
-			}
-			return m.epicPatch("label", board.EpicPatch{AddLabels: []string{v}})
-		case epicInputNewRepo:
-			e.stage = epicList
-			if v == "" {
-				m.noteEpicStage()
-				return nil
-			}
-			return m.epicPatch("repo", board.EpicPatch{AddRepos: []string{v}})
-		case epicInputNewDep:
-			e.stage = epicList
-			if v == "" {
-				m.noteEpicStage()
-				return nil
-			}
-			// No re-note after this: every write funnel writes the status row
-			// itself (the pending write, or its refusal), so the input's
-			// "⏎ apply" is already gone — and re-noting here erased the
-			// "waiting for furrow" the store-first write had just put there.
-			return m.epicWrite("epic dep "+id, func(p board.Provider) error {
-				return p.EpicDepAdd(id, v)
-			})
-		case epicInputNewMeta:
-			e.stage = epicList
-			if v == "" {
-				m.noteEpicStage()
-				return nil
-			}
-			k, val, ok := strings.Cut(v, "=")
-			k = strings.TrimSpace(k)
-			if !ok || k == "" {
-				m.fail("meta wants key=value, got %q", v)
-				return nil
-			}
-			return m.epicPatch("meta", board.EpicPatch{
-				SetMeta: map[string]string{k: strings.TrimSpace(val)}})
-		}
-		return nil
+	switch k {
+	case epicInputTitle, epicInputGoal, epicInputReason:
+		e.stage = stageMenu
+	default:
+		e.stage = stageList
 	}
-	var c tea.Cmd
-	e.input, c = e.input.Update(msg)
-	return c
+	m.noteEpicStage()
+	return nil
 }
 
-// commitEpicConfirm is ⏎ on the confirm stage: the lifecycle and declaration
-// writes that are a single toggle with no text to collect.
-func (m *Model) commitEpicConfirm() tea.Cmd {
+// onEpicInputCommit is ⏎ in the input, v already trimmed and already past the
+// rolling-back refusal (the shell's; onEpicNewKey has guarded its own title the
+// same way since t-74y3). No re-note after a write: every write funnel writes
+// the status row itself (the pending write, or its refusal), so the input's
+// "⏎ apply" is already gone — and re-noting here erased the "waiting for
+// furrow" the store-first write had just put there.
+func (m *Model) onEpicInputCommit(k epicInputKind, v string) tea.Cmd {
 	e := m.epic
-	box := m.b.Epic(e.id)
-	if box == nil {
-		return nil
+	id := e.id
+	switch k {
+	case epicInputTitle:
+		e.stage = stageMenu
+		if v == "" {
+			// furrow answers exit 2 on an empty rename; refusing here keeps
+			// the queue clean and the message specific.
+			m.fail("a box title cannot be empty")
+			return nil
+		}
+		return m.epicPatch("retitle", board.EpicPatch{Title: &v})
+	case epicInputGoal:
+		e.stage = stageMenu
+		return m.epicPatch("goal", board.EpicPatch{Goal: &v})
+	case epicInputReason:
+		e.stage = stageMenu
+		return m.epicWrite("epic activate "+id, func(p board.Provider) error {
+			return p.EpicActivate(id, v)
+		})
+	case epicInputNewLabel:
+		e.stage = stageList
+		if v == "" {
+			m.noteEpicStage()
+			return nil
+		}
+		return m.epicPatch("label", board.EpicPatch{AddLabels: []string{v}})
+	case epicInputNewRepo:
+		e.stage = stageList
+		if v == "" {
+			m.noteEpicStage()
+			return nil
+		}
+		return m.epicPatch("repo", board.EpicPatch{AddRepos: []string{v}})
+	case epicInputNewDep:
+		e.stage = stageList
+		if v == "" {
+			m.noteEpicStage()
+			return nil
+		}
+		return m.epicWrite("epic dep "+id, func(p board.Provider) error {
+			return p.EpicDepAdd(id, v)
+		})
+	case epicInputNewMeta:
+		e.stage = stageList
+		if v == "" {
+			m.noteEpicStage()
+			return nil
+		}
+		k, val, ok := strings.Cut(v, "=")
+		k = strings.TrimSpace(k)
+		if !ok || k == "" {
+			m.fail("meta wants key=value, got %q", v)
+			return nil
+		}
+		return m.epicPatch("meta", board.EpicPatch{
+			SetMeta: map[string]string{k: strings.TrimSpace(val)}})
 	}
-	e.stage = epicMenu
+	return nil
+}
+
+// commitEpicConfirm is ⏎ on the gate stage: the lifecycle and declaration
+// writes that are a single toggle with no text to collect.
+func (m *Model) commitEpicConfirm(box *board.EpicInfo) tea.Cmd {
+	e := m.epic
+	e.stage = stageMenu
 	id := e.id
 	switch e.field {
 	case epicFieldActive:
@@ -816,14 +754,14 @@ func yesNo(b bool) string {
 	return "no"
 }
 
-// epicLayer draws the overlay, in the same box style as the task edit overlay.
+// epicLayer draws the overlay, in the same box as the task edit overlay.
 func (m *Model) epicLayer() *lg.Layer {
 	th := m.th
 	e := m.epic
 	if e == nil {
 		return nil
 	}
-	inner := clamp(m.w/3, 44, 72)
+	inner := m.overlayInner()
 
 	var head, body string
 	switch {
@@ -843,23 +781,17 @@ func (m *Model) epicLayer() *lg.Layer {
 		}
 		head = "box " + box.ID
 		switch e.stage {
-		case epicMenu:
+		case stageMenu:
 			body = m.renderEpicMenu(box, inner)
-		case epicInput:
-			body = th.peekHdr.Render(epicInputTitleFor(e.inputFor)) + "\n\n" +
-				e.input.View() + "\n" + th.dim.Render(pad("⏎ apply · esc back", inner))
-		case epicConfirm:
+		case stageInput:
+			body = m.renderOverlayInput(epicInputTitleFor(e.inputFor), e.input, inner)
+		case stageGate:
 			body = m.renderEpicConfirm(box, inner)
-		case epicList:
-			body = m.renderEpicList(box, inner, maxInt(1, m.h-editListChrome))
+		case stageList:
+			body = m.renderEpicList(box, inner, maxInt(1, m.h-overlayListChrome))
 		}
 	}
-
-	panel := th.peek.Render(pad(th.peekHdr.Render(head), inner) + "\n\n" + body)
-	panel = lg.NewStyle().MaxWidth(m.w).MaxHeight(m.h).Render(panel)
-	x := maxInt(0, (m.w-lg.Width(panel))/2)
-	y := maxInt(0, (m.h-lg.Height(panel))/3)
-	return lg.NewLayer(panel).ID("epic").X(x).Y(y).Z(zEdit)
+	return m.overlayLayer("epic", head, body)
 }
 
 func (m *Model) renderEpicMenu(box *board.EpicInfo, inner int) string {
@@ -875,7 +807,7 @@ func (m *Model) renderEpicMenu(box *board.EpicInfo, inner int) string {
 	if keys := box.MetaKeys(); len(keys) > 0 {
 		metaCell = strings.Join(keys, ",")
 	}
-	rows := []struct{ name, cur string }{
+	rows := []menuRow{
 		{epicFieldName(epicFieldTitle), box.Title},
 		{epicFieldName(epicFieldGoal), box.Goal},
 		{epicFieldName(epicFieldActive), m.epicActiveCell(box)},
@@ -888,7 +820,6 @@ func (m *Model) renderEpicMenu(box *board.EpicInfo, inner int) string {
 		{epicFieldName(epicFieldClosed), epicClosedCell(box)},
 	}
 
-	var b strings.Builder
 	// The derived line first: progress and stuck are furrow's verdict on this
 	// box and nothing in the menu can change them, so they belong above the
 	// editable rows rather than pretending to be one.
@@ -896,25 +827,8 @@ func (m *Model) renderEpicMenu(box *board.EpicInfo, inner int) string {
 	if box.Stuck {
 		derived += " · " + th.warn.Render("STUCK")
 	}
-	b.WriteString(th.muted.Render(pad(derived, inner)) + "\n\n")
-	for i, r := range rows {
-		cursor, style := "  ", th.base
-		if i == m.epic.menuIdx {
-			cursor, style = "▌ ", th.peekHdr
-		}
-		cur := r.cur
-		if cur == "" {
-			cur = "—"
-		}
-		// Measured, never a hard-coded cell budget: every one of these values
-		// can be CJK, and the real board's epic titles run to 139 display cells
-		// (111 boxes, median 8, p90 37) — the goal line is longer still.
-		room := maxInt(4, inner-13)
-		b.WriteString(cursor + style.Render(pad(r.name, 10)) +
-			th.muted.Render(pad(ansi.Truncate(cur, room, "…"), room)) + "\n")
-	}
-	b.WriteString("\n" + th.dim.Render(pad("↑↓ field · ⏎ edit · esc close · ^c quit", inner)))
-	return b.String()
+	return th.muted.Render(pad(derived, inner)) + "\n\n" +
+		m.renderOverlayMenu(rows, m.epic.menuIdx, inner)
 }
 
 func (m *Model) renderEpicConfirm(box *board.EpicInfo, inner int) string {
@@ -961,7 +875,6 @@ func (m *Model) renderEpicConfirm(box *board.EpicInfo, inner int) string {
 }
 
 func (m *Model) renderEpicList(box *board.EpicInfo, inner, budget int) string {
-	th := m.th
 	e := m.epic
 	rows := m.epicListRows(box)
 
@@ -1017,26 +930,5 @@ func (m *Model) renderEpicList(box *board.EpicInfo, inner, budget int) string {
 		hdr = "meta — furrow stores it and never reads it"
 		foot = "⏎/x remove · a add k=v · esc back"
 	}
-
-	var b strings.Builder
-	b.WriteString(th.peekHdr.Render(hdr) + "\n\n")
-	if len(rows) == 0 {
-		b.WriteString(th.dim.Render(pad("(empty)", inner)) + "\n")
-	}
-	start, end, marks := editListWindow(len(rows), e.listIdx, budget)
-	if marks && start > 0 {
-		b.WriteString(th.dim.Render(pad(fmt.Sprintf("%d above", start), inner)) + "\n")
-	}
-	for i := start; i < end; i++ {
-		cursor, style := "  ", th.base
-		if i == e.listIdx {
-			cursor, style = "▌ ", th.peekHdr
-		}
-		b.WriteString(cursor + style.Render(pad(ansi.Truncate(mark(i, rows[i]), inner-2, "…"), inner-2)) + "\n")
-	}
-	if marks && end < len(rows) {
-		b.WriteString(th.dim.Render(pad(fmt.Sprintf("+%d below", len(rows)-end), inner)) + "\n")
-	}
-	b.WriteString("\n" + th.dim.Render(pad(foot, inner)))
-	return b.String()
+	return m.renderOverlayList(hdr, foot, rows, e.listIdx, inner, budget, mark)
 }

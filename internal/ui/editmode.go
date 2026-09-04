@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"charm.land/bubbles/v2/key"
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	lg "charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -19,20 +18,12 @@ import (
 // can record, editable without leaving the board. GitHub's analogue is cell
 // editing (Enter toggles it) plus the side panel's field controls; the panel
 // itself is undocumented, so the shape here is ridge's own — one menu, one
-// sub-editor per field, Esc walks back out.
+// sub-editor per field, Esc walks back out. The walk itself is overlayShell's
+// (overlay.go); this file is what each field means.
 //
 // Every apply is optimistic: the board mutates first (board.SetFields and
 // friends validate before touching anything), the write queues behind it, and
 // a failed write rolls the whole board back via the persist queue's reload.
-
-type editStage int
-
-const (
-	stageMenu  editStage = iota
-	stagePick            // value/effort: a 1..5 keypress, 0 clears
-	stageList            // labels / epic / repos / checklist cursor
-	stageInput           // title / due / new label / new repo / checklist add+reword
-)
 
 type editField int
 
@@ -96,14 +87,28 @@ const (
 	inputNote
 )
 
-type editState struct {
-	id       string
-	stage    editStage
-	field    editField
-	menuIdx  int
-	listIdx  int
-	input    textinput.Model
-	inputFor inputKind
+type editState = overlayShell[editField, inputKind]
+
+// editHooks is the task overlay's half of the stage machine: the shell walks
+// the stages, these say what each one does to the task under edit.
+type editHooks struct {
+	m *Model
+	t *board.Task
+}
+
+func (h editHooks) note()              { h.m.noteEditStage() }
+func (h editHooks) exit()              { h.m.exitEdit() }
+func (h editHooks) subject() string    { return "edit " + h.t.ID }
+func (h editHooks) fieldCount() int    { return int(fieldCount) }
+func (h editHooks) listRows() []string { return h.m.editListRows(h.t) }
+
+func (h editHooks) openField(f editField) tea.Cmd       { return h.m.openField(f, h.t) }
+func (h editHooks) listSelect(rows []string) tea.Cmd    { return h.m.editListSelect(h.t, rows) }
+func (h editHooks) listKey(msg tea.KeyPressMsg) tea.Cmd { return h.m.onEditListKey(msg, h.t) }
+func (h editHooks) gateKey(msg tea.KeyPressMsg) tea.Cmd { return h.m.onEditPickKey(msg) }
+func (h editHooks) inputCancel(k inputKind) tea.Cmd     { return h.m.onEditInputCancel(k) }
+func (h editHooks) inputCommit(k inputKind, v string) tea.Cmd {
+	return h.m.onEditInputCommit(k, v, h.t)
 }
 
 // enterEdit opens the field-edit menu on the current selection.
@@ -114,10 +119,7 @@ func (m *Model) enterEdit() {
 		return
 	}
 	m.cancelDrag()
-	ti := textinput.New()
-	ti.SetWidth(48)
-	m.edit = &editState{id: t.ID, stage: stageMenu}
-	m.edit.input = ti
+	m.edit = &editState{id: t.ID, stage: stageMenu, input: newOverlayInput()}
 	m.mode = modeEdit
 	m.peekOpen = true
 	m.syncPeek()
@@ -137,14 +139,11 @@ func (m *Model) enterNote() tea.Cmd {
 		return nil
 	}
 	m.cancelDrag()
-	ti := textinput.New()
-	ti.SetWidth(48)
-	m.edit = &editState{id: t.ID, stage: stageInput}
-	m.edit.input = ti
+	m.edit = &editState{id: t.ID, stage: stageInput, input: newOverlayInput()}
 	m.mode = modeEdit
 	m.peekOpen = true
 	m.syncPeek()
-	return m.startInput(inputNote, "", "progress in one paragraph — appended to the body")
+	return m.edit.startInput(editHooks{m, t}, inputNote, "", "progress in one paragraph — appended to the body")
 }
 
 func (m *Model) exitEdit() {
@@ -155,7 +154,7 @@ func (m *Model) exitEdit() {
 // noteEditStage keeps the bottom row true as the overlay moves between stages.
 // enterEdit wrote it once and nothing re-wrote it, so every sub-editor still
 // advertised "⏎ pick a field · esc closes" — while in stageList ⏎ was toggling
-// a checklist item and esc went BACK to the menu, and in stagePick ⏎ was a
+// a checklist item and esc went BACK to the menu, and in stageGate ⏎ was a
 // literal no-op. It is the only note in the app that made an imperative key
 // claim false at read time, which is the failure the one-row status exists to
 // prevent. Every other mode already re-notes on state change.
@@ -172,7 +171,7 @@ func (m *Model) noteEditStage() {
 		return
 	}
 	switch e.stage {
-	case stagePick:
+	case stageGate:
 		m.note("edit %s · %s — 1-5 sets · 0 clears · esc back", e.id, editFieldName(e.field))
 	case stageList:
 		if e.field == fieldDeps || e.field == fieldRefs {
@@ -217,63 +216,24 @@ func (m *Model) onEditKey(msg tea.KeyPressMsg) tea.Cmd {
 	if t == nil {
 		return nil
 	}
-	e := m.edit
-	if e.stage == stageInput {
-		return m.onEditInputKey(msg, t)
-	}
-
-	switch {
-	case key.Matches(msg, m.keys.Cancel):
-		if e.stage == stageMenu {
-			m.exitEdit()
-		} else {
-			e.stage, e.listIdx = stageMenu, 0
-			m.noteEditStage()
-		}
-		return nil
-	case key.Matches(msg, m.keys.Quit) && e.stage == stageMenu:
-		m.exitEdit()
-		return nil
-	}
-
-	switch e.stage {
-	case stageMenu:
-		return m.onEditMenuKey(msg, t)
-	case stagePick:
-		return m.onEditPickKey(msg)
-	case stageList:
-		return m.onEditListKey(msg, t)
-	}
-	return nil
-}
-
-func (m *Model) onEditMenuKey(msg tea.KeyPressMsg, t *board.Task) tea.Cmd {
-	switch {
-	case key.Matches(msg, m.keys.Up):
-		m.edit.menuIdx = (m.edit.menuIdx + int(fieldCount) - 1) % int(fieldCount)
-	case key.Matches(msg, m.keys.Down):
-		m.edit.menuIdx = (m.edit.menuIdx + 1) % int(fieldCount)
-	case key.Matches(msg, m.keys.Commit):
-		return m.openField(editField(m.edit.menuIdx), t)
-	}
-	return nil
+	return m.edit.onKey(m, msg, editHooks{m, t})
 }
 
 func (m *Model) openField(f editField, t *board.Task) tea.Cmd {
-	e := m.edit
+	e, h := m.edit, editHooks{m, t}
 	e.field, e.listIdx = f, 0
 	switch f {
 	case fieldTitle:
-		return m.startInput(inputTitle, t.Title, "title")
+		return e.startInput(h, inputTitle, t.Title, "title")
 	case fieldValue, fieldEffort:
-		e.stage = stagePick
+		e.stage = stageGate
 		m.noteEditStage()
 	case fieldDue:
 		cur := ""
 		if !t.Due.IsZero() {
 			cur = t.Due.In(localZone()).Format("2006-01-02")
 		}
-		return m.startInput(inputDue, cur, "2026-08-04 · +1d · +2h · empty clears")
+		return e.startInput(h, inputDue, cur, "2026-08-04 · +1d · +2h · empty clears")
 	case fieldLabels, fieldEpic, fieldDeps, fieldRepos, fieldRefs, fieldChecklist:
 		e.stage = stageList
 		if f == fieldEpic {
@@ -331,16 +291,8 @@ func epicRow(epics []board.EpicInfo, id string) int {
 	return 0
 }
 
-func (m *Model) startInput(kind inputKind, value, placeholder string) tea.Cmd {
-	e := m.edit
-	e.stage, e.inputFor = stageInput, kind
-	e.input.SetValue(value)
-	e.input.Placeholder = placeholder
-	e.input.SetWidth(48)
-	m.noteEditStage()
-	return e.input.Focus()
-}
-
+// onEditPickKey is the gate stage: value / effort take a 1..5 keypress, 0
+// clears, anything else is ignored.
 func (m *Model) onEditPickKey(msg tea.KeyPressMsg) tea.Cmd {
 	s := msg.String()
 	if len(s) != 1 || s[0] < '0' || s[0] > '5' {
@@ -358,34 +310,23 @@ func (m *Model) onEditPickKey(msg tea.KeyPressMsg) tea.Cmd {
 	return m.applyPatch(label, patch)
 }
 
+// onEditListKey is the list stage's own keys, after the shell has answered the
+// cursor and ⏎/x: `a` adds to the one-way lists, `d` / `r` work the checklist.
 func (m *Model) onEditListKey(msg tea.KeyPressMsg, t *board.Task) tea.Cmd {
-	e := m.edit
-	rows := len(m.editListRows(t))
+	e, h := m.edit, editHooks{m, t}
 	switch {
-	case key.Matches(msg, m.keys.Up):
-		if rows > 0 {
-			e.listIdx = (e.listIdx + rows - 1) % rows
-		}
-	case key.Matches(msg, m.keys.Down):
-		if rows > 0 {
-			e.listIdx = (e.listIdx + 1) % rows
-		}
-
-	case key.Matches(msg, m.keys.Commit), key.Matches(msg, m.keys.Check):
-		return m.editListSelect(t)
-
 	case msg.String() == "a":
 		switch e.field {
 		case fieldLabels:
-			return m.startInput(inputNewLabel, "", "new label")
+			return e.startInput(h, inputNewLabel, "", "new label")
 		case fieldDeps:
-			return m.startInput(inputDepAdd, "", "t-… — the task this waits on")
+			return e.startInput(h, inputDepAdd, "", "t-… — the task this waits on")
 		case fieldRepos:
-			return m.startInput(inputNewRepo, "", "owner/repo")
+			return e.startInput(h, inputNewRepo, "", "owner/repo")
 		case fieldRefs:
-			return m.startInput(inputNewRef, "", "file:line or URL")
+			return e.startInput(h, inputNewRef, "", "file:line or URL")
 		case fieldChecklist:
-			return m.startInput(inputCheckAdd, "", "new checklist item")
+			return e.startInput(h, inputCheckAdd, "", "new checklist item")
 		}
 
 	case msg.String() == "d" && e.field == fieldChecklist:
@@ -400,7 +341,7 @@ func (m *Model) onEditListKey(msg tea.KeyPressMsg, t *board.Task) tea.Cmd {
 
 	case msg.String() == "r" && e.field == fieldChecklist:
 		if e.listIdx < len(t.Checklist) {
-			return m.startInput(inputCheckReword, t.Checklist[e.listIdx].Text, "reworded item")
+			return e.startInput(h, inputCheckReword, t.Checklist[e.listIdx].Text, "reworded item")
 		}
 	}
 	return nil
@@ -408,9 +349,8 @@ func (m *Model) onEditListKey(msg tea.KeyPressMsg, t *board.Task) tea.Cmd {
 
 // editListSelect is Enter/x on a list row: toggle a label or repo, file under
 // an epic, or toggle a checklist item.
-func (m *Model) editListSelect(t *board.Task) tea.Cmd {
+func (m *Model) editListSelect(t *board.Task, rows []string) tea.Cmd {
 	e := m.edit
-	rows := m.editListRows(t)
 	if e.listIdx >= len(rows) {
 		return nil
 	}
@@ -503,148 +443,121 @@ func (m *Model) editListRows(t *board.Task) []string {
 	return nil
 }
 
-func (m *Model) onEditInputKey(msg tea.KeyPressMsg, t *board.Task) tea.Cmd {
+// onEditInputCancel is esc in the input: back to the stage the input was
+// opened from.
+func (m *Model) onEditInputCancel(k inputKind) tea.Cmd {
 	e := m.edit
-	switch {
-	case key.Matches(msg, m.keys.Cancel):
-		e.input.Blur()
-		switch e.inputFor {
-		case inputNote:
-			// There is no stage behind this input — enterNote opened the
-			// overlay straight onto it — so esc closes the overlay, not a
-			// menu the user never saw.
+	switch k {
+	case inputNote:
+		// There is no stage behind this input — enterNote opened the
+		// overlay straight onto it — so esc closes the overlay, not a
+		// menu the user never saw.
+		m.exitEdit()
+		m.note("note cancelled — nothing appended")
+		return nil
+	case inputTitle, inputDue:
+		e.stage = stageMenu
+	default:
+		e.stage = stageList
+	}
+	m.noteEditStage()
+	return nil
+}
+
+// onEditInputCommit is ⏎ in the input, v already trimmed and already past the
+// rolling-back refusal. Every branch that lands back in stageList re-notes,
+// because there ⏎ TOGGLES or REMOVES — a board write — and the input's
+// surviving "⏎ apply" would be the false-key-claim failure noteEditStage exists
+// to prevent (a refusal survives the re-note: noteEditStage never over-writes an
+// unread m.fail). The branches whose apply writes its own status ("ref <id>",
+// "retitle <id>") need no re-note.
+func (m *Model) onEditInputCommit(k inputKind, v string, t *board.Task) tea.Cmd {
+	e := m.edit
+	switch k {
+	case inputTitle:
+		e.stage = stageMenu
+		return m.applyPatch("retitle", board.FieldPatch{Title: &v})
+	case inputDue:
+		e.stage = stageMenu
+		return m.applyPatch("due", board.FieldPatch{Due: &v})
+	case inputNewLabel:
+		e.stage = stageList
+		if v == "" {
+			m.noteEditStage()
+			return nil
+		}
+		return m.applyPatch("label", board.FieldPatch{AddLabels: []string{v}})
+	case inputNewRepo:
+		e.stage = stageList
+		if v == "" {
+			m.noteEditStage()
+			return nil
+		}
+		return m.applyPatch("repo", board.FieldPatch{AddRepos: []string{v}})
+	case inputNewRef:
+		e.stage = stageList
+		if v == "" {
+			m.noteEditStage()
+			return nil
+		}
+		return m.applyPatch("ref", board.FieldPatch{AddRefs: []string{v}})
+	case inputCheckAdd:
+		e.stage = stageList
+		if v == "" {
+			m.noteEditStage()
+			return nil
+		}
+		cmd := m.applyCheck("check add", func() error { return m.b.CheckAdd(t.ID, v) },
+			func() error { return m.prov.PersistCheckAdd(t.ID, v) })
+		m.noteEditStage()
+		return cmd
+	case inputCheckReword:
+		e.stage = stageList
+		i := e.listIdx
+		cmd := m.applyCheck("check reword", func() error { return m.b.CheckReword(t.ID, i, v) },
+			func() error { return m.prov.PersistCheckReword(t.ID, i, v) })
+		m.noteEditStage()
+		return cmd
+	case inputDepAdd:
+		e.stage = stageList
+		if v == "" {
+			m.noteEditStage()
+			return nil
+		}
+		// Without the re-note the NEXT ⏎ silently deletes the dep under the
+		// cursor — in stageList ⏎ removes an edge, the one destructive key in
+		// the overlay.
+		cmd := m.applyCheck("dep add", func() error { return m.b.DepAdd(t.ID, v) },
+			func() error { return m.prov.PersistDepAdd(t.ID, v) })
+		m.noteEditStage()
+		return cmd
+	case inputNote:
+		if v == "" {
+			// Nothing to append; leave like esc does. AppendNote would
+			// refuse it anyway (furrow's "note text is empty"), but an
+			// empty ⏎ is a back-out, not a mistake to report as one.
 			m.exitEdit()
 			m.note("note cancelled — nothing appended")
 			return nil
-		case inputTitle, inputDue:
-			e.stage = stageMenu
-		default:
-			e.stage = stageList
 		}
-		m.noteEditStage()
-		return nil
-	case key.Matches(msg, m.keys.Commit):
-		v := strings.TrimSpace(e.input.Value())
-		// Refused BEFORE the blur and the stage reset below. applyPatch and
-		// applyCheck refuse it too, but only after the modal has closed over
-		// hand-typed text that nothing can recover; leaving the input open and
-		// focused is what lets the user land it once the re-read arrives. An
-		// empty ⏎ is a back-out, not a write, so it still passes through.
-		if v != "" && m.refuseWhileRollingBack("edit "+e.id) {
-			m.status += "; ⏎ again in a moment"
+		// One paragraph per open: the apply CLOSES the overlay (there is
+		// no list to land back in), and the peek left open behind it shows
+		// the paragraph at the body's tail.
+		cmd := m.applyCheck("note", func() error { return m.b.AppendNote(t.ID, v) },
+			func() error { return m.prov.PersistNote(t.ID, v) })
+		if cmd == nil {
+			// The LOCAL apply refused (the shell's rolling-back refusal never
+			// reaches applyCheck): the fail is on the status row and the
+			// typed text is still in the input — re-focus it (the shell
+			// blurred it before this) instead of closing over hand-typed
+			// prose.
 			return e.input.Focus()
 		}
-		e.input.Blur()
-		switch e.inputFor {
-		case inputTitle:
-			e.stage = stageMenu
-			return m.applyPatch("retitle", board.FieldPatch{Title: &v})
-		case inputDue:
-			e.stage = stageMenu
-			return m.applyPatch("due", board.FieldPatch{Due: &v})
-		case inputNewLabel:
-			e.stage = stageList
-			if v == "" {
-				// An empty submission just backs out to the list, so the row
-				// has to stop advertising the input's keys — in stageList ⏎
-				// TOGGLES, which is a board write, not an apply.
-				m.noteEditStage()
-				return nil
-			}
-			return m.applyPatch("label", board.FieldPatch{AddLabels: []string{v}})
-		case inputNewRepo:
-			e.stage = stageList
-			if v == "" {
-				// An empty submission just backs out to the list, so the row
-				// has to stop advertising the input's keys — in stageList ⏎
-				// TOGGLES, which is a board write, not an apply.
-				m.noteEditStage()
-				return nil
-			}
-			return m.applyPatch("repo", board.FieldPatch{AddRepos: []string{v}})
-		case inputNewRef:
-			e.stage = stageList
-			if v == "" {
-				// An empty submission just backs out to the list, so the row
-				// has to stop advertising the input's keys — in stageList ⏎
-				// REMOVES, which is a board write, not an apply.
-				m.noteEditStage()
-				return nil
-			}
-			// No re-note needed, unlike inputDepAdd: applyPatch writes its own
-			// "ref <id>" status, so the input's "⏎ apply" claim never survives.
-			return m.applyPatch("ref", board.FieldPatch{AddRefs: []string{v}})
-		case inputCheckAdd:
-			e.stage = stageList
-			if v == "" {
-				// An empty submission just backs out to the list, so the row
-				// has to stop advertising the input's keys — in stageList ⏎
-				// TOGGLES, which is a board write, not an apply.
-				m.noteEditStage()
-				return nil
-			}
-			cmd := m.applyCheck("check add", func() error { return m.b.CheckAdd(t.ID, v) },
-				func() error { return m.prov.PersistCheckAdd(t.ID, v) })
-			// The apply lands back in stageList, where ⏎ TOGGLES — the input's
-			// "⏎ apply" note surviving here is the false-key-claim failure
-			// noteEditStage exists to prevent (a refusal survives: noteEditStage
-			// never over-writes an unread m.fail).
-			m.noteEditStage()
-			return cmd
-		case inputCheckReword:
-			e.stage = stageList
-			i := e.listIdx
-			cmd := m.applyCheck("check reword", func() error { return m.b.CheckReword(t.ID, i, v) },
-				func() error { return m.prov.PersistCheckReword(t.ID, i, v) })
-			m.noteEditStage()
-			return cmd
-		case inputDepAdd:
-			e.stage = stageList
-			if v == "" {
-				// An empty submission just backs out to the list, so the row
-				// has to stop advertising the input's keys — in stageList ⏎
-				// REMOVES, which is a board write, not an apply.
-				m.noteEditStage()
-				return nil
-			}
-			// Re-note after the apply, or the surviving "⏎ apply" makes the
-			// NEXT ⏎ silently delete the dep under the cursor — in stageList
-			// ⏎ removes an edge, the one destructive key in the overlay.
-			cmd := m.applyCheck("dep add", func() error { return m.b.DepAdd(t.ID, v) },
-				func() error { return m.prov.PersistDepAdd(t.ID, v) })
-			m.noteEditStage()
-			return cmd
-		case inputNote:
-			if v == "" {
-				// Nothing to append; leave like esc does. AppendNote would
-				// refuse it anyway (furrow's "note text is empty"), but an
-				// empty ⏎ is a back-out, not a mistake to report as one.
-				m.exitEdit()
-				m.note("note cancelled — nothing appended")
-				return nil
-			}
-			// One paragraph per open: the apply CLOSES the overlay (there is
-			// no list to land back in), and the peek left open behind it shows
-			// the paragraph at the body's tail.
-			cmd := m.applyCheck("note", func() error { return m.b.AppendNote(t.ID, v) },
-				func() error { return m.prov.PersistNote(t.ID, v) })
-			if cmd == nil {
-				// The LOCAL apply refused (the rollingBack refusal above never
-				// reaches applyCheck): the fail is on the status row and the
-				// typed text is still in the input — re-focus it (the Commit
-				// branch blurred it above) instead of closing over hand-typed
-				// prose.
-				return e.input.Focus()
-			}
-			m.exitEdit()
-			m.note("note appended to %s", t.ID)
-			return cmd
-		}
-		return nil
+		m.exitEdit()
+		m.note("note appended to %s", t.ID)
+		return cmd
 	}
-	var c tea.Cmd
-	e.input, c = e.input.Update(msg)
-	return c
+	return nil
 }
 
 // applyPatch is the one funnel for a field edit: local apply (validated),
@@ -721,38 +634,28 @@ func vocabUnion(vocab, own []string) []string {
 // ---- rendering --------------------------------------------------------------
 
 // editLayer draws the overlay: the menu with current values, or the active
-// sub-editor. Same Layer style as the peek and help overlays.
+// sub-editor.
 func (m *Model) editLayer() *lg.Layer {
 	th := m.th
 	t := m.b.Task(m.edit.id)
 	if t == nil {
 		return nil
 	}
-	inner := clamp(m.w/3, 44, 72)
+	inner := m.overlayInner()
 
 	var body string
 	switch m.edit.stage {
 	case stageMenu:
 		body = m.renderEditMenu(t, inner)
-	case stagePick:
-		name := "value"
-		if m.edit.field == fieldEffort {
-			name = "effort"
-		}
-		body = th.peekHdr.Render("set "+name) + "\n\n" +
+	case stageGate:
+		body = th.peekHdr.Render("set "+editFieldName(m.edit.field)) + "\n\n" +
 			pad("press 1-5 · 0 clears · esc back", inner)
 	case stageList:
-		body = m.renderEditList(t, inner, maxInt(1, m.h-editListChrome))
+		body = m.renderEditList(t, inner, maxInt(1, m.h-overlayListChrome))
 	case stageInput:
-		body = th.peekHdr.Render(inputTitleFor(m.edit.inputFor)) + "\n\n" +
-			m.edit.input.View() + "\n" + th.dim.Render(pad("⏎ apply · esc back", inner))
+		body = m.renderOverlayInput(inputTitleFor(m.edit.inputFor), m.edit.input, inner)
 	}
-
-	box := th.peek.Render(pad(th.peekHdr.Render("edit "+t.ID), inner) + "\n\n" + body)
-	box = lg.NewStyle().MaxWidth(m.w).MaxHeight(m.h).Render(box)
-	x := maxInt(0, (m.w-lg.Width(box))/2)
-	y := maxInt(0, (m.h-lg.Height(box))/3)
-	return lg.NewLayer(box).ID("edit").X(x).Y(y).Z(zEdit)
+	return m.overlayLayer("edit", "edit "+t.ID, body)
 }
 
 func inputTitleFor(k inputKind) string {
@@ -780,7 +683,6 @@ func inputTitleFor(k inputKind) string {
 }
 
 func (m *Model) renderEditMenu(t *board.Task, inner int) string {
-	th := m.th
 	est := func(n int) string {
 		if n == 0 {
 			return "—"
@@ -805,77 +707,22 @@ func (m *Model) renderEditMenu(t *board.Task, inner int) string {
 		due = t.Due.In(localZone()).Format("2006-01-02")
 	}
 	cd, ct := t.CheckProgress()
-	rows := []struct{ name, cur string }{
-		{editFieldName(fieldTitle), ansi.Truncate(t.Title, inner-14, "…")},
+	rows := []menuRow{
+		{editFieldName(fieldTitle), t.Title},
 		{editFieldName(fieldValue), est(t.Value)},
 		{editFieldName(fieldEffort), est(t.Effort)},
 		{editFieldName(fieldLabels), strings.Join(t.Labels, ",")},
 		{editFieldName(fieldEpic), epicLabel},
 		{editFieldName(fieldDue), due},
-		{editFieldName(fieldDeps), ansi.Truncate(strings.Join(t.Deps, ","), inner-14, "…")},
-		{editFieldName(fieldRepos), ansi.Truncate(strings.Join(t.Repos, ","), inner-14, "…")},
-		{editFieldName(fieldRefs), ansi.Truncate(strings.Join(t.Refs, ","), inner-14, "…")},
+		{editFieldName(fieldDeps), strings.Join(t.Deps, ",")},
+		{editFieldName(fieldRepos), strings.Join(t.Repos, ",")},
+		{editFieldName(fieldRefs), strings.Join(t.Refs, ",")},
 		{editFieldName(fieldChecklist), fmt.Sprintf("%d/%d", cd, ct)},
 	}
-	var b strings.Builder
-	for i, r := range rows {
-		cursor, style := "  ", th.base
-		if i == m.edit.menuIdx {
-			cursor, style = "▌ ", th.peekHdr
-		}
-		cur := r.cur
-		if cur == "" {
-			cur = "—"
-		}
-		b.WriteString(cursor + style.Render(pad(r.name, 10)) + th.muted.Render(pad(cur, maxInt(4, inner-13))) + "\n")
-	}
-	b.WriteString("\n" + th.dim.Render(pad("↑↓ field · ⏎ edit · esc close · ^c quit", inner)))
-	return b.String()
-}
-
-// editListChrome is every line of the list stage that is NOT a row: the peek
-// box's border (2), the "edit <id>" header and its blank line (2), the stage
-// header and its blank line (2), and the blank line plus the key hints at the
-// foot (2). The rows get whatever is left, so the hints are never the thing
-// that falls off the bottom of the terminal.
-const editListChrome = 8
-
-// editListWindow picks the slice of rows to draw so the cursor stays on screen
-// with context around it. budget is the whole allowance in LINES, hints
-// included: a clipped head or tail spends one of them on its "N above" /
-// "+N below" line, the same way a clipped column announces itself. marks is
-// false when the rows are not clipped at all, and also when the budget is too
-// small to afford a hint — the rows take every line rather than the footer
-// losing its own.
-//
-// The window is derived from idx on every frame instead of being stored, so
-// the frame stays a pure function of the state -dump already prints.
-func editListWindow(n, idx, budget int) (start, end int, marks bool) {
-	if budget < 1 {
-		budget = 1
-	}
-	if n <= budget {
-		return 0, n, false
-	}
-	if budget < 3 {
-		start = clamp(idx-budget/2, 0, n-budget)
-		return start, start + budget, false
-	}
-	// Worst case both hints show; the one that turns out unnecessary hands its
-	// line back to the rows.
-	w := budget - 2
-	start = clamp(idx-w/2, 0, n-w)
-	switch {
-	case start == 0:
-		return 0, budget - 1, true
-	case start+w >= n:
-		return n - (budget - 1), n, true
-	}
-	return start, start + w, true
+	return m.renderOverlayMenu(rows, m.edit.menuIdx, inner)
 }
 
 func (m *Model) renderEditList(t *board.Task, inner, budget int) string {
-	th := m.th
 	e := m.edit
 	rows := m.editListRows(t)
 
@@ -942,29 +789,5 @@ func (m *Model) renderEditList(t *board.Task, inner, budget int) string {
 			return box + row
 		}
 	}
-
-	var b strings.Builder
-	b.WriteString(th.peekHdr.Render(hdr) + "\n\n")
-	if len(rows) == 0 {
-		b.WriteString(th.dim.Render(pad("(empty)", inner)) + "\n")
-	}
-	// Only the RENDER is windowed: listIdx still walks — and wraps over — the
-	// whole row list, and i below stays the ABSOLUTE index, which is the index
-	// mark() and editListSelect agree on.
-	start, end, marks := editListWindow(len(rows), e.listIdx, budget)
-	if marks && start > 0 {
-		b.WriteString(th.dim.Render(pad(fmt.Sprintf("%d above", start), inner)) + "\n")
-	}
-	for i := start; i < end; i++ {
-		cursor, style := "  ", th.base
-		if i == e.listIdx {
-			cursor, style = "▌ ", th.peekHdr
-		}
-		b.WriteString(cursor + style.Render(pad(ansi.Truncate(mark(i, rows[i]), inner-2, "…"), inner-2)) + "\n")
-	}
-	if marks && end < len(rows) {
-		b.WriteString(th.dim.Render(pad(fmt.Sprintf("+%d below", len(rows)-end), inner)) + "\n")
-	}
-	b.WriteString("\n" + th.dim.Render(pad(foot, inner)))
-	return b.String()
+	return m.renderOverlayList(hdr, foot, rows, e.listIdx, inner, budget, mark)
 }

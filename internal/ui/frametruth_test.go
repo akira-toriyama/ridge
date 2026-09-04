@@ -219,11 +219,11 @@ func TestTheStatusRowFollowsTheEditStage(t *testing.T) {
 
 	t.Run("pick stage", func(t *testing.T) {
 		m.openField(fieldValue, m.editTask())
-		if m.edit.stage != stagePick {
+		if m.edit.stage != stageGate {
 			t.Skip("value did not open a pick stage")
 		}
 		if strings.Contains(m.status, "pick a field") {
-			t.Errorf("stagePick makes ⏎ a literal no-op, but the row still advertises it: %q", m.status)
+			t.Errorf("stageGate makes ⏎ a literal no-op, but the row still advertises it: %q", m.status)
 		}
 	})
 }

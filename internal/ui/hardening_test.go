@@ -33,7 +33,7 @@ func TestChecklistPersistCarriesTheGestureTimeValue(t *testing.T) {
 
 	// Toggle fires the write (inflight), but do NOT run its Cmd yet: the
 	// store call has not happened when the next gesture arrives.
-	if c := m.editListSelect(m.b.Task("a")); c == nil {
+	if c := m.editListSelect(m.b.Task("a"), m.editListRows(m.b.Task("a"))); c == nil {
 		t.Fatal("the toggle must fire the persist")
 	}
 	// Delete the same item while the toggle is still in flight. The local

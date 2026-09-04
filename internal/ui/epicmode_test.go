@@ -212,7 +212,7 @@ func TestEpicListSubEditorTogglesAndParses(t *testing.T) {
 		sliceOnEpicAxis(t, m, "e-one")
 		press(m, "m")
 		m.epic.menuIdx = int(f)
-		if c := m.openEpicField(f); c != nil {
+		if c := m.openEpicField(f, m.b.Epic(m.epic.id)); c != nil {
 			_ = c
 		}
 		return m, p
@@ -263,11 +263,11 @@ func TestEpicListSubEditorTogglesAndParses(t *testing.T) {
 	// meta wants key=value, splits on the FIRST `=`, and refuses anything else.
 	t.Run("meta parse", func(t *testing.T) {
 		m, _ := newOverlay(t, epicFieldMeta)
-		if c := m.startEpicInput(epicInputNewMeta, "", ""); c != nil {
+		if c := m.onEpicKey(keyMsg("a")); c != nil {
 			_ = c
 		}
 		m.epic.input.SetValue("キーだけ")
-		if cmd := m.onEpicInputKey(keyMsg("enter")); cmd != nil {
+		if cmd := m.onEpicKey(keyMsg("enter")); cmd != nil {
 			t.Error("a meta value with no = queued a write")
 		}
 		if !m.statusErr {
@@ -275,11 +275,11 @@ func TestEpicListSubEditorTogglesAndParses(t *testing.T) {
 		}
 
 		m.status, m.statusErr = "", false
-		if c := m.startEpicInput(epicInputNewMeta, "", ""); c != nil {
+		if c := m.onEpicKey(keyMsg("a")); c != nil {
 			_ = c
 		}
 		m.epic.input.SetValue("note=a=b c")
-		if cmd := m.onEpicInputKey(keyMsg("enter")); cmd == nil {
+		if cmd := m.onEpicKey(keyMsg("enter")); cmd == nil {
 			t.Fatal("a valid k=v queued no write")
 		}
 		if m.statusErr {
@@ -303,7 +303,7 @@ func TestEpicListCursorPullsBackWhenTheReReadShrinksTheRows(t *testing.T) {
 	press(m, "m")
 	m.b.Epic("e-one").Deps = []string{"e-two", "e-three"}
 	m.epic.menuIdx = int(epicFieldDeps)
-	if c := m.openEpicField(epicFieldDeps); c != nil {
+	if c := m.openEpicField(epicFieldDeps, m.b.Epic(m.epic.id)); c != nil {
 		_ = c
 	}
 
@@ -341,7 +341,7 @@ func TestEpicLabelRemovalPullsTheCursorBackOnReRead(t *testing.T) {
 	// review). Two rows put the cursor at 1 and the shrink leaves 1 row.
 	box.Labels = append(box.Labels, "yyy-box-only", "zzz-box-only")
 	m.epic.menuIdx = int(epicFieldLabels)
-	if c := m.openEpicField(epicFieldLabels); c != nil {
+	if c := m.openEpicField(epicFieldLabels, m.b.Epic(m.epic.id)); c != nil {
 		_ = c
 	}
 	rows := m.epicListRows(box)
@@ -371,7 +371,7 @@ func TestEpicListCursorClampsEvenWhenTheReReadLandsMidInput(t *testing.T) {
 	press(m, "m")
 	m.b.Epic("e-one").Deps = []string{"e-two", "e-three"}
 	m.epic.menuIdx = int(epicFieldDeps)
-	if c := m.openEpicField(epicFieldDeps); c != nil {
+	if c := m.openEpicField(epicFieldDeps, m.b.Epic(m.epic.id)); c != nil {
 		_ = c
 	}
 	m.epic.listIdx = 1
@@ -380,16 +380,16 @@ func TestEpicListCursorClampsEvenWhenTheReReadLandsMidInput(t *testing.T) {
 		t.Fatal("the removal queued no write")
 	}
 	// `a` opens the add-input; the re-read lands while it is focused.
-	if c := m.onEpicListKey(keyMsg("a")); c == nil {
+	if c := m.onEpicKey(keyMsg("a")); c == nil {
 		t.Fatal("a did not open the add-input")
 	}
 	m.b.Epic("e-one").Deps = []string{"e-two"}
 	m.recompute()
 	// esc restores the list; the cursor must already be back in range.
-	if c := m.onEpicInputKey(keyMsg("esc")); c != nil {
+	if c := m.onEpicKey(keyMsg("esc")); c != nil {
 		_ = c
 	}
-	if m.epic.stage != epicList {
+	if m.epic.stage != stageList {
 		t.Fatalf("esc did not return to the list stage")
 	}
 	if m.epic.listIdx != 0 {
@@ -405,7 +405,7 @@ func TestARefusedEpicListRemovalDoesNotMoveTheCursor(t *testing.T) {
 	press(m, "m")
 	m.b.Epic("e-one").Deps = []string{"e-two", "e-three"}
 	m.epic.menuIdx = int(epicFieldDeps)
-	if c := m.openEpicField(epicFieldDeps); c != nil {
+	if c := m.openEpicField(epicFieldDeps, m.b.Epic(m.epic.id)); c != nil {
 		_ = c
 	}
 	m.epic.listIdx = 1
@@ -435,11 +435,11 @@ func TestEpicWritesApplyNothingLocally(t *testing.T) {
 
 	// Rename it: type a new title and commit.
 	m.epic.menuIdx = int(epicFieldTitle)
-	if c := m.openEpicField(epicFieldTitle); c != nil {
+	if c := m.openEpicField(epicFieldTitle, m.b.Epic(m.epic.id)); c != nil {
 		_ = c
 	}
 	m.epic.input.SetValue("改名した箱")
-	cmd := m.onEpicInputKey(keyMsg("enter"))
+	cmd := m.onEpicKey(keyMsg("enter"))
 	if cmd == nil {
 		t.Fatal("the rename queued no write")
 	}
@@ -455,10 +455,10 @@ func TestEpicWritesApplyNothingLocally(t *testing.T) {
 	// aimed at a board the user cannot see yet.
 	before := len(m.pending)
 	m.epic.menuIdx = int(epicFieldStanding)
-	if c := m.openEpicField(epicFieldStanding); c != nil {
+	if c := m.openEpicField(epicFieldStanding, m.b.Epic(m.epic.id)); c != nil {
 		_ = c
 	}
-	m.commitEpicConfirm()
+	m.onEpicKey(keyMsg("enter"))
 	if len(m.pending) != before {
 		t.Errorf("a second epic write queued while one was in flight (%d → %d)", before, len(m.pending))
 	}
@@ -477,40 +477,40 @@ func TestEveryEpicWriteLeavesThePendingWriteOnTheStatusRow(t *testing.T) {
 	}{
 		{"dep add", func(m *Model) {
 			m.epic.menuIdx = int(epicFieldDeps)
-			if c := m.openEpicField(epicFieldDeps); c != nil {
+			if c := m.openEpicField(epicFieldDeps, m.b.Epic(m.epic.id)); c != nil {
 				_ = c
 			}
-			if c := m.startEpicInput(epicInputNewDep, "", ""); c != nil {
+			if c := m.onEpicKey(keyMsg("a")); c != nil {
 				_ = c
 			}
 			m.epic.input.SetValue("e-two")
-			m.onEpicInputKey(keyMsg("enter"))
+			m.onEpicKey(keyMsg("enter"))
 		}},
 		{"meta add", func(m *Model) {
 			m.epic.menuIdx = int(epicFieldMeta)
-			if c := m.openEpicField(epicFieldMeta); c != nil {
+			if c := m.openEpicField(epicFieldMeta, m.b.Epic(m.epic.id)); c != nil {
 				_ = c
 			}
-			if c := m.startEpicInput(epicInputNewMeta, "", ""); c != nil {
+			if c := m.onEpicKey(keyMsg("a")); c != nil {
 				_ = c
 			}
 			m.epic.input.SetValue("origin=テスト")
-			m.onEpicInputKey(keyMsg("enter"))
+			m.onEpicKey(keyMsg("enter"))
 		}},
 		{"goal", func(m *Model) {
 			m.epic.menuIdx = int(epicFieldGoal)
-			if c := m.openEpicField(epicFieldGoal); c != nil {
+			if c := m.openEpicField(epicFieldGoal, m.b.Epic(m.epic.id)); c != nil {
 				_ = c
 			}
 			m.epic.input.SetValue("新しいゴール")
-			m.onEpicInputKey(keyMsg("enter"))
+			m.onEpicKey(keyMsg("enter"))
 		}},
 		{"standing", func(m *Model) {
 			m.epic.menuIdx = int(epicFieldStanding)
-			if c := m.openEpicField(epicFieldStanding); c != nil {
+			if c := m.openEpicField(epicFieldStanding, m.b.Epic(m.epic.id)); c != nil {
 				_ = c
 			}
-			m.commitEpicConfirm()
+			m.onEpicKey(keyMsg("enter"))
 		}},
 	}
 	for _, tc := range cases {
@@ -587,54 +587,54 @@ func TestEachEpicGestureReachesItsOwnProviderCall(t *testing.T) {
 	}{
 		{"retitle", "", "epicset e-one", func(m *Model) {
 			m.epic.menuIdx = int(epicFieldTitle)
-			if c := m.openEpicField(epicFieldTitle); c != nil {
+			if c := m.openEpicField(epicFieldTitle, m.b.Epic(m.epic.id)); c != nil {
 				_ = c
 			}
 			m.epic.input.SetValue("改名した箱")
-			m.onEpicInputKey(keyMsg("enter"))
+			m.onEpicKey(keyMsg("enter"))
 		}},
 		{"activate carries the reason", "", "epicactivate e-one reason=ユーザー依頼", func(m *Model) {
 			m.epic.menuIdx = int(epicFieldActive)
-			if c := m.openEpicField(epicFieldActive); c != nil {
+			if c := m.openEpicField(epicFieldActive, m.b.Epic(m.epic.id)); c != nil {
 				_ = c
 			}
 			m.epic.input.SetValue("ユーザー依頼")
-			m.onEpicInputKey(keyMsg("enter"))
+			m.onEpicKey(keyMsg("enter"))
 		}},
 		{"pinned", "", "epicset e-one", func(m *Model) {
 			m.epic.menuIdx = int(epicFieldPinned)
-			if c := m.openEpicField(epicFieldPinned); c != nil {
+			if c := m.openEpicField(epicFieldPinned, m.b.Epic(m.epic.id)); c != nil {
 				_ = c
 			}
-			m.commitEpicConfirm()
+			m.onEpicKey(keyMsg("enter"))
 		}},
 		{"dep add", "", "epicdep e-one e-two", func(m *Model) {
 			m.epic.menuIdx = int(epicFieldDeps)
-			if c := m.openEpicField(epicFieldDeps); c != nil {
+			if c := m.openEpicField(epicFieldDeps, m.b.Epic(m.epic.id)); c != nil {
 				_ = c
 			}
-			if c := m.startEpicInput(epicInputNewDep, "", ""); c != nil {
+			if c := m.onEpicKey(keyMsg("a")); c != nil {
 				_ = c
 			}
 			m.epic.input.SetValue("e-two")
-			m.onEpicInputKey(keyMsg("enter"))
+			m.onEpicKey(keyMsg("enter"))
 		}},
 		// The lifecycle row is ONE row reading the box's own state, so each
 		// direction has to be driven separately to prove it picks the right
 		// verb. Both go through the confirm stage, like standing/pinned.
 		{"close", "", "epicdone e-one", func(m *Model) {
 			m.epic.menuIdx = int(epicFieldClosed)
-			if c := m.openEpicField(epicFieldClosed); c != nil {
+			if c := m.openEpicField(epicFieldClosed, m.b.Epic(m.epic.id)); c != nil {
 				_ = c
 			}
-			m.commitEpicConfirm()
+			m.onEpicKey(keyMsg("enter"))
 		}},
 		{"reopen", "e-shut", "epicreopen e-shut", func(m *Model) {
 			m.epic.menuIdx = int(epicFieldClosed)
-			if c := m.openEpicField(epicFieldClosed); c != nil {
+			if c := m.openEpicField(epicFieldClosed, m.b.Epic(m.epic.id)); c != nil {
 				_ = c
 			}
-			m.commitEpicConfirm()
+			m.onEpicKey(keyMsg("enter"))
 		}},
 	}
 	for _, tc := range cases {
@@ -699,11 +699,11 @@ func TestEpicTitleRefusesEmptyWhileGoalClears(t *testing.T) {
 	press(m, "m")
 
 	m.epic.menuIdx = int(epicFieldTitle)
-	if c := m.openEpicField(epicFieldTitle); c != nil {
+	if c := m.openEpicField(epicFieldTitle, m.b.Epic(m.epic.id)); c != nil {
 		_ = c
 	}
 	m.epic.input.SetValue("")
-	if cmd := m.onEpicInputKey(keyMsg("enter")); cmd != nil {
+	if cmd := m.onEpicKey(keyMsg("enter")); cmd != nil {
 		t.Error("an empty title queued a write")
 	}
 	if !m.statusErr {
@@ -712,11 +712,11 @@ func TestEpicTitleRefusesEmptyWhileGoalClears(t *testing.T) {
 
 	m.status, m.statusErr = "", false
 	m.epic.menuIdx = int(epicFieldGoal)
-	if c := m.openEpicField(epicFieldGoal); c != nil {
+	if c := m.openEpicField(epicFieldGoal, m.b.Epic(m.epic.id)); c != nil {
 		_ = c
 	}
 	m.epic.input.SetValue("")
-	if cmd := m.onEpicInputKey(keyMsg("enter")); cmd == nil {
+	if cmd := m.onEpicKey(keyMsg("enter")); cmd == nil {
 		t.Error(`an empty goal must queue the clear — --goal "" is furrow's clearing form`)
 	}
 }
@@ -988,7 +988,7 @@ func TestEpicInputKeepsItsDraftInsideTheRollbackWindow(t *testing.T) {
 	}
 	m.epic.menuIdx = int(epicFieldGoal)
 	press(m, "enter")
-	if m.epic.stage != epicInput {
+	if m.epic.stage != stageInput {
 		t.Fatalf("the goal input did not open: stage=%d", m.epic.stage)
 	}
 
@@ -1000,7 +1000,7 @@ func TestEpicInputKeepsItsDraftInsideTheRollbackWindow(t *testing.T) {
 	if len(m.pending) != 0 {
 		t.Errorf("pending = %d, want 0 — the write must not be queued", len(m.pending))
 	}
-	if m.epic == nil || m.epic.stage != epicInput {
+	if m.epic == nil || m.epic.stage != stageInput {
 		t.Fatal("the input must stay open — a closed one loses the draft")
 	}
 	if got := m.epic.input.Value(); got != draft {
