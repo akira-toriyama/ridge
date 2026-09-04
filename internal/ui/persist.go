@@ -81,6 +81,24 @@ type reloadDoneMsg struct {
 	err      error
 }
 
+// markUnread records that a write LANDED in a live store and the board has not
+// re-read it (Model.unreadLanded; storeFirst narrows it to Model.storeFirstUnread).
+// Production code writes the two flags only here and in clearUnread, so
+// storeFirstUnread ⇒ unreadLanded holds by construction rather than by every
+// landing site remembering to set both.
+func (m *Model) markUnread(storeFirst bool) {
+	m.unreadLanded = true
+	if storeFirst {
+		m.storeFirstUnread = true
+	}
+}
+
+// clearUnread closes the unread window. Only a re-read that APPLIED may call
+// it — see the note on Model.unreadLanded for why firing one is not enough.
+func (m *Model) clearUnread() {
+	m.unreadLanded, m.storeFirstUnread = false, false
+}
+
 // refuseWhileRollingBack refuses a gesture before it commits anything the
 // window cannot take back. The three enqueue entrances refuse through it too,
 // but by then a caller may already have mutated m.b or closed a modal over
@@ -241,18 +259,15 @@ func (m *Model) onPersistDone(msg persistDoneMsg) tea.Cmd {
 		// store, the store-first branch below re-reads synchronously, and
 		// prov.Reload() is the DISCARD operation — firing it later would throw
 		// the session's own epic edits away.
-		m.unreadLanded = true
-	}
-	if op.noLocal {
+		m.markUnread(op.noLocal)
+	} else if op.noLocal {
 		// The write landed and the board was never told. A live store converges
 		// on the reconcile at the end of the drain (or on the refusal path's
 		// re-read); the fixture has no reconcile there — it requeries instead —
 		// so it re-reads right here, the shape the quick add has always used.
-		if m.prov.Live() {
-			m.storeFirstUnread = true
-		} else {
-			m.reload()
-		}
+		m.reload()
+	}
+	if op.noLocal {
 		// The gesture's own note said "waiting for furrow"; replace it now that
 		// the wait is over, and carry whatever prose the write computed.
 		if op.note != nil && *op.note != "" {
@@ -429,6 +444,11 @@ func (m *Model) onReloadDone(msg reloadDoneMsg) tea.Cmd {
 			// CLEAR the window even so — gating every write forever behind
 			// a re-read that may never succeed trades a lying board for a
 			// dead one; the message hands the user the retry.
+			//
+			// The unread window is NOT cleared: a write that LANDED is still
+			// unread, so store-first gestures stay refused (they gate nothing
+			// else) until a re-read applies — `r` from the board, which the
+			// refusal names, since the overlay does not route it.
 			m.rollingBack = false
 			// The held $EDITOR body still applies: its payload is complete
 			// (id + full text, no indices), and dropping it here would lose
@@ -462,7 +482,7 @@ func (m *Model) onReloadDone(msg reloadDoneMsg) tea.Cmd {
 	// rather than where the reload was fired: a reload that never applies (the
 	// in-flight guard above, or an error) still owes the board a re-read.
 	m.rollingBack = false
-	m.unreadLanded, m.storeFirstUnread = false, false
+	m.clearUnread()
 	if msg.label != "" {
 		m.note("%s · %dms", msg.label, msg.ms)
 	}
