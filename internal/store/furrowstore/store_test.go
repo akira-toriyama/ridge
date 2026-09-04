@@ -759,3 +759,58 @@ func TestContractRevisitCarriesFurrowsReasons(t *testing.T) {
 		t.Errorf("a half-typed query must be refused whole, got %d rows, err %v", len(rows), err)
 	}
 }
+
+// furrow accepts a terminal lane in next.lanes and echoes it in the board JSON,
+// but `furrow next` and `is:actionable` still skip it. ridge's Lane.Next must
+// mirror what furrow DOES, not what the config says: a done task with its deps
+// satisfied is not actionable, and the ▸ it would otherwise earn is a lie the
+// board's own `v` sits beside.
+func TestNextLanesExcludeTerminalLanesLikeFurrowDoes(t *testing.T) {
+	p, dir := newLabProvider(t)
+	lab(t, dir, "furrow", "config", "set", "next.lanes", "ready,in-progress,done")
+	id := labAdd(t, dir, "closed while listed as next", "-s", "ready")
+	lab(t, dir, "furrow", "set", id, "-s", "done")
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	b := p.Board()
+	if l := b.Lane("ready"); l == nil || !l.Next {
+		t.Errorf("ready must stay a next lane, got %+v", l)
+	}
+	if l := b.Lane("done"); l == nil || l.Next {
+		t.Errorf("done is terminal, so it is not a next lane whatever next.lanes says, got %+v", l)
+	}
+	if board.NewGraph(b).Actionable(id) {
+		t.Errorf("%s is done; furrow next would not hand it out", id)
+	}
+	// The same answer furrow gives, read from the binary this test seeded.
+	if out := lab(t, dir, "furrow", "ls", "-q", "is:actionable", "--json"); strings.TrimSpace(string(out)) != "[]" {
+		t.Errorf("furrow is:actionable = %s, want [] — the premise of this test moved", out)
+	}
+}
+
+// The same rule without the binary: a board JSON that lists done under
+// next_lanes AND under terminal maps to a lane that is Done and not Next.
+// (The contract test above proves furrow behaves this way; this one keeps
+// the mapping pinned where furrow is not on PATH.)
+func TestLanesFromDropsTerminalLanesFromNext(t *testing.T) {
+	lanes := lanesFrom(boardJSON{
+		Lanes:     []string{"inbox", "ready", "in-progress", "done", "icebox"},
+		NextLanes: []string{"ready", "in-progress", "done"},
+		Terminal:  []string{"done", "icebox"},
+		DoneLane:  "done",
+	})
+	got := map[string]board.Lane{}
+	for _, l := range lanes {
+		got[l.Name] = l
+	}
+	if !got["ready"].Next || !got["in-progress"].Next {
+		t.Errorf("ready / in-progress must be next lanes: %+v", lanes)
+	}
+	if got["done"].Next || !got["done"].Done {
+		t.Errorf("done is terminal: Next must be false whatever next_lanes says, Done true — got %+v", got["done"])
+	}
+	if got["inbox"].Next || got["icebox"].Next {
+		t.Errorf("lanes outside next_lanes stay non-next: %+v", lanes)
+	}
+}

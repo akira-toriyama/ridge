@@ -82,6 +82,7 @@ func (p *Store) Sync() error {
 type boardJSON struct {
 	Lanes       []string `json:"lanes"`
 	NextLanes   []string `json:"next_lanes"`
+	Terminal    []string `json:"terminal"`
 	DoneLane    string   `json:"done_lane"`
 	Writable    bool     `json:"writable"`
 	SchemaState string   `json:"schema_state"`
@@ -211,16 +212,7 @@ func (p *Store) load() (*board.Board, error) {
 		}
 	}
 
-	inNext := toSet(cfg.NextLanes)
-	lanes := make([]board.Lane, 0, len(cfg.Lanes))
-	for _, name := range cfg.Lanes {
-		lanes = append(lanes, board.Lane{
-			Name: name,
-			Next: inNext[name],
-			Done: name == cfg.DoneLane,
-			WIP:  wipDefaults[name],
-		})
-	}
+	lanes := lanesFrom(cfg)
 
 	tasks := make([]*board.Task, 0, len(rows))
 	for _, r := range rows {
@@ -304,6 +296,27 @@ func readBodies(store string, rows []taskJSON, tasks []*board.Task) error {
 	default:
 		return nil
 	}
+}
+
+// lanesFrom is the lane vocabulary as furrow's board JSON states it. Next is
+// next.lanes MINUS the terminal set: `furrow config set next.lanes` accepts a
+// terminal lane (done, icebox, waiting) and the board JSON echoes it, but
+// `furrow next` and `is:actionable` still skip every task in it (measured
+// 2026-09-04). Copying next_lanes alone made a done task Actionable here —
+// "▸ actionable" on the peek's meta line, the strip head and the graph node
+// (the card marker reads done first since #82, so it never showed it).
+func lanesFrom(cfg boardJSON) []board.Lane {
+	inNext, inTerminal := toSet(cfg.NextLanes), toSet(cfg.Terminal)
+	lanes := make([]board.Lane, 0, len(cfg.Lanes))
+	for _, name := range cfg.Lanes {
+		lanes = append(lanes, board.Lane{
+			Name: name,
+			Next: inNext[name] && !inTerminal[name],
+			Done: name == cfg.DoneLane,
+			WIP:  wipDefaults[name],
+		})
+	}
+	return lanes
 }
 
 func toSet(xs []string) map[string]bool {
