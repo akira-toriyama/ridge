@@ -272,7 +272,7 @@ func (m *Model) openField(f editField, t *board.Task) tea.Cmd {
 	case fieldDue:
 		cur := ""
 		if !t.Due.IsZero() {
-			cur = t.Due.Local().Format("2006-01-02")
+			cur = t.Due.In(localZone()).Format("2006-01-02")
 		}
 		return m.startInput(inputDue, cur, "2026-08-04 · +1d · +2h · empty clears")
 	case fieldLabels, fieldEpic, fieldDeps, fieldRepos, fieldRefs, fieldChecklist:
@@ -803,7 +803,7 @@ func (m *Model) renderEditMenu(t *board.Task, inner int) string {
 	}
 	due := "—"
 	if !t.Due.IsZero() {
-		due = t.Due.Local().Format("2006-01-02")
+		due = t.Due.In(localZone()).Format("2006-01-02")
 	}
 	cd, ct := t.CheckProgress()
 	rows := []struct{ name, cur string }{

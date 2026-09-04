@@ -6,14 +6,16 @@ import (
 	"time"
 )
 
-// fixedZone pins time.Local for the duration of a test. The whole point of the
+// fixedZone pins THIS package's localZone (never time.Local — see its
+// declaration) for the duration of a test; ui.localZone is separate. The whole point of the
 // due grammar is that furrow reads dates in LOCAL time, and that is invisible
 // on a machine (or a CI runner) whose zone happens to be UTC.
 func fixedZone(t *testing.T, name string, offsetHours int) {
 	t.Helper()
-	prev := time.Local
-	time.Local = time.FixedZone(name, offsetHours*3600)
-	t.Cleanup(func() { time.Local = prev })
+	prev := localZone
+	zone := time.FixedZone(name, offsetHours*3600)
+	localZone = func() *time.Location { return zone }
+	t.Cleanup(func() { localZone = prev })
 }
 
 // fixedNow pins the board clock so an offset form has a computable answer.
@@ -31,7 +33,7 @@ func fixedNow(t *testing.T, at time.Time) {
 // so the mirror has to be as wide as the original.
 func TestParseDueMatchesFurrowsOffsetGrammar(t *testing.T) {
 	fixedZone(t, "TEST", 9)
-	now := time.Date(2026, 8, 10, 17, 1, 39, 500_000_000, time.Local)
+	now := time.Date(2026, 8, 10, 17, 1, 39, 500_000_000, localZone())
 	fixedNow(t, now)
 
 	tests := []struct {
@@ -71,7 +73,7 @@ func TestParseDueBareDayIsEndOfDayLocal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseDue: %v", err)
 	}
-	want := time.Date(2026, 9, 1, 23, 59, 59, 0, time.Local)
+	want := time.Date(2026, 9, 1, 23, 59, 59, 0, localZone())
 	if !got.Equal(want) {
 		t.Errorf("ParseDue(bare day) = %s, want %s (end of that day, local)",
 			got.Format(time.RFC3339), want.Format(time.RFC3339))
@@ -86,7 +88,7 @@ func TestParseDueDayTimeIsLocalNotUTC(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseDue: %v", err)
 	}
-	want := time.Date(2026, 9, 1, 10, 30, 0, 0, time.Local)
+	want := time.Date(2026, 9, 1, 10, 30, 0, 0, localZone())
 	if !got.Equal(want) {
 		t.Errorf("ParseDue(day+time) = %s, want %s (local)",
 			got.Format(time.RFC3339), want.Format(time.RFC3339))
