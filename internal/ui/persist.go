@@ -44,9 +44,8 @@ type persistOp struct {
 	// is the parsed title, which is what labels and failure notes quote.
 	// addOpts is the INHERITED context only, pre-apply: the reopened modal
 	// re-parses addRaw live, and Draft is the one field apply() ORs instead
-	// of assigning, so storing the composed opts made a typed is:draft
-	// unclearable after a refusal — delete the token, the chip stays (found
-	// by review).
+	// of assigning, so storing the composed opts would make a typed is:draft
+	// unclearable after a refusal — delete the token, the chip stays.
 	addRaw   string
 	addTitle string
 	addOpts  board.AddOptions

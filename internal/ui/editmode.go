@@ -208,9 +208,8 @@ func (m *Model) onEditKey(msg tea.KeyPressMsg) tea.Cmd {
 	// bubbletea's raw mode delivers ctrl+c as an ordinary keystroke, so
 	// nothing else would ever let go of the keyboard. Checked BEFORE
 	// editTask: when a reconcile dropped the task, editTask closes the
-	// overlay and would swallow this very keystroke. (In stageMenu ctrl+c
-	// used to fall into keys.Quit and merely close the overlay; quitting the
-	// app is the deliberate new meaning.)
+	// overlay and would swallow this very keystroke. In stageMenu too it
+	// quits the app, deliberately — not merely the overlay.
 	if key.Matches(msg, m.keys.ForceQuit) {
 		return m.quitOrFlush()
 	}

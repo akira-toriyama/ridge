@@ -111,9 +111,9 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 	if *benchload {
 		// -benchload opens the real store, prints a latency breakdown and
 		// exits. Everything that shapes a FRAME or swaps in the fixture is
-		// meaningless to it, and it used to accept them all silently — most
-		// damagingly -mock, which left `-benchload -mock` reading the REAL
-		// store. The list is hand-written, so it is only as complete as the
+		// meaningless to it, and accepting them silently is the harm — most of
+		// all -mock, which would leave `-benchload -mock` reading the REAL store.
+		// The list is hand-written, so it is only as complete as the
 		// last person to add a flag — TestBenchloadRefusesEveryFrameShapingFlag
 		// walks the real flag surface and fails on the first one missing here.
 		//
@@ -152,10 +152,10 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 		return CodeUsage
 	}
 
-	// -demo is a -dump modifier (glossary), and it used to be READ only inside
-	// the -dump branch while still forcing the fixture: a bare `-demo move`
-	// launched an ordinary fixture TUI with the state silently dropped, and a
-	// bare `-demo bogus` exited 0 without ever validating the name.
+	// -demo is a -dump modifier (glossary) and is refused without -dump. Were
+	// it consulted only inside the -dump branch, a bare `-demo move` would open
+	// the ordinary live-store TUI with the state silently dropped, and a bare
+	// `-demo bogus` would exit 0 without ever validating the name.
 	if *demo != "" && !*dump {
 		_, _ = fmt.Fprintf(stderr, "error: -demo %s needs -dump (it fixes one transient state into a single frame)\n", *demo)
 		return CodeUsage
@@ -163,8 +163,8 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 
 	// -dump is the headless verification surface; it stays on the fixture so
 	// its frames are deterministic and diffable. -demo is not listed: it is
-	// refused above unless -dump is set, so it can no longer force the fixture
-	// on its own.
+	// refused above unless -dump is set, so it cannot force the fixture on
+	// its own.
 	useMock := *mock || *dump || *readonly
 
 	// -perflog records the latency of furrow execs. The fixture runs none, and
@@ -321,9 +321,9 @@ func runBenchload(stdout, stderr io.Writer, extra func(op string, d time.Duratio
 		mu.Lock()
 		samples = append(samples, sample{op, d.Milliseconds()})
 		mu.Unlock()
-		// -perflog used to be dropped here: the branch returned before
-		// perfHook ran at all, so the one mode whose purpose is measuring
-		// furrow latency discarded the flag that persists the measurement.
+		// extra is the -perflog sink and must run on this path too: this is
+		// the one mode whose purpose is measuring furrow latency, so it must
+		// not be the one that drops the flag persisting the measurement.
 		if extra != nil {
 			extra(op, d)
 		}

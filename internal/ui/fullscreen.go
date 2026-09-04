@@ -84,8 +84,7 @@ func (m *Model) composeFullScreen(titleBar, header string, canvas []string, stri
 // sits on (y) and the line scrolling UP must reveal (top: y itself, or the
 // group header above it when the row is its group's first — a row is read
 // against the cluster / repo / band it belongs to, and stopping one line short
-// leaves that header just off the top — the dep map once left
-// "── #3  6 nodes · depth 2 ──" there). A selection the layout no longer has
+// leaves that header just off the top). A selection the layout no longer has
 // keeps the current offset, clamped.
 func scrollToSel(scroll, total, canvasH int, row func() (top, y int, ok bool)) int {
 	if total <= canvasH {
@@ -112,7 +111,7 @@ func scrollToSel(scroll, total, canvasH int, row func() (top, y int, ok bool)) i
 // where names the axis in the note when it could not move at all. Every
 // view's step is monotone along its axis, which is what lets "never moved"
 // stand in for "ended where it began"; a step that wrapped around would need
-// the old before/after comparison back.
+// a before/after comparison instead.
 func (m *Model) halfPage(msg tea.KeyPressMsg, canvasH int, move func(dir int) bool, where string) {
 	dir := 1
 	if msg.String() != "ctrl+d" {

@@ -82,10 +82,9 @@ type layout struct {
 // The count is derived from colMinW, not from the PREFERRED width: the question
 // a board has to answer first is "how many lanes can I show at all", and
 // answering it with the preferred 28 hid lanes that would have fitted
-// comfortably at 26. On this board that was the difference between four visible
-// lanes and six — and a lane you cannot see is a lane you cannot drop into, so
-// the old reading cost function, not just polish. Width is then shared out of
-// whatever is actually there, capped at colMaxW.
+// comfortably at 26 — and a lane you cannot see is a lane you cannot drop
+// into. Width is then shared out of whatever is actually there, capped at
+// colMaxW.
 func boardCols(w, lanes int) (n, cw int) {
 	if lanes < 1 {
 		lanes = 1
@@ -289,8 +288,8 @@ func buildLayout(w, h, x0 int, lanes []board.Lane, cols map[string][]*board.Task
 			Tasks: cols[lane.Name],
 		}
 		// The scroll offset is clamped to what is actually scrollable, not to
-		// len(tasks)-1. A filter that shrinks a column used to leave a stale
-		// offset behind, rendering a 2-card column scrolled past both of them.
+		// len(tasks)-1, which leaves a column the filter shrank scrolled past
+		// every card it still has.
 		c.Scroll = clamp(scroll[lane.Name], 0,
 			maxScrollFor(c.Tasks, c.Top, c.Bot, colW, ms))
 		c.Cards = layCards(c.Tasks, c.Scroll, c.X, c.Top, c.Bot, colW, ms)

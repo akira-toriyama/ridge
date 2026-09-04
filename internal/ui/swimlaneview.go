@@ -580,9 +580,9 @@ func (m *Model) sliceToSwimBand(l *swimLayout) tea.Cmd {
 	}
 	// selectSlice runs BEFORE the view moves, and its own verdict is read
 	// rather than overwritten. It is a radio (re-selecting the active value
-	// clears the slice) and it refuses a value with no -q spelling, so the old
-	// unconditional "sliced to <term>" said the opposite of what happened in
-	// both cases — once with an empty term, because sliceTerm() was "" by then.
+	// clears the slice) and it refuses a value with no -q spelling, so an
+	// unconditional "sliced to <term>" would say the opposite of what happened
+	// in both cases — once with an empty term, sliceTerm() being "" by then.
 	cmd := m.selectSlice(l.Axis, b.Key)
 	if m.statusErr {
 		return cmd // refused: its reason stands, and the reader stays where they pressed

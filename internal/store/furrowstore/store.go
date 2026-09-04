@@ -841,9 +841,9 @@ func (p *Store) Add(title string, o board.AddOptions) (string, error) {
 // exec: undecodable bytes are furrow breaking JSON, while decodable JSON
 // without an id (null, {}, an id-less envelope) is a reply SHAPE ridge does
 // not expect — and folding them into one message printed the nil error as
-// the cause: "undecodable reply: <nil>" (found by review). The shape branch
-// is defensive: measured on furrow dev (60074b8), both adds answer a bare
-// row with an id on exit 0, and a non-zero exit never reaches this decode.
+// the cause: "undecodable reply: <nil>". The shape branch is defensive:
+// measured on furrow dev (60074b8), both adds answer a bare row with an id
+// on exit 0, and a non-zero exit never reaches this decode.
 func decodeAddReply(what string, out []byte) (string, error) {
 	var row addRow
 	if err := json.Unmarshal(out, &row); err != nil {

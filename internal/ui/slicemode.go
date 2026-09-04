@@ -106,7 +106,7 @@ func (m *Model) toggleSlice() {
 // modal, so `?` cannot be typed inside it and HelpSections deliberately omits
 // the modals — this note is the only surface that can advertise m/A, and the
 // epic axis is the only one where they mean anything. Called on open AND on
-// every axis switch: written once at open, it went stale on the first tab.
+// every axis switch, or it goes stale on the first tab.
 func (m *Model) noteSliceAxis() {
 	if m.statusErr {
 		return // never over-write a refusal nobody has read yet

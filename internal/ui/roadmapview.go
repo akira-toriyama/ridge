@@ -95,13 +95,12 @@ func (m *Model) renderRoadmap() string {
 		// not in startRoadmap (the -roadmap flag runs it inside New(), before
 		// any size exists) and not on the interactive program's very first
 		// frame either, which bubbletea draws before the WindowSizeMsg
-		// arrives (found by review: the first two cuts each anchored against
-		// the constructor's 240×60 on one of those paths). Today lands a
-		// third of the way in — the promises just behind and just ahead of
-		// it are the ones that need attention, and GH's roadmap opens the
-		// same way. The seed may sit outside this window: its row is still
-		// the selection (the strip shows it, its ◆ leaves an edge arrow),
-		// and the first cursor move pans to it.
+		// arrives (either path anchors against the constructor's 240×60
+		// otherwise). Today lands a third of the way in — the promises just
+		// behind and just ahead of it are the ones that need attention, and
+		// GH's roadmap opens the same way. The seed may sit outside this
+		// window: its row is still the selection (the strip shows it, its ◆
+		// leaves an edge arrow), and the first cursor move pans to it.
 		m.roadAnchored = true
 		m.roadXOff = 0
 		if l.Cells > tlW {
@@ -248,9 +247,8 @@ func (m *Model) roadCells(l *roadLayout, t *board.Task, r *roadRow, tlW int) str
 	// frame is a leak two views already assert against.
 	//
 	// The chip YIELDS to today's gridline: on every overdue row that belongs
-	// to a box the chip's natural span crosses today, and letting it win put
-	// a hole in the ┊ on exactly the rows the view exists to surface (found
-	// by review — all three shipped headless frames had it).
+	// to a box the chip's natural span crosses today, and letting it win puts
+	// a hole in the ┊ on exactly the rows the view exists to surface.
 	chip := ""
 	budget := rest - 3
 	if tx > x {
@@ -382,9 +380,8 @@ func (m *Model) roadEnsureX() {
 	}
 	tlW := m.roadTLW()
 	// The pad cell exists only when the window can spare it: at tlW==1 a ±1
-	// pad IS the whole window, and both branches parked the ◆ one cell
-	// outside it (found by review, in two rounds — the first fix stopped the
-	// branches chaining and still overshot).
+	// pad IS the whole window, and both branches would park the ◆ one cell
+	// outside it.
 	pad := minInt(1, tlW-1)
 	// else-if, deliberately: the second test must read the offset the FIRST
 	// one was judged against.
@@ -420,9 +417,9 @@ func (m *Model) roadPanBy(d int) {
 // flag opens the view from inside New() — where a note would overwrite the
 // read-only warning that is set exactly once per session and never restored
 // (dump.go's own switch documents that trap; -table dodges it by being a
-// bare view assignment, and this split is how -roadmap dodges it — found by
-// review). It returns the fallback sentence the interactive path owes, ""
-// when the seed landed.
+// bare view assignment, and this split is how -roadmap dodges it). It
+// returns the fallback sentence the interactive path owes, "" when the seed
+// landed.
 //
 // The seed is the caller's cursor when that task is on the axis at all —
 // arriving from a dated task and losing it would make the roadmap a place
@@ -441,8 +438,8 @@ func (m *Model) startRoadmap() string {
 // switch must carry roadSel directly: the roadmap MUTES what the filter
 // hides rather than dropping it, so its cursor is routinely on a task the
 // board cols do not contain — a round trip through the board cursor
-// (selectID, then curTask inside this function) dropped exactly those rows
-// and snapped the walk back (found by review, on the second pass).
+// (selectID, then curTask inside this function) drops exactly those rows
+// and snaps the walk back.
 func (m *Model) startRoadmapFrom(seed string) string {
 	m.cancelDrag()
 	m.roadScroll, m.roadXOff, m.roadMoved, m.roadAnchored = 0, 0, false, false
@@ -508,8 +505,8 @@ func (m *Model) cycleRoadZoom() {
 	// sized like every other anchoring path: a z racing ahead of the first
 	// WindowSizeMsg would otherwise anchor against the constructor's default
 	// width, and the offset below stays a provisional value the sized render
-	// overwrites (found by review — latent, but the invariant is "nothing
-	// anchors against an unreal size", without exceptions).
+	// overwrites (latent, but the invariant is "nothing anchors against an
+	// unreal size", without exceptions).
 	if m.sized {
 		m.roadAnchored = true
 	}

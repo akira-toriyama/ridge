@@ -20,13 +20,12 @@ import (
 // for a title that itself contains `value:`) and immediately after a token
 // key's colon (`check:"…"` carries prose) — and a LITERAL RUNE everywhere
 // else, so `Don't stop` and `彼は"これ"と言った` reach the store verbatim
-// (found by review: consuming quotes anywhere silently rewrote such titles
-// AND swallowed every token behind the odd quote). Unknown keys (and
-// anything after the first `:` of a known one) stay verbatim, so
-// `ref:ui/addmode.go:42` and a bare URL both survive. The inherited keys
-// (label:/epic:/repo:) and the focus-derived ones (status:/lane:) are
-// refused with their own guidance rather than silently titled: a user typing
-// them expects them to land.
+// (consuming quotes anywhere would silently rewrite such titles AND swallow
+// every token behind the odd quote). Unknown keys (and anything after the
+// first `:` of a known one) stay verbatim, so `ref:ui/addmode.go:42` and a
+// bare URL both survive. The inherited keys (label:/epic:/repo:) and the
+// focus-derived ones (status:/lane:) are refused with their own guidance
+// rather than silently titled: a user typing them expects them to land.
 //
 // The parse itself never fails — the chips row renders it live on every
 // keystroke, mid-word and all — so everything uncommittable lands in bad,

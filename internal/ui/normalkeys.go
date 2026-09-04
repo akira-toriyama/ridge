@@ -38,9 +38,8 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 			m.note("filter cleared")
 			return cmd
 		case m.sliceVal != "":
-			// A slice-only filter must be escapable too — before this case,
-			// the only way out was reopening the panel and re-selecting the
-			// same row. Radio semantics: re-selecting clears.
+			// A slice-only filter must be escapable too. Radio semantics:
+			// re-selecting clears.
 			return m.selectSlice(m.sliceField, m.sliceVal)
 		}
 
@@ -132,10 +131,9 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 		// the peek AND move the board cursor at the same time.
 		//
 		// The keys scroll whatever the user is looking at — the open peek
-		// wins, then the table, then the focused column. They used to be
-		// peek-only, which left them a SILENT dead key in the other two
-		// states while the help advertised a plain "scroll" (t-84r1); a
-		// gesture that cannot move must say so instead.
+		// wins, then the table, then the focused column; the help advertises
+		// a plain "scroll", so a gesture that cannot move must say so rather
+		// than sit as a silent dead key.
 		down := msg.String() == "ctrl+d"
 		dir := 1
 		if !down {

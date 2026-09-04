@@ -284,8 +284,7 @@ type Model struct {
 	// whose size is real (m.sized), because the interactive program draws
 	// one frame before the terminal reports a size, and a window placed
 	// against the constructor's default width put today off screen on every
-	// other terminal (found by review, twice: first against the flag path,
-	// then against the pre-size frame).
+	// other terminal.
 	roadZoom     roadZoom
 	roadSel      string
 	roadMoved    bool
@@ -329,9 +328,8 @@ type Model struct {
 
 // newModel takes the recorder up front, not via a setter: the constructor
 // itself emits status (the read-only warning below), and a recorder attached
-// after the fact missed it — the one status set exactly once per session, so
-// a -readonly -debuglog file could not explain its own status line (found by
-// review).
+// after the fact misses it — the one status set exactly once per session, so
+// a -readonly -debuglog file could not explain its own status line.
 func newModel(p board.Provider, dbg *DebugLog) *Model {
 	ti := textinput.New()
 	ti.Prompt = "/ "
@@ -439,10 +437,10 @@ func (m *Model) recompute() {
 	// labels/repos arms had no clamp at all, so removing their last row left
 	// ⏎/x silently dead on a cursor past the end. Not gated on the list
 	// stage: the re-read can land while the overlay is parked in the `a`
-	// input, whose esc walks back into the list with the index untouched
-	// (found by review) — e.field still names the list the index is for, and
-	// epicListRows is empty on the non-list fields, where openEpicField
-	// re-zeroes the index anyway.
+	// input, whose esc walks back into the list with the index untouched —
+	// e.field still names the list the index is for, and epicListRows is
+	// empty on the non-list fields, where openEpicField re-zeroes the index
+	// anyway.
 	if m.epic != nil && !m.epic.creating {
 		if box := m.b.Epic(m.epic.id); box != nil {
 			m.epic.listIdx = clamp(m.epic.listIdx, 0, maxInt(0, len(m.epicListRows(box))-1))

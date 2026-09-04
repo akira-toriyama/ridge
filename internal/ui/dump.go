@@ -77,10 +77,8 @@ func New(p board.Provider, o Options) *Model {
 	if o.Roadmap {
 		// startRoadmap, NOT openRoadmap: the note-free half. openRoadmap's
 		// status line would land exactly where the read-only warning below
-		// protects itself by writing nothing — the first cut used the full
-		// open and `-readonly -roadmap` lost the warning (found by review;
-		// the same regression this switch's own comment records shipping
-		// once before).
+		// protects itself by writing nothing, and `-readonly -roadmap` would
+		// lose the warning.
 		m.startRoadmap()
 	}
 	if o.GraphLR {
@@ -106,16 +104,16 @@ func New(p board.Provider, o Options) *Model {
 		"live": p.Live(), "tasks": len(m.b.Tasks()), "view": m.view.String(),
 	})
 	// What the read cost is the one thing the opening frame knows and the
-	// screen does not show anywhere else. The keys that used to be tacked on
-	// here (`r reload · R sync · ? help`) were a third partial key list.
+	// screen does not show anywhere else. No key hints: they would be a
+	// third partial key list.
 	//
 	// The read-only case says NOTHING, on purpose. newModel has already put
 	// "board is read-only … writes will fail until `furrow upgrade`" in the
 	// status, and that warning is set exactly once per session — nothing
-	// restores it later, so anything written over it is gone for good. An
-	// earlier revision of this function overwrote it with "fixture · N tasks",
-	// which was worse than losing it: on a live store gated by the schema
-	// check, "fixture" is the one word that means nothing you do touches disk.
+	// restores it later, so anything written over it is gone for good — and
+	// "fixture · N tasks" over it would be worse than losing it: on a live store
+	// gated by the schema check, "fixture" is the one word that means nothing
+	// you do touches disk.
 	switch {
 	case !m.b.Writable():
 	case p.Live():
@@ -358,11 +356,11 @@ func (m *Model) demoState(kind string) error {
 
 	case "filterchips":
 		// The filter row under maximum load: table view sorted, an epic slice
-		// active, and the input holding the keyboard. The fixed-width input
-		// used to push the sort readout off the row in exactly this state
-		// (t-a54p), and no other demo can produce it — the sort chip needs the
-		// table, the slice chip needs a selection, and the input only pads the
-		// row while it is focused mid-keystroke.
+		// active, and the input holding the keyboard: the state in which a
+		// fixed-width input pushes the sort readout off the row (t-a54p), and
+		// no other demo can produce it — the sort chip needs the table, the
+		// slice chip needs a selection, and the input only pads the row while
+		// it is focused mid-keystroke.
 		m.view = viewTable
 		m.setSort(sortUpdated, false)
 		m.toggleSlice()
@@ -414,7 +412,7 @@ func (m *Model) demoState(kind string) error {
 		// and the peek's reason line. t-jv3j carries the dep_done signal
 		// (its dep t-t38k is done) on top of the fixture-wide staleness.
 		// setRevisit(true), not a toggle: -revisit may already have turned
-		// the lens on, and `-revisit -demo revisit` used to cancel it.
+		// the lens on, and a toggle would cancel it.
 		if c := m.setRevisit(true); c != nil {
 			return fmt.Errorf("demo revisit: the fixture lens must answer synchronously")
 		}
@@ -581,7 +579,7 @@ func (m *Model) demoState(kind string) error {
 		m.sliceField = sliceEpic
 		// Fed through the panel's own key handler, not enterEpicNew directly:
 		// this frame is also the proof that `A` is BOUND — a staged call would
-		// keep rendering after the binding was deleted (found by review).
+		// keep rendering after the binding was deleted.
 		if c := m.onSliceKey(tea.KeyPressMsg{Code: 'A', Text: "A"}); c == nil {
 			return fmt.Errorf("demo epicnew: A did not open the new-box modal")
 		}

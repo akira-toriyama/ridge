@@ -145,8 +145,8 @@ func (m *Model) enterEpic(id string) {
 // matters more here than there: a box naming no repo cannot be activated at
 // all. NOT from the slice: `A` is only answered on the epic axis, and the
 // axis switch that got the panel there already cleared any repo-axis pick, so
-// a slice-derived repo was a branch no key sequence could reach (found by
-// review — the effective query is what survives the axis switch).
+// a slice-derived repo is a branch no key sequence can reach; the effective
+// query is what survives the axis switch.
 func (m *Model) enterEpicNew() tea.Cmd {
 	_, _, repo, _ := inheritContext(m.effectiveQuery())
 	m.epic = &epicState{stage: epicInput, inputFor: epicInputNewBox,
@@ -351,8 +351,8 @@ func (m *Model) onEpicNewKey(msg tea.KeyPressMsg) tea.Cmd {
 			// every write path refuses until the re-read. Checked BEFORE the
 			// modal closes — the queue's own refusal comes after exitEpic, so
 			// reaching it would eat the typed title all over again, exactly on
-			// the reopened-after-refusal retry (found by review; the quick
-			// add's onAddKey keeps the same guard for the same reason).
+			// the reopened-after-refusal retry (the quick add's onAddKey keeps
+			// the same guard for the same reason).
 			m.fail("the store refused the last write — rolling back; press ⏎ again in a moment")
 			return nil
 		}

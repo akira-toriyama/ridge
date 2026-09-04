@@ -219,8 +219,7 @@ func (m *Model) toggleRevisit() tea.Cmd {
 // owned BEFORE the refire: the reasons (a refused re-query keeps the last good
 // verdict, so applyVerdict would never clear them) and, when nothing else
 // narrows the board, the jump pins — applyFilter's own rule, which the toggle
-// bypasses. A stale reason line under a vanished chip, and "+1 pinned" over
-// an unfiltered board, were both measured before this.
+// bypasses.
 func (m *Model) setRevisit(on bool) tea.Cmd {
 	m.revisitOn = on
 	if !on {
