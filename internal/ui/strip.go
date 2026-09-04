@@ -74,7 +74,7 @@ func (m *Model) taskStrip(t *board.Task, hidden bool, h int) string {
 	if m.g.Actionable(t.ID) {
 		head += " " + th.ok.Render(glyphActionable+" actionable")
 	}
-	if nb := len(m.g.BlockedBy(t.ID)); nb > 0 {
+	if nb := len(m.g.OpenBlockedBy(t.ID)); nb > 0 {
 		head += " " + th.danger.Render(fmt.Sprintf("%s blocked by %d", glyphBlocked, nb))
 	}
 	if hidden {

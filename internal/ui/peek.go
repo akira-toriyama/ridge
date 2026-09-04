@@ -72,7 +72,7 @@ func (m *Model) peekContent(w int) string {
 	switch {
 	case m.g.Actionable(t.ID):
 		meta = append(meta, th.ok.Render(glyphActionable+" actionable"))
-	case len(m.g.BlockedBy(t.ID)) > 0:
+	case len(m.g.OpenBlockedBy(t.ID)) > 0:
 		meta = append(meta, th.danger.Render(fmt.Sprintf("%s blocked", glyphBlocked)))
 	}
 	if len(meta) > 0 {

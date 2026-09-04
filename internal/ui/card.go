@@ -44,15 +44,17 @@ func (t *theme) cardStyle(st cardState, done bool) lg.Style {
 }
 
 // cardMarker is the leading glyph: the single most important fact about a task.
-// Priority order is deliberate — blocked beats actionable.
+// Priority order is deliberate — done beats blocked beats actionable
+// (OpenBlockedBy is already nil for a done task; the order here says so where
+// it is read).
 func cardMarker(t *board.Task, g *board.Graph) (glyph string, style func(*theme) lg.Style) {
 	switch {
-	case len(g.BlockedBy(t.ID)) > 0:
+	case g.IsDone(t.ID):
+		return glyphDone, func(th *theme) lg.Style { return th.dim }
+	case len(g.OpenBlockedBy(t.ID)) > 0:
 		return glyphBlocked, func(th *theme) lg.Style { return th.danger }
 	case g.Actionable(t.ID):
 		return glyphActionable, func(th *theme) lg.Style { return th.ok }
-	case g.IsDone(t.ID):
-		return glyphDone, func(th *theme) lg.Style { return th.dim }
 	}
 	return " ", func(th *theme) lg.Style { return th.dim }
 }
@@ -169,7 +171,7 @@ func cardLines(t *board.Task, g *board.Graph, th *theme, w int) []string {
 	if t.Value > 0 || t.Effort > 0 {
 		bits = append(bits, th.muted.Render(fmt.Sprintf("%d/%d", t.Value, t.Effort)))
 	}
-	if n := len(g.BlockedBy(t.ID)); n > 0 {
+	if n := len(g.OpenBlockedBy(t.ID)); n > 0 {
 		bits = append(bits, th.danger.Render(fmt.Sprintf("%s%d", glyphBlocked, n)))
 	}
 	if n, tot := t.CheckProgress(); tot > 0 {

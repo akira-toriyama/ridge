@@ -662,3 +662,74 @@ func TestAShortTerminalDoesNotPanicInEitherFullScreenView(t *testing.T) {
 		}
 	}
 }
+
+// A task closed while its blocker was still open is the one member that can
+// split the counts from the markers: it is done AND has an unsatisfied dep.
+// Both the cluster (Blocked skips done members) and the glyph (done beats
+// blocked) must call it done, or the panel says one thing and draws another.
+// The fixture board has no such task, so this builds one.
+func TestADoneMemberWithAnOpenDepIsCountedAndDrawnAsDone(t *testing.T) {
+	b := board.NewBoard([]*board.Task{
+		{ID: "blocker", Status: "backlog", Title: "still open"},
+		{ID: "closed-early", Status: "done", Title: "closed out of order", Deps: []string{"blocker"}},
+		{ID: "waiting", Status: "backlog", Title: "really blocked", Deps: []string{"blocker"}},
+	})
+	m := New(memstore.NewWith(b), Options{})
+	m.w, m.h = 240, 60
+	m.recompute()
+	m.mapScope = board.ClusterAll
+	m.openMap("")
+	l := m.buildMap()
+	if len(l.Panels) != 1 {
+		t.Fatalf("scope=all groups the three through blocker, got %d panels", len(l.Panels))
+	}
+	c := l.Panels[0].Cluster
+	if c.Roots() != 1 || c.Blocked() != 1 || c.Done() != 1 {
+		t.Errorf("counts = %d unblocked / %d blocked / %d done, want 1 / 1 / 1",
+			c.Roots(), c.Blocked(), c.Done())
+	}
+	if glyph, _ := cardMarker(m.b.Task("closed-early"), m.g); glyph != glyphDone {
+		t.Errorf("the done member draws %q, want %q — done beats blocked", glyph, glyphDone)
+	}
+	if glyph, _ := cardMarker(m.b.Task("waiting"), m.g); glyph != glyphBlocked {
+		t.Errorf("the open member draws %q, want %q", glyph, glyphBlocked)
+	}
+	line := ansiStrip(m.renderMapPanel(l.Panels[0], l.ColW)[l.Panels[0].H-1])
+	if !strings.Contains(line, "1 unblocked") || !strings.Contains(line, "1 blocked") {
+		t.Errorf("stat line %q does not carry 1 unblocked · 1 blocked", line)
+	}
+
+	// Every surface that SAYS blocked follows the glyph: the card badge, the
+	// peek's meta line, the strip's head, the graph node's badge. The word may
+	// appear once on this board — for waiting — and never for closed-early.
+	done := m.b.Task("closed-early")
+	if got := len(m.g.OpenBlockedBy("closed-early")); got != 0 {
+		t.Errorf("OpenBlockedBy(closed-early) = %d deps, want none — a done task is not held up", got)
+	}
+	if got := len(m.g.BlockedBy("closed-early")); got != 1 {
+		t.Errorf("BlockedBy(closed-early) = %d, want 1 — the open dep must still be LISTED", got)
+	}
+	m.closeMap()
+	m.selectID("closed-early", true)
+	m.recompute()
+	// The badge count is taken with the peek CLOSED: the peek overlays the
+	// done column and clips the card's right edge, where the badge sits.
+	if out := ansiStrip(frame(m)); strings.Count(out, "x1") != 1 {
+		t.Errorf("the board draws the x1 badge %d times, want once (waiting only):\n%s",
+			strings.Count(out, "x1"), out)
+	}
+	m.peekOpen = true
+	m.recompute()
+	if out := ansiStrip(m.peekContent(60)); strings.Contains(out, "x blocked") {
+		t.Errorf("the peek calls the done task blocked:\n%s", out)
+	}
+	// "blocked by 1 open · blocks 0 open" is the strip's dep LISTING, kept on
+	// purpose; the badge is the glyph-led "x blocked by N".
+	if out := ansiStrip(m.taskStrip(done, false, 3)); strings.Contains(out, glyphBlocked+" blocked by") {
+		t.Errorf("the strip calls the done task blocked:\n%s", out)
+	}
+	m.openGraph()
+	if out := ansiStrip(frame(m)); strings.Contains(out, glyphBlocked+"1 blocked") || strings.Contains(out, glyphBlocked+" blocked by") {
+		t.Errorf("the graph rooted at the done task says blocked:\n%s", out)
+	}
+}

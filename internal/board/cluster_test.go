@@ -392,3 +392,26 @@ func TestASelfDependencyIsBlockedByItselfAndNothingElse(t *testing.T) {
 		t.Errorf("roots=%d blocked=%d, want 0 and 1", cs[0].Roots(), cs[0].Blocked())
 	}
 }
+
+// The three counts partition the cluster — Roots + Blocked + Done == len(Nodes)
+// — and that is what lets every number on the map be recounted from the row
+// markers. The one member that can break it is a DONE task whose dep is still
+// open (closed out of order, which furrow permits): at scope=all it is done
+// AND has an unsatisfied dep, and counting it under both put the sum one over
+// the node count.
+func TestClusterCountsPartitionEvenWhenADoneTaskHasAnOpenDep(t *testing.T) {
+	b := NewBoard([]*Task{
+		mk("blocker", "backlog"),
+		mk("closed-early", "done", "blocker"),
+		mk("waiting", "backlog", "blocker"),
+	})
+	all := NewGraph(b).Clusters(ClusterAll)
+	if len(all) != 1 {
+		t.Fatalf("scope=all groups the three through blocker, got %d clusters", len(all))
+	}
+	c := all[0]
+	if sum := c.Roots() + c.Blocked() + c.Done(); sum != len(c.Nodes) {
+		t.Errorf("Roots %d + Blocked %d + Done %d = %d, want len(Nodes) = %d",
+			c.Roots(), c.Blocked(), c.Done(), sum, len(c.Nodes))
+	}
+}

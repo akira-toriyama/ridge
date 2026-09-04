@@ -57,6 +57,26 @@ func (g *Graph) BlockedBy(id string) []string {
 	return out
 }
 
+// OpenBlockedBy is BlockedBy restricted to an OPEN subject (the list itself is
+// BlockedBy's; only the receiver is gated) — the one predicate behind every
+// surface that SAYS a task is blocked: the marker, the card and graph badges,
+// the peek's meta line, the strip's head, the cluster counts. Nil for a done task: its deps
+// may still be open (furrow permits closing out of order, and furrow's own
+// `is:blocked` keeps matching such a task), but a finished task is not held
+// up by anything. Before this predicate the surfaces disagreed with each
+// other — the cluster count read done-and-open twice, the marker and badges
+// read it as blocked — and the dep map's counts ran one off its rows.
+// BlockedBy stays for LISTING the deps, which is not lost — the peek's
+// blocked-by list, the strip's "blocked by N open · blocks M open" line, the
+// table's open/total cell, jump-to-blocker. "Stuck" is not the word on
+// purpose: STUCK is furrow's derived state of an EPIC.
+func (g *Graph) OpenBlockedBy(id string) []string {
+	if g.IsDone(id) {
+		return nil
+	}
+	return g.BlockedBy(id)
+}
+
 // Blocks lists the tasks that depend on this one — the reverse edges, which
 // exist nowhere on disk and are the half of a dep a raw shard cannot show you.
 func (g *Graph) Blocks(id string) []string { return g.rev[id] }

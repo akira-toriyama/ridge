@@ -105,12 +105,15 @@ func (c Cluster) Roots() int {
 	return n
 }
 
-// Blocked counts the members with at least one unsatisfied dep — exactly the
-// rows the board's own marker draws as blocked.
+// Blocked counts the UNFINISHED members with at least one unsatisfied dep —
+// exactly the rows the board's own marker draws as blocked. A done task whose
+// dep is still open (closed out of order, which furrow permits) is done, not
+// blocked: counting it here too put the three counts one over len(Nodes) at
+// scope=all, and the marker on its row says `v`, not `x`.
 func (c Cluster) Blocked() int {
 	n := 0
 	for _, nd := range c.Nodes {
-		if len(nd.Open) > 0 {
+		if !nd.Done && len(nd.Open) > 0 {
 			n++
 		}
 	}
