@@ -260,7 +260,7 @@ func TestValuePickIsRefusedWhileRollingBack(t *testing.T) {
 
 	m.edit.menuIdx = int(fieldValue)
 	press(m, "enter") // into the value pick
-	if m.edit.stage != stagePick {
+	if m.edit.stage != stageGate {
 		t.Fatalf("the value pick did not open: stage=%d", m.edit.stage)
 	}
 	m.rollingBack = true

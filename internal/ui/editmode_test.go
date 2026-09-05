@@ -98,7 +98,7 @@ func TestEditValuePickAppliesAndPersists(t *testing.T) {
 	m := editModel(t, "t-9sa6")
 	m.edit.menuIdx = int(fieldValue)
 	press(m, "enter") // open the picker
-	if m.edit.stage != stagePick {
+	if m.edit.stage != stageGate {
 		t.Fatalf("stage = %d, want pick", m.edit.stage)
 	}
 	press(m, "3")
