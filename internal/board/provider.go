@@ -116,9 +116,10 @@ type Provider interface {
 
 	// --- epic writes: store-first, NOT the Persist* contract ---------------
 	//
-	// The store-first members are exactly: Add, and the eight Epic* methods
-	// below. Every other write is Persist*-shaped. (glossary.md points here
-	// for the list — a copy of it there once omitted two of the eight.)
+	// The store-first members are exactly: Add, the eight Epic* methods
+	// below, and the three sweep writes (Archive, Unarchive, Tidy). Every
+	// other write is Persist*-shaped. (glossary.md points here for the list —
+	// a copy of it there once omitted two of the eight.)
 	//
 	// The Persist* family records a change the model already applied to the
 	// board on the UI thread. The epic family deliberately does not join it:
@@ -180,6 +181,30 @@ type Provider interface {
 	// closed or archived box leaves a removable edge behind, which is exactly
 	// the removal that matters.
 	EpicDepRm(id, dep string) error
+
+	// --- the sweep: furrow's maintenance passes (sweep.go) ------------------
+	//
+	// SweepPreview is the read: `archive` dry-run, `tidy` preview and the
+	// archive store, over the WHOLE board (the empty -r, like load). Every
+	// candidate is furrow's; a refused read returns an error and no Sweep.
+	SweepPreview() (Sweep, error)
+
+	// Archive retires exactly ids (`furrow archive <ids> --yes`). Store-first.
+	// Each id must be a done-lane task or furrow refuses the whole write
+	// (exit 2, nothing moves). The list is never empty — an adapter refuses
+	// that before exec (ValidateSweepIDs), because the id-less form is the
+	// aged sweep.
+	Archive(ids []string) error
+
+	// Unarchive restores exactly ids from the archive store, all-or-nothing,
+	// back to the done lane as they were (`furrow unarchive`; no --yes,
+	// restoring destroys nothing). Store-first. Never empty (ValidateSweepIDs).
+	Unarchive(ids []string) error
+
+	// Tidy prunes one class (`furrow tidy <class> --yes`). Store-first. The
+	// whole class goes — furrow has no per-edge form — so the caller owes the
+	// user the count before the keystroke.
+	Tidy(class TidyClass) error
 }
 
 // Revisit is one `furrow revisit --json` row: a task and why it surfaced.

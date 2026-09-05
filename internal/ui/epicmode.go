@@ -323,7 +323,7 @@ func (m *Model) onEpicNewKey(msg tea.KeyPressMsg) tea.Cmd {
 			m.fail("a box needs a title")
 			return nil
 		}
-		if m.refuseWhileWriting("new box") {
+		if m.refuseWhileWriting("new box", "a box write") {
 			return nil
 		}
 		if m.rollingBack {
@@ -619,7 +619,15 @@ func (m *Model) epicWriteNoting(label string, note *string, run func(board.Provi
 // epicWriteOp queues one pre-shaped store-first epic op and says what it is
 // waiting for.
 func (m *Model) epicWriteOp(op persistOp) tea.Cmd {
-	if m.refuseWhileWriting(op.label) {
+	return m.storeFirstWrite(op, "a box write")
+}
+
+// storeFirstWrite is the funnel every store-first surface (the epic overlay,
+// the sweep) queues through: the repeat refusal, the rollback-window refusal,
+// then the "waiting for furrow" note. what names the surface's write in the
+// refusal ("a box write", "a sweep write").
+func (m *Model) storeFirstWrite(op persistOp, what string) tea.Cmd {
+	if m.refuseWhileWriting(op.label, what) {
 		return nil
 	}
 	queued := len(m.pending)
@@ -646,10 +654,10 @@ func (m *Model) epicWriteOp(op persistOp) tea.Cmd {
 // record). It is that the overlay's rows still show the PRE-write values, so the
 // second gesture is aimed at a board the user cannot yet see, and its report
 // lands on the status line over the first write's.
-func (m *Model) refuseWhileWriting(label string) bool {
+func (m *Model) refuseWhileWriting(label, what string) bool {
 	switch {
 	case m.storeFirstInflight():
-		m.fail("%s — a box write is still in flight; the board re-reads when it lands", label)
+		m.fail("%s — %s is still in flight; the board re-reads when it lands", label, what)
 	case m.storeFirstUnread:
 		// The window AFTER the write landed and BEFORE its re-read arrives. The
 		// queue is empty, so the in-flight check above passes — but the rows are
@@ -658,7 +666,7 @@ func (m *Model) refuseWhileWriting(label string) bool {
 		// ("X is not a dependency of Y").
 		// Names the way out: `r` is not routed inside the overlay, and after
 		// a failed rollback re-read nothing else will fire one.
-		m.fail("%s — the last box write landed; waiting for the board to re-read it (esc out, then r)", label)
+		m.fail("%s — the last store-first write landed; waiting for the board to re-read it (esc out, then r)", label)
 	default:
 		return false
 	}

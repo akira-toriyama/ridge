@@ -47,6 +47,15 @@ type Store struct {
 	// one direction the gate exists to describe, so the refusal lives on the
 	// store, not only in Board.Writable().
 	writeErr error
+
+	// The sweep's session state, kept across Reload for the reason added is:
+	// a reload that brought an archived task back, or re-grew a pruned edge,
+	// would make the fixture lie about a write it reported as landed.
+	// archived is the ids retired this session (they leave the board and
+	// appear in the archive list); pruned is the satisfied dep edges tidy
+	// removed, per task.
+	archived map[string]bool
+	pruned   map[string]map[string]bool
 }
 
 // New serves the fixture snapshot.
@@ -118,8 +127,15 @@ func (p *Store) Reload() error {
 }
 
 // rebuild materializes the pristine board plus a fresh copy of every task
-// added this session.
+// added this session, with the session's sweep applied (shape).
 func (p *Store) rebuild() *board.Board {
+	return p.shape(p.rebuildUnshaped())
+}
+
+// rebuildUnshaped is rebuild before the sweep: the population the archive
+// store draws from, since an archived task is by definition not on the shaped
+// board.
+func (p *Store) rebuildUnshaped() *board.Board {
 	p.mu.Lock()
 	added := make([]board.Task, len(p.added))
 	copy(added, p.added)

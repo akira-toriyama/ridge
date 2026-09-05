@@ -155,6 +155,13 @@ type keyMap struct {
 	// undo a slip with.
 	EpicEdit key.Binding
 	EpicNew  key.Binding
+
+	// The sweep (sweepview.go). Sweep opens it from normal mode (uppercase
+	// like every full-screen opener; `x` is the checklist toggle, so the
+	// view's own skip key reuses the letter only INSIDE the view). Commit is
+	// the gate's ⏎ twice; every other key cancels an open gate.
+	Sweep     key.Binding
+	SweepSkip key.Binding
 }
 
 func defaultKeys() keyMap {
@@ -263,6 +270,9 @@ func defaultKeys() keyMap {
 
 		EpicEdit: key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "manage box")),
 		EpicNew:  key.NewBinding(key.WithKeys("A"), key.WithHelp("A", "new box")),
+
+		Sweep:     key.NewBinding(key.WithKeys("X"), key.WithHelp("X", "sweep (archive / tidy / unarchive)")),
+		SweepSkip: key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "skip/include an archive row")),
 	}
 }
 
@@ -301,7 +311,7 @@ func (k keyMap) HelpSections(enterEdits bool) []helpSection {
 			// while the one canonical key list denied it existed. Every
 			// full-screen view's opener belongs here — the section is "your
 			// keys right now", and normal mode is where they are pressed.
-			{k.Graph, k.Map, k.Boxes, k.Roadmap, k.Swim, k.JumpBlock, k.JumpBack, k.Reload, k.Sync, k.Mouse, k.Cancel, k.Help, k.Quit},
+			{k.Graph, k.Map, k.Boxes, k.Roadmap, k.Swim, k.Sweep, k.JumpBlock, k.JumpBack, k.Reload, k.Sync, k.Mouse, k.Cancel, k.Help, k.Quit},
 		}},
 		{"move mode", [][]key.Binding{
 			// The arrows come first because they are how the lifted card is
@@ -351,6 +361,14 @@ func (k keyMap) HelpSections(enterEdits bool) []helpSection {
 			{k.SwimFold, k.SwimSlice, k.SwimAxis, k.MapScope},
 			{k.Top, k.Bottom, k.PeekScroll},
 			{k.Swim, k.View, k.Cancel},
+		}},
+		// The sweep's surface. Same rule: every key onSweepKey acts on. The
+		// gate's "any other key cancels" is not a binding, so it is not listed
+		// — the header line says it while a gate is open.
+		{"sweep", [][]key.Binding{
+			{k.Up, k.Down, k.Top, k.Bottom, k.PeekScroll},
+			{k.Commit, k.SweepSkip, k.Reload},
+			{k.Sweep, k.View, k.Cancel},
 		}},
 		{"graph", [][]key.Binding{
 			// Sharpest omission of the three: re-rooting answers "is already

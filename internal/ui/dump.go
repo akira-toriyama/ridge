@@ -14,7 +14,7 @@ import (
 // unknown-name error and the tests all read this slice, because the list was
 // duplicated in three places and adding two states updated two of them —
 // `ridge -h` then advertised eight of ten.
-var DemoNames = []string{"move", "drag", "add", "adddraft", "edit", "editpick", "editinput", "editdeps", "editrefs", "note", "refs", "graph", "graphall", "map", "mapall", "mapfiltered", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "revisit", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicshut", "epicdone", "epicreopen", "sliceepicall", "epicnew", "boxes", "boxesall", "roadmapweek", "roadmapmonth", "swim", "swimopen", "swimrepo", "swimall", "views", "viewsroad", "viewsmany", "fail"}
+var DemoNames = []string{"move", "drag", "add", "adddraft", "edit", "editpick", "editinput", "editdeps", "editrefs", "note", "refs", "graph", "graphall", "map", "mapall", "mapfiltered", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "revisit", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicshut", "epicdone", "epicreopen", "sliceepicall", "epicnew", "boxes", "boxesall", "roadmapweek", "roadmapmonth", "swim", "swimopen", "swimrepo", "swimall", "views", "viewsroad", "viewsmany", "sweep", "sweepconfirm", "sweeprestore", "sweepwait", "fail"}
 
 // Options configures a freshly-constructed Model. The zero value is the
 // default TUI: dark palette, board view, no filter.
@@ -761,6 +761,79 @@ func (m *Model) demoState(kind string) error {
 		}
 		if m.view != viewRoadmap {
 			return fmt.Errorf("demo viewsmany: 9 did not open the saved roadmap view")
+		}
+
+	case "sweep":
+		// The sweep at rest, driven through the board's own key handler so the
+		// frame also proves `X` is BOUND. The fixture's nine done tasks are all
+		// past the age guard and several open tasks carry edges to them, so
+		// the archive and done-deps sections both have rows; unknown-keys and
+		// the archive store are empty — the two "nothing" lines have no other
+		// frame.
+		if c := m.onNormalKey(tea.KeyPressMsg{Code: 'X', Text: "X"}); c != nil {
+			_ = c
+		}
+		if m.view != viewSweep {
+			return fmt.Errorf("demo sweep: X did not open the sweep")
+		}
+
+	case "sweepconfirm":
+		// The archive gate with one row skipped: the header line names the
+		// exact id list and count the second ⏎ sends, and the skipped row's
+		// marker is dim — the frame the destructive write is judged from.
+		if c := m.openSweep(); c != nil {
+			_ = c
+		}
+		rows := sweepRows(m.sweep)
+		if c := m.onSweepKey(tea.KeyPressMsg{Code: 'x', Text: "x"}); c != nil {
+			_ = c
+		}
+		m.sweepSel = sweepStep(rows, m.sweepSel, +1)
+		if c := m.onSweepKey(tea.KeyPressMsg{Code: tea.KeyEnter}); c != nil {
+			_ = c
+		}
+		if m.sweepGate == nil {
+			return fmt.Errorf("demo sweepconfirm: ⏎ did not arm the archive gate")
+		}
+
+	case "sweeprestore":
+		// After an archive landed: the archive store has rows, the cursor is
+		// on one, and the restore gate is open — the other direction of the
+		// round trip, on the same screen.
+		if c := m.openSweep(); c != nil {
+			_ = c
+		}
+		ids := sweepArchiveSet(m.sweep, nil)
+		if len(ids) < 2 {
+			return fmt.Errorf("demo sweeprestore: the fixture has %d archivable tasks, want 2+", len(ids))
+		}
+		if err := m.prov.Archive(ids[:2]); err != nil {
+			return fmt.Errorf("demo sweeprestore: %v", err)
+		}
+		m.reload()
+		if c := m.loadSweep(); c != nil {
+			_ = c
+		}
+		m.sweepSel = sweepKey(sweepArchived, ids[0])
+		if c := m.onSweepKey(tea.KeyPressMsg{Code: tea.KeyEnter}); c != nil {
+			_ = c
+		}
+		if m.sweepGate == nil {
+			return fmt.Errorf("demo sweeprestore: ⏎ did not arm the restore gate")
+		}
+
+	case "sweepwait":
+		// The sweep opened while a write is still queued: the preview read is
+		// deferred to the drain (it would race the queue's furrow process), and
+		// the header must say so — four empty sections here would claim there
+		// is nothing to sweep. The op is a stand-in; nothing runs it.
+		m.pending = append(m.pending, persistOp{label: "move t-jv3j", run: func() ([]string, error) { return nil, nil }})
+		m.inflight = true
+		if c := m.openSweep(); c != nil {
+			_ = c
+		}
+		if m.sweep != nil || !m.sweepLoading {
+			return fmt.Errorf("demo sweepwait: the read was not deferred (sweep=%v loading=%v)", m.sweep != nil, m.sweepLoading)
 		}
 
 	case "fail":

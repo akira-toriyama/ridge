@@ -462,3 +462,8 @@ func TestAdvBlockedToggleCorruptsANegatedQuery(t *testing.T) {
 // reads the exact board it just wrote. The equivalent hazards of the async
 // architecture (a stale reload snapshot yanking back optimistic edits, writes
 // landing out of order) are covered in persist_test.go.
+
+func (p *emptyProvider) SweepPreview() (board.Sweep, error) { return board.Sweep{}, nil }
+func (p *emptyProvider) Archive([]string) error             { return nil }
+func (p *emptyProvider) Unarchive([]string) error           { return nil }
+func (p *emptyProvider) Tidy(board.TidyClass) error         { return nil }

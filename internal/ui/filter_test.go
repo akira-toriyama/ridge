@@ -221,3 +221,8 @@ func TestClearingTheFilterNeedsNoStoreRoundTrip(t *testing.T) {
 		t.Error("clearing the filter must show the whole board")
 	}
 }
+
+func (p *liveQueryProvider) SweepPreview() (board.Sweep, error) { return board.Sweep{}, nil }
+func (p *liveQueryProvider) Archive([]string) error             { return nil }
+func (p *liveQueryProvider) Unarchive([]string) error           { return nil }
+func (p *liveQueryProvider) Tidy(board.TidyClass) error         { return nil }

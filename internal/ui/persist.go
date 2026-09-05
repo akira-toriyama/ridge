@@ -60,6 +60,11 @@ type persistOp struct {
 	// reads it only after persistDoneMsg has crossed the channel back, the same
 	// handoff addedID uses.
 	note *string
+	// reloadOnFail marks a store-first write whose REFUSAL may still have
+	// moved the store (a batch the adapter judged short). The failure path
+	// re-reads for it even when nothing else is unread — a plain reload, not
+	// the rollback: there is no optimistic half, so "unsaved edit" would lie.
+	reloadOnFail bool
 }
 
 type persistDoneMsg struct {
@@ -223,7 +228,7 @@ func (m *Model) onPersistDone(msg persistDoneMsg) tea.Cmd {
 			reopen = m.reopenRefusedEpicAdd(op)
 		}
 		if !needRollback {
-			if m.unreadLanded {
+			if m.unreadLanded || op.reloadOnFail {
 				// An earlier write LANDED and the board has not re-read it.
 				// Nothing was applied optimistically here, so no ROLLBACK
 				// re-read is coming — and without a plain one a store-first
@@ -240,7 +245,8 @@ func (m *Model) onPersistDone(msg persistDoneMsg) tea.Cmd {
 			// successful add would fire at some unrelated future reload.
 			m.selectAfterReload = ""
 			m.fail("%s: %v%s", msg.label, msg.err, loss)
-			return reopen
+			// The sweep's previews may still be waiting on this drain.
+			return tea.Batch(reopen, m.sweepAfterWrite())
 		}
 		// Until the re-read lands the board keeps showing the refused state,
 		// so `rollingBack` refuses new writes — otherwise one keystroke in
@@ -265,6 +271,8 @@ func (m *Model) onPersistDone(msg persistDoneMsg) tea.Cmd {
 		// re-read); the fixture has no reconcile there — it requeries instead —
 		// so it re-reads right here, the shape the quick add has always used.
 		m.reload()
+		// The fixture's sweep previews are synchronous too; the Cmd is nil.
+		m.sweepAfterWrite()
 	}
 	if op.noLocal {
 		// The gesture's own note said "waiting for furrow"; replace it now that
@@ -295,7 +303,9 @@ func (m *Model) onPersistDone(msg persistDoneMsg) tea.Cmd {
 	if m.prov.Live() {
 		return m.reloadCmd("")
 	}
-	return m.requery()
+	// The fixture drain reloads nothing, so the sweep's deferred read is owed
+	// here (a live drain's reload reaches it through onReloadDone).
+	return tea.Batch(m.requery(), m.sweepAfterWrite())
 }
 
 // quitOrFlush is every quit key's guard: leaving with writes still queued
@@ -455,9 +465,11 @@ func (m *Model) onReloadDone(msg reloadDoneMsg) tea.Cmd {
 			// BEFORE the failure message so press-r is what the user is
 			// left reading, not the replay's own note.
 			heldBody := m.releaseHeldBody()
+			m.sweepReadStalled()
 			m.fail("rollback re-read failed — the board may show an unsaved edit; press r to retry (%v)", msg.err)
 			return heldBody
 		}
+		m.sweepReadStalled()
 		m.fail("%s: %v", label, msg.err)
 		return nil
 	}
@@ -499,8 +511,9 @@ func (m *Model) onReloadDone(msg reloadDoneMsg) tea.Cmd {
 	// reload's own note, so "body updated" is what survives on the line.
 	heldBody := m.releaseHeldBody()
 	// The board changed under the matched set: ask the store for a fresh
-	// verdict, no debounce — this is a reload, not a keystroke.
-	return tea.Batch(heldBody, m.requery())
+	// verdict, no debounce — this is a reload, not a keystroke. The sweep's
+	// previews are a read of the same store and go stale the same way.
+	return tea.Batch(heldBody, m.requery(), m.sweepAfterWrite())
 }
 
 // releaseHeldBody replays a $EDITOR result that waited out the rollback
