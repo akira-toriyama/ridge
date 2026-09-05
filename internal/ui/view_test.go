@@ -60,6 +60,8 @@ func TestModeBadgeAlwaysNamesTheMode(t *testing.T) {
 				want = "⟨ROADMAP⟩"
 			case m.view == viewSwim:
 				want = "⟨SWIM⟩"
+			case m.view == viewSweep:
+				want = "⟨SWEEP⟩"
 			default:
 				var ok bool
 				if want, ok = badgeTokens[m.mode]; !ok {

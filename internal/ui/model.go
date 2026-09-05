@@ -76,6 +76,10 @@ const (
 	// answers "which of my boxes / repos / labels is work sitting in", which
 	// is `furrow ls --tree` given a second dimension.
 	viewSwim
+	// viewSweep is the SWEEP — full-screen, furrow's maintenance passes
+	// (archive / tidy / unarchive) previewed and applied. The others read
+	// the board; this one is where the board is pruned.
+	viewSweep
 )
 
 func (v viewKind) String() string {
@@ -94,6 +98,8 @@ func (v viewKind) String() string {
 		return "roadmap"
 	case viewSwim:
 		return "swimlane"
+	case viewSweep:
+		return "sweep"
 	}
 	return "unknown"
 }
@@ -310,6 +316,20 @@ type Model struct {
 	swimMoved  bool
 	swimScroll int
 	swimLay    *swimLayout
+
+	// The sweep view (sweep.go / sweepview.go). sweep is the last preview
+	// read (nil before the first); sweepSel is the cursor's row KEY; sweepSkip
+	// is the archive candidates the user excluded; sweepGate is the write
+	// waiting for its second ⏎. sweepSeq fences stale reads like qSeq.
+	sweep        *board.Sweep
+	sweepErr     string
+	sweepSel     string
+	sweepSkip    map[string]bool
+	sweepGate    *sweepGate
+	sweepSeq     int
+	sweepLoading bool
+	sweepMoved   bool
+	sweepScroll  int
 
 	// sized reports that the terminal has told us who it is: a WindowSizeMsg
 	// landed, or -dump set the size by hand. Until then w/h are newModel's
@@ -566,6 +586,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, c)
 		}
 
+	case sweepResultMsg:
+		m.onSweepResult(msg)
+
 	case filterResultMsg:
 		m.onFilterResult(msg)
 
@@ -680,6 +703,10 @@ func (m *Model) onKey(msg tea.KeyPressMsg) tea.Cmd {
 	// The swimlane, likewise.
 	if m.view == viewSwim {
 		return m.onSwimKey(msg)
+	}
+	// The sweep, likewise.
+	if m.view == viewSweep {
+		return m.onSweepKey(msg)
 	}
 	return m.onNormalKey(msg)
 }

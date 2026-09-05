@@ -43,6 +43,8 @@ func (m *Model) View() tea.View {
 		content = m.renderRoadmap()
 	case viewSwim:
 		content = m.renderSwim()
+	case viewSweep:
+		content = m.renderSweep()
 	default:
 		content = m.renderBoard()
 	}
@@ -146,7 +148,7 @@ func (m *Model) fullTabs(active viewKind) string {
 	}{
 		{viewBoard, "Board"}, {viewTable, "Table"}, {viewGraph, "Graph"},
 		{viewMap, "Map"}, {viewBoxes, "Boxes"}, {viewRoadmap, "Roadmap"},
-		{viewSwim, "Swim"},
+		{viewSwim, "Swim"}, {viewSweep, "Sweep"},
 	} {
 		if tab.v == active {
 			parts = append(parts, th.tabOn.Render(tab.name))
@@ -538,6 +540,8 @@ func (m *Model) helpLayer() *lg.Layer {
 		now = "roadmap"
 	case m.view == viewSwim:
 		now = "swimlane"
+	case m.view == viewSweep:
+		now = "sweep"
 	}
 
 	// Render each section as its own block first…

@@ -368,3 +368,14 @@ func laneIDs(b *board.Board, lane string) string {
 	}
 	return strings.Join(ids, ",")
 }
+
+// The sweep writes ride the same scripted store-first channel as the epic
+// family: epicFailAt counts them too, so a test can refuse the Nth.
+func (p *scriptedProvider) SweepPreview() (board.Sweep, error) { return board.Sweep{}, nil }
+func (p *scriptedProvider) Archive(ids []string) error {
+	return p.epicCall("archive " + strings.Join(ids, ","))
+}
+func (p *scriptedProvider) Unarchive(ids []string) error {
+	return p.epicCall("unarchive " + strings.Join(ids, ","))
+}
+func (p *scriptedProvider) Tidy(c board.TidyClass) error { return p.epicCall("tidy " + c.String()) }

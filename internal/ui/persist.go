@@ -265,6 +265,8 @@ func (m *Model) onPersistDone(msg persistDoneMsg) tea.Cmd {
 		// re-read); the fixture has no reconcile there — it requeries instead —
 		// so it re-reads right here, the shape the quick add has always used.
 		m.reload()
+		// The fixture's sweep previews are synchronous too; the Cmd is nil.
+		m.sweepAfterWrite()
 	}
 	if op.noLocal {
 		// The gesture's own note said "waiting for furrow"; replace it now that
@@ -499,8 +501,9 @@ func (m *Model) onReloadDone(msg reloadDoneMsg) tea.Cmd {
 	// reload's own note, so "body updated" is what survives on the line.
 	heldBody := m.releaseHeldBody()
 	// The board changed under the matched set: ask the store for a fresh
-	// verdict, no debounce — this is a reload, not a keystroke.
-	return tea.Batch(heldBody, m.requery())
+	// verdict, no debounce — this is a reload, not a keystroke. The sweep's
+	// previews are a read of the same store and go stale the same way.
+	return tea.Batch(heldBody, m.requery(), m.sweepAfterWrite())
 }
 
 // releaseHeldBody replays a $EDITOR result that waited out the rollback

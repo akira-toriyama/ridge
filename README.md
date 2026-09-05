@@ -144,6 +144,25 @@ terms, and why there are no writes: glossary, "Swimlane", "band", "rail").
 Headless: `-dump -demo swim` (default) / `swimopen` (a band unfolded) /
 `swimrepo` (repo axis) / `swimall` (scope all).
 
+### Sweep — archive / tidy / unarchive
+
+`X`. **furrow's three maintenance passes, previewed and applied from one
+screen.** Four sections, one cursor: the done tasks past the age guard
+(`furrow archive` dry-run over the whole board), the open tasks with
+satisfied dep edges and the shards with unknown keys (`furrow tidy`), and the
+archive store (`furrow ls --archived`). Every candidate is furrow's; ridge
+derives none. `⏎` on a row names the write in the header line — the exact
+id list an archive sends, the count a tidy class prunes, the one task a
+restore brings back — and a second `⏎` applies it; any other key cancels.
+`x` skips / includes an archive row: the write sends the **explicit ids on
+screen**, never the id-less sweep, so what moves is what was previewed. `r`
+re-reads the previews. Every write is store-first (glossary): the frame keeps
+the pre-write preview until the write lands and both the board and the
+previews are re-read.
+
+Headless: `-dump -demo sweep` (at rest) / `sweepconfirm` (the archive gate,
+one row skipped) / `sweeprestore` (the restore gate on an archived row).
+
 ### Saved views — tabs + views.toml
 
 The equivalent of GitHub Projects' view tabs (terms: glossary, "saved view",
@@ -184,6 +203,7 @@ handlers match. This table is only a foothold.
 | `E` | Box overview (every epic by repo; `⏎` slices to that box, `z` includes closed) |
 | `C` | Roadmap (due timeline; `z` for day/week/month, `h`/`l` pan) |
 | `W` | Swimlanes (lanes × group by; `space` folds/unfolds a band, `tab` switches axis, `⏎` slices to the band) |
+| `X` | Sweep (furrow archive / tidy / unarchive; `⏎` `⏎` applies the row's write, `x` skips an archive row) |
 | `1`-`9` / `V` | Switch / save a saved view (views.toml is canonical; `V` with no tabs = new) |
 | `Enter` | Move mode (`Enter` commits, `Esc` cancels). **With peek open, or in Table: the edit menu** |
 | `f` | Revisit lens (only the open tasks `furrow revisit` flags; the reason in peek; `-revisit` headless) |
@@ -223,6 +243,7 @@ go run ./cmd/ridge -h                        # the list of every -demo state (ca
 go run ./cmd/ridge -readonly -dump           # a board made read-only by the schema gate
 go run ./cmd/ridge -graphlr -dump -demo graphall  # the dependency graph left-right (the same state as `o`)
 go run ./cmd/ridge -dump -roadmap            # the due timeline (week/month axes: -demo roadmapweek / roadmapmonth)
+go run ./cmd/ridge -dump -demo sweepconfirm  # the sweep with the archive gate open (sweep / sweeprestore are the other two)
 ```
 
 What `-dump` / `-demo` / `-graphlr` / `-readonly` mean, and why the latter two

@@ -107,6 +107,9 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 	case key.Matches(msg, m.keys.Boxes):
 		m.openBoxes()
 
+	case key.Matches(msg, m.keys.Sweep):
+		return m.openSweep()
+
 	case key.Matches(msg, m.keys.Roadmap):
 		m.openRoadmap()
 

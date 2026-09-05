@@ -47,6 +47,15 @@ type Store struct {
 	// one direction the gate exists to describe, so the refusal lives on the
 	// store, not only in Board.Writable().
 	writeErr error
+
+	// The sweep's session state, kept across Reload for the reason added is:
+	// a reload that brought an archived task back, or re-grew a pruned edge,
+	// would make the fixture lie about a write it reported as landed.
+	// archived is the ids retired this session (they leave the board and
+	// appear in the archive list); pruned is the satisfied dep edges tidy
+	// removed, per task.
+	archived map[string]bool
+	pruned   map[string]map[string]bool
 }
 
 // New serves the fixture snapshot.
@@ -125,7 +134,7 @@ func (p *Store) rebuild() *board.Board {
 	copy(added, p.added)
 	p.mu.Unlock()
 
-	b := p.base()
+	b := p.shape(p.base())
 	for i := range added {
 		// NewWith's base is the caller's OWN board, handed back as-is, so an
 		// add appended to it on the first rebuild is still there on the
