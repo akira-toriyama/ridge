@@ -145,6 +145,9 @@ func (p *Store) Unarchive(ids []string) error {
 	}
 	var envs []struct {
 		Unarchived bool `json:"unarchived"`
+		After      struct {
+			ID string `json:"id"`
+		} `json:"after"`
 	}
 	if err := json.Unmarshal(out, &envs); err != nil {
 		return fmt.Errorf("furrow unarchive: undecodable reply: %v", err)
@@ -152,9 +155,9 @@ func (p *Store) Unarchive(ids []string) error {
 	if len(envs) != len(ids) {
 		return fmt.Errorf("furrow unarchive: restored %d of %d", len(envs), len(ids))
 	}
-	for i, e := range envs {
+	for _, e := range envs {
 		if !e.Unarchived {
-			return fmt.Errorf("furrow unarchive: envelope %d reports unarchived=false", i)
+			return fmt.Errorf("furrow unarchive: %s reports unarchived=false", e.After.ID)
 		}
 	}
 	return nil

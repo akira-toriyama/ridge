@@ -14,7 +14,7 @@ import (
 // unknown-name error and the tests all read this slice, because the list was
 // duplicated in three places and adding two states updated two of them —
 // `ridge -h` then advertised eight of ten.
-var DemoNames = []string{"move", "drag", "add", "adddraft", "edit", "editpick", "editinput", "editdeps", "editrefs", "note", "refs", "graph", "graphall", "map", "mapall", "mapfiltered", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "revisit", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicshut", "epicdone", "epicreopen", "sliceepicall", "epicnew", "boxes", "boxesall", "roadmapweek", "roadmapmonth", "swim", "swimopen", "swimrepo", "swimall", "views", "viewsroad", "viewsmany", "sweep", "sweepconfirm", "sweeprestore", "fail"}
+var DemoNames = []string{"move", "drag", "add", "adddraft", "edit", "editpick", "editinput", "editdeps", "editrefs", "note", "refs", "graph", "graphall", "map", "mapall", "mapfiltered", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "revisit", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicshut", "epicdone", "epicreopen", "sliceepicall", "epicnew", "boxes", "boxesall", "roadmapweek", "roadmapmonth", "swim", "swimopen", "swimrepo", "swimall", "views", "viewsroad", "viewsmany", "sweep", "sweepconfirm", "sweeprestore", "sweepwait", "fail"}
 
 // Options configures a freshly-constructed Model. The zero value is the
 // default TUI: dark palette, board view, no filter.
@@ -820,6 +820,20 @@ func (m *Model) demoState(kind string) error {
 		}
 		if m.sweepGate == nil {
 			return fmt.Errorf("demo sweeprestore: ⏎ did not arm the restore gate")
+		}
+
+	case "sweepwait":
+		// The sweep opened while a write is still queued: the preview read is
+		// deferred to the drain (it would race the queue's furrow process), and
+		// the header must say so — four empty sections here would claim there
+		// is nothing to sweep. The op is a stand-in; nothing runs it.
+		m.pending = append(m.pending, persistOp{label: "move t-jv3j", run: func() ([]string, error) { return nil, nil }})
+		m.inflight = true
+		if c := m.openSweep(); c != nil {
+			_ = c
+		}
+		if m.sweep != nil || !m.sweepLoading {
+			return fmt.Errorf("demo sweepwait: the read was not deferred (sweep=%v loading=%v)", m.sweep != nil, m.sweepLoading)
 		}
 
 	case "fail":

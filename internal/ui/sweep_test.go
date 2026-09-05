@@ -243,3 +243,54 @@ func TestSweepGateLetsCtrlCThrough(t *testing.T) {
 		t.Error("ctrl+c under the gate returned no quit command")
 	}
 }
+
+// X while a write is queued defers the read (it would race the queue's furrow
+// process) — and the drain then delivers it, on the refusal path that reloads
+// nothing as much as on success. Measured before the fix: a refused write with
+// nothing unread left the sweep at "nothing to sweep" for good.
+func TestSweepDeferredReadArrivesWhenTheDrainEnds(t *testing.T) {
+	m, p := scriptedModel(t)
+	p.epicErr, p.epicFailAt = errors.New("scripted refusal"), 1
+	// A store-first write in flight, then X.
+	m.mode = modeNormal
+	if c := m.epicWrite("epic set e-1", func(prov board.Provider) error { return prov.EpicSet("e-1", board.EpicPatch{Goal: new(string)}) }); c == nil {
+		t.Fatal("the epic write did not queue")
+	}
+	press(m, "X")
+	if m.view != viewSweep || m.sweep != nil || !m.sweepLoading {
+		t.Fatalf("X under a queued write: view=%v sweep=%v loading=%v", m.view, m.sweep != nil, m.sweepLoading)
+	}
+	if out := frame(m); !strings.Contains(out, "reading the previews") || strings.Contains(out, "nothing old enough") || !strings.Contains(out, "not read yet") {
+		t.Errorf("the deferred frame must say it is reading, not that there is nothing to sweep")
+	}
+	// Drive the loop the way the program does: every Cmd Update returns is
+	// run and its message fed back, so the deferred read the refusal branch
+	// batches in actually executes (drainPersists discards those Cmds).
+	pump(m, m.firePersist())
+	if m.inflight || len(m.pending) > 0 {
+		t.Fatal("the queue did not drain")
+	}
+	if m.sweep == nil || m.sweepLoading {
+		t.Errorf("the drain (a refused write, nothing unread) did not deliver the read: sweep=%v loading=%v", m.sweep != nil, m.sweepLoading)
+	}
+}
+
+// pump runs cmd, feeds its message to Update and recurses on what comes back,
+// unwrapping batches — a synchronous stand-in for the program loop.
+func pump(m *Model, cmd tea.Cmd) {
+	if cmd == nil {
+		return
+	}
+	msg := cmd()
+	if msg == nil {
+		return
+	}
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		for _, c := range batch {
+			pump(m, c)
+		}
+		return
+	}
+	_, next := m.Update(msg)
+	pump(m, next)
+}

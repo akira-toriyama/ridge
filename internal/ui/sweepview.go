@@ -67,9 +67,12 @@ func (m *Model) closeSweep() {
 func (m *Model) loadSweep() tea.Cmd {
 	if m.queueBusy() {
 		// The board's own rule for `r` (normalkeys.go): a read fired now would
-		// race the queue's furrow process, and the drain's reload re-reads the
-		// previews anyway (sweepAfterWrite). Nothing is lost by waiting.
-		m.note("sweep previews re-read when the queued writes land")
+		// race the queue's furrow process. sweepLoading stays UP so the header
+		// says "reading…" rather than letting four empty sections claim there
+		// is nothing to sweep, and every end of the drain — success, refusal,
+		// with or without a reload — calls sweepAfterWrite, which reads then.
+		m.sweepLoading = true
+		m.note("sweep previews are read when the queued writes land")
 		return nil
 	}
 	m.sweepSeq++
@@ -166,7 +169,7 @@ func (m *Model) sweepTitleBar() string {
 func (m *Model) sweepHeader(clipped bool) string {
 	th := m.th
 	if g := m.sweepGate; g != nil {
-		left := th.warn.Render("⏎ confirms: "+g.what) + th.dim.Render("  ·  any other key cancels")
+		left := th.warn.Render("⏎ confirms: "+g.what) + th.dim.Render("  ·  any other key cancels (ctrl+c quits)")
 		return joinEnds(left, "", m.w)
 	}
 	left := th.peekHdr.Render("sweep") + th.dim.Render("  ·  furrow archive / tidy / unarchive")
@@ -228,7 +231,13 @@ func (m *Model) sweepLines(rows []sweepRow, w int) []string {
 		case r.Header:
 			out = append(out, m.sweepHeaderLine(r.Section, w))
 		case r.Empty:
-			out = append(out, "   "+th.dim.Render(sweepEmptyText(r.Section)))
+			text := sweepEmptyText(r.Section)
+			if m.sweep == nil {
+				// No verdict yet (first read pending, or deferred behind the
+				// queue): an "empty" section must not claim emptiness.
+				text = "— not read yet —"
+			}
+			out = append(out, "   "+th.dim.Render(text))
 		default:
 			gutter := "  "
 			if r.Key == m.sweepSel {
@@ -516,10 +525,14 @@ func (m *Model) sweepWrite(g *sweepGate) tea.Cmd {
 	}, "a sweep write")
 }
 
-// sweepAfterWrite is what the board's re-read owes this view: a fresh preview.
-// Nil when the sweep is not on screen — the previews are read on open.
+// sweepAfterWrite is what every end of the persist queue owes this view: a
+// fresh preview. Nil when the sweep is not on screen — the previews are read
+// on open. Called from onReloadDone (a re-read applied), from the fixture's
+// drain end (which reloads nothing) and from the refusal branch that
+// re-reads nothing, so a read loadSweep refused while writes were queued is
+// never left unread.
 func (m *Model) sweepAfterWrite() tea.Cmd {
-	if m.view != viewSweep {
+	if m.view != viewSweep || m.queueBusy() {
 		return nil
 	}
 	return m.loadSweep()

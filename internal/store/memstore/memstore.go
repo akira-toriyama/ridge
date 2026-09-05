@@ -134,7 +134,7 @@ func (p *Store) rebuild() *board.Board {
 	copy(added, p.added)
 	p.mu.Unlock()
 
-	b := p.shape(p.base())
+	b := p.base()
 	for i := range added {
 		// NewWith's base is the caller's OWN board, handed back as-is, so an
 		// add appended to it on the first rebuild is still there on the
@@ -146,7 +146,9 @@ func (p *Store) rebuild() *board.Board {
 		t := cloneTask(added[i])
 		b.Append(&t)
 	}
-	return b
+	// After the adds, not before: a quick add archived this session must not
+	// be resurrected by the replay (review of #88 measured it coming back).
+	return p.shape(b)
 }
 
 // withTask copies a board's task list, appends one task and returns a NEW

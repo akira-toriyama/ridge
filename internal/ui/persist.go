@@ -245,7 +245,8 @@ func (m *Model) onPersistDone(msg persistDoneMsg) tea.Cmd {
 			// successful add would fire at some unrelated future reload.
 			m.selectAfterReload = ""
 			m.fail("%s: %v%s", msg.label, msg.err, loss)
-			return reopen
+			// The sweep's previews may still be waiting on this drain.
+			return tea.Batch(reopen, m.sweepAfterWrite())
 		}
 		// Until the re-read lands the board keeps showing the refused state,
 		// so `rollingBack` refuses new writes — otherwise one keystroke in
@@ -302,7 +303,9 @@ func (m *Model) onPersistDone(msg persistDoneMsg) tea.Cmd {
 	if m.prov.Live() {
 		return m.reloadCmd("")
 	}
-	return m.requery()
+	// The fixture drain reloads nothing, so the sweep's deferred read is owed
+	// here (a live drain's reload reaches it through onReloadDone).
+	return tea.Batch(m.requery(), m.sweepAfterWrite())
 }
 
 // quitOrFlush is every quit key's guard: leaving with writes still queued

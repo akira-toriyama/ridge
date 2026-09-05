@@ -153,7 +153,8 @@ satisfied dep edges and the shards with unknown keys (`furrow tidy`), and the
 archive store (`furrow ls --archived`). Every candidate is furrow's; ridge
 derives none. `⏎` on a row names the write in the header line — the exact
 id list an archive sends, the count a tidy class prunes, the one task a
-restore brings back — and a second `⏎` applies it; any other key cancels.
+restore brings back — and a second `⏎` applies it; any other key cancels
+(`ctrl+c` still quits).
 `x` skips / includes an archive row: the write sends the **explicit ids on
 screen**, never the id-less sweep, so what moves is what was previewed. `r`
 re-reads the previews. Every write is store-first (glossary): the frame keeps
