@@ -617,6 +617,10 @@ func TestContractPersistDepAddAndRm(t *testing.T) {
 // overlay uses; read the store back and believe IT, not the patch. The note
 // half also pins the join AppendNote mirrors (one blank line, one trailing
 // newline) against furrow's own file — the mirror's measurement, kept honest.
+//
+// bite-exempt: pins furrow v5.1.0's current ref grammar against the real CLI
+// (self-skips where furrow is absent, as on the bite runner); the mirror's own
+// bite is TestSetFieldsRefsKeepCommaAndQuoteVerbatim in internal/board.
 func TestContractRefEditsAndNoteAppend(t *testing.T) {
 	p, dir := newLabProvider(t)
 	id := labAdd(t, dir, "参照とメモの対象")
