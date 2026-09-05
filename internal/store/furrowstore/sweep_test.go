@@ -2,6 +2,8 @@ package furrowstore
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -15,15 +17,23 @@ import (
 func labClose(t *testing.T, dir, id string, days int) {
 	t.Helper()
 	lab(t, dir, "furrow", "set", id, "-s", "done")
-	path := dir + "/.furrow/tasks/" + id + ".json"
-	raw := lab(t, dir, "cat", path)
+	path := filepath.Join(dir, ".furrow", "tasks", id+".json")
+	raw, err := os.ReadFile(path) //nolint:gosec // G304: the path is the throwaway store's own shard, built from t.TempDir()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var shard map[string]any
 	if err := json.Unmarshal(raw, &shard); err != nil {
 		t.Fatal(err)
 	}
 	shard["closed"] = time.Now().UTC().Add(-time.Duration(days) * 24 * time.Hour).Format(time.RFC3339)
-	out, _ := json.MarshalIndent(shard, "", "  ")
-	lab(t, dir, "sh", "-c", "cat > "+path+" <<'EOF'\n"+string(out)+"\nEOF")
+	out, err := json.MarshalIndent(shard, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, out, 0o600); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // The sweep contract against the real CLI: the archive dry-run names the

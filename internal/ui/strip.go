@@ -28,7 +28,7 @@ const (
 // neither modal can be submitted from that view in the first place.
 func (m *Model) fullScreen() bool {
 	return m.view == viewGraph || m.view == viewMap || m.view == viewBoxes ||
-		m.view == viewRoadmap || m.view == viewSwim
+		m.view == viewRoadmap || m.view == viewSwim || m.view == viewSweep
 }
 
 // stripHeight shrinks the detail strip on a short terminal rather than letting

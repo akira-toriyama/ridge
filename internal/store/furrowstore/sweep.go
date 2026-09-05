@@ -152,6 +152,11 @@ func (p *Store) Unarchive(ids []string) error {
 	if len(envs) != len(ids) {
 		return fmt.Errorf("furrow unarchive: restored %d of %d", len(envs), len(ids))
 	}
+	for i, e := range envs {
+		if !e.Unarchived {
+			return fmt.Errorf("furrow unarchive: envelope %d reports unarchived=false", i)
+		}
+	}
 	return nil
 }
 

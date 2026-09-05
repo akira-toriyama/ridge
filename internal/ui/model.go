@@ -328,7 +328,6 @@ type Model struct {
 	sweepGate    *sweepGate
 	sweepSeq     int
 	sweepLoading bool
-	sweepMoved   bool
 	sweepScroll  int
 
 	// sized reports that the terminal has told us who it is: a WindowSizeMsg

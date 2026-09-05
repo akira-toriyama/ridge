@@ -60,6 +60,11 @@ type persistOp struct {
 	// reads it only after persistDoneMsg has crossed the channel back, the same
 	// handoff addedID uses.
 	note *string
+	// reloadOnFail marks a store-first write whose REFUSAL may still have
+	// moved the store (a batch the adapter judged short). The failure path
+	// re-reads for it even when nothing else is unread — a plain reload, not
+	// the rollback: there is no optimistic half, so "unsaved edit" would lie.
+	reloadOnFail bool
 }
 
 type persistDoneMsg struct {
@@ -223,7 +228,7 @@ func (m *Model) onPersistDone(msg persistDoneMsg) tea.Cmd {
 			reopen = m.reopenRefusedEpicAdd(op)
 		}
 		if !needRollback {
-			if m.unreadLanded {
+			if m.unreadLanded || op.reloadOnFail {
 				// An earlier write LANDED and the board has not re-read it.
 				// Nothing was applied optimistically here, so no ROLLBACK
 				// re-read is coming — and without a plain one a store-first

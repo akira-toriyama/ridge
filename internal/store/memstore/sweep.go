@@ -18,14 +18,21 @@ import (
 // fixtureOlderThanDays mirrors furrow's default `archive.older_than_days`.
 const fixtureOlderThanDays = 30
 
-// shape applies the session's sweep state to a freshly built board: archived
-// tasks leave it, pruned edges are dropped. Called by rebuild on every Reload
-// so the writes survive the way quick adds do.
+// shape applies the session's sweep state to a board: archived tasks leave
+// it, pruned edges are dropped. rebuild calls it on every Reload so the writes
+// survive the way quick adds do, and the writes themselves call it on the
+// CURRENT snapshot — never Reload, which is the fixture's discard operation
+// and would throw the session's other edits away with the sweep (review of
+// #88 measured a keyboard move reverting under an archive).
 func (p *Store) shape(b *board.Board) *board.Board {
 	p.mu.Lock()
 	archived := p.archived
 	pruned := p.pruned
 	p.mu.Unlock()
+	return shapeWith(b, archived, pruned)
+}
+
+func shapeWith(b *board.Board, archived map[string]bool, pruned map[string]map[string]bool) *board.Board {
 	if len(archived) == 0 && len(pruned) == 0 {
 		return b
 	}
@@ -115,14 +122,15 @@ func (p *Store) Archive(ids []string) error {
 		}
 	}
 	p.mu.Lock()
+	defer p.mu.Unlock()
 	if p.archived == nil {
 		p.archived = map[string]bool{}
 	}
 	for _, id := range ids {
 		p.archived[id] = true
 	}
-	p.mu.Unlock()
-	return p.Reload()
+	p.b = shapeWith(p.b, p.archived, p.pruned)
+	return nil
 }
 
 // Unarchive restores ids (board.Provider). All-or-nothing like furrow: an id
@@ -150,12 +158,22 @@ func (p *Store) Unarchive(ids []string) error {
 	if len(missing) > 0 {
 		return fmt.Errorf("%d of %d ids not found in the archive — nothing was restored (%v)", len(missing), len(ids), missing)
 	}
+	// The restored task comes back as it was ARCHIVED — the pristine copy,
+	// which is what the archive store holds — appended to the current board
+	// so every other session edit stays.
+	pristine := p.base()
 	p.mu.Lock()
+	defer p.mu.Unlock()
+	cur := p.b
 	for _, id := range ids {
 		delete(p.archived, id)
+		if t := pristine.Task(id); t != nil {
+			c := cloneTask(*t)
+			cur = withTask(cur, &c)
+		}
 	}
-	p.mu.Unlock()
-	return p.Reload()
+	p.b = cur
+	return nil
 }
 
 // Tidy prunes one class (board.Provider). done-deps drops every satisfied
@@ -182,8 +200,9 @@ func (p *Store) Tidy(class board.TidyClass) error {
 				set[dep] = true
 			}
 		}
+		p.b = shapeWith(p.b, p.archived, p.pruned)
 		p.mu.Unlock()
-		return p.Reload()
+		return nil
 	case board.TidyUnknownKeys:
 		return nil
 	}

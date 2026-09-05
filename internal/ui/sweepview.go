@@ -32,7 +32,6 @@ type sweepGate struct {
 	label string // the status-line name of the write ("archive 4 tasks")
 	what  string // the gate's own line: what furrow will do
 	run   func(board.Provider) error
-	ids   []string // the archive/unarchive list, for the debug log
 }
 
 // sweepResultMsg carries a preview read that ran off the UI thread.
@@ -52,7 +51,6 @@ func (m *Model) openSweep() tea.Cmd {
 	m.view = viewSweep
 	m.sweepScroll = 0
 	m.sweepGate = nil
-	m.sweepMoved = false
 	m.note("sweep — furrow archive / tidy / unarchive · ⏎ previews the write, ⏎ again applies · x skips an archive row · esc returns")
 	return m.loadSweep()
 }
@@ -67,6 +65,13 @@ func (m *Model) closeSweep() {
 // deterministic -dump frame), as a Cmd on a live store. seq fences a stale
 // result the way the filter's does.
 func (m *Model) loadSweep() tea.Cmd {
+	if m.queueBusy() {
+		// The board's own rule for `r` (normalkeys.go): a read fired now would
+		// race the queue's furrow process, and the drain's reload re-reads the
+		// previews anyway (sweepAfterWrite). Nothing is lost by waiting.
+		m.note("sweep previews re-read when the queued writes land")
+		return nil
+	}
 	m.sweepSeq++
 	seq := m.sweepSeq
 	prov := m.prov
@@ -355,7 +360,13 @@ func (m *Model) onSweepKey(msg tea.KeyPressMsg) tea.Cmd {
 	if g := m.sweepGate; g != nil {
 		// The gate: ⏎ applies, ANY other key cancels — including the arrows,
 		// because a cursor that moved under an open gate would leave the gate
-		// naming a row the eye is no longer on.
+		// naming a row the eye is no longer on. ctrl+c stays the escape hatch
+		// it is everywhere else (the epic overlay checks it before its stage
+		// machine for the same reason): it quits, it does not merely cancel.
+		if key.Matches(msg, m.keys.ForceQuit) {
+			m.sweepGate = nil
+			return m.quitOrFlush()
+		}
 		m.sweepGate = nil
 		if key.Matches(msg, m.keys.Commit) {
 			return m.sweepWrite(g)
@@ -404,16 +415,12 @@ func (m *Model) onSweepKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 
 	case key.Matches(msg, m.keys.Up):
-		m.sweepMoved = true
 		m.sweepSel = sweepStep(rows, m.sweepSel, -1)
 	case key.Matches(msg, m.keys.Down):
-		m.sweepMoved = true
 		m.sweepSel = sweepStep(rows, m.sweepSel, +1)
 	case key.Matches(msg, m.keys.Top):
-		m.sweepMoved = true
 		m.sweepSel = sweepFirst(rows)
 	case key.Matches(msg, m.keys.Bottom):
-		m.sweepMoved = true
 		m.sweepSel = sweepLast(rows)
 	case key.Matches(msg, m.keys.PeekScroll):
 		m.halfPage(msg, m.sweepCanvasH(), func(dir int) bool {
@@ -449,7 +456,6 @@ func (m *Model) armSweepGate(rows []sweepRow) tea.Cmd {
 		g = sweepGate{
 			label: fmt.Sprintf("archive %d task(s)", len(ids)),
 			what:  fmt.Sprintf("furrow archive %s --yes — %d done task(s) leave the board for .furrow/archive/ (unarchive brings one back)", sweepIDsBrief(ids), len(ids)),
-			ids:   ids,
 			run:   func(p board.Provider) error { return p.Archive(ids) },
 		}
 	case sweepDoneDeps:
@@ -477,7 +483,6 @@ func (m *Model) armSweepGate(rows []sweepRow) tea.Cmd {
 		g = sweepGate{
 			label: "unarchive " + id,
 			what:  fmt.Sprintf("furrow unarchive %s — back to the done lane exactly as archived (to reopen, move it afterwards)", id),
-			ids:   []string{id},
 			run:   func(p board.Provider) error { return p.Unarchive([]string{id}) },
 		}
 	}
@@ -503,6 +508,11 @@ func (m *Model) sweepWrite(g *sweepGate) tea.Cmd {
 	return m.storeFirstWrite(persistOp{
 		label: "sweep: " + g.label,
 		run:   func() ([]string, error) { return nil, g.run(prov) },
+		// A sweep write can fail AFTER furrow moved something (the adapter
+		// refuses a reply that names fewer tasks than it sent), so a refusal
+		// must still re-read: the board would otherwise keep showing tasks
+		// that are already in the archive until a manual `r`.
+		reloadOnFail: true,
 	}, "a sweep write")
 }
 

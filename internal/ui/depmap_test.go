@@ -512,6 +512,13 @@ func TestAFullScreenViewRefusesToReopenAnInvisibleModal(t *testing.T) {
 	}{
 		{"graph", func() { m.openGraph() }},
 		{"map", func() { m.openMap("") }},
+		{"boxes", func() { m.openBoxes() }},
+		{"roadmap", func() { m.openRoadmap() }},
+		{"swim", func() { m.openSwim() }},
+		// The sweep shipped without its fullScreen arm once (review of #88):
+		// a slice-panel click landed on the invisible panel and the keyboard
+		// left the view. Every full-screen view belongs in this table.
+		{"sweep", func() { _ = m.openSweep() }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m.view = viewBoard

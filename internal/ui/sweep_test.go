@@ -2,6 +2,8 @@ package ui
 
 import (
 	"errors"
+
+	tea "charm.land/bubbletea/v2"
 	"strings"
 	"testing"
 
@@ -206,5 +208,38 @@ func TestSweepWriteRefusalIsStoreFirst(t *testing.T) {
 	}
 	if !m.statusErr || !strings.Contains(m.status, "sweep: archive 1 task(s)") {
 		t.Errorf("status = %q, want the refusal named", m.status)
+	}
+}
+
+// A sweep write on the fixture must not discard the session's other edits:
+// memstore's writes reshape the CURRENT snapshot, never Reload (the discard
+// operation). Review of #88 measured a keyboard move reverting under an
+// archive before this.
+func TestSweepWriteKeepsTheSessionsOtherEditsOnTheFixture(t *testing.T) {
+	m := boardModel(t, 240, 40)
+	if _, err := m.b.MoveTo("t-ehk7", "ready", 0); err != nil {
+		t.Fatal(err)
+	}
+	press(m, "X", "enter", "enter")
+	drainPersists(m, t)
+	if tk := m.b.Task("t-ehk7"); tk == nil || tk.Status != "ready" {
+		t.Errorf("the archive write reverted the session's move: %+v", tk)
+	}
+	if len(m.sweep.Archived) == 0 {
+		t.Error("the archive write did not land")
+	}
+}
+
+// ctrl+c under an open gate quits (after the drain) instead of merely
+// cancelling the gate — the escape hatch every other surface keeps.
+func TestSweepGateLetsCtrlCThrough(t *testing.T) {
+	m := boardModel(t, 240, 40)
+	press(m, "X", "enter")
+	if m.sweepGate == nil {
+		t.Fatal("no gate")
+	}
+	c := m.onSweepKey(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
+	if c == nil {
+		t.Error("ctrl+c under the gate returned no quit command")
 	}
 }
