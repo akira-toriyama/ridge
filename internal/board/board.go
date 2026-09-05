@@ -584,19 +584,14 @@ func ParseDue(s string) (time.Time, error) {
 		"YYYY-MM-DDTHH:MM, an RFC3339 instant, or a signed offset like +1d/+2h", s)
 }
 
-// validateRef refuses a ref the flag layer would mangle. Measured on v4.0.0
-// (cmd_mutate.go newRefCmd): --add/--rm are pflag StringSlice, i.e. a CSV
-// field — a ref carrying a comma lands SPLIT into two refs after the
-// reconcile, and a bare `"` is a flag-layer parse error (exit 2) that arrives
-// only after the optimistic apply. Mirror-refused here until furrow takes
-// refs verbatim (requests: t-pwrp); an empty --add is furrow's own exit 2.
-// `furrow add --ref` is the same pflag type, so the add path shares this.
+// validateRef mirrors the one refusal furrow's ref flag still has: an empty
+// --add is furrow's own exit 2. Everything else is free text that reaches the
+// store verbatim — `,` and `"` included — since furrow #317 made --add/--rm
+// and `add --ref` pflag StringArrays (measured on dev 82b181b). Do not
+// reintroduce a character filter here: it would refuse refs furrow accepts.
 func validateRef(r string) error {
 	if r == "" {
 		return fmt.Errorf("a ref cannot be empty")
-	}
-	if strings.ContainsAny(r, `,"`) {
-		return fmt.Errorf("ref %q: `,` and `\"` cannot ride furrow's CSV flag parsing — it would split or refuse the ref", r)
 	}
 	return nil
 }
@@ -663,8 +658,8 @@ func (b *Board) SetFields(id string, p FieldPatch) error {
 		t.Repos = slices.DeleteFunc(t.Repos, func(s string) bool { return s == r })
 	}
 	// Append order preserved, add idempotent, rm exact-match — `furrow ref`'s
-	// contract (refs are a sequence, not a sorted set). Every add already
-	// passed the CSV-safety validation above, so nothing here narrows.
+	// contract (refs are a sequence, not a sorted set). Nothing here narrows:
+	// the only refusal is the empty add, already made above.
 	for _, r := range p.AddRefs {
 		if !slices.Contains(t.Refs, r) {
 			t.Refs = append(t.Refs, r)

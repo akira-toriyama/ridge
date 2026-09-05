@@ -606,7 +606,7 @@ func (p *Store) PersistDepRm(id, dep string) error {
 // these compose argv, run one furrow command and report its verdict. Every
 // argv fact below was measured against the release
 // .github/workflows/build.yml pins for the contract job — v4.0.0 originally,
-// re-measured on v5.0.0 when the pin moved. Measure against the PIN, never
+// re-measured on v5.0.0 and v5.1.0 as the pin moved. Measure against the PIN, never
 // `which furrow`: the two overtake each other in BOTH directions (`epic
 // reopen` landed in furrow on 2026-08-11, two days after v4.0.0 shipped and
 // sixteen before v5.0.0 carried it; and on the day v5.0.0 shipped the
@@ -821,8 +821,8 @@ func (p *Store) Add(title string, o board.AddOptions) (string, error) {
 	for _, c := range o.Checks {
 		args = append(args, "--check", c)
 	}
-	// --ref is pflag CSV (the t-pwrp caveat); Validate refused `,`/`"`
-	// above, so what reaches the flag survives it verbatim.
+	// --ref is a pflag StringArray since furrow #317 (measured on dev
+	// 82b181b): every ref reaches the store verbatim, `,` and `"` included.
 	for _, r := range o.Refs {
 		args = append(args, "--ref", r)
 	}

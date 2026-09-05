@@ -617,6 +617,10 @@ func TestContractPersistDepAddAndRm(t *testing.T) {
 // overlay uses; read the store back and believe IT, not the patch. The note
 // half also pins the join AppendNote mirrors (one blank line, one trailing
 // newline) against furrow's own file — the mirror's measurement, kept honest.
+//
+// bite-exempt: pins furrow v5.1.0's current ref grammar against the real CLI
+// (self-skips where furrow is absent, as on the bite runner); the mirror's own
+// bite is TestSetFieldsRefsKeepCommaAndQuoteVerbatim in internal/board.
 func TestContractRefEditsAndNoteAppend(t *testing.T) {
 	p, dir := newLabProvider(t)
 	id := labAdd(t, dir, "参照とメモの対象")
@@ -630,10 +634,17 @@ func TestContractRefEditsAndNoteAppend(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	// One mixed write: rm one, add one — furrow composes both in one call.
+	// One mixed write: rm one, add three — furrow composes all in one call.
+	// The comma'd URL and the quoted text pin furrow #317: --add/--rm are
+	// pflag StringArrays, so both land as ONE ref each, verbatim (the CSV era
+	// split the first and refused the second with exit 2).
 	if err := p.PersistFields(id, board.FieldPatch{
-		AddRefs: []string{"-dash.md:1"}, // a leading dash rides as a flag VALUE, never a positional
-		RmRefs:  []string{"internal/x.go:12"},
+		AddRefs: []string{
+			"-dash.md:1", // a leading dash rides as a flag VALUE, never a positional
+			"https://example.com/spec?rows=1,2",
+			`say "hi"`,
+		},
+		RmRefs: []string{"internal/x.go:12"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -641,8 +652,19 @@ func TestContractRefEditsAndNoteAppend(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := p.Board().Task(id)
-	if want := []string{"https://example.com/spec", "-dash.md:1"}; strings.Join(got.Refs, ",") != strings.Join(want, ",") {
+	if want := []string{"https://example.com/spec", "-dash.md:1", "https://example.com/spec?rows=1,2", `say "hi"`}; strings.Join(got.Refs, "|") != strings.Join(want, "|") {
 		t.Errorf("refs = %v, want %v", got.Refs, want)
+	}
+	// --rm is exact-match on the verbatim text, quote and all.
+	if err := p.PersistFields(id, board.FieldPatch{RmRefs: []string{`say "hi"`}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	got = p.Board().Task(id)
+	if want := []string{"https://example.com/spec", "-dash.md:1", "https://example.com/spec?rows=1,2"}; strings.Join(got.Refs, "|") != strings.Join(want, "|") {
+		t.Errorf("refs after rm = %v, want %v", got.Refs, want)
 	}
 
 	// The note appends a paragraph AND advances updated, in one command. The

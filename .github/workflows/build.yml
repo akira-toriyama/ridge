@@ -63,8 +63,8 @@ jobs:
         # major version"). The release tarball is how the fleet's own
         # sync-task-status gate installs it — checksum-pinned here.
         run: |
-          curl -fsSL -o /tmp/furrow.tgz             https://github.com/akira-toriyama/furrow/releases/download/v5.0.0/furrow_5.0.0_linux_amd64.tar.gz
-          echo "64d9e30c5258188f25e40ceb85685bcf038d20d297374b6226164bf6c307f395  /tmp/furrow.tgz" | sha256sum -c -
+          curl -fsSL -o /tmp/furrow.tgz             https://github.com/akira-toriyama/furrow/releases/download/v5.1.0/furrow_5.1.0_linux_amd64.tar.gz
+          echo "b8fda89a2dc52568f9c659b70e14da582c5dfbfc999f55658a437df9d85979b8  /tmp/furrow.tgz" | sha256sum -c -
           tar -C /tmp -xzf /tmp/furrow.tgz furrow
           sudo install -m 0755 /tmp/furrow /usr/local/bin/furrow
       - name: Contract tests against the real CLI

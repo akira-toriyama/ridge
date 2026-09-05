@@ -12,6 +12,9 @@ func TestAddOptionsValidate(t *testing.T) {
 		{Due: "+1d"},
 		{Due: "2026-09-01"},
 		{Deps: []string{"t-a"}, Checks: []string{"書く"}, Refs: []string{"a.go:1"}},
+		// --ref is a pflag StringArray since furrow #317: `,` and `"` are
+		// ordinary ref text and must not be refused here.
+		{Refs: []string{"https://example.com/spec?rows=1,2", `say "hi"`}},
 		{Draft: true},
 		{Draft: true, Lane: "icebox", Epic: "e-x"}, // draft conflicts with repo ONLY
 	}
@@ -29,15 +32,12 @@ func TestAddOptionsValidate(t *testing.T) {
 		{AddOptions{Effort: -1}, "want 1..5"},
 		{AddOptions{Due: "someday"}, "not a date"},
 		{AddOptions{Deps: []string{""}}, "needs a task id"},
-		// --dep is the same pflag CSV field as --ref (re-review, finding A):
-		// a comma'd id would split silently, a bare `"` is pflag's exit 2.
+		// --dep is still a pflag CSV StringSlice (unlike --ref since furrow
+		// #317): a comma'd id would split silently, a bare `"` is pflag's exit 2.
 		{AddOptions{Deps: []string{`t-a"b`}}, "CSV"},
 		{AddOptions{Deps: []string{"t-a,t-b"}}, "CSV"},
 		{AddOptions{Checks: []string{"  "}}, "needs text"},
 		{AddOptions{Refs: []string{""}}, "cannot be empty"},
-		// The t-pwrp CSV caveat: a comma'd ref would land SPLIT after the
-		// reconcile, so it is refused before the flag layer sees it.
-		{AddOptions{Refs: []string{"a,b"}}, "CSV"},
 		// furrow refuses `--draft` next to `-r`; the mirror refuses before
 		// the exec so the modal line survives instead of a store round trip.
 		{AddOptions{Draft: true, Repo: "lab/lab"}, "conflicts with repo"},

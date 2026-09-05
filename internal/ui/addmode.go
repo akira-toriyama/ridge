@@ -139,7 +139,7 @@ func (m *Model) onAddKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		opts := tk.apply(a.opts)
 		if err := opts.Validate(); err != nil {
-			// The semantic half (estimate range, due grammar, ref CSV):
+			// The semantic half (estimate range, due grammar, empty ref):
 			// refused here so the line survives instead of costing a store
 			// round trip that would bounce anyway.
 			m.fail("%v", err)

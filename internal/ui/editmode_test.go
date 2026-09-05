@@ -565,13 +565,13 @@ func TestEditRefsRenderInPeekAndMenu(t *testing.T) {
 	if !strings.Contains(out, "docs/積載図-2026.md:18") || !strings.Contains(out, "https://camp.example.com/loading-guide") {
 		t.Error("the refs rows are missing from the peek")
 	}
-	// The MENU half: its refs row joins the values with commas — a form the
-	// peek (one ref per line) never renders, so this bites on the menu row
-	// alone (the first version of this test asserted only the peek, and its
-	// name promised more than it checked — found by review).
+	// The MENU half: its refs row joins the values on a middle dot — a form
+	// the peek (one ref per line) never renders, so this bites on the menu
+	// row alone. Not a comma: a ref may carry one since furrow #317, so a
+	// comma-joined row would read as a split.
 	m.enterEdit()
-	if got := frame(m); !strings.Contains(got, "docs/積載図-2026.md:18,http") {
-		t.Error("the edit menu's refs row is missing its comma-joined value")
+	if got := frame(m); !strings.Contains(got, "docs/積載図-2026.md:18 · http") {
+		t.Error("the edit menu's refs row is missing its dot-joined value")
 	}
 }
 

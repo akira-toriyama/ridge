@@ -111,7 +111,7 @@ type Provider interface {
 	// of applying optimistically (a single add measures ~57ms). Both
 	// adapters run o.Validate() themselves — the UI refuses first for the
 	// modal's sake, but a future caller must not be able to slip a comma'd
-	// ref past the CSV flag layer by skipping the modal.
+	// dep or an empty ref past the flag layer by skipping the modal.
 	Add(title string, o AddOptions) (id string, err error)
 
 	// --- epic writes: store-first, NOT the Persist* contract ---------------
@@ -267,7 +267,7 @@ type AddOptions struct {
 	Due    string   // furrow date form incl. the +1d offset; "" = no promise
 	Deps   []string // t- ids; existence/acyclicity stay furrow's rules
 	Checks []string // unchecked checklist items, text verbatim
-	Refs   []string // free text; `,` and `"` refused (the t-pwrp CSV caveat)
+	Refs   []string // free text, verbatim (pflag StringArray since furrow #317); "" refused
 
 	// Draft creates the task with NO repo attached — furrow's `add --draft`,
 	// which also suppresses the board's auto-attach. It conflicts with Repo
@@ -278,7 +278,7 @@ type AddOptions struct {
 // Validate refuses an AddOptions the flag layer would mangle or furrow would
 // refuse — BEFORE the modal closes, so the typed line survives as a
 // still-open modal instead of a refusal round trip. Due goes through the same
-// ParseDue mirror SetFields uses and refs through the same CSV caveat; the
+// ParseDue mirror SetFields uses and refs through the same empty check; the
 // estimate check is deliberately STRICTER than furrow, which clamps instead
 // of refusing (measured on dev 60074b8: `--value 9` exits 0 and stores 5) —
 // a silent clamp would stamp an estimate the user did not type.
@@ -300,8 +300,9 @@ func (o AddOptions) Validate() error {
 		if d == "" {
 			return fmt.Errorf("dep: needs a task id")
 		}
-		// --dep is the same pflag CSV field as --ref: a comma'd id would
-		// SPLIT silently and a bare `"` is pflag's own exit-2 parse error.
+		// --dep is still a pflag CSV StringSlice (cmd_add.go on dev 82b181b;
+		// --ref stopped being one in furrow #317): a comma'd id would SPLIT
+		// silently and a bare `"` is pflag's own exit-2 parse error.
 		if strings.ContainsAny(d, `,"`) {
 			return fmt.Errorf("dep %q: `,` and `\"` cannot ride furrow's CSV flag parsing", d)
 		}
@@ -335,9 +336,9 @@ type FieldPatch struct {
 	// Refs are a SEQUENCE, not a sorted set like labels: furrow appends adds
 	// at the end and keeps the order given. Add is idempotent, Rm is
 	// exact-match and a no-op on an absent ref (measured on dev 60074b8).
-	// The form is free text (file:line or URL) with one flag-layer caveat:
-	// furrow's --add/--rm are pflag CSV StringSlices, so SetFields refuses
-	// adds carrying `,` or `"` until furrow takes them verbatim (t-pwrp).
+	// The form is free text (file:line or URL) and reaches furrow verbatim,
+	// `,` and `"` included — --add/--rm are pflag StringArrays since furrow
+	// #317 (measured on dev 82b181b). SetFields refuses only an empty add.
 	AddRefs []string
 	RmRefs  []string
 }
