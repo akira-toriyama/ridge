@@ -162,7 +162,9 @@ the pre-write preview until the write lands and both the board and the
 previews are re-read.
 
 Headless: `-dump -demo sweep` (at rest) / `sweepconfirm` (the archive gate,
-one row skipped) / `sweeprestore` (the restore gate on an archived row).
+one row skipped) / `sweeprestore` (the restore gate on an archived row) /
+`sweepwait` (opened behind a queued write — the read is deferred and the
+frame says so).
 
 ### Saved views — tabs + views.toml
 
@@ -244,7 +246,7 @@ go run ./cmd/ridge -h                        # the list of every -demo state (ca
 go run ./cmd/ridge -readonly -dump           # a board made read-only by the schema gate
 go run ./cmd/ridge -graphlr -dump -demo graphall  # the dependency graph left-right (the same state as `o`)
 go run ./cmd/ridge -dump -roadmap            # the due timeline (week/month axes: -demo roadmapweek / roadmapmonth)
-go run ./cmd/ridge -dump -demo sweepconfirm  # the sweep with the archive gate open (sweep / sweeprestore are the other two)
+go run ./cmd/ridge -dump -demo sweepconfirm  # the sweep with the archive gate open (sweep / sweeprestore / sweepwait are the others)
 ```
 
 What `-dump` / `-demo` / `-graphlr` / `-readonly` mean, and why the latter two

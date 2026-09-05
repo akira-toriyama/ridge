@@ -90,7 +90,10 @@ func (p *Store) SweepPreview() (board.Sweep, error) {
 	archived := p.archived
 	p.mu.Unlock()
 	if len(archived) > 0 {
-		for _, t := range p.base().Tasks() {
+		// The pristine board plus the session's quick adds: an archived add
+		// is off the board like any other retired task and must be restorable
+		// from the same list (review of #88 measured it vanishing from both).
+		for _, t := range p.rebuildUnshaped().Tasks() {
 			if archived[t.ID] {
 				s.Archived = append(s.Archived, sweepTaskOf(t))
 			}
@@ -161,7 +164,7 @@ func (p *Store) Unarchive(ids []string) error {
 	// The restored task comes back as it was ARCHIVED — the pristine copy,
 	// which is what the archive store holds — appended to the current board
 	// so every other session edit stays.
-	pristine := p.base()
+	pristine := p.rebuildUnshaped()
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	cur := p.b

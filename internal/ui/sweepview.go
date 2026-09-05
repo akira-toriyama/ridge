@@ -190,7 +190,11 @@ func (m *Model) sweepHeader(clipped bool) string {
 			th.dim.Render(fmt.Sprintf("%d archived", len(s.Archived))))
 	}
 	if m.sweepErr != "" {
-		bits = append(bits, th.warn.Render("last preview refused — showing the previous one"))
+		msg := "last preview refused — showing the previous one"
+		if m.sweep == nil {
+			msg = m.sweepErr
+		}
+		bits = append(bits, th.warn.Render(msg))
 	}
 	if m.sweepLoading && m.sweep != nil {
 		bits = append(bits, th.dim.Render("re-reading…"))
@@ -529,11 +533,26 @@ func (m *Model) sweepWrite(g *sweepGate) tea.Cmd {
 // fresh preview. Nil when the sweep is not on screen — the previews are read
 // on open. Called from onReloadDone (a re-read applied), from the fixture's
 // drain end (which reloads nothing) and from the refusal branch that
-// re-reads nothing, so a read loadSweep refused while writes were queued is
-// never left unread.
+// re-reads nothing. The one end that reads nothing is a re-read that itself
+// FAILED (onReloadDone's error paths): sweepReadStalled drops the "reading…"
+// claim there and names `r`, which re-reads the previews from inside the view.
 func (m *Model) sweepAfterWrite() tea.Cmd {
 	if m.view != viewSweep || m.queueBusy() {
 		return nil
 	}
 	return m.loadSweep()
+}
+
+// sweepReadStalled is the board re-read failing under a deferred sweep read:
+// nothing more is coming, so the header must stop saying "reading…" and the
+// frame must say how to get the previews (measured: without this the header
+// claimed a read in flight forever).
+func (m *Model) sweepReadStalled() {
+	if m.view != viewSweep || !m.sweepLoading {
+		return
+	}
+	m.sweepLoading = false
+	if m.sweep == nil {
+		m.sweepErr = "previews not read — r reads them"
+	}
 }

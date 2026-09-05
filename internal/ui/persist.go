@@ -465,9 +465,11 @@ func (m *Model) onReloadDone(msg reloadDoneMsg) tea.Cmd {
 			// BEFORE the failure message so press-r is what the user is
 			// left reading, not the replay's own note.
 			heldBody := m.releaseHeldBody()
+			m.sweepReadStalled()
 			m.fail("rollback re-read failed — the board may show an unsaved edit; press r to retry (%v)", msg.err)
 			return heldBody
 		}
+		m.sweepReadStalled()
 		m.fail("%s: %v", label, msg.err)
 		return nil
 	}

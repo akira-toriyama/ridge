@@ -127,8 +127,15 @@ func (p *Store) Reload() error {
 }
 
 // rebuild materializes the pristine board plus a fresh copy of every task
-// added this session.
+// added this session, with the session's sweep applied (shape).
 func (p *Store) rebuild() *board.Board {
+	return p.shape(p.rebuildUnshaped())
+}
+
+// rebuildUnshaped is rebuild before the sweep: the population the archive
+// store draws from, since an archived task is by definition not on the shaped
+// board.
+func (p *Store) rebuildUnshaped() *board.Board {
 	p.mu.Lock()
 	added := make([]board.Task, len(p.added))
 	copy(added, p.added)
@@ -146,9 +153,7 @@ func (p *Store) rebuild() *board.Board {
 		t := cloneTask(added[i])
 		b.Append(&t)
 	}
-	// After the adds, not before: a quick add archived this session must not
-	// be resurrected by the replay (review of #88 measured it coming back).
-	return p.shape(b)
+	return b
 }
 
 // withTask copies a board's task list, appends one task and returns a NEW

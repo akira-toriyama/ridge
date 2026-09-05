@@ -294,3 +294,20 @@ func pump(m *Model, cmd tea.Cmd) {
 	_, next := m.Update(msg)
 	pump(m, next)
 }
+
+// A board re-read that FAILS under a deferred sweep read is the one drain end
+// that reads nothing: the header must stop claiming a read is in flight and
+// name r instead (measured before: "reading the previews…" forever).
+func TestSweepStalledReadNamesTheWayOut(t *testing.T) {
+	m, _ := scriptedModel(t)
+	m.view = viewSweep
+	m.sweepLoading = true
+	m.sweep = nil
+	m.Update(reloadDoneMsg{label: "reload", err: errors.New("furrow ls timed out")})
+	if m.sweepLoading {
+		t.Error("the failed re-read left the loading claim up")
+	}
+	if out := frame(m); !strings.Contains(out, "previews not read — r reads them") || strings.Contains(out, "reading the previews") {
+		t.Errorf("frame after a failed re-read must name r, got a stale claim")
+	}
+}

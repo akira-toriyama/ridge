@@ -126,3 +126,39 @@ func TestSweepWritesHonourTheGate(t *testing.T) {
 		}
 	}
 }
+
+// A quick add archived this session stays archived across Reload AND is
+// listed in the archive store, so it can be restored like any other task.
+func TestSweepArchivedQuickAddStaysArchivedAndRestorable(t *testing.T) {
+	p := NewWith(sweepBoard())
+	id, err := p.Add("added then retired", board.AddOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Age and close it in place: the fixture's Board is the store.
+	tk := p.Board().Task(id)
+	tk.Status, tk.Closed = "done", time.Now().Add(-90*24*time.Hour)
+	if err := p.Archive([]string{id}); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	if p.Board().Task(id) != nil {
+		t.Fatal("Reload resurrected the archived quick add")
+	}
+	s, _ := p.SweepPreview()
+	found := false
+	for _, a := range s.Archived {
+		found = found || a.ID == id
+	}
+	if !found {
+		t.Fatalf("the archived add is missing from the archive store: %+v", s.Archived)
+	}
+	if err := p.Unarchive([]string{id}); err != nil {
+		t.Fatal(err)
+	}
+	if p.Board().Task(id) == nil {
+		t.Error("unarchive did not bring the add back")
+	}
+}
