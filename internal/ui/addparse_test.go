@@ -46,10 +46,11 @@ func TestParseAddLineSplitsTokensFromTheTitle(t *testing.T) {
 			raw: "Don't stop value:4", title: "Don't stop", tk: addTokens{value: 4}},
 		{name: "mid-word quotes reach the store verbatim",
 			raw: `彼は"これ"と言った`, title: `彼は"これ"と言った`},
-		{name: "a quote mid-value is literal too",
-			raw: `t ref:a"b`, title: "t",
-			tk: addTokens{bad: []string{"ref:a\"b — `,` and `\"` cannot ride furrow's CSV flag parsing"}}},
-		{name: "dep shares ref's CSV quote refusal",
+		{name: "a quote mid-value is literal too, and a ref keeps it verbatim",
+			raw: `t ref:a"b`, title: "t", tk: addTokens{refs: []string{`a"b`}}},
+		{name: "a comma'd ref is one ref (pflag StringArray since furrow #317)",
+			raw: "t ref:https://x/?a=1,2", title: "t", tk: addTokens{refs: []string{"https://x/?a=1,2"}}},
+		{name: "dep keeps its CSV quote refusal (--dep is still a StringSlice)",
 			raw: `t dep:t-a"b`, title: "t",
 			tk: addTokens{bad: []string{"dep:t-a\"b — `\"` cannot ride furrow's CSV flag parsing"}}},
 		{name: "unknown colon words stay title",
@@ -158,9 +159,8 @@ func TestQuickAddRefusesBadTokensAndKeepsTheLine(t *testing.T) {
 		t.Errorf("status = %q, want the token named, not the empty title", m.status)
 	}
 
-	// Range, due grammar and the ref CSV caveat refuse before the store
-	// round trip.
-	for _, bad := range []string{"t value:9", "t due:someday", `t ref:'a,b'`} {
+	// Range and the due grammar refuse before the store round trip.
+	for _, bad := range []string{"t value:9", "t due:someday"} {
 		m.add.input.SetValue(bad)
 		commitAdd(t, m)
 		if m.mode != modeAdd {

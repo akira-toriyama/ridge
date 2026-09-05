@@ -821,8 +821,8 @@ func (p *Store) Add(title string, o board.AddOptions) (string, error) {
 	for _, c := range o.Checks {
 		args = append(args, "--check", c)
 	}
-	// --ref is pflag CSV (the t-pwrp caveat); Validate refused `,`/`"`
-	// above, so what reaches the flag survives it verbatim.
+	// --ref is a pflag StringArray since furrow #317 (measured on dev
+	// 82b181b): every ref reaches the store verbatim, `,` and `"` included.
 	for _, r := range o.Refs {
 		args = append(args, "--ref", r)
 	}

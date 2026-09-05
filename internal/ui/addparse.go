@@ -30,7 +30,7 @@ import (
 // The parse itself never fails — the chips row renders it live on every
 // keystroke, mid-word and all — so everything uncommittable lands in bad,
 // with the reason the ⚠ row and the refusal note quote. Semantic checks that
-// need no board (estimate range, the due grammar, the ref CSV caveat) run
+// need no board (estimate range, the due grammar, the empty ref) run
 // HERE so the ⚠ row shows them before Enter does; board.AddOptions.Validate
 // stays the backstop on the store path.
 
@@ -178,9 +178,9 @@ func parseAddLine(raw string) (title string, tk addTokens) {
 					continue
 				}
 				if strings.Contains(d, `"`) {
-					// --dep is the same pflag CSV field as --ref; without
-					// this mirror the refusal would be pflag's own parse
-					// error after the round trip (re-review, finding A).
+					// --dep is still a pflag CSV StringSlice (--ref is not,
+					// since furrow #317); without this mirror the refusal
+					// would be pflag's own parse error after the round trip.
 					tk.bad = append(tk.bad, f.raw+" — `\"` cannot ride furrow's CSV flag parsing")
 					got = true
 					continue
@@ -202,11 +202,8 @@ func parseAddLine(raw string) (title string, tk addTokens) {
 				tk.bad = append(tk.bad, f.raw+" — needs a file:line or URL")
 				continue
 			}
-			if strings.ContainsAny(v, `,"`) {
-				// The t-pwrp caveat, surfaced live instead of on Enter.
-				tk.bad = append(tk.bad, f.raw+" — `,` and `\"` cannot ride furrow's CSV flag parsing")
-				continue
-			}
+			// Free text, verbatim: `,` and `"` ride furrow's --ref since
+			// #317 made it a pflag StringArray, so nothing else is refused.
 			tk.refs = append(tk.refs, v)
 		case "is":
 			// The one is: value an ADD can mean: born without a repo

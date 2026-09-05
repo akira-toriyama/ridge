@@ -36,22 +36,28 @@ func TestSetFieldsRefsAppendInOrderAndDedupe(t *testing.T) {
 	}
 }
 
-// furrow's --add/--rm are pflag CSV StringSlices (measured, t-pwrp): a comma
-// SPLITS the ref into two after the reconcile and a bare `"` is a flag-layer
-// exit 2 that arrives only after the optimistic apply — so both are
-// mirror-refused before anything mutates, until furrow takes refs verbatim.
-func TestSetFieldsRefsRefuseWhatFurrowsFlagLayerMangles(t *testing.T) {
+// furrow's --add/--rm are pflag StringArrays since #317 (measured on dev
+// 82b181b: `--add 'https://x/?a=1,2' --add 'say "hi"'` lands both, verbatim),
+// so a comma or a bare `"` is ordinary ref text here too. This pins that the
+// mirror refusal of the CSV era stays gone — its return would refuse refs
+// furrow accepts.
+func TestSetFieldsRefsKeepCommaAndQuoteVerbatim(t *testing.T) {
 	b := NewBoard([]*Task{mk("a", "backlog")})
-	for _, ref := range []string{
+	refs := []string{
 		"https://example.com/spec?rows=1,2",
-		`internal/x.go:1"weird`,
-	} {
-		if err := b.SetFields("a", FieldPatch{AddRefs: []string{ref}}); err == nil {
-			t.Errorf("SetFields must refuse %q — furrow's CSV flag parsing splits or rejects it", ref)
-		}
+		`say "hi"`,
 	}
-	if got := len(b.Task("a").Refs); got != 0 {
-		t.Errorf("a refused add mutated the refs: %v", b.Task("a").Refs)
+	if err := b.SetFields("a", FieldPatch{AddRefs: refs}); err != nil {
+		t.Fatalf("SetFields refused a ref furrow takes verbatim: %v", err)
+	}
+	if got := strings.Join(b.Task("a").Refs, "|"); got != strings.Join(refs, "|") {
+		t.Errorf("refs = %q, want both kept verbatim", got)
+	}
+	if err := b.SetFields("a", FieldPatch{RmRefs: refs[:1]}); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(b.Task("a").Refs, "|"); got != `say "hi"` {
+		t.Errorf("refs after rm = %q, want the comma'd one gone, exact-match", got)
 	}
 }
 
