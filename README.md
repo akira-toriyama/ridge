@@ -7,7 +7,7 @@ The contract that ridge never imports furrow's Go packages, and why, is in
 [CLAUDE.md](CLAUDE.md); terms are canonical in [glossary.md](glossary.md).
 
 ```sh
-go run ./cmd/ridge            # start on the real furrow board (furrow must be on PATH)
+go run ./cmd/ridge            # start on the real furrow board (furrow v5.1.0+ on PATH — the contract job's pin in .github/workflows/build.yml is the floor)
 go run ./cmd/ridge -mock      # start on the built-in fixture (no furrow needed)
 go run ./cmd/ridge -dump      # emit one frame with no TTY (always the fixture)
 go run ./cmd/ridge -benchload # measure the real board's load latency and exit (read-only)

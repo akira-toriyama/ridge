@@ -716,7 +716,9 @@ func (m *Model) renderEditMenu(t *board.Task, inner int) string {
 		{editFieldName(fieldDue), due},
 		{editFieldName(fieldDeps), strings.Join(t.Deps, ",")},
 		{editFieldName(fieldRepos), strings.Join(t.Repos, ",")},
-		{editFieldName(fieldRefs), strings.Join(t.Refs, ",")},
+		// Refs are free text and may carry a comma (furrow #317), so the
+		// summary joins on a middle dot — a comma here would read as a split.
+		{editFieldName(fieldRefs), strings.Join(t.Refs, " · ")},
 		{editFieldName(fieldChecklist), fmt.Sprintf("%d/%d", cd, ct)},
 	}
 	return m.renderOverlayMenu(rows, m.edit.menuIdx, inner)
