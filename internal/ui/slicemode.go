@@ -36,11 +36,13 @@ func (f sliceField) String() string {
 }
 
 const (
-	// 32 is the widest the board can give away for free: boardCols derives the
-	// lane count from colMinW+colGap, so at the 240-column floor an inset of 27,
-	// 29 or 33 all leave 8 lane slots and only an inset of 35 drops one. The two
-	// cells over the old 26 pay for the lifecycle column below, so no row's
-	// title budget regresses; the rest buys back what the measured suffix eats.
+	// 32 costs the board no LANE: boardCols derives the lane count from
+	// colMinW+colGap, so at the 240-column floor an inset of 27, 29 or 33 all
+	// leave 8 lane slots and only an inset of 35 drops one. It is not free —
+	// the lanes share what is left, so at 240 each card column loses one cell
+	// (33 -> 32) and the table's title column 109 -> 103. Of the six cells two
+	// pay for the lifecycle column below, so no row's title budget regresses,
+	// and four buy back what the measured suffix eats.
 	slicePanelW = 32
 	sliceInsetW = slicePanelW + 1
 	sliceRowTop = boardTop + 3 // panel header + axis line + scope line
@@ -98,7 +100,7 @@ func quoteQVal(v string) string {
 // a side-effect of hiding the panel); open-but-unfocused → focus.
 func (m *Model) toggleSlice() {
 	// Opening the panel re-insets every column; a drag surviving that shift
-	// would drop 27 cells away from the pointer (observed: the release
+	// would drop a panel's width away from the pointer (observed: the release
 	// committed into a lane the pointer never visited).
 	m.cancelDrag()
 	switch {
@@ -166,7 +168,7 @@ func (m *Model) onSliceKey(msg tea.KeyPressMsg) tea.Cmd {
 	case key.Matches(msg, m.keys.PrevCol), key.Matches(msg, m.keys.Left):
 		return m.cycleSliceField(-1)
 
-	// 111 boxes on the real board, in a 26-cell column: without these the only
+	// 178 boxes on the real board, in a 32-cell column: without these the only
 	// way to the far end of the list is holding j.
 	case key.Matches(msg, m.keys.Top):
 		if len(rows) > 0 {
@@ -301,6 +303,13 @@ func (m *Model) sliceRows() []sliceRow {
 			// place on the row a reader scanning the column never looks.
 			// furrow clears `active` when it closes a box, so the two never
 			// collide and the ladder can be a switch.
+			//
+			// boxRowLine's ladder has a third rung, `◆ pinned`. This one
+			// deliberately does not: the overview's column can afford to be
+			// exclusive, while the panel is the only surface `z` reaches and
+			// has to be able to say `v` and `◆` at once. So pinned stays in
+			// the suffix here, and an open pinned box carries `◆` in the
+			// panel's suffix where the overview carries it in its column.
 			mark := " "
 			switch {
 			case !e.Closed.IsZero():
@@ -470,8 +479,13 @@ func (m *Model) sliceScope(rowCount int) string {
 }
 
 // sliceRowBody styles one row's segments. The row's TEXT is composed once, in
-// sliceRows, so this may not truncate: the budget was already measured there
-// and a truncate over styled text would cut inside an escape sequence.
+// sliceRows, so this may not truncate: the budget was already measured there,
+// and cutting here would cut a string that is already styled.
+//
+// The one path that can hand this an over-wide row is sliceRows' `maxInt(4,
+// …)` title floor, which needs a 23-cell suffix — seven-digit counts — to
+// bite. There pad() truncates the composed line; it is ANSI-aware, so what is
+// lost is the suffix's tail and not the escape sequence around it.
 //
 // hi is "the cursor or the issued slice is on this row". It wins over the
 // closed dim — where you are outranks what the row is — which is why a closed
@@ -485,8 +499,14 @@ func (m *Model) sliceRowBody(r sliceRow, style lg.Style, hi bool, w int) string 
 	markStyle, titleStyle, sufStyle := th.dim, style, th.muted
 	switch {
 	case r.closed:
-		// boxRowLine's treatment: a finished box recedes whole, so the closed
-		// tail of the list reads as one block rather than a column of glyphs.
+		// A finished box recedes WHOLE, so the closed tail of the list reads as
+		// one block rather than a column of glyphs. Two deliberate steps past
+		// boxRowLine, which dims the title alone: here the suffix dims too (the
+		// panel has no id chip to carry the contrast), and so does the stuck
+		// marker below — a box furrow reports closed AND stuck (e-6k9x on the
+		// real board, 2026-09-11) has nothing left to act on, so one
+		// warn-coloured cell in a dim row would be the loudest thing in the
+		// list.
 		sufStyle = th.dim
 		if !hi {
 			titleStyle = th.dim
@@ -495,7 +515,7 @@ func (m *Model) sliceRowBody(r sliceRow, style lg.Style, hi bool, w int) string 
 		markStyle = th.ok
 	}
 	suffix := sufStyle.Render(r.suffix)
-	if strings.HasSuffix(r.suffix, glyphWIPOver) {
+	if !r.closed && strings.HasSuffix(r.suffix, glyphWIPOver) {
 		suffix = sufStyle.Render(strings.TrimSuffix(r.suffix, glyphWIPOver)) + th.warn.Render(glyphWIPOver)
 	}
 	return markStyle.Render(r.mark) + titleStyle.Render(r.title) + suffix
