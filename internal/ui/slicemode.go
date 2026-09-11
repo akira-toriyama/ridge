@@ -36,16 +36,30 @@ func (f sliceField) String() string {
 }
 
 const (
-	slicePanelW = 26 // 24-28 fits even the 240-column floor
+	// 32 is the widest the board can give away for free: boardCols derives the
+	// lane count from colMinW+colGap, so at the 240-column floor an inset of 27,
+	// 29 or 33 all leave 8 lane slots and only an inset of 35 drops one. The two
+	// cells over the old 26 pay for the lifecycle column below, so no row's
+	// title budget regresses; the rest buys back what the measured suffix eats.
+	slicePanelW = 32
 	sliceInsetW = slicePanelW + 1
-	sliceRowTop = boardTop + 3 // panel header + axis line + blank
+	sliceRowTop = boardTop + 3 // panel header + axis line + scope line
+	// sliceMarkW is the lifecycle column: one glyph plus its separating space.
+	sliceMarkW = 2
 )
 
 // sliceRow is one selectable value: term is what gets ANDed into the query,
-// display is the human line (short repo, epic progress).
+// display is the composed PLAIN line (short repo, epic progress) and the
+// fields under it are the same line's segments, so the renderer can style them
+// without composing the text a second time.
 type sliceRow struct {
 	value   string // the -q value; selection identity
 	display string
+	// The epic axis' segments; mark is "" on the axes that have no lifecycle.
+	mark   string // the leading lifecycle glyph, already padded to sliceMarkW
+	title  string // truncated to the budget left once mark and suffix are measured
+	suffix string // furrow's derived numbers, never truncated
+	closed bool
 }
 
 // sliceInset is how far the board shifts right while the panel is up.
@@ -281,6 +295,25 @@ func (m *Model) sliceRows() []sliceRow {
 			boxes = m.b.EpicsAll()
 		}
 		for _, e := range boxes {
+			// The lifecycle LEADS the row, at a fixed column, and is drawn
+			// before the title is ever cut — boxRowLine's grammar. Riding the
+			// suffix, `v` landed after the title's ellipsis, which is the one
+			// place on the row a reader scanning the column never looks.
+			// furrow clears `active` when it closes a box, so the two never
+			// collide and the ladder can be a switch.
+			mark := " "
+			switch {
+			case !e.Closed.IsZero():
+				mark = glyphDone
+			case e.Active:
+				mark = glyphEpicActive // furrow brief's own marker for the box a repo works out of
+			}
+			// Pinned stays ADDITIVE at the head of the suffix rather than
+			// joining the ladder: furrow keeps `pinned` when it closes a box
+			// (measured on v5.0.0 — `epic done` on a pinned box answers
+			// changed:[closed] and after.pinned true), so `v` + `◆` is a
+			// legitimate pair and one exclusive column could not say both.
+			//
 			// Build the suffix FIRST and give the title whatever is left. The
 			// old `slicePanelW-11` hard-coded a 7-cell suffix budget, which
 			// only holds for single-digit counts with no stuck marker: the
@@ -290,22 +323,7 @@ func (m *Model) sliceRows() []sliceRow {
 			// ("epic 行は store の progress/stuck つき").
 			// Measure the composed pieces; never hard-code a cell budget
 			// around CJK text.
-			// The lifecycle markers lead the suffix: they are the shortest
-			// pieces and the ones the epic overlay acts on, so they must
-			// survive the CJK title's ellipsis. ▶ = the box this repo is
-			// working out of (furrow's own brief marker), ◆ = pinned.
 			suffix := ""
-			if !e.Closed.IsZero() {
-				// Additive, not exclusive: furrow clears `active` when it
-				// closes a box but leaves `pinned` alone (measured on v5.0.0 —
-				// `epic done` on a pinned box answers changed:[closed] and
-				// after.pinned true), so a closed box can still carry ◆ and the
-				// row must be able to say both.
-				suffix += " " + glyphDone
-			}
-			if e.Active {
-				suffix += " " + glyphEpicActive
-			}
 			if e.Pinned {
 				suffix += " " + glyphEpicPinned
 			}
@@ -321,10 +339,15 @@ func (m *Model) sliceRows() []sliceRow {
 			if e.Stuck {
 				suffix += " !"
 			}
-			budget := maxInt(4, slicePanelW-4-lg.Width(suffix))
+			budget := maxInt(4, slicePanelW-4-sliceMarkW-lg.Width(suffix))
+			title := ansi.Truncate(e.Title, budget, "…")
 			out = append(out, sliceRow{
 				value:   e.ID,
-				display: ansi.Truncate(e.Title, budget, "…") + suffix,
+				display: mark + " " + title + suffix,
+				mark:    mark + " ",
+				title:   title,
+				suffix:  suffix,
+				closed:  !e.Closed.IsZero(),
 			})
 		}
 	}
@@ -419,6 +442,65 @@ func (m *Model) sliceClick(_, y int) tea.Cmd {
 	return m.selectSlice(m.sliceField, rows[i].value)
 }
 
+// sliceScope is the panel's third chrome line: the axis' population, and on
+// the epic axis the road to the boxes it is not showing. It replaces a blank
+// line, so no y moves and the click path is untouched.
+//
+// It exists because `z` is otherwise announced only in the note, which the
+// next `sliced to …` overwrites — and the box the user wants may well be one
+// closed in an earlier session, which the default population hides.
+func (m *Model) sliceScope(rowCount int) string {
+	switch m.sliceField {
+	case sliceEpic:
+		open := len(m.b.Epics())
+		shut := len(m.b.EpicsAll()) - open
+		switch {
+		case shut == 0:
+			return fmt.Sprintf("%d open", open)
+		case m.sliceEpicAll:
+			return fmt.Sprintf("%d open · %d closed", open, shut)
+		default:
+			return fmt.Sprintf("%d open · +%d closed  z", open, shut)
+		}
+	case sliceLabel:
+		return fmt.Sprintf("%d labels", rowCount)
+	default:
+		return fmt.Sprintf("%d repos", rowCount)
+	}
+}
+
+// sliceRowBody styles one row's segments. The row's TEXT is composed once, in
+// sliceRows, so this may not truncate: the budget was already measured there
+// and a truncate over styled text would cut inside an escape sequence.
+//
+// hi is "the cursor or the issued slice is on this row". It wins over the
+// closed dim — where you are outranks what the row is — which is why a closed
+// row's leading mark is never styled away: that glyph is the signal -plain
+// keeps and colour is not.
+func (m *Model) sliceRowBody(r sliceRow, style lg.Style, hi bool, w int) string {
+	th := m.th
+	if r.mark == "" { // repo / label: one flat value, no lifecycle to carry
+		return style.Render(ansi.Truncate(r.display, w, "…"))
+	}
+	markStyle, titleStyle, sufStyle := th.dim, style, th.muted
+	switch {
+	case r.closed:
+		// boxRowLine's treatment: a finished box recedes whole, so the closed
+		// tail of the list reads as one block rather than a column of glyphs.
+		sufStyle = th.dim
+		if !hi {
+			titleStyle = th.dim
+		}
+	case strings.HasPrefix(r.mark, glyphEpicActive):
+		markStyle = th.ok
+	}
+	suffix := sufStyle.Render(r.suffix)
+	if strings.HasSuffix(r.suffix, glyphWIPOver) {
+		suffix = sufStyle.Render(strings.TrimSuffix(r.suffix, glyphWIPOver)) + th.warn.Render(glyphWIPOver)
+	}
+	return markStyle.Render(r.mark) + titleStyle.Render(r.title) + suffix
+}
+
 // sliceLayer renders the panel: axis header, value rows (cursor while the
 // panel holds the keyboard), a right-hand rule to fence it off the board.
 func (m *Model) sliceLayer() *lg.Layer {
@@ -443,7 +525,7 @@ func (m *Model) sliceLayer() *lg.Layer {
 		}
 	}
 	b = append(b, line(strings.Join(axes, th.dim.Render(" │ "))))
-	b = append(b, line(""))
+	b = append(b, line(th.dim.Render(m.sliceScope(len(rows)))))
 
 	if indicators {
 		up := ""
@@ -458,11 +540,11 @@ func (m *Model) sliceLayer() *lg.Layer {
 		if m.mode == modeSlice && i == m.sliceIdx {
 			cursor, style = "▌ ", th.peekHdr
 		}
-		mark := "  "
+		sel, hi := "  ", m.mode == modeSlice && i == m.sliceIdx
 		if m.sliceVal == r.value {
-			mark, style = "● ", th.accent
+			sel, style, hi = "● ", th.accent, true
 		}
-		b = append(b, line(cursor+mark+style.Render(ansi.Truncate(r.display, w-4, "…"))))
+		b = append(b, line(cursor+sel+m.sliceRowBody(r, style, hi, w-4)))
 	}
 	if indicators {
 		down := ""

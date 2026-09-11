@@ -4,8 +4,11 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
+	lg "charm.land/lipgloss/v2"
+	"github.com/akira-toriyama/ridge/internal/board"
 )
 
 func TestSliceIssuesAQTermAndComposesWithTheFilter(t *testing.T) {
@@ -240,16 +243,21 @@ func TestSlicePanelScrollsAndClicksAgree(t *testing.T) {
 // inside the rendered value region. At h≤11 the status and help lines used
 // to map to rows — the region math was one off and had no floor for the
 // indicator shape.
+//
+// Swept on EVERY axis: pressing tab once lands on the label axis, so the epic
+// axis — the only one with its own row arithmetic — went uncovered.
 func TestSliceClickNeverMapsOutsideTheRenderedRegion(t *testing.T) {
-	for h := 8; h <= 30; h++ {
-		m := boardModel(t, 240, h)
-		press(m, "s")
-		m.Update(keyMsg("tab"))
-		rows := len(m.sliceRows())
-		for y := 0; y < h; y++ {
-			if i := m.sliceRowAt(y, rows); i >= 0 {
-				if y < sliceRowTop || y >= m.h-footerH {
-					t.Errorf("h=%d: y=%d maps to row %d but is outside the panel's value region", h, y, i)
+	for _, axis := range []sliceField{sliceRepo, sliceLabel, sliceEpic} {
+		for h := 8; h <= 30; h++ {
+			m := boardModel(t, 240, h)
+			press(m, "s")
+			m.sliceField = axis
+			rows := len(m.sliceRows())
+			for y := 0; y < h; y++ {
+				if i := m.sliceRowAt(y, rows); i >= 0 {
+					if y < sliceRowTop || y >= m.h-footerH {
+						t.Errorf("%s axis, h=%d: y=%d maps to row %d but is outside the panel's value region", axis, h, y, i)
+					}
 				}
 			}
 		}
@@ -450,5 +458,77 @@ func TestSliceTermQuotesCommas(t *testing.T) {
 	}
 	if got := m.sliceTerm(); got != `label:"tui,cli"` {
 		t.Errorf("sliceTerm = %q, want the quoted form", got)
+	}
+}
+
+// The epic row's grammar, after the lifecycle moved out of the suffix: the
+// mark LEADS at a fixed column and is drawn before the title is ever cut,
+// `◆` stays additive so a closed-and-pinned box can still say both, and the
+// title is the only segment that yields.
+func TestSliceEpicRowsLeadWithTheLifecycleMark(t *testing.T) {
+	shut := time.Date(2026, 7, 15, 9, 12, 7, 0, time.UTC)
+	boxes := []board.EpicInfo{
+		{ID: "e-act", Title: "動いている箱", Active: true, Done: 1, Total: 3},
+		{ID: "e-pin", Title: "留めてある箱", Pinned: true, Done: 0, Total: 2},
+		{ID: "e-both", Title: "閉じたが留めてある箱", Pinned: true, Closed: shut},
+		{ID: "e-long", Title: "ridge: TUI v2 — furrow parity・俯瞰・時間軸・保存ビュー", Done: 15, Total: 18, Stuck: true},
+	}
+	m := boardModel(t, 240, 50)
+	m.b = board.NewStoreBoard([]board.Lane{{Name: "backlog"}}, nil, boxes, true, "")
+	m.recompute()
+	m.sliceField, m.sliceEpicAll = sliceEpic, true
+
+	rows := m.sliceRows()
+	if len(rows) != len(boxes) {
+		t.Fatalf("got %d epic rows, want %d", len(rows), len(boxes))
+	}
+	for i, want := range []string{glyphEpicActive + " ", "  ", glyphDone + " ", "  "} {
+		if rows[i].mark != want {
+			t.Errorf("%s leads with %q, want %q", boxes[i].ID, rows[i].mark, want)
+		}
+		if !strings.HasPrefix(rows[i].display, want) {
+			t.Errorf("%s renders %q, want it to lead with %q", boxes[i].ID, rows[i].display, want)
+		}
+	}
+	// furrow keeps `pinned` when it closes a box, so the row must say both.
+	if !rows[2].closed || !strings.Contains(rows[2].suffix, glyphEpicPinned) {
+		t.Errorf("a closed pinned box lost one of its two marks: %+v", rows[2])
+	}
+	// The suffix is measured first and never truncated; the title yields.
+	if !strings.HasSuffix(rows[3].display, "15/18 "+glyphWIPOver) {
+		t.Errorf("the long row lost its numbers: %q", rows[3].display)
+	}
+	if !strings.HasSuffix(rows[3].title, "…") {
+		t.Errorf("the long title must be the segment that yields: %q", rows[3].title)
+	}
+	// The mark column is paid for by the panel's width, not out of the title:
+	// this row's suffix is 8 cells, so a title that does not fit still gets
+	// more than the 14 cells the 26-cell panel left it.
+	if w := lg.Width(rows[3].title); w < 18 {
+		t.Errorf("title budget is %d cells, want the marker column not to eat it", w)
+	}
+}
+
+// The scope line: the population, and on the epic axis the key that reaches
+// the boxes the default population hides. The note cannot carry this — the
+// next `sliced to …` overwrites it.
+func TestSliceScopeLineNamesTheHiddenClosedBoxes(t *testing.T) {
+	m := boardModel(t, 240, 50)
+	press(m, "s")
+	if got := m.sliceScope(len(m.sliceRows())); !strings.HasSuffix(got, "repos") {
+		t.Errorf("repo axis scope = %q, want it to count the repos", got)
+	}
+	m.sliceField = sliceEpic
+	narrow := m.sliceScope(len(m.sliceRows()))
+	if !strings.Contains(narrow, "+1 closed") || !strings.Contains(narrow, "z") {
+		t.Errorf("narrow scope = %q, want the hidden count and the key that shows them", narrow)
+	}
+	press(m, "z")
+	wide := m.sliceScope(len(m.sliceRows()))
+	if !strings.Contains(wide, "1 closed") || strings.Contains(wide, "+") {
+		t.Errorf("widened scope = %q, want it to stop advertising a widening", wide)
+	}
+	if !strings.Contains(frame(m), wide) {
+		t.Error("the scope line must be in the frame, not only in the model")
 	}
 }

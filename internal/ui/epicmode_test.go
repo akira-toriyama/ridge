@@ -87,8 +87,11 @@ func TestTheWidenedEpicAxisIsWhatReachesAClosedBox(t *testing.T) {
 			row = r.display
 		}
 	}
-	if !strings.Contains(row, glyphDone) {
-		t.Errorf("closed row = %q, want the closed marker %q", row, glyphDone)
+	// HasPrefix, not Contains: the marker has to LEAD the row. Riding the
+	// suffix it sat after the title's ellipsis — present in the string, and
+	// the last thing on the row a reader scanning the column would find.
+	if !strings.HasPrefix(row, glyphDone+" ") {
+		t.Errorf("closed row = %q, want it to lead with the closed marker %q", row, glyphDone)
 	}
 	// And back: it is a toggle, not a one-way widening.
 	press(m, "z")
@@ -1056,10 +1059,12 @@ func TestEpicDemoFramesCarryWhatTheyExistFor(t *testing.T) {
 		// back, and the activate precondition that outranks every other.
 		{"epicshut", []string{"box e-2b7h", "closed", "yes — 2026-07-15",
 			"no — closed; reopen it first"}},
-		// The widened axis itself: the closed marker, and the note saying which
-		// scope is in force (the panel is modal, so the note is the only place
-		// that can).
-		{"sliceepicall", []string{"open + closed", "z scope", glyphDone + " 0/0"}},
+		// The widened axis itself: the closed marker LEADING the row (it used to
+		// ride the suffix, where the title's ellipsis hid it), the scope line
+		// counting what the narrow population leaves out, and the note saying
+		// which scope is in force.
+		{"sliceepicall", []string{"open + closed", "z scope",
+			glyphDone + " 夏キャンプ", "4 open · 1 closed"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.demo, func(t *testing.T) {

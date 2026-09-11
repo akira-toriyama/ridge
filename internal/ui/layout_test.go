@@ -29,6 +29,9 @@ func TestGlyphsAreSingleWidth(t *testing.T) {
 		"dropL": glyphDropL, "dropR": glyphDropR, "laneDot": glyphLaneDot,
 		"lift": glyphLift, "sortAsc": glyphSortAsc, "sortDesc": glyphSortDesc,
 		"due": glyphDue, "today": glyphToday,
+		// Both lead the slice panel's fixed lifecycle column, where one extra
+		// cell shears every row's right edge.
+		"epicActive": glyphEpicActive, "epicPinned": glyphEpicPinned,
 	}
 	for name, g := range glyphs {
 		if w := lg.Width(g); w != 1 {
