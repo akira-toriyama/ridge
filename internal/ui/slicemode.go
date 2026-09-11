@@ -75,9 +75,6 @@ type sliceRow struct {
 	closed bool
 }
 
-// text is what the row SAYS, independent of how many lines it takes.
-func (r sliceRow) text() string { return strings.Join(r.lines, " ") }
-
 // sliceInset is how far the board shifts right while the panel is up.
 func (m *Model) sliceInset() int {
 	if m.sliceOpen {
@@ -293,7 +290,7 @@ func (m *Model) sliceRows() []sliceRow {
 				short = r[i+1:]
 			}
 			out = append(out, sliceRow{value: r,
-				lines: []string{fmt.Sprintf("%s %d", short, counts[r])}})
+				lines: []string{ansi.Truncate(fmt.Sprintf("%s %d", short, counts[r]), slicePanelW-4, "…")}})
 		}
 	case sliceLabel:
 		for _, t := range m.b.Tasks() {
@@ -303,7 +300,7 @@ func (m *Model) sliceRows() []sliceRow {
 		}
 		for _, l := range m.labelVocab() {
 			out = append(out, sliceRow{value: l,
-				lines: []string{fmt.Sprintf("%s %d", l, counts[l])}})
+				lines: []string{ansi.Truncate(fmt.Sprintf("%s %d", l, counts[l]), slicePanelW-4, "…")}})
 		}
 	case sliceEpic:
 		boxes := m.b.Epics()
@@ -363,21 +360,21 @@ func (m *Model) sliceRows() []sliceRow {
 				suffix += " !"
 			}
 			// A title that does not fit takes a SECOND LINE rather than an
-			// ellipsis at 20 cells. Measured on the real board (2026-09-11):
-			// of the 133 open boxes only 26 wrap, so the list pays 1.20 lines
-			// per row on average, and the 34 boxes that are not one of the
-			// three reserved names go from 2 of 34 readable whole to 13 —
-			// every one of them showing its `<repo>: <headline>` head, which
-			// is what tells two boxes apart.
+			// ellipsis. Measured on the real board (2026-09-11, through this
+			// code): of the 133 open boxes 27 wrap, so the list pays 1.20
+			// lines per row, and the 34 boxes that are not one of the three
+			// reserved names go from 7 readable whole to 15 — the rest showing
+			// their `<repo>: <headline>` head, which is what tells two boxes
+			// apart.
 			//
 			// Line 1 is the title's alone: the suffix moves to the last line,
 			// so furrow's numbers can no longer squeeze a title to nothing.
 			avail := slicePanelW - 4 - sliceMarkW
 			one := maxInt(4, avail-lg.Width(suffix))
-			title, tail := e.Title, ""
+			title, tail, wrapped := e.Title, "", false
 			switch {
 			case lg.Width(title) <= one:
-				// It fits: one line, and the suffix rides it.
+				// It fits beside the suffix: one line, and the suffix rides it.
 			case m.h-footerH-sliceRowTop < sliceWrapCap:
 				// No room to draw a second line whole (see sliceWrapCap).
 				title = ansi.Truncate(e.Title, one, "…")
@@ -385,8 +382,17 @@ func (m *Model) sliceRows() []sliceRow {
 				// Split on the CELL boundary, not a word one: an exact prefix
 				// and the remainder wastes no cells, and TrimPrefix is safe
 				// because ansi.Truncate with no ellipsis returns a prefix.
+				//
+				// tail can come out EMPTY here — a title too wide to sit beside
+				// the suffix but not wider than the line itself — and that row
+				// still needs its second line, for the suffix. Deriving "did it
+				// wrap" from the tail is how the numbers ended up over the
+				// row's width, where pad() ate them: measured on the real
+				// board, `chord: action-keys 完成 0/1` rendered `0…` and
+				// `projects/CLAUDE.md の整理 11/11 !` lost its numbers whole.
 				title = ansi.Truncate(e.Title, avail, "")
 				tail = ansi.Truncate(strings.TrimPrefix(e.Title, title), one, "…")
+				wrapped = true
 			}
 			row := sliceRow{
 				value:  e.ID,
@@ -396,7 +402,7 @@ func (m *Model) sliceRows() []sliceRow {
 				suffix: suffix,
 				closed: !e.Closed.IsZero(),
 			}
-			if tail == "" {
+			if !wrapped {
 				row.lines = []string{row.mark + title + suffix}
 			} else {
 				// The continuation hangs under the title, clear of the mark
@@ -495,6 +501,9 @@ func (m *Model) ensureSliceVisible() {
 	for n := 0; n <= len(rows); n++ {
 		g := m.sliceViewport(rows)
 		m.sliceOff = g.off
+		if g.window == 0 {
+			return // a region too short to draw a row has nothing to scroll
+		}
 		if m.sliceIdx < g.off+g.window || g.off >= maxInt(0, len(rows)-1) {
 			return
 		}
@@ -581,15 +590,18 @@ func (m *Model) sliceScope(rowCount int) string {
 // strip.go argues for under the full-screen views ("a box or a row can only
 // ever show a truncated title; the strip is the answer").
 //
-// Budget: at the 240-column floor the line leaves ~170 cells once the panel's
-// note is measured, and the longest box title on the real board is 145
-// (2026-09-11, 178 boxes), so every box reads whole. The caller hands this to
-// joinEnds, which truncates the LEFT — so the note, and a refusal, are never
-// the half that yields.
+// Budget, measured 2026-09-11 against the real board's 178 boxes (longest
+// title 139 cells): the epic axis' opening note is 115 cells, which leaves the
+// readout 124 at the 240-column floor — 10 of the 133 open boxes are still cut
+// there. They are not cut at the 400-column target (284), nor at 240 once a
+// slice is issued and the note becomes `sliced to …`. The note keeps the row
+// because the panel is modal: it is the only place its keys can be advertised,
+// so the caller hands this to joinEnds, which truncates the LEFT.
 //
-// It rebuilds the row list (measured 2026-09-11: 0.98ms for 178 boxes, against
-// the five rebuilds the panel's own paths already do per event). A frame is
-// drawn per message here, not per tick, so this is not the thing to cache.
+// It rebuilds the row list (measured 2026-09-11: 0.3-1.0ms for 178 boxes,
+// against the five rebuilds the panel's own paths already do per event, in a
+// 4.4ms frame). modeSlice has no ticker — a frame is drawn per message — so
+// this is not the thing to cache.
 func (m *Model) sliceReadout() string {
 	rows := m.sliceRows()
 	if m.sliceIdx >= len(rows) {
@@ -605,10 +617,12 @@ func (m *Model) sliceReadout() string {
 	}
 	// furrow's own words for a box, in boxStrip's order — this line must not
 	// invent a second vocabulary for the same facts.
-	meta := []string{fmt.Sprintf("%d/%d done", e.Done, e.Total)}
+	head := th.chipAlt.Render(e.ID) + " " + th.base.Render(e.Title)
 	if !e.Closed.IsZero() {
-		meta = append(meta, "closed "+e.Closed.In(localZone()).Format("2006-01-02"))
+		// Beside the title, where boxStrip puts it.
+		head += th.dim.Render("  closed " + e.Closed.In(localZone()).Format("2006-01-02"))
 	}
+	meta := []string{fmt.Sprintf("%d/%d done", e.Done, e.Total)}
 	if e.Active {
 		meta = append(meta, th.ok.Render("active"))
 	}
@@ -631,8 +645,7 @@ func (m *Model) sliceReadout() string {
 		// epic axis the repo is the only thing that tells two rows apart.
 		meta = append(meta, "repos "+strings.Join(e.Repos, ","))
 	}
-	return th.chipAlt.Render(e.ID) + " " + th.base.Render(e.Title) +
-		th.muted.Render("  "+strings.Join(meta, " · "))
+	return head + th.muted.Render("  "+strings.Join(meta, " · "))
 }
 
 // sliceRowBody styles one row's segments. The row's TEXT is composed once, in
@@ -648,10 +661,10 @@ func (m *Model) sliceReadout() string {
 // closed dim — where you are outranks what the row is — which is why a closed
 // row's leading mark is never styled away: that glyph is the signal -plain
 // keeps and colour is not.
-func (m *Model) sliceRowBody(r sliceRow, li int, style lg.Style, hi bool, w int) string {
+func (m *Model) sliceRowBody(r sliceRow, li int, style lg.Style, hi bool) string {
 	th := m.th
 	if r.mark == "" { // repo / label: one flat value, no lifecycle to carry
-		return style.Render(ansi.Truncate(r.lines[li], w, "…"))
+		return style.Render(r.lines[li])
 	}
 	markStyle, titleStyle, sufStyle := th.dim, style, th.muted
 	switch {
@@ -682,8 +695,8 @@ func (m *Model) sliceRowBody(r sliceRow, li int, style lg.Style, hi bool, w int)
 		return strings.Repeat(" ", sliceMarkW) + titleStyle.Render(r.tail) + suffix
 	}
 	head := markStyle.Render(r.mark) + titleStyle.Render(r.title)
-	if r.tail != "" {
-		return head // the suffix rides the last line
+	if li+1 < len(r.lines) {
+		return head // the suffix rides the LAST line, whatever line that is
 	}
 	return head + suffix
 }
@@ -734,7 +747,13 @@ func (m *Model) sliceLayer() *lg.Layer {
 		}
 		for li := range r.lines {
 			if drawn >= g.lineCap {
-				break // the region's clip, the same one sliceRowAt refuses past
+				// A backstop, not a live clip: wrapping needs capacity >= 4
+				// (sliceWrapCap), which leaves lineCap >= 2, so a two-line row
+				// always fits whole. Measured unreachable over the real
+				// board's 178 boxes at every height 6-40; it is here so a
+				// future height rule cannot desynchronise the renderer from
+				// sliceRowAt, which refuses past the same number.
+				break
 			}
 			// The cursor bar spans BOTH lines of a wrapped row (it is one row,
 			// and a bar on the head alone reads as a one-line row above a
@@ -743,7 +762,7 @@ func (m *Model) sliceLayer() *lg.Layer {
 			if li > 0 {
 				mark = "  "
 			}
-			b = append(b, line(cursor+mark+m.sliceRowBody(r, li, style, hi, w-4)))
+			b = append(b, line(cursor+mark+m.sliceRowBody(r, li, style, hi)))
 			drawn++
 		}
 	}

@@ -546,6 +546,9 @@ func TestSliceScopeLineNamesTheHiddenClosedBoxes(t *testing.T) {
 	}
 }
 
+// text is what the row SAYS, independent of how many lines it takes.
+func (r sliceRow) text() string { return strings.Join(r.lines, " ") }
+
 // styleAt returns the escape sequence that opens the style in force at byte
 // index i of a rendered line — the last one before it. The house pattern from
 // boxboard_test: compare OPENING sequences, not whole rendered strings.
@@ -632,6 +635,9 @@ func TestSlicePanelFrameLinesAreExactlyTheirWidth(t *testing.T) {
 	boxes := []board.EpicInfo{
 		{ID: "e-1", Title: "短い", Done: 1, Total: 2},
 		{ID: "e-2", Title: "日本語のとても長いエピックのタイトルです", Done: 6, Total: 18, Stuck: true},
+		// A title too wide to sit beside its suffix but not wider than the
+		// line: the band where the row used to compose past its own width.
+		{ID: "e-band", Title: "chord: action-keys 完成", Done: 0, Total: 1},
 		// The suffix at its worst: every optional piece, and counts past any
 		// real board. This is the row that reaches sliceRows' title floor.
 		{ID: "e-3", Title: "ridge: TUI v2 — furrow parity", Pinned: true,
@@ -713,7 +719,7 @@ func TestSliceEpicRowWrapsWithoutLosingCells(t *testing.T) {
 	for _, r := range rows {
 		// The split is a prefix and its remainder: no cell is spent on a word
 		// boundary, and no cell is dropped between the lines.
-		rest := strings.TrimSuffix(strings.TrimPrefix(r.tail, ""), "…")
+		rest := strings.TrimSuffix(r.tail, "…")
 		if !strings.HasPrefix(title, r.title+rest) {
 			t.Errorf("%s: %q + %q is not how %q starts", r.value, r.title, rest, title)
 		}
@@ -836,7 +842,7 @@ func TestSliceReadoutNamesTheCursorRowInFull(t *testing.T) {
 	m.sliceField = sliceEpic
 	m.sliceIdx = 0
 	full := m.b.Epics()[0].Title
-	row := ansiStrip(m.sliceRowBody(m.sliceRows()[0], 0, m.th.base, false, slicePanelW-4))
+	row := ansiStrip(m.sliceRowBody(m.sliceRows()[0], 0, m.th.base, false))
 	if strings.Contains(row, full) {
 		t.Fatalf("fixture drifted: the row already shows the whole title %q", full)
 	}
@@ -859,5 +865,48 @@ func TestSliceReadoutNamesTheCursorRowInFull(t *testing.T) {
 	press(m, "esc")
 	if line := ansiStrip(m.statusLine()); strings.Contains(line, full) {
 		t.Errorf("the readout outlived the panel's focus: %q", line)
+	}
+}
+
+// The three rules a wrapped row is drawn by, asserted on the frame: the cursor
+// bar spans BOTH lines (it is one row, and a bar on the head alone reads as a
+// one-line row above a stray), the selection dot marks the value ONCE, and the
+// continuation hangs clear of the lifecycle column. All three survived every
+// other test in this package when mutated away.
+func TestSliceWrappedRowIsDrawnAsOneRow(t *testing.T) {
+	m := boardModel(t, 240, 50)
+	press(m, "s")
+	m.sliceField = sliceEpic
+	rows := m.sliceRows()
+	if len(rows[0].lines) != 2 {
+		t.Fatalf("fixture drifted: want a wrapped first row, got %q", rows[0].lines)
+	}
+	if c := m.selectSlice(sliceEpic, rows[0].value); c != nil {
+		m.Update(c())
+	}
+	lines := strings.Split(frame(m), "\n")
+	head, cont := lines[sliceRowTop], lines[sliceRowTop+1]
+	if !strings.HasPrefix(head, "▌ ● ") {
+		t.Errorf("the head line is %q, want the cursor bar and the selection dot", head[:12])
+	}
+	if !strings.HasPrefix(cont, "▌ ") {
+		t.Errorf("the continuation is %q, want the cursor bar to span the whole row", cont[:12])
+	}
+	if strings.Contains(cont[:8], "●") {
+		t.Errorf("the continuation carries a second selection dot: %q", cont[:12])
+	}
+	// The hanging indent: the continuation starts where the TITLE starts, not
+	// where the lifecycle mark does. In CELLS — the lines are CJK, so a byte
+	// offset says nothing about a column.
+	cell := func(line, sub string) int {
+		i := strings.Index(line, sub)
+		if i < 0 {
+			t.Fatalf("%q is not in %q", sub, line)
+		}
+		return lg.Width(line[:i])
+	}
+	title := cell(head, strings.TrimSpace(rows[0].title))
+	if got := cell(cont, strings.TrimSpace(rows[0].tail)); got != title {
+		t.Errorf("the continuation starts at cell %d, the title at %d — it must hang under the title", got, title)
 	}
 }

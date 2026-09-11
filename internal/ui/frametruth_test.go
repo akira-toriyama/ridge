@@ -237,6 +237,12 @@ func TestSliceEpicRowsKeepTheirCountAndStuckMarker(t *testing.T) {
 		{ID: "e-2", Title: "ridge: TUI v1 — 実 furrow に接続し CI が立つ", Done: 15, Total: 16, Stuck: true},
 		{ID: "e-3", Title: "a very long ASCII epic title that will not fit", Done: 100, Total: 250, Stuck: true},
 		{ID: "e-4", Title: "日本語のとても長いエピックのタイトルです", Done: 999, Total: 999},
+		// The BAND: a title too wide to sit beside its suffix, but not wider
+		// than the line itself. Both of these are real boxes; both rendered
+		// over the row's width and had their numbers eaten by pad() (`0…`,
+		// and `11/11 !` gone whole) while every other case was green.
+		{ID: "e-5", Title: "chord: action-keys 完成", Done: 0, Total: 1},
+		{ID: "e-6", Title: "projects/CLAUDE.md の整理", Done: 11, Total: 11, Stuck: true},
 	}
 	lanes := []board.Lane{{Name: "backlog"}}
 	b := board.NewStoreBoard(lanes, nil, cases, true, "")
