@@ -4,8 +4,12 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
+	lg "charm.land/lipgloss/v2"
+	"github.com/akira-toriyama/ridge/internal/board"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestSliceIssuesAQTermAndComposesWithTheFilter(t *testing.T) {
@@ -240,16 +244,21 @@ func TestSlicePanelScrollsAndClicksAgree(t *testing.T) {
 // inside the rendered value region. At h≤11 the status and help lines used
 // to map to rows — the region math was one off and had no floor for the
 // indicator shape.
+//
+// Swept on EVERY axis: pressing tab once lands on the label axis, so the epic
+// axis — the only one with its own row arithmetic — went uncovered.
 func TestSliceClickNeverMapsOutsideTheRenderedRegion(t *testing.T) {
-	for h := 8; h <= 30; h++ {
-		m := boardModel(t, 240, h)
-		press(m, "s")
-		m.Update(keyMsg("tab"))
-		rows := len(m.sliceRows())
-		for y := 0; y < h; y++ {
-			if i := m.sliceRowAt(y, rows); i >= 0 {
-				if y < sliceRowTop || y >= m.h-footerH {
-					t.Errorf("h=%d: y=%d maps to row %d but is outside the panel's value region", h, y, i)
+	for _, axis := range []sliceField{sliceRepo, sliceLabel, sliceEpic} {
+		for h := 8; h <= 30; h++ {
+			m := boardModel(t, 240, h)
+			press(m, "s")
+			m.sliceField = axis
+			rows := len(m.sliceRows())
+			for y := 0; y < h; y++ {
+				if i := m.sliceRowAt(y, rows); i >= 0 {
+					if y < sliceRowTop || y >= m.h-footerH {
+						t.Errorf("%s axis, h=%d: y=%d maps to row %d but is outside the panel's value region", axis, h, y, i)
+					}
 				}
 			}
 		}
@@ -450,5 +459,204 @@ func TestSliceTermQuotesCommas(t *testing.T) {
 	}
 	if got := m.sliceTerm(); got != `label:"tui,cli"` {
 		t.Errorf("sliceTerm = %q, want the quoted form", got)
+	}
+}
+
+// The epic row's grammar, after the lifecycle moved out of the suffix: the
+// mark LEADS at a fixed column and is drawn before the title is ever cut,
+// `◆` stays additive so a closed-and-pinned box can still say both, and the
+// title is the only segment that yields.
+func TestSliceEpicRowsLeadWithTheLifecycleMark(t *testing.T) {
+	shut := time.Date(2026, 7, 15, 9, 12, 7, 0, time.UTC)
+	boxes := []board.EpicInfo{
+		{ID: "e-act", Title: "動いている箱", Active: true, Done: 1, Total: 3},
+		{ID: "e-pin", Title: "留めてある箱", Pinned: true, Done: 0, Total: 2},
+		{ID: "e-both", Title: "閉じたが留めてある箱", Pinned: true, Closed: shut},
+		{ID: "e-long", Title: "ridge: TUI v2 — furrow parity・俯瞰・時間軸・保存ビュー", Done: 15, Total: 18, Stuck: true},
+	}
+	m := boardModel(t, 240, 50)
+	m.b = board.NewStoreBoard([]board.Lane{{Name: "backlog"}}, nil, boxes, true, "")
+	m.recompute()
+	m.sliceField, m.sliceEpicAll = sliceEpic, true
+
+	rows := m.sliceRows()
+	if len(rows) != len(boxes) {
+		t.Fatalf("got %d epic rows, want %d", len(rows), len(boxes))
+	}
+	for i, want := range []string{glyphEpicActive + " ", "  ", glyphDone + " ", "  "} {
+		if rows[i].mark != want {
+			t.Errorf("%s leads with %q, want %q", boxes[i].ID, rows[i].mark, want)
+		}
+		if !strings.HasPrefix(rows[i].display, want) {
+			t.Errorf("%s renders %q, want it to lead with %q", boxes[i].ID, rows[i].display, want)
+		}
+	}
+	// furrow keeps `pinned` when it closes a box, so the row must say both.
+	if !rows[2].closed || !strings.Contains(rows[2].suffix, glyphEpicPinned) {
+		t.Errorf("a closed pinned box lost one of its two marks: %+v", rows[2])
+	}
+	// The suffix is measured first and never truncated; the title yields.
+	if !strings.HasSuffix(rows[3].display, "15/18 "+glyphWIPOver) {
+		t.Errorf("the long row lost its numbers: %q", rows[3].display)
+	}
+	if !strings.HasSuffix(rows[3].title, "…") {
+		t.Errorf("the long title must be the segment that yields: %q", rows[3].title)
+	}
+	// The mark column is paid for by the panel's width, not out of the title:
+	// this row's suffix is 8 cells, so a title that does not fit still gets
+	// more than the 14 cells the 26-cell panel left it.
+	if w := lg.Width(rows[3].title); w < 18 {
+		t.Errorf("title budget is %d cells, want the marker column not to eat it", w)
+	}
+}
+
+// The scope line: the population, and on the epic axis the key that reaches
+// the boxes the default population hides. The note cannot carry this — the
+// next `sliced to …` overwrites it.
+func TestSliceScopeLineNamesTheHiddenClosedBoxes(t *testing.T) {
+	m := boardModel(t, 240, 50)
+	press(m, "s")
+	if got := m.sliceScope(len(m.sliceRows())); !strings.HasSuffix(got, "repos") {
+		t.Errorf("repo axis scope = %q, want it to count the repos", got)
+	}
+	m.sliceField = sliceEpic
+	narrow := m.sliceScope(len(m.sliceRows()))
+	if !strings.Contains(narrow, "+1 closed") || !strings.Contains(narrow, "z") {
+		t.Errorf("narrow scope = %q, want the hidden count and the key that shows them", narrow)
+	}
+	press(m, "z")
+	wide := m.sliceScope(len(m.sliceRows()))
+	if !strings.Contains(wide, "1 closed") || strings.Contains(wide, "+") {
+		t.Errorf("widened scope = %q, want it to stop advertising a widening", wide)
+	}
+	if !strings.Contains(frame(m), wide) {
+		t.Error("the scope line must be in the frame, not only in the model")
+	}
+}
+
+// styleAt returns the escape sequence that opens the style in force at byte
+// index i of a rendered line — the last one before it. The house pattern from
+// boxboard_test: compare OPENING sequences, not whole rendered strings.
+func styleAt(line string, i int) string {
+	j := strings.LastIndex(line[:i], "\x1b[")
+	if j < 0 {
+		return ""
+	}
+	if k := strings.Index(line[j:], "m"); k >= 0 {
+		return line[j : j+k+1]
+	}
+	return line[j:]
+}
+
+// rawPanelLine returns the rendered (still styled) frame line carrying sub.
+func rawPanelLine(t *testing.T, m *Model, sub string) string {
+	t.Helper()
+	for _, l := range strings.Split(m.View().Content, "\n") {
+		if strings.Contains(ansiStrip(l), sub) {
+			return l
+		}
+	}
+	t.Fatalf("no rendered line carries %q", sub)
+	return ""
+}
+
+// The row's STYLES, asserted through the rendered frame. Deleting the closed
+// dim or the active/stuck colours left every other test in this package green.
+func TestSlicePanelStylesTheLifecycleAndTheClosedRow(t *testing.T) {
+	shut := time.Date(2026, 7, 15, 9, 12, 7, 0, time.UTC)
+	boxes := []board.EpicInfo{
+		{ID: "e-act", Title: "動いている箱", Active: true, Done: 1, Total: 3},
+		{ID: "e-stuck", Title: "詰まった箱", Done: 0, Total: 4, Stuck: true},
+		{ID: "e-shut", Title: "閉じた箱", Closed: shut, Done: 2, Total: 2},
+		{ID: "e-both", Title: "閉じたのに詰まった箱", Closed: shut, Done: 2, Total: 5, Stuck: true},
+	}
+	m := boardModel(t, 240, 50)
+	m.b = board.NewStoreBoard([]board.Lane{{Name: "backlog"}}, nil, boxes, true, "")
+	m.recompute()
+	m.relayout()
+	m.toggleSlice()
+	m.sliceField, m.sliceEpicAll = sliceEpic, true
+	m.sliceIdx = 0 // the cursor is on the ACTIVE row, clear of the closed ones
+
+	th := m.th
+	open := func(s lg.Style) string { return styleAt(s.Render("x"), strings.Index(s.Render("x"), "x")) }
+
+	// The active mark is the one green thing on the row.
+	l := rawPanelLine(t, m, "動いている箱")
+	if got, want := styleAt(l, strings.Index(l, glyphEpicActive)), open(th.ok); got != want {
+		t.Errorf("the active mark is styled %q, want th.ok %q", got, want)
+	}
+	// An OPEN stuck box keeps its warn-coloured marker.
+	l = rawPanelLine(t, m, "詰まった箱 ")
+	if got, want := styleAt(l, strings.LastIndex(l, glyphWIPOver)), open(th.warn); got != want {
+		t.Errorf("an open stuck row's %q is styled %q, want th.warn %q", glyphWIPOver, got, want)
+	}
+	// A closed box recedes: the title dims even though nothing else on the row
+	// changed, and the mark leads it.
+	l = rawPanelLine(t, m, "閉じた箱 ")
+	if got, want := styleAt(l, strings.Index(l, "閉じた箱")), open(th.dim); got != want {
+		t.Errorf("a closed row's title is styled %q, want th.dim %q", got, want)
+	}
+	// …and a closed box furrow still calls stuck recedes WHOLE: the warn cell
+	// would otherwise be the loudest thing in a dim row.
+	l = rawPanelLine(t, m, "閉じたのに")
+	if got := styleAt(l, strings.LastIndex(l, glyphWIPOver)); got == open(th.warn) {
+		t.Errorf("a CLOSED stuck row still shouts: %q is styled th.warn", glyphWIPOver)
+	}
+	// The cursor outranks the dim — the row you are standing on is never the
+	// recessed one. (The demo frame sliceepicclosed is its headless form.)
+	m.sliceIdx = len(m.sliceRows()) - 1
+	l = rawPanelLine(t, m, "閉じたのに")
+	if got := styleAt(l, strings.Index(l, "閉じたのに")); got == open(th.dim) {
+		t.Errorf("the cursor row is dimmed like any other closed box: %q", got)
+	}
+}
+
+// The panel's rendered lines are exactly slicePanelW cells wide, with the rule
+// in the next cell — measured on the FRAME, on every axis, at the widths and
+// heights the app negotiates. The row-level invariant was asserted on
+// sliceRow.display, which the epic renderer no longer draws.
+func TestSlicePanelFrameLinesAreExactlyTheirWidth(t *testing.T) {
+	boxes := []board.EpicInfo{
+		{ID: "e-1", Title: "短い", Done: 1, Total: 2},
+		{ID: "e-2", Title: "日本語のとても長いエピックのタイトルです", Done: 6, Total: 18, Stuck: true},
+		// The suffix at its worst: every optional piece, and counts past any
+		// real board. This is the row that reaches sliceRows' title floor.
+		{ID: "e-3", Title: "ridge: TUI v2 — furrow parity", Pinned: true,
+			Done: 999999, Total: 999999, Stuck: true, Deps: []string{"e-1", "e-2"}, OpenDeps: []string{"e-1", "e-2"}},
+	}
+	for _, w := range []int{240, 400} {
+		for _, h := range []int{12, 24, 50} {
+			for _, axis := range []sliceField{sliceRepo, sliceLabel, sliceEpic} {
+				m := boardModel(t, w, h)
+				m.b = board.NewStoreBoard([]board.Lane{{Name: "backlog"}}, nil, boxes, true, "")
+				m.recompute()
+				m.relayout()
+				m.toggleSlice()
+				m.sliceField, m.sliceEpicAll = axis, true
+				lines := strings.Split(frame(m), "\n")
+				for y := boardTop; y < m.h-footerH && y < len(lines); y++ {
+					head := ansi.Truncate(lines[y], slicePanelW, "")
+					if lg.Width(head) != slicePanelW {
+						t.Fatalf("%s axis %dx%d y=%d: the panel's first %d cells do not land on a boundary: %q",
+							axis, w, h, y, slicePanelW, lines[y])
+					}
+					if rest := lines[y][len(head):]; !strings.HasPrefix(rest, "│") {
+						t.Errorf("%s axis %dx%d y=%d: cell %d is %q, want the panel's rule",
+							axis, w, h, y, slicePanelW, ansi.Truncate(rest, 1, ""))
+					}
+				}
+				// What the row says it is, is what the frame draws.
+				rows := m.sliceRows()
+				off, window, _ := m.sliceViewport(len(rows))
+				body := frame(m)
+				for i := off; i < off+window && i < len(rows); i++ {
+					if !strings.Contains(body, rows[i].display) {
+						t.Errorf("%s axis %dx%d: row %d renders as something other than %q",
+							axis, w, h, i, rows[i].display)
+					}
+				}
+			}
+		}
 	}
 }

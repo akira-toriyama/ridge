@@ -14,7 +14,7 @@ import (
 // unknown-name error and the tests all read this slice, because the list was
 // duplicated in three places and adding two states updated two of them —
 // `ridge -h` then advertised eight of ten.
-var DemoNames = []string{"move", "drag", "add", "adddraft", "edit", "editpick", "editinput", "editdeps", "editrefs", "note", "refs", "graph", "graphall", "map", "mapall", "mapfiltered", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "revisit", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicshut", "epicdone", "epicreopen", "sliceepicall", "epicnew", "boxes", "boxesall", "roadmapweek", "roadmapmonth", "swim", "swimopen", "swimrepo", "swimall", "views", "viewsroad", "viewsmany", "sweep", "sweepconfirm", "sweeprestore", "sweepwait", "fail"}
+var DemoNames = []string{"move", "drag", "add", "adddraft", "edit", "editpick", "editinput", "editdeps", "editrefs", "note", "refs", "graph", "graphall", "map", "mapall", "mapfiltered", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "revisit", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicshut", "epicdone", "epicreopen", "sliceepicall", "sliceepicclosed", "epicnew", "boxes", "boxesall", "roadmapweek", "roadmapmonth", "swim", "swimopen", "swimrepo", "swimall", "views", "viewsroad", "viewsmany", "sweep", "sweepconfirm", "sweeprestore", "sweepwait", "fail"}
 
 // Options configures a freshly-constructed Model. The zero value is the
 // default TUI: dark palette, board view, no filter.
@@ -562,6 +562,25 @@ func (m *Model) demoState(kind string) error {
 		}
 		if !m.sliceEpicAll {
 			return fmt.Errorf("demo sliceepicall: z did not widen the epic axis")
+		}
+
+	case "sliceepicclosed":
+		// The widened axis with the cursor ON the closed box. The one frame
+		// that can show the exception the closed row's styling carries: the
+		// cursor outranks the dim, so the row a reader is standing on is never
+		// the recessed one. Driven through the key handler, like sliceepicall.
+		m.toggleSlice()
+		m.sliceField = sliceEpic
+		m.noteSliceAxis()
+		if c := m.onSliceKey(tea.KeyPressMsg{Code: 'z', Text: "z"}); c != nil {
+			_ = c
+		}
+		if c := m.onSliceKey(tea.KeyPressMsg{Code: 'G', Text: "G"}); c != nil {
+			_ = c
+		}
+		rows := m.sliceRows()
+		if m.sliceIdx != len(rows)-1 || !rows[m.sliceIdx].closed {
+			return fmt.Errorf("demo sliceepicclosed: the cursor is on %d of %d, and it is not a closed box", m.sliceIdx, len(rows))
 		}
 
 	case "epicnew":
