@@ -201,7 +201,7 @@ handlers match. This table is only a foothold.
 |---|---|
 | `?` | **Key list** (everything is reachable from here) |
 | `Space` | Peek |
-| `s` | Slice panel (the left side nav: repo / label / epic; `tab` switches the axis, `⏎` slices, `z` includes closed boxes, `m` / `A` manage a box) |
+| `s` | Slice panel (the left side nav: repo / label / epic; `tab` switches the axis, `⏎` slices, `z` includes closed boxes, `m` / `A` manage a box). A box title too long for the panel wraps to a second line, and the bottom row names the row under the cursor in full |
 | `S` | Dependency graph (rooted at one task; `o` for top-down / left-right) |
 | `T` | Dependency map (every cluster at once) |
 | `E` | Box overview (every epic by repo; `⏎` slices to that box, `z` includes closed) |
@@ -217,7 +217,10 @@ handlers match. This table is only a foothold.
 The bottom of the screen is one line, and it carries only **what is not on
 the screen** (the exit of the mode just entered, failures, load results). It
 never lists keys — a partial key list was worse than none for exactly as much
-as it made a reader think "that is all of them".
+as it made a reader think "that is all of them". While the slice panel holds
+the keyboard the row names the box under the cursor in full, which is the same
+rule: the panel's rows are scanned, and a title it had to cut is precisely what
+is not on the screen.
 
 ## Design rules
 

@@ -367,8 +367,7 @@ func (m *Model) onWheel(msg tea.MouseWheelMsg) {
 		case tea.MouseWheelDown:
 			m.sliceOff++
 		}
-		off, _, _ := m.sliceViewport(len(m.sliceRows()))
-		m.sliceOff = off
+		m.sliceOff = m.sliceViewport(m.sliceRows()).off
 		return
 	}
 	// The BOARD wheel needs the board on screen and no modal overlay over

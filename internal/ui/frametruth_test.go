@@ -252,17 +252,21 @@ func TestSliceEpicRowsKeepTheirCountAndStuckMarker(t *testing.T) {
 	}
 	for i, r := range rows {
 		e := cases[i]
-		// The renderer truncates to slicePanelW-4; anything wider loses its tail.
-		if w := lg.Width(r.display); w > slicePanelW-4 {
-			t.Errorf("%s renders %d cells, over the %d the panel gives it: %q",
-				e.ID, w, slicePanelW-4, r.display)
+		// Every LINE the row will draw has to fit the cells the panel gives
+		// it; a row whose title does not fit takes a second line, never a
+		// wider one.
+		for li, l := range r.lines {
+			if w := lg.Width(l); w > slicePanelW-4 {
+				t.Errorf("%s line %d renders %d cells, over the %d the panel gives it: %q",
+					e.ID, li, w, slicePanelW-4, l)
+			}
 		}
 		count := itoa(e.Done) + "/" + itoa(e.Total)
-		if !strings.Contains(r.display, count) {
-			t.Errorf("%s lost its progress count %q: %q", e.ID, count, r.display)
+		if !strings.Contains(r.text(), count) {
+			t.Errorf("%s lost its progress count %q: %q", e.ID, count, r.text())
 		}
-		if e.Stuck && !strings.HasSuffix(r.display, "!") {
-			t.Errorf("%s is stuck but the row does not say so: %q", e.ID, r.display)
+		if e.Stuck && !strings.HasSuffix(r.text(), "!") {
+			t.Errorf("%s is stuck but the row does not say so: %q", e.ID, r.text())
 		}
 	}
 }
