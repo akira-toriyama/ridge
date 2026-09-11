@@ -84,7 +84,7 @@ func TestTheWidenedEpicAxisIsWhatReachesAClosedBox(t *testing.T) {
 	var row string
 	for _, r := range m.sliceRows() {
 		if r.value == "e-2b7h" {
-			row = r.display
+			row = r.lines[0]
 		}
 	}
 	// HasPrefix, not Contains: the marker has to LEAD the row. Riding the

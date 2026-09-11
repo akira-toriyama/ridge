@@ -237,6 +237,12 @@ func TestSliceEpicRowsKeepTheirCountAndStuckMarker(t *testing.T) {
 		{ID: "e-2", Title: "ridge: TUI v1 — 実 furrow に接続し CI が立つ", Done: 15, Total: 16, Stuck: true},
 		{ID: "e-3", Title: "a very long ASCII epic title that will not fit", Done: 100, Total: 250, Stuck: true},
 		{ID: "e-4", Title: "日本語のとても長いエピックのタイトルです", Done: 999, Total: 999},
+		// The BAND: a title too wide to sit beside its suffix, but not wider
+		// than the line itself. Both of these are real boxes; both rendered
+		// over the row's width and had their numbers eaten by pad() (`0…`,
+		// and `11/11 !` gone whole) while every other case was green.
+		{ID: "e-5", Title: "chord: action-keys 完成", Done: 0, Total: 1},
+		{ID: "e-6", Title: "projects/CLAUDE.md の整理", Done: 11, Total: 11, Stuck: true},
 	}
 	lanes := []board.Lane{{Name: "backlog"}}
 	b := board.NewStoreBoard(lanes, nil, cases, true, "")
@@ -252,17 +258,21 @@ func TestSliceEpicRowsKeepTheirCountAndStuckMarker(t *testing.T) {
 	}
 	for i, r := range rows {
 		e := cases[i]
-		// The renderer truncates to slicePanelW-4; anything wider loses its tail.
-		if w := lg.Width(r.display); w > slicePanelW-4 {
-			t.Errorf("%s renders %d cells, over the %d the panel gives it: %q",
-				e.ID, w, slicePanelW-4, r.display)
+		// Every LINE the row will draw has to fit the cells the panel gives
+		// it; a row whose title does not fit takes a second line, never a
+		// wider one.
+		for li, l := range r.lines {
+			if w := lg.Width(l); w > slicePanelW-4 {
+				t.Errorf("%s line %d renders %d cells, over the %d the panel gives it: %q",
+					e.ID, li, w, slicePanelW-4, l)
+			}
 		}
 		count := itoa(e.Done) + "/" + itoa(e.Total)
-		if !strings.Contains(r.display, count) {
-			t.Errorf("%s lost its progress count %q: %q", e.ID, count, r.display)
+		if !strings.Contains(r.text(), count) {
+			t.Errorf("%s lost its progress count %q: %q", e.ID, count, r.text())
 		}
-		if e.Stuck && !strings.HasSuffix(r.display, "!") {
-			t.Errorf("%s is stuck but the row does not say so: %q", e.ID, r.display)
+		if e.Stuck && !strings.HasSuffix(r.text(), "!") {
+			t.Errorf("%s is stuck but the row does not say so: %q", e.ID, r.text())
 		}
 	}
 }

@@ -92,24 +92,26 @@ func TestSliceEpicRowsCarryProgressAndClickSelects(t *testing.T) {
 	if len(rows) != 4 || rows[0].value != "e-fw2m" {
 		t.Fatalf("epic rows = %+v", rows)
 	}
-	if !strings.Contains(rows[0].display, "6/18") {
-		t.Errorf("the epic row must carry the store's progress: %q", rows[0].display)
+	if !strings.Contains(rows[0].text(), "6/18") {
+		t.Errorf("the epic row must carry the store's progress: %q", rows[0].text())
 	}
 	// The dep readout: →N is furrow's derived open_deps, verbatim.
 	// e-fw2m waits on the open e-p3dx; e-c4mt declares THREE deps but furrow
 	// resolved two away — e-2b7h is closed and e-x0k9 resolves to nothing —
 	// so both rows read →1, and the dep-less e-p3dx row carries no arrow.
 	for i, want := range map[int]string{0: "6/18 →1", 3: "0/1 →1"} {
-		if !strings.Contains(rows[i].display, want) {
-			t.Errorf("epic row %d = %q, want it to contain %q", i, rows[i].display, want)
+		if !strings.Contains(rows[i].text(), want) {
+			t.Errorf("epic row %d = %q, want it to contain %q", i, rows[i].text(), want)
 		}
 	}
-	if strings.Contains(rows[1].display, "→") {
-		t.Errorf("e-p3dx has no deps; its row must carry no arrow: %q", rows[1].display)
+	// On the SUFFIX, not the whole row: this box's title is 常備菜ライン 2026
+	// 夏→秋, and now that the row wraps, its own arrow is on screen.
+	if strings.Contains(rows[1].suffix, "→") {
+		t.Errorf("e-p3dx has no deps; its row must carry no arrow: %q", rows[1].suffix)
 	}
 	// The stuck epic keeps its marker alongside the new suffix grammar.
-	if !strings.Contains(rows[2].display, "0/2 !") {
-		t.Errorf("the stuck epic row must keep its marker: %q", rows[2].display)
+	if !strings.Contains(rows[2].text(), "0/2 !") {
+		t.Errorf("the stuck epic row must keep its marker: %q", rows[2].text())
 	}
 
 	// A click on the first value row selects it.
@@ -204,9 +206,9 @@ func TestSlicePanelScrollsAndClicksAgree(t *testing.T) {
 	if len(rows) < 4 {
 		t.Fatalf("fixture drifted: want ≥4 label rows, got %d", len(rows))
 	}
-	_, window, indicators := m.sliceViewport(len(rows))
-	if !indicators || window != 1 {
-		t.Fatalf("viewport = window %d indicators %v, want the 1-row indicator shape", window, indicators)
+	g := m.sliceViewport(rows)
+	if !g.indicators || g.window != 1 {
+		t.Fatalf("viewport = window %d indicators %v, want the 1-row indicator shape", g.window, g.indicators)
 	}
 
 	// Cursor past the window: the window follows, the frame shows the cursor.
@@ -253,7 +255,7 @@ func TestSliceClickNeverMapsOutsideTheRenderedRegion(t *testing.T) {
 			m := boardModel(t, 240, h)
 			press(m, "s")
 			m.sliceField = axis
-			rows := len(m.sliceRows())
+			rows := m.sliceRows()
 			for y := 0; y < h; y++ {
 				if i := m.sliceRowAt(y, rows); i >= 0 {
 					if y < sliceRowTop || y >= m.h-footerH {
@@ -487,8 +489,8 @@ func TestSliceEpicRowsLeadWithTheLifecycleMark(t *testing.T) {
 		if rows[i].mark != want {
 			t.Errorf("%s leads with %q, want %q", boxes[i].ID, rows[i].mark, want)
 		}
-		if !strings.HasPrefix(rows[i].display, want) {
-			t.Errorf("%s renders %q, want it to lead with %q", boxes[i].ID, rows[i].display, want)
+		if !strings.HasPrefix(rows[i].lines[0], want) {
+			t.Errorf("%s renders %q, want it to lead with %q", boxes[i].ID, rows[i].lines[0], want)
 		}
 	}
 	// furrow keeps `pinned` when it closes a box, so the row must say both.
@@ -496,11 +498,21 @@ func TestSliceEpicRowsLeadWithTheLifecycleMark(t *testing.T) {
 		t.Errorf("a closed pinned box lost one of its two marks: %+v", rows[2])
 	}
 	// The suffix is measured first and never truncated; the title yields.
-	if !strings.HasSuffix(rows[3].display, "15/18 "+glyphWIPOver) {
-		t.Errorf("the long row lost its numbers: %q", rows[3].display)
+	if !strings.HasSuffix(rows[3].text(), "15/18 "+glyphWIPOver) {
+		t.Errorf("the long row lost its numbers: %q", rows[3].text())
 	}
-	if !strings.HasSuffix(rows[3].title, "…") {
-		t.Errorf("the long title must be the segment that yields: %q", rows[3].title)
+	// The title is the segment that yields — onto a second line first, and
+	// only its tail carries the ellipsis.
+	if rows[3].tail == "" || !strings.HasSuffix(rows[3].tail, "…") {
+		t.Errorf("the long title must wrap and then yield: head %q tail %q", rows[3].title, rows[3].tail)
+	}
+	if len(rows[3].lines) != 2 {
+		t.Errorf("a title that does not fit takes two lines, got %d: %q", len(rows[3].lines), rows[3].lines)
+	}
+	// …and a title that fits still costs one line. The wrap is per row, not a
+	// uniform two-line grid: on the real board only 26 of 133 open boxes wrap.
+	if len(rows[0].lines) != 1 || rows[0].tail != "" {
+		t.Errorf("a title that fits must not wrap: %q", rows[0].lines)
 	}
 	// The mark column is paid for by the panel's width, not out of the title:
 	// this row's suffix is 8 cells, so a title that does not fit still gets
@@ -533,6 +545,9 @@ func TestSliceScopeLineNamesTheHiddenClosedBoxes(t *testing.T) {
 		t.Error("the scope line must be in the frame, not only in the model")
 	}
 }
+
+// text is what the row SAYS, independent of how many lines it takes.
+func (r sliceRow) text() string { return strings.Join(r.lines, " ") }
 
 // styleAt returns the escape sequence that opens the style in force at byte
 // index i of a rendered line — the last one before it. The house pattern from
@@ -615,11 +630,14 @@ func TestSlicePanelStylesTheLifecycleAndTheClosedRow(t *testing.T) {
 // The panel's rendered lines are exactly slicePanelW cells wide, with the rule
 // in the next cell — measured on the FRAME, on every axis, at the widths and
 // heights the app negotiates. The row-level invariant was asserted on
-// sliceRow.display, which the epic renderer no longer draws.
+// sliceRow.display, a single string the epic renderer no longer draws.
 func TestSlicePanelFrameLinesAreExactlyTheirWidth(t *testing.T) {
 	boxes := []board.EpicInfo{
 		{ID: "e-1", Title: "短い", Done: 1, Total: 2},
 		{ID: "e-2", Title: "日本語のとても長いエピックのタイトルです", Done: 6, Total: 18, Stuck: true},
+		// A title too wide to sit beside its suffix but not wider than the
+		// line: the band where the row used to compose past its own width.
+		{ID: "e-band", Title: "chord: action-keys 完成", Done: 0, Total: 1},
 		// The suffix at its worst: every optional piece, and counts past any
 		// real board. This is the row that reaches sliceRows' title floor.
 		{ID: "e-3", Title: "ridge: TUI v2 — furrow parity", Pinned: true,
@@ -648,15 +666,247 @@ func TestSlicePanelFrameLinesAreExactlyTheirWidth(t *testing.T) {
 				}
 				// What the row says it is, is what the frame draws.
 				rows := m.sliceRows()
-				off, window, _ := m.sliceViewport(len(rows))
+				g := m.sliceViewport(rows)
 				body := frame(m)
-				for i := off; i < off+window && i < len(rows); i++ {
-					if !strings.Contains(body, rows[i].display) {
+				for i := g.off; i < g.off+g.window && i < len(rows); i++ {
+					if !sliceRowDrawn(body, rows[i]) {
 						t.Errorf("%s axis %dx%d: row %d renders as something other than %q",
-							axis, w, h, i, rows[i].display)
+							axis, w, h, i, rows[i].lines)
 					}
 				}
 			}
 		}
+	}
+}
+
+// sliceRowDrawn reports whether every line the row says it has is in the
+// frame. The tie between what sliceRows composes and what the panel paints.
+func sliceRowDrawn(frame string, r sliceRow) bool {
+	for _, l := range r.lines {
+		if !strings.Contains(frame, l) {
+			return false
+		}
+	}
+	return true
+}
+
+// The wrap's own arithmetic: line 1 is the title's alone — the suffix moved to
+// the last line, so furrow's numbers can no longer squeeze a title to nothing —
+// and the split loses no cells.
+func TestSliceEpicRowWrapsWithoutLosingCells(t *testing.T) {
+	title := "ridge: TUI v2 — furrow parity・俯瞰・時間軸・保存ビュー"
+	boxes := []board.EpicInfo{
+		{ID: "e-plain", Title: title, Done: 1, Total: 2},
+		// Every optional piece at once: the suffix at its widest.
+		{ID: "e-loud", Title: title, Pinned: true, Done: 999, Total: 999, Stuck: true,
+			Deps: []string{"e-plain"}, OpenDeps: []string{"e-plain"}},
+	}
+	m := boardModel(t, 240, 50)
+	m.b = board.NewStoreBoard([]board.Lane{{Name: "backlog"}}, nil, boxes, true, "")
+	m.recompute()
+	m.sliceField = sliceEpic
+
+	rows := m.sliceRows()
+	head := rows[0].title
+	if rows[1].title != head {
+		t.Errorf("the suffix shrank line 1: %q with a small suffix, %q with a large one",
+			head, rows[1].title)
+	}
+	if w := lg.Width(head); w != slicePanelW-4-sliceMarkW {
+		t.Errorf("line 1's title is %d cells, want the whole %d the line has",
+			w, slicePanelW-4-sliceMarkW)
+	}
+	for _, r := range rows {
+		// The split is a prefix and its remainder: no cell is spent on a word
+		// boundary, and no cell is dropped between the lines.
+		rest := strings.TrimSuffix(r.tail, "…")
+		if !strings.HasPrefix(title, r.title+rest) {
+			t.Errorf("%s: %q + %q is not how %q starts", r.value, r.title, rest, title)
+		}
+		if !strings.HasSuffix(r.lines[len(r.lines)-1], r.suffix) {
+			t.Errorf("%s: the numbers must ride the LAST line: %q", r.value, r.lines)
+		}
+	}
+}
+
+// The hit test over mixed row heights: every line a wrapped row draws belongs
+// to that row, including its continuation, and no line past the region does.
+func TestSliceClickHitsTheRowUnderEachOfItsLines(t *testing.T) {
+	m := boardModel(t, 240, 50)
+	press(m, "s")
+	m.sliceField = sliceEpic
+	rows := m.sliceRows()
+	if len(rows) < 2 || len(rows[0].lines) != 2 {
+		t.Fatalf("fixture drifted: want a wrapped first epic row, got %d rows %q",
+			len(rows), rows[0].lines)
+	}
+	// y walked down the region, against the heights the frame drew.
+	y := sliceRowTop
+	for i, r := range rows {
+		for li := range r.lines {
+			if got := m.sliceRowAt(y, rows); got != i {
+				t.Errorf("y=%d is line %d of row %d, but the click path says row %d", y, li, i, got)
+			}
+			y++
+		}
+	}
+	if got := m.sliceRowAt(y, rows); got != -1 {
+		t.Errorf("y=%d is past the last row, but maps to %d", y, got)
+	}
+	// And a real click on a CONTINUATION line selects that row, not its
+	// neighbour — the failure a line-blind y→row map would produce.
+	if c := m.sliceClick(3, sliceRowTop+1); c != nil {
+		m.Update(c())
+	}
+	if m.sliceVal != rows[0].value {
+		t.Errorf("a click on row 0's second line sliced to %q, want %q", m.sliceVal, rows[0].value)
+	}
+}
+
+// A wrapped row is scrolled in WHOLE, and on a region too short to hold two
+// lines the rows do not wrap at all. Asserted on the FRAME after every step of
+// the cursor, not on the geometry: what the window claims and what the panel
+// painted are the two things that must not drift apart.
+func TestSliceCursorScrollsAWrappedRowFullyIntoView(t *testing.T) {
+	if rows := boardModel(t, 240, 50).sliceRows(); len(rows) == 0 {
+		t.Fatal("no rows to scroll")
+	}
+	for h := 12; h <= 30; h++ {
+		m := boardModel(t, 240, h)
+		press(m, "s")
+		m.sliceField = sliceEpic
+		rows := m.sliceRows()
+		roomy := h-footerH-sliceRowTop >= sliceWrapCap
+		if got := len(rows[0].lines) == 2; got != roomy {
+			t.Fatalf("h=%d: row wrapped=%v, want %v for a region of %d lines: %q",
+				h, got, roomy, h-footerH-sliceRowTop, rows[0].lines)
+		}
+		// Down the whole list and back up: every stop must show the cursor
+		// row's LAST line, or the row cannot be read where it is selected.
+		for _, key := range []string{"down", "down", "down", "G", "up", "g"} {
+			press(m, key)
+			out := frame(m)
+			for li, l := range rows[m.sliceIdx].lines {
+				if !strings.Contains(out, l) {
+					t.Fatalf("h=%d after %q: cursor row %d line %d (%q) is not in the frame",
+						h, key, m.sliceIdx, li, l)
+				}
+			}
+		}
+	}
+}
+
+// The same invariant over MIXED heights, which the fixture cannot produce (all
+// five of its box titles wrap). With heights mixed, "how far down must the
+// window start" stops being a subtraction: a window measured from the old
+// offset over-counts the rows that fit from the new one, and the cursor row
+// lands one row past the end of the window.
+func TestSliceCursorScrollsOverMixedRowHeights(t *testing.T) {
+	long := "ridge: TUI v2 — furrow parity・俯瞰・時間軸・保存ビュー"
+	var boxes []board.EpicInfo
+	for i, title := range []string{"短い", "短い箱", "みじかい", long, long, "短", long} {
+		boxes = append(boxes, board.EpicInfo{
+			ID: "e-" + string(rune('a'+i)), Title: title, Done: i, Total: 9,
+		})
+	}
+	for h := 13; h <= 24; h++ {
+		m := boardModel(t, 240, h)
+		press(m, "s")
+		m.sliceField = sliceEpic
+		m.b = board.NewStoreBoard([]board.Lane{{Name: "backlog"}}, nil, boxes, true, "")
+		m.recompute()
+		got := m.sliceRows()
+		if len(got[0].lines) != 1 || len(got[3].lines) != 2 {
+			t.Fatalf("h=%d: want mixed heights, got %d and %d lines",
+				h, len(got[0].lines), len(got[3].lines))
+		}
+		for i := range got {
+			m.sliceIdx = i
+			m.ensureSliceVisible()
+			out := frame(m)
+			for li, l := range got[i].lines {
+				if !strings.Contains(out, l) {
+					t.Fatalf("h=%d: cursor on row %d, line %d (%q) is not in the frame",
+						h, i, li, l)
+				}
+			}
+		}
+	}
+}
+
+// The bottom row names the cursor row in full while the panel holds the
+// keyboard — the reading surface the truncated row is scanned against.
+func TestSliceReadoutNamesTheCursorRowInFull(t *testing.T) {
+	m := boardModel(t, 240, 50)
+	press(m, "s")
+	m.sliceField = sliceEpic
+	m.sliceIdx = 0
+	full := m.b.Epics()[0].Title
+	row := ansiStrip(m.sliceRowBody(m.sliceRows()[0], 0, m.th.base, false))
+	if strings.Contains(row, full) {
+		t.Fatalf("fixture drifted: the row already shows the whole title %q", full)
+	}
+	line := ansiStrip(m.statusLine())
+	if !strings.Contains(line, full) {
+		t.Errorf("the readout does not carry the cursor row's whole title: %q", line)
+	}
+	if !strings.Contains(line, "6/18 done") || !strings.Contains(line, "repos tomo/kyushu-trip") {
+		t.Errorf("the readout lost furrow's own words for the box: %q", line)
+	}
+	// The note keeps the right end, and a refusal outranks the readout for it.
+	if !strings.Contains(line, "esc leaves") {
+		t.Errorf("the panel's note must keep the row's right end: %q", line)
+	}
+	m.fail("nope")
+	if line := ansiStrip(m.statusLine()); !strings.Contains(line, "⚠ nope") {
+		t.Errorf("a refusal must survive the readout: %q", line)
+	}
+	// With the keyboard back on the board, the row is the note's again.
+	press(m, "esc")
+	if line := ansiStrip(m.statusLine()); strings.Contains(line, full) {
+		t.Errorf("the readout outlived the panel's focus: %q", line)
+	}
+}
+
+// The three rules a wrapped row is drawn by, asserted on the frame: the cursor
+// bar spans BOTH lines (it is one row, and a bar on the head alone reads as a
+// one-line row above a stray), the selection dot marks the value ONCE, and the
+// continuation hangs clear of the lifecycle column. All three survived every
+// other test in this package when mutated away.
+func TestSliceWrappedRowIsDrawnAsOneRow(t *testing.T) {
+	m := boardModel(t, 240, 50)
+	press(m, "s")
+	m.sliceField = sliceEpic
+	rows := m.sliceRows()
+	if len(rows[0].lines) != 2 {
+		t.Fatalf("fixture drifted: want a wrapped first row, got %q", rows[0].lines)
+	}
+	if c := m.selectSlice(sliceEpic, rows[0].value); c != nil {
+		m.Update(c())
+	}
+	lines := strings.Split(frame(m), "\n")
+	head, cont := lines[sliceRowTop], lines[sliceRowTop+1]
+	if !strings.HasPrefix(head, "▌ ● ") {
+		t.Errorf("the head line is %q, want the cursor bar and the selection dot", head[:12])
+	}
+	if !strings.HasPrefix(cont, "▌ ") {
+		t.Errorf("the continuation is %q, want the cursor bar to span the whole row", cont[:12])
+	}
+	if strings.Contains(cont[:8], "●") {
+		t.Errorf("the continuation carries a second selection dot: %q", cont[:12])
+	}
+	// The hanging indent: the continuation starts where the TITLE starts, not
+	// where the lifecycle mark does. In CELLS — the lines are CJK, so a byte
+	// offset says nothing about a column.
+	cell := func(line, sub string) int {
+		i := strings.Index(line, sub)
+		if i < 0 {
+			t.Fatalf("%q is not in %q", sub, line)
+		}
+		return lg.Width(line[:i])
+	}
+	title := cell(head, strings.TrimSpace(rows[0].title))
+	if got := cell(cont, strings.TrimSpace(rows[0].tail)); got != title {
+		t.Errorf("the continuation starts at cell %d, the title at %d — it must hang under the title", got, title)
 	}
 }

@@ -352,6 +352,18 @@ func (m *Model) statusLine() string {
 		return th.accent.Render(fmt.Sprintf("%s DRAG %s → %s [slot %d]   release to drop · esc cancel",
 			glyphLift, m.drag.id, to, m.lay.idxAtY(to, m.drag.y))) + warn
 	}
+	// While the panel holds the keyboard the bottom row names the row under
+	// the cursor in full, with the note pushed to the right end. joinEnds
+	// truncates the LEFT, so the note — a refusal included — never yields.
+	if m.mode == modeSlice && !m.fullScreen() {
+		if read := m.sliceReadout(); read != "" {
+			note := th.status.Render(m.status)
+			if m.statusErr {
+				note = th.errText.Render("⚠ " + m.status)
+			}
+			return joinEnds(read, note, m.w)
+		}
+	}
 	if m.statusErr {
 		return th.errText.Render("⚠ " + m.status)
 	}
