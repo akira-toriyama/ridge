@@ -58,6 +58,7 @@ type addState struct {
 // enterAdd opens the quick-add modal aimed at the focused lane (board) or
 // the store's default lane (table — GH's bottom-of-table add).
 func (m *Model) enterAdd() tea.Cmd {
+	m.fullHelp = false // a modal never inherits the `?` overlay (enterEpic)
 	m.cancelDrag()
 	ti := textinput.New()
 	ti.Prompt = "+ "

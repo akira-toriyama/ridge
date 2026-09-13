@@ -18,6 +18,7 @@ import (
 // once each — and the rollingBack refusal applied to every reorder gesture.
 
 func (m *Model) enterMove() {
+	m.fullHelp = false // a modal never inherits the `?` overlay (enterEpic)
 	if m.drag.armed {
 		// The mirror of onMouseDown's guard. Without it a card could be lifted
 		// by the keyboard while the mouse still held it: the release commits one

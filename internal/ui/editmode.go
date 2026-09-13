@@ -113,6 +113,7 @@ func (h editHooks) inputCommit(k inputKind, v string) tea.Cmd {
 
 // enterEdit opens the field-edit menu on the current selection.
 func (m *Model) enterEdit() {
+	m.fullHelp = false // a modal never inherits the `?` overlay (enterEpic)
 	t := m.curTask()
 	if t == nil {
 		m.note("nothing selected — the edit menu works on a task")
@@ -133,6 +134,7 @@ func (m *Model) enterEdit() {
 // The peek opens with it so the appended paragraph is visibly landing in the
 // body, the same reason enterEdit opens it.
 func (m *Model) enterNote() tea.Cmd {
+	m.fullHelp = false // a modal never inherits the `?` overlay (enterEpic)
 	t := m.curTask()
 	if t == nil {
 		m.note("nothing selected — a note appends to a task")

@@ -184,7 +184,13 @@ func (l *layout) dropY(lane string, idx int) (int, bool) {
 	if idx > last.Idx {
 		return clamp(last.Y+last.H, c.Top, maxInt(c.Top, c.Bot-1)), true
 	}
-	return c.Top, true
+	// idx is ABOVE the fold: the column was scrolled past it — the wheel is
+	// allowed to move the destination column mid-move (drag.go), so a
+	// keyboard move and the wheel meet here routinely. Its boundary is not on
+	// screen, and reporting the column's first row instead marked a slot the
+	// commit will not use. Same rule the drag path states for a pointer off
+	// the board: a slot that cannot be shown is not marked.
+	return 0, false
 }
 
 // measurer memoises card heights ACROSS frames.
