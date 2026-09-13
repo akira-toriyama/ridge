@@ -1,6 +1,8 @@
 package board
 
 import (
+	"fmt"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -132,6 +134,26 @@ func TestParseDueRefusesOffsetsThatOverflowInsteadOfWrappingIntoThePast(t *testi
 	now := time.Date(2026, 9, 13, 12, 0, 0, 0, localZone())
 	fixedNow(t, now)
 
+	// Boundary-valued, computed from the same constants the guard uses so the
+	// test cannot drift from it: exactly the widest offset per unit is
+	// accepted, one more is refused. A round-numbers-only test passed a guard
+	// that was off by one in both directions and still landed 1734.
+	units := map[byte]time.Duration{'m': time.Minute, 'h': time.Hour, 'd': 24 * time.Hour, 'w': 7 * 24 * time.Hour}
+	for u, d := range units {
+		widest := int64(math.MaxInt64) / int64(d)
+		for _, sign := range []string{"+", "-"} {
+			ok := fmt.Sprintf("%s%d%c", sign, widest, u)
+			if _, err := ParseDue(ok); err != nil {
+				t.Errorf("ParseDue(%q) refused the widest offset that fits: %v", ok, err)
+			}
+			over := fmt.Sprintf("%s%d%c", sign, widest+1, u)
+			if got, err := ParseDue(over); err == nil {
+				t.Errorf("ParseDue(%q) = %s, want a refusal: one past the widest offset overflows",
+					over, got.Format(time.RFC3339))
+			}
+		}
+	}
+
 	for _, in := range []string{"+999999d", "-999999d", "+999999w", "+9999999999h", "+99999999999999999999m"} {
 		t.Run(in, func(t *testing.T) {
 			got, err := ParseDue(in)
@@ -142,8 +164,8 @@ func TestParseDueRefusesOffsetsThatOverflowInsteadOfWrappingIntoThePast(t *testi
 		})
 	}
 
-	// The widest offset that still fits must keep working — the guard is an
-	// overflow check, not a new length limit.
+	// A few spellings well inside the range must keep working — the guard is
+	// an overflow check, not a new length limit.
 	for _, in := range []string{"+106750d", "-106750d", "+15250w"} {
 		t.Run(in, func(t *testing.T) {
 			got, err := ParseDue(in)
