@@ -615,10 +615,16 @@ func fixtureTasks() []*board.Task {
 //     clashes with the box that already holds the slot" has a site — the
 //     precondition line and the refusal it warns about are both unreachable
 //     headless without one.
-//   - e-p3dx is the only box whose repo is FREE, so it is the one `activate`
-//     lands on without first deactivating e-fw2m. A box naming no repo cannot be
-//     activated at all (it would bypass the one-active-per-repo rule), so a
-//     fixture where every box was repo-less could only ever demo refusals.
+//   - e-p3dx's repo is FREE (tomo/joubisai holds no active box), so it is one
+//     `activate` lands on without first deactivating e-fw2m — e-7q1m shares
+//     that repo and that property. A box naming no repo cannot be activated at
+//     all (it would bypass the one-active-per-repo rule), so a fixture where
+//     every box was repo-less could only ever demo refusals.
+//   - e-7q1m and e-3v8p are the board's DOMINANT shape rather than its
+//     exceptions: one reserved title in two repos, where the title identifies
+//     nothing. They are also the only rows that fit on one line, and the only
+//     ones whose repo chip renders (whole on e-7q1m, elided and dimmed on the
+//     closed e-3v8p).
 //   - e-p3dx carries Standing+Pinned, the mandate-shaped pair, so the two
 //     PERMANENT-channel rows have a non-default value to render somewhere.
 func fixtureEpics() []board.EpicInfo {
@@ -686,11 +692,23 @@ func fixtureEpics() []board.EpicInfo {
 			Repos: []string{"tomo/joubisai"},
 		},
 		{
-			// The CLOSED box, and the only one: it is what `epic reopen` has to
-			// aim at, what the closed-scope surfaces have to show, and what
-			// makes e-c4mt's wait on it resolvable instead of a bare id. Its
-			// members were archived with it, which is why a finished box
-			// reports 0/0.
+			// The same reserved title as e-7q1m in a DIFFERENT repo — the real
+			// board's shape, where a reserved name says nothing and the repo
+			// says everything — and closed, so one frame carries both states
+			// the repo chip can be in and neither had a headless producer:
+			// ELIDED (kyushu-trip is 11 cells and the row has 10 left) and
+			// DIMMED (a closed row recedes whole, repo included).
+			ID:     "e-3v8p",
+			Title:  "parking-lot",
+			Repos:  []string{"tomo/kyushu-trip"},
+			Closed: ts("2026-06-30T11:05:00Z"),
+		},
+		{
+			// The closed box the REST of the board points at: it is what
+			// `epic reopen` has to aim at, what the closed-scope surfaces have
+			// to show, and what makes e-c4mt's wait on it resolvable instead
+			// of a bare id. Its members were archived with it, which is why a
+			// finished box reports 0/0.
 			ID:     "e-2b7h",
 			Title:  "夏キャンプ 2026 — 装備の棚卸しと積み方の確定",
 			Goal:   "夏装備一式が積載図つきで確定している",

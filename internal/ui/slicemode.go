@@ -7,6 +7,7 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	lg "charm.land/lipgloss/v2"
+	"github.com/akira-toriyama/ridge/internal/board"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -78,7 +79,7 @@ type sliceRow struct {
 	mark   string // the leading lifecycle glyph, already padded to sliceMarkW
 	title  string // the first line's title, truncated only when there is no second
 	tail   string // the title's continuation on line two, "" when it fit on one
-	repo   string // the box's short repo, "" when the title says it or there is no room
+	repo   string // the box's short repo; "" when the title says it, the row wrapped, or there is no room
 	suffix string // furrow's derived numbers, never truncated
 	closed bool
 }
@@ -293,10 +294,7 @@ func (m *Model) sliceRows() []sliceRow {
 			}
 		}
 		for _, r := range m.repoVocab() {
-			short := r
-			if i := strings.LastIndex(r, "/"); i >= 0 {
-				short = r[i+1:]
-			}
+			short := board.ShortRepoName(r)
 			out = append(out, sliceRow{value: r,
 				lines: []string{ansi.Truncate(fmt.Sprintf("%s %d", short, counts[r]), slicePanelW-4, "…")}})
 		}
@@ -408,10 +406,26 @@ func (m *Model) sliceRows() []sliceRow {
 			// board's 134 open boxes are the reserved ones — mandate /
 			// parking-lot / requests, one per repo — so for three quarters of
 			// this axis the repo is the ONLY thing that tells two rows apart,
-			// and those rows have 9-15 free cells (measured 2026-09-13). The
-			// 25 of 35 remaining boxes whose title already opens with the repo
-			// get nothing, because it would be the same word twice.
-			repo := e.ShortRepo()
+			// and those rows have 9-15 cells standing empty (measured
+			// 2026-09-13). The 25 of 35 remaining boxes whose title already
+			// opens with the repo get nothing: it would be the same word twice.
+			// Against the BASENAME, not ShortRepo's `name+N`: a box titled
+			// `sill` in two repos reads `sill+1`, which is never a prefix of
+			// its own title, so the multi-repo boxes walked straight past the
+			// same-word-twice rule and rendered `sill sill+1`. Four boxes on
+			// the real board have that shape and are saved only by their
+			// titles wrapping. When the title already says the first repo, the
+			// `+N` remainder is the only part left worth showing.
+			repo := ""
+			if len(e.Repos) > 0 {
+				repo = board.ShortRepoName(e.Repos[0])
+				if strings.HasPrefix(strings.ToLower(e.Title), strings.ToLower(repo)) {
+					repo = ""
+				}
+				if n := len(e.Repos) - 1; n > 0 {
+					repo += fmt.Sprintf("+%d", n)
+				}
+			}
 			switch {
 			case wrapped:
 				// A title long enough to wrap already identifies its box, and
@@ -420,8 +434,6 @@ func (m *Model) sliceRows() []sliceRow {
 				// One row on the real board loses it, and none of the rows
 				// that render identically without it are in that set.
 				repo = ""
-			case strings.HasPrefix(strings.ToLower(e.Title), strings.ToLower(repo)):
-				repo = "" // the same word twice
 			}
 			row := sliceRow{
 				value:  e.ID,
@@ -445,9 +457,9 @@ func (m *Model) sliceRows() []sliceRow {
 			// while an absent one does not. Measured over the real board's 179
 			// rows (2026-09-13): dropping it leaves 9 rows rendering
 			// identically to another, shortening it leaves 0, at the price of
-			// 16 rows showing an elided repo — and the readout under the
-			// cursor spells every one of them out. Below 5 cells there is no
-			// discriminator left to show, only noise.
+			// 14 rows showing an elided repo — and the readout under the
+			// cursor spells every one of them out. Below sliceRepoMin there is
+			// no discriminator left to show, only noise.
 			if repo != "" {
 				free := slicePanelW - 4 - lg.Width(last) - 1 - lg.Width(suffix)
 				switch {
@@ -756,8 +768,9 @@ func (m *Model) sliceRowBody(r sliceRow, li int, style lg.Style, hi bool) string
 	if li > 0 {
 		// The continuation: a hanging indent where the mark was, the title's
 		// rest, and the numbers the first line gave up so the title could have
-		// the whole width.
-		return strings.Repeat(" ", sliceMarkW) + titleStyle.Render(r.tail) + repo + suffix
+		// the whole width. No repo — a row with a continuation wrapped, and a
+		// wrapped row carries none.
+		return strings.Repeat(" ", sliceMarkW) + titleStyle.Render(r.tail) + suffix
 	}
 	head := markStyle.Render(r.mark) + titleStyle.Render(r.title)
 	if li+1 < len(r.lines) {

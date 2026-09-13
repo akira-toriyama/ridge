@@ -88,11 +88,7 @@ func (m *Model) swimVocab() []swimValue {
 	switch m.swimAxis {
 	case sliceRepo:
 		for _, r := range m.repoVocab() {
-			short := r
-			if i := strings.LastIndex(r, "/"); i >= 0 {
-				short = r[i+1:]
-			}
-			out = append(out, swimValue{Key: r, Label: short})
+			out = append(out, swimValue{Key: r, Label: board.ShortRepoName(r)})
 		}
 	case sliceLabel:
 		for _, l := range m.labelVocab() {
