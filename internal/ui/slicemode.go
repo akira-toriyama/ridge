@@ -48,6 +48,13 @@ const (
 	sliceRowTop = boardTop + 3 // panel header + axis line + scope line
 	// sliceMarkW is the lifecycle column: one glyph plus its separating space.
 	sliceMarkW = 2
+	// sliceRepoMin is the fewest cells worth spending on a row's repo: the
+	// elision costs one, so 8 keeps seven characters, and two repos that
+	// differ at all differ inside that. Measured over the real board's 179
+	// rows (2026-09-13), 5, 6 and 8 all leave ZERO rows rendering identically
+	// to another, so the floor is chosen for the quality of the discriminator
+	// rather than the count; 10 starts losing rows again (3).
+	sliceRepoMin = 8
 	// sliceWrapCap is the region's line capacity below which a row stays on
 	// ONE line however long its title is. A region of 4 lines is the smallest
 	// that can hold a two-line row whole even with both indicators reserved
@@ -71,6 +78,7 @@ type sliceRow struct {
 	mark   string // the leading lifecycle glyph, already padded to sliceMarkW
 	title  string // the first line's title, truncated only when there is no second
 	tail   string // the title's continuation on line two, "" when it fit on one
+	repo   string // the box's short repo, "" when the title says it or there is no room
 	suffix string // furrow's derived numbers, never truncated
 	closed bool
 }
@@ -395,6 +403,26 @@ func (m *Model) sliceRows() []sliceRow {
 				tail = ansi.Truncate(strings.TrimPrefix(e.Title, title), one, "…")
 				wrapped = true
 			}
+			// The repo, where the title does not already say it and the row has
+			// cells standing empty. It is not decoration: 99 of the real
+			// board's 134 open boxes are the reserved ones — mandate /
+			// parking-lot / requests, one per repo — so for three quarters of
+			// this axis the repo is the ONLY thing that tells two rows apart,
+			// and those rows have 9-15 free cells (measured 2026-09-13). The
+			// 25 of 35 remaining boxes whose title already opens with the repo
+			// get nothing, because it would be the same word twice.
+			repo := e.ShortRepo()
+			switch {
+			case wrapped:
+				// A title long enough to wrap already identifies its box, and
+				// the continuation is where an elided title lands — a repo
+				// beside it competes with the text it exists to disambiguate.
+				// One row on the real board loses it, and none of the rows
+				// that render identically without it are in that set.
+				repo = ""
+			case strings.HasPrefix(strings.ToLower(e.Title), strings.ToLower(repo)):
+				repo = "" // the same word twice
+			}
 			row := sliceRow{
 				value:  e.ID,
 				mark:   mark + " ",
@@ -403,12 +431,40 @@ func (m *Model) sliceRows() []sliceRow {
 				suffix: suffix,
 				closed: !e.Closed.IsZero(),
 			}
+			var last string
 			if !wrapped {
-				row.lines = []string{row.mark + title + suffix}
+				last = row.mark + title
 			} else {
 				// The continuation hangs under the title, clear of the mark
 				// column, so a two-line row cannot be read as two rows.
-				row.lines = []string{row.mark + title, strings.Repeat(" ", sliceMarkW) + tail + suffix}
+				last = strings.Repeat(" ", sliceMarkW) + tail
+			}
+			// It takes only cells nothing else wanted — the title never yields
+			// for it — and is shortened rather than dropped when those cells
+			// are few, because a shortened repo still tells two rows apart
+			// while an absent one does not. Measured over the real board's 179
+			// rows (2026-09-13): dropping it leaves 9 rows rendering
+			// identically to another, shortening it leaves 0, at the price of
+			// 16 rows showing an elided repo — and the readout under the
+			// cursor spells every one of them out. Below 5 cells there is no
+			// discriminator left to show, only noise.
+			if repo != "" {
+				free := slicePanelW - 4 - lg.Width(last) - 1 - lg.Width(suffix)
+				switch {
+				case free < sliceRepoMin:
+					repo = ""
+				case lg.Width(repo) > free:
+					repo = ansi.Truncate(repo, free, "…")
+				}
+			}
+			row.repo = repo
+			if repo != "" {
+				last += " " + repo
+			}
+			if !wrapped {
+				row.lines = []string{last + suffix}
+			} else {
+				row.lines = []string{row.mark + title, last + suffix}
 			}
 			out = append(out, row)
 		}
@@ -689,17 +745,25 @@ func (m *Model) sliceRowBody(r sliceRow, li int, style lg.Style, hi bool) string
 	if !r.closed && strings.HasSuffix(r.suffix, glyphWIPOver) {
 		suffix = sufStyle.Render(strings.TrimSuffix(r.suffix, glyphWIPOver)) + th.warn.Render(glyphWIPOver)
 	}
+	// th.chipAlt is the card's own repo chip: one vocabulary for the same fact.
+	repo := ""
+	if r.repo != "" {
+		repo = " " + th.chipAlt.Render(r.repo)
+		if r.closed && !hi {
+			repo = " " + th.dim.Render(r.repo)
+		}
+	}
 	if li > 0 {
 		// The continuation: a hanging indent where the mark was, the title's
 		// rest, and the numbers the first line gave up so the title could have
 		// the whole width.
-		return strings.Repeat(" ", sliceMarkW) + titleStyle.Render(r.tail) + suffix
+		return strings.Repeat(" ", sliceMarkW) + titleStyle.Render(r.tail) + repo + suffix
 	}
 	head := markStyle.Render(r.mark) + titleStyle.Render(r.title)
 	if li+1 < len(r.lines) {
 		return head // the suffix rides the LAST line, whatever line that is
 	}
-	return head + suffix
+	return head + repo + suffix
 }
 
 // sliceLayer renders the panel: axis header, value rows (cursor while the

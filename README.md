@@ -201,7 +201,7 @@ handlers match. This table is only a foothold.
 |---|---|
 | `?` | **Key list** (everything is reachable from here) |
 | `Space` | Peek |
-| `s` | Slice panel (the left side nav: repo / label / epic; `tab` switches the axis, `⏎` slices, `z` includes closed boxes, `m` / `A` manage a box). A box title too long for the panel wraps to a second line, and the bottom row names the row under the cursor in full |
+| `s` | Slice panel (the left side nav: repo / label / epic; `tab` switches the axis, `⏎` slices, `z` includes closed boxes, `m` / `A` manage a box). A box title too long for the panel wraps to a second line, the row carries the repo where the title does not say it, and the bottom row names the row under the cursor in full |
 | `S` | Dependency graph (rooted at one task; `o` for top-down / left-right) |
 | `T` | Dependency map (every cluster at once) |
 | `E` | Box overview (every epic by repo; `⏎` slices to that box, `z` includes closed) |

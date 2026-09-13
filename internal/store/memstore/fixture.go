@@ -670,6 +670,22 @@ func fixtureEpics() []board.EpicInfo {
 			OpenDeps: []string{"e-fw2m"},
 		},
 		{
+			// The board's DOMINANT row shape, which every other box here is
+			// the exception to: a reserved box carries the same short title in
+			// every repo (the real board is 99 of 134 open boxes titled
+			// mandate / parking-lot / requests, one per repo, 2026-09-13), so
+			// its title identifies nothing and its row has cells to spare.
+			// Without one the fixture has no row that fits on ONE line either,
+			// and the panel's wrap arithmetic was pinned only by rows that all
+			// wrapped.
+			// 0/0 for the same reason the closed box reports it: no member
+			// task on this board belongs to it, and the fixture's declared
+			// progress has to equal what its members measure.
+			ID:    "e-7q1m",
+			Title: "parking-lot",
+			Repos: []string{"tomo/joubisai"},
+		},
+		{
 			// The CLOSED box, and the only one: it is what `epic reopen` has to
 			// aim at, what the closed-scope surfaces have to show, and what
 			// makes e-c4mt's wait on it resolvable instead of a bare id. Its

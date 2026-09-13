@@ -59,20 +59,29 @@ type Task struct {
 	Body      string
 }
 
-// ShortRepo renders "akira-toriyama/vista" as "vista" for a narrow card.
-func (t *Task) ShortRepo() string {
-	if len(t.Repos) == 0 {
+// ShortRepo renders "akira-toriyama/vista" as "vista" for a narrow surface,
+// and says how many more are attached rather than naming one and hiding the
+// rest. Tasks and boxes both carry a repo list, and both have a row too narrow
+// to spell it out, so the rule lives here once.
+func ShortRepo(repos []string) string {
+	if len(repos) == 0 {
 		return ""
 	}
-	r := t.Repos[0]
+	r := repos[0]
 	if i := strings.LastIndex(r, "/"); i >= 0 {
 		r = r[i+1:]
 	}
-	if len(t.Repos) > 1 {
-		return fmt.Sprintf("%s+%d", r, len(t.Repos)-1)
+	if len(repos) > 1 {
+		return fmt.Sprintf("%s+%d", r, len(repos)-1)
 	}
 	return r
 }
+
+// ShortRepo is the task's own repo list, shortened.
+func (t *Task) ShortRepo() string { return ShortRepo(t.Repos) }
+
+// ShortRepo is the box's own repo list, shortened.
+func (e EpicInfo) ShortRepo() string { return ShortRepo(e.Repos) }
 
 // CheckProgress counts the task's own checklist.
 func (t *Task) CheckProgress() (done, total int) {

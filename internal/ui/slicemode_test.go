@@ -89,7 +89,7 @@ func TestSliceEpicRowsCarryProgressAndClickSelects(t *testing.T) {
 	press(m, "s")
 	m.sliceField = sliceEpic
 	rows := m.sliceRows()
-	if len(rows) != 4 || rows[0].value != "e-fw2m" {
+	if len(rows) != 5 || rows[0].value != "e-fw2m" {
 		t.Fatalf("epic rows = %+v", rows)
 	}
 	if !strings.Contains(rows[0].text(), "6/18") {
@@ -908,5 +908,50 @@ func TestSliceWrappedRowIsDrawnAsOneRow(t *testing.T) {
 	title := cell(head, strings.TrimSpace(rows[0].title))
 	if got := cell(cont, strings.TrimSpace(rows[0].tail)); got != title {
 		t.Errorf("the continuation starts at cell %d, the title at %d — it must hang under the title", got, title)
+	}
+}
+
+// The repo on the row: the reserved boxes carry the same title in every repo,
+// so without it three quarters of the real board's epic axis is rows that
+// render identically. It takes only cells nothing else wanted.
+func TestSliceEpicRowCarriesTheRepoWhereTheTitleDoesNot(t *testing.T) {
+	long := "ridge: TUI v2 — furrow parity・俯瞰・時間軸・保存ビュー"
+	boxes := []board.EpicInfo{
+		{ID: "e-a", Title: "parking-lot", Repos: []string{"tomo/joubisai"}, Done: 1, Total: 4},
+		{ID: "e-b", Title: "parking-lot", Repos: []string{"tomo/kyushu-trip"}, Done: 1, Total: 4},
+		// The title already opens with the repo: saying it twice is noise.
+		{ID: "e-c", Title: "ridge: TUI v2", Repos: []string{"akira-toriyama/ridge"}, Done: 2, Total: 3},
+		// No room: the title fills the line, so the repo yields, not the title.
+		{ID: "e-d", Title: long, Repos: []string{"tomo/joubisai"}, Done: 2, Total: 3},
+		// Several repos: name one and count the rest, as a card does.
+		{ID: "e-e", Title: "mandate", Repos: []string{"tomo/joubisai", "tomo/kyushu-trip"}, Done: 0, Total: 1},
+	}
+	m := boardModel(t, 240, 50)
+	m.b = board.NewStoreBoard([]board.Lane{{Name: "backlog"}}, nil, boxes, true, "")
+	m.recompute()
+	m.sliceField = sliceEpic
+	rows := m.sliceRows()
+
+	// The whole point: two boxes with the SAME title no longer render the same.
+	if rows[0].text() == rows[1].text() {
+		t.Errorf("two reserved boxes still render identically: %q", rows[0].text())
+	}
+	// e-b's row has 10 free cells and "kyushu-trip" is 11, so it is shortened
+	// rather than dropped — the row still separates from e-a, and the readout
+	// under the cursor spells it out.
+	for i, want := range []string{"joubisai", "kyushu-tr…", "", "", "joubisai+1"} {
+		if rows[i].repo != want {
+			t.Errorf("%s carries repo %q, want %q", boxes[i].ID, rows[i].repo, want)
+		}
+	}
+	// The repo never costs the title a cell: e-d's title is what it would be
+	// with no repo at all.
+	noRepo := boxes[3]
+	noRepo.Repos = nil
+	m.b = board.NewStoreBoard([]board.Lane{{Name: "backlog"}}, nil, []board.EpicInfo{noRepo}, true, "")
+	m.recompute()
+	if got := m.sliceRows()[0]; got.title != rows[3].title || got.tail != rows[3].tail {
+		t.Errorf("the title yielded for the repo: %q/%q with a repo, %q/%q without",
+			rows[3].title, rows[3].tail, got.title, got.tail)
 	}
 }
