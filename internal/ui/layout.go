@@ -184,13 +184,34 @@ func (l *layout) dropY(lane string, idx int) (int, bool) {
 	if idx > last.Idx {
 		return clamp(last.Y+last.H, c.Top, maxInt(c.Top, c.Bot-1)), true
 	}
-	// idx is ABOVE the fold: the column was scrolled past it — the wheel is
-	// allowed to move the destination column mid-move (drag.go), so a
-	// keyboard move and the wheel meet here routinely. Its boundary is not on
-	// screen, and reporting the column's first row instead marked a slot the
-	// commit will not use. Same rule the drag path states for a pointer off
-	// the board: a slot that cannot be shown is not marked.
-	return 0, false
+	return c.Top, true
+}
+
+// slotVisible reports whether insertion index idx has a boundary ON SCREEN in
+// this column — a card drawn at idx, or the row after the last card when that
+// card ends the lane.
+//
+// dropY answers leniently for the DRAG, whose index is resolved from the
+// pointer and is therefore always on screen; a drag off the end must still get
+// the append row. A keyboard move picks its slot with the keyboard, and the
+// wheel may scroll the destination column out from under it, so that caller
+// asks this first: a bar drawn for a slot nobody can see marks a row the
+// commit will not use.
+func (l *layout) slotVisible(lane string, idx int) bool {
+	c := l.byName[lane]
+	if c == nil {
+		return false
+	}
+	if len(c.Cards) == 0 {
+		return len(c.Tasks) == 0
+	}
+	for _, b := range c.Cards {
+		if b.Idx == idx {
+			return true
+		}
+	}
+	last := c.Cards[len(c.Cards)-1]
+	return idx == last.Idx+1 && last.Idx == len(c.Tasks)-1
 }
 
 // measurer memoises card heights ACROSS frames.
