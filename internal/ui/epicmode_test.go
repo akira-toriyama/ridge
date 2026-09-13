@@ -1064,7 +1064,7 @@ func TestEpicDemoFramesCarryWhatTheyExistFor(t *testing.T) {
 		// counting what the narrow population leaves out, and the note saying
 		// which scope is in force.
 		{"sliceepicall", []string{"open + closed", "z scope",
-			glyphDone + " 夏キャンプ", "4 open · 1 closed"}},
+			glyphDone + " 夏キャンプ", "5 open · 2 closed"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.demo, func(t *testing.T) {

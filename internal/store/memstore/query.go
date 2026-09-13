@@ -194,12 +194,7 @@ func (v queryVocab) resolveRepo(s string) (string, string) {
 	}
 }
 
-func shortRepo(r string) string {
-	if i := strings.LastIndex(r, "/"); i >= 0 {
-		return r[i+1:]
-	}
-	return r
-}
+func shortRepo(r string) string { return board.ShortRepoName(r) }
 
 // tokenize splits on whitespace OUTSIDE quotes, KEEPING the quotes: the
 // parser needs their positions, because furrow refuses the misplaced shapes

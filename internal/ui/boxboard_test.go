@@ -229,7 +229,7 @@ func TestBoxOverviewDemoFramesCarryWhatTheyExistFor(t *testing.T) {
 		{"boxes", []string{"boxes by repo", "scope open", "tomo/kyushu-trip",
 			glyphEpicActive + " e-fw2m", "6/18", "←e-p3dx", "1 stuck"}},
 		// The widened scope and the closed row, which has no other frame.
-		{"boxesall", []string{"scope open + closed", "1 closed",
+		{"boxesall", []string{"scope open + closed", "2 closed",
 			glyphDone + " e-2b7h", "closed 2026-07-15"}},
 	} {
 		t.Run(tc.demo, func(t *testing.T) {

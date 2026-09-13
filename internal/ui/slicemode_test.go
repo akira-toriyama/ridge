@@ -89,7 +89,7 @@ func TestSliceEpicRowsCarryProgressAndClickSelects(t *testing.T) {
 	press(m, "s")
 	m.sliceField = sliceEpic
 	rows := m.sliceRows()
-	if len(rows) != 4 || rows[0].value != "e-fw2m" {
+	if len(rows) != 5 || rows[0].value != "e-fw2m" {
 		t.Fatalf("epic rows = %+v", rows)
 	}
 	if !strings.Contains(rows[0].text(), "6/18") {
@@ -533,12 +533,12 @@ func TestSliceScopeLineNamesTheHiddenClosedBoxes(t *testing.T) {
 	}
 	m.sliceField = sliceEpic
 	narrow := m.sliceScope(len(m.sliceRows()))
-	if !strings.Contains(narrow, "+1 closed") || !strings.Contains(narrow, "z") {
+	if !strings.Contains(narrow, "+2 closed") || !strings.Contains(narrow, "z") {
 		t.Errorf("narrow scope = %q, want the hidden count and the key that shows them", narrow)
 	}
 	press(m, "z")
 	wide := m.sliceScope(len(m.sliceRows()))
-	if !strings.Contains(wide, "1 closed") || strings.Contains(wide, "+") {
+	if !strings.Contains(wide, "2 closed") || strings.Contains(wide, "+") {
 		t.Errorf("widened scope = %q, want it to stop advertising a widening", wide)
 	}
 	if !strings.Contains(frame(m), wide) {
@@ -618,6 +618,22 @@ func TestSlicePanelStylesTheLifecycleAndTheClosedRow(t *testing.T) {
 	if got := styleAt(l, strings.LastIndex(l, glyphWIPOver)); got == open(th.warn) {
 		t.Errorf("a CLOSED stuck row still shouts: %q is styled th.warn", glyphWIPOver)
 	}
+	// The repo chip is the CARD's chip, not a colour of its own, and on a
+	// closed row it recedes with everything else. Both were mutable to a bare
+	// string with the whole package still green.
+	m2 := boardModel(t, 240, 50)
+	m2.toggleSlice()
+	m2.sliceField, m2.sliceEpicAll = sliceEpic, true
+	m2.sliceIdx = 0 // clear of both repo rows
+	l = rawPanelLine(t, m2, "parking-lot joubisai")
+	if got, want := styleAt(l, strings.Index(l, "joubisai")), open(th.chipAlt); got != want {
+		t.Errorf("the repo is styled %q, want the card's repo chip %q", got, want)
+	}
+	l = rawPanelLine(t, m2, "parking-lot kyushu-tr…")
+	if got, want := styleAt(l, strings.Index(l, "kyushu-tr…")), open(th.dim); got != want {
+		t.Errorf("a closed row's repo is styled %q, want th.dim %q", got, want)
+	}
+
 	// The cursor outranks the dim — the row you are standing on is never the
 	// recessed one. (The demo frame sliceepicclosed is its headless form.)
 	m.sliceIdx = len(m.sliceRows()) - 1
@@ -908,5 +924,84 @@ func TestSliceWrappedRowIsDrawnAsOneRow(t *testing.T) {
 	title := cell(head, strings.TrimSpace(rows[0].title))
 	if got := cell(cont, strings.TrimSpace(rows[0].tail)); got != title {
 		t.Errorf("the continuation starts at cell %d, the title at %d — it must hang under the title", got, title)
+	}
+}
+
+// The repo on the row: the reserved boxes carry the same title in every repo,
+// so without it three quarters of the real board's epic axis is rows that
+// render identically. It takes only cells nothing else wanted.
+func TestSliceEpicRowCarriesTheRepoWhereTheTitleDoesNot(t *testing.T) {
+	long := "ridge: TUI v2 — furrow parity・俯瞰・時間軸・保存ビュー"
+	boxes := []board.EpicInfo{
+		{ID: "e-a", Title: "parking-lot", Repos: []string{"tomo/joubisai"}, Done: 1, Total: 4},
+		{ID: "e-b", Title: "parking-lot", Repos: []string{"tomo/kyushu-trip"}, Done: 1, Total: 4},
+		// The title already opens with the repo: saying it twice is noise.
+		{ID: "e-c", Title: "ridge: TUI v2", Repos: []string{"akira-toriyama/ridge"}, Done: 2, Total: 3},
+		// No room: the title fills the line, so the repo yields, not the title.
+		{ID: "e-d", Title: long, Repos: []string{"tomo/joubisai"}, Done: 2, Total: 3},
+		// Several repos: name one and count the rest, as a card does.
+		{ID: "e-e", Title: "mandate", Repos: []string{"tomo/joubisai", "tomo/kyushu-trip"}, Done: 0, Total: 1},
+		// Several repos AND a title that opens with the first: only the count
+		// of the others is left worth showing.
+		{ID: "e-f", Title: "joubisai", Repos: []string{"tomo/joubisai", "tomo/kyushu-trip"}, Done: 0, Total: 1},
+		// Wraps, but its continuation has cells to spare — the row the
+		// wrapped-row rule is actually about.
+		{ID: "e-w", Title: "夏休み自由研究 — 火起こしと星の観察", Repos: []string{"tomo/kyushu-trip"}, Done: 0, Total: 2},
+	}
+	m := boardModel(t, 240, 50)
+	m.b = board.NewStoreBoard([]board.Lane{{Name: "backlog"}}, nil, boxes, true, "")
+	m.recompute()
+	m.sliceField = sliceEpic
+	rows := m.sliceRows()
+
+	// The whole point: two boxes with the SAME title no longer render the same.
+	if rows[0].text() == rows[1].text() {
+		t.Errorf("two reserved boxes still render identically: %q", rows[0].text())
+	}
+	// e-b's row has 10 free cells and "kyushu-trip" is 11, so it is shortened
+	// rather than dropped — the row still separates from e-a, and the readout
+	// under the cursor spells it out.
+	//
+	// e-f's title opens with its first repo, so only the `+1` remainder is
+	// left worth showing: matching the title against ShortRepo's own `name+N`
+	// form let every multi-repo box through the same-word-twice rule.
+	for i, want := range []string{"joubisai", "kyushu-tr…", "", "", "joubisai+1", "+1", ""} {
+		if rows[i].repo != want {
+			t.Errorf("%s carries repo %q, want %q", boxes[i].ID, rows[i].repo, want)
+		}
+	}
+	// A row whose title WRAPPED carries none — including e-w, whose
+	// continuation has room to spare. The long title already identifies the
+	// box, and the continuation is where an elided title lands.
+	for _, i := range []int{3, 6} {
+		if len(rows[i].lines) != 2 || rows[i].repo != "" {
+			t.Errorf("%s wrapped and still carries a repo: %q in %q",
+				boxes[i].ID, rows[i].repo, rows[i].lines)
+		}
+	}
+	// And the floor holds FROM BELOW: a row with 7 cells to spare shows
+	// nothing rather than a shortened stub. The title length here is a fixed
+	// 14 cells — deriving it from sliceRepoMin would move the case with the
+	// constant and pin nothing.
+	tight := []board.EpicInfo{{ID: "e-g", Title: strings.Repeat("x", 14),
+		Repos: []string{"tomo/joubisai"}, Done: 1, Total: 4}}
+	m2 := boardModel(t, 240, 50)
+	m2.b = board.NewStoreBoard([]board.Lane{{Name: "backlog"}}, nil, tight, true, "")
+	m2.recompute()
+	m2.sliceField = sliceEpic
+	if got := m2.sliceRows()[0]; got.repo != "" {
+		t.Errorf("a row with 7 cells to spare still shows %q — that is under sliceRepoMin (%d)",
+			got.repo, sliceRepoMin)
+	}
+
+	// The repo never costs the title a cell: e-d's title is what it would be
+	// with no repo at all.
+	noRepo := boxes[3]
+	noRepo.Repos = nil
+	m.b = board.NewStoreBoard([]board.Lane{{Name: "backlog"}}, nil, []board.EpicInfo{noRepo}, true, "")
+	m.recompute()
+	if got := m.sliceRows()[0]; got.title != rows[3].title || got.tail != rows[3].tail {
+		t.Errorf("the title yielded for the repo: %q/%q with a repo, %q/%q without",
+			rows[3].title, rows[3].tail, got.title, got.tail)
 	}
 }
