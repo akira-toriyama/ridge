@@ -38,17 +38,54 @@ func TestOpeningAModalClosesTheHelpOverlay(t *testing.T) {
 	}
 }
 
-// The same state, asserted on the FRAME rather than the flag: whatever has
-// the keyboard has to be what is drawn.
-func TestTheEpicOverlayIsVisibleWhenItHasTheKeyboard(t *testing.T) {
-	m := boardModel(t, 240, 50)
-	press(m, "?", "E", "m")
-	if m.mode != modeEpic {
-		t.Fatalf("? E m reached mode %v, want the epic overlay", m.mode)
-	}
-	frame := ansiStrip(m.View().Content)
-	if strings.Contains(frame, "quit · ? help") && !strings.Contains(frame, "box") {
-		t.Errorf("the epic overlay holds the keyboard but the frame is the help listing:\n%s",
-			firstLines(frame, 4))
-	}
+// The `?` listing is the whole frame while it is up. Two surfaces still acted
+// under it because `?` IS bound in them and only their esc branch looked:
+// `⏎ ? J ⏎` moved a card to the bottom of another lane, and `X ? ⏎ ⏎` armed
+// and applied a bulk archive — both with nothing but the listing on screen.
+// The first key takes the overlay off and does nothing else.
+func TestNoMutationRunsUnderTheHelpOverlay(t *testing.T) {
+	const w, h = 240, 40
+
+	t.Run("move mode commit", func(t *testing.T) {
+		m := boardModel(t, w, h)
+		id := m.curTask().ID
+		before := laneOf(m, id)
+		press(m, "enter")
+		if m.mode != modeMove {
+			t.Fatalf("⏎ reached mode %v, want move", m.mode)
+		}
+		press(m, "?")
+		if !m.fullHelp {
+			t.Fatal("? did not open the listing in move mode")
+		}
+		press(m, "J", "enter")
+		if got := laneOf(m, id); got != before {
+			t.Errorf("%s moved from %s to %s while the frame showed only the help listing",
+				id, before, got)
+		}
+		if m.fullHelp {
+			t.Error("the first key under the listing did not take it off")
+		}
+	})
+
+	t.Run("sweep gate", func(t *testing.T) {
+		m := boardModel(t, w, h)
+		before := len(m.b.Tasks())
+		press(m, "X")
+		if m.view != viewSweep {
+			t.Fatalf("X reached view %v, want the sweep view", m.view)
+		}
+		press(m, "?")
+		if !m.fullHelp {
+			t.Fatal("? did not open the listing in the sweep view")
+		}
+		press(m, "enter", "enter")
+		if got := len(m.b.Tasks()); got != before {
+			t.Errorf("the board went from %d tasks to %d while the frame showed only the help listing",
+				before, got)
+		}
+		if m.fullHelp {
+			t.Error("the first key under the listing did not take it off")
+		}
+	})
 }

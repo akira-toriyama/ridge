@@ -78,6 +78,15 @@ func (m *Model) onMoveKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.fullHelp = !m.fullHelp
 		return nil
 
+	// While the listing is up it is the whole frame: the board, the lifted
+	// card and the drop marker are all behind it. So the FIRST key takes the
+	// overlay off and does nothing else — `⏎ ? J ⏎` used to move a card to the
+	// bottom of another lane while the user could see only the help listing.
+	// esc keeps its own branch below: it also has a second job here.
+	case m.fullHelp && !key.Matches(msg, m.keys.Cancel) && !key.Matches(msg, m.keys.ForceQuit):
+		m.fullHelp = false
+		return nil
+
 	case key.Matches(msg, m.keys.Cancel):
 		// The overlay is on top, so it is what esc takes off first — same
 		// ordering as the board's and the graph's Cancel.

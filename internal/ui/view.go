@@ -477,6 +477,13 @@ func (m *Model) dropLayer() *lg.Layer {
 	switch {
 	case m.mode == modeMove:
 		lane, idx = m.dropLane, m.dropIdx
+		if !m.lay.slotVisible(lane, idx) {
+			// The wheel is allowed to move the destination column while a
+			// keyboard move is in flight (drag.go), so the slot can be off
+			// screen — and dropY answers for the DRAG, which needs the append
+			// row and can never be off screen. Nothing to mark here.
+			return nil
+		}
 	case m.drag.moved:
 		// Ask the same predicate the RELEASE asks, take the lane IT resolves,
 		// and ask now rather than trusting values cached at motion time: an
