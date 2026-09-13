@@ -591,9 +591,17 @@ func (m *Model) renderGraphNode(n *egoNode, w, titleLines int) string {
 	lines = append(lines, joinEnds(head, right, inner))
 
 	body := wrapLines(t.Title, inner)
-	if len(body) > titleLines {
+	if len(body) > titleLines && titleLines > 0 {
 		body = body[:titleLines]
-		body[titleLines-1] = ansi.Truncate(body[titleLines-1], inner-1, "…")
+		// The cut is in the TITLE, not in this line. wrapLines already fits
+		// every line inside inner, so truncating the LINE appended the
+		// ellipsis only when it happened to land on exactly inner cells — and
+		// a Japanese title almost never does, because a double-width glyph
+		// wraps one cell early. The node then showed 11 cells of a 77-cell
+		// title with nothing to say the rest existed.
+		if inner >= 2 {
+			body[titleLines-1] = ansi.Truncate(body[titleLines-1], inner-1, "") + "…"
+		}
 	}
 	titleStyle := th.base
 	if m.g.IsDone(t.ID) {
