@@ -340,7 +340,8 @@ func (m *Model) sliceRows() []sliceRow {
 			// renderer's outer truncate to w-4 then landed on the digits, so
 			// the panel showed a number that was not the epic's progress and
 			// ate the stuck marker that glossary.md makes part of the row
-			// ("epic 行は store の progress/stuck つき").
+			// ("the head of the measured suffix, beside the store's
+			// progress/stuck").
 			// Measure the composed pieces; never hard-code a cell budget
 			// around CJK text.
 			suffix := ""
