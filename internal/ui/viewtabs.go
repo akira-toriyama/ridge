@@ -208,8 +208,10 @@ func (m *Model) switchView(i int) tea.Cmd {
 	}
 	m.sliceIdx, m.sliceOff = 0, 0
 
-	m.qRaw = v.Q
-	m.ti.SetValue(v.Q)
+	// views.toml is hand-editable, so its q reaches the filter row as free
+	// text — the same door -filter uses (oneLineQuery).
+	m.qRaw = oneLineQuery(v.Q)
+	m.ti.SetValue(m.qRaw)
 	// A view change is a new view: pins were jump/add artifacts of the old
 	// one (selectSlice's rule, and applyFilter's when everything empties).
 	m.pinned = map[string]bool{}
