@@ -90,12 +90,26 @@ func Load(path string) ([]View, []string, error) {
 	return f.View, warns, nil
 }
 
+// The strict pass below is QUADRATIC in the number of unknown keys — go-toml
+// accumulates each one against the whole set (measured: 1,000 keys 32ms,
+// 2,000 92ms, 4,000 361ms, 36,000 ~14s) — and every warning it returns is
+// joined into a status line the UI re-measures on every frame. Both ends are
+// bounded, and neither bound can hide a real typo: the warnings exist for a
+// hand-edited file, and a file past either limit is not that.
+const (
+	strictScanLimit       = 32 << 10 // bytes; a nine-view file is under 2KiB
+	maxUnknownKeyWarnings = 20
+)
+
 // unknownKeyWarnings is a second, strict decode of the same bytes, demoted
 // to warnings: the lenient decode above deliberately ignores unknown keys
 // (forward-compat — go-dev's config rule), but a misspelled KEY is the
 // likelier hand-edit than a misspelled value, and it was the one typo with
 // no report at all.
 func unknownKeyWarnings(b []byte) []string {
+	if len(b) > strictScanLimit {
+		return []string{fmt.Sprintf("views.toml is %d bytes; unknown keys not checked", len(b))}
+	}
 	d := toml.NewDecoder(bytes.NewReader(b))
 	d.DisallowUnknownFields()
 	var f file
@@ -106,6 +120,11 @@ func unknownKeyWarnings(b []byte) []string {
 	}
 	var warns []string
 	for _, de := range sme.Errors {
+		if len(warns) == maxUnknownKeyWarnings {
+			warns = append(warns, fmt.Sprintf("and %d more unknown keys ignored",
+				len(sme.Errors)-maxUnknownKeyWarnings))
+			break
+		}
 		warns = append(warns, fmt.Sprintf("unknown key %q ignored", strings.Join(de.Key(), ".")))
 	}
 	return warns
