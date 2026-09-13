@@ -174,8 +174,13 @@ func (m *Model) onMouseDown(msg tea.MouseClickMsg) tea.Cmd {
 		// no row check a click on the title bar, the filter row, a lane
 		// header or the footer re-pointed the selection invisibly and the
 		// open peek went on describing the task still on screen; the next
-		// key then acted on a different one. Re-pointing is a selection
-		// move, so it owes syncPeek and ensureVisible like every other.
+		// key then acted on a different one.
+		//
+		// syncPeek but NOT ensureVisible: focusing a lane by clicking its
+		// empty space is not a request to move the card cursor, and the one
+		// column the gesture must leave alone is the one the wheel just
+		// scrolled — ensureVisible's own comment names that snap-back as the
+		// thing to avoid.
 		c := m.lay.Col(lane)
 		if c == nil || msg.Y < c.Top || msg.Y >= c.Bot {
 			return nil
@@ -183,7 +188,6 @@ func (m *Model) onMouseDown(msg tea.MouseClickMsg) tea.Cmd {
 		if i := m.b.LaneIndex(lane); i >= 0 && i != m.curLane {
 			m.curLane = i
 			m.syncPeek()
-			m.ensureVisible()
 		}
 		return nil
 	}
