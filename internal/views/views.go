@@ -87,6 +87,15 @@ func Load(path string) ([]View, []string, error) {
 	// truncates from the right, and a clamp that changed what a view means
 	// outranks a key that changed nothing.
 	warns = append(warns, unknownKeyWarnings(b)...)
+	// Bound the whole report, not one source of it: clamp appends one line per
+	// repaired field with no cap of its own, and the UI joins every line into
+	// ONE status string it re-measures on every frame — 469 views produced a
+	// 140KB status line. Both sources meet here, so the cap lives here.
+	if len(warns) > maxViewWarnings {
+		more := len(warns) - maxViewWarnings
+		warns = append(warns[:maxViewWarnings:maxViewWarnings],
+			fmt.Sprintf("and %d more views.toml warning(s)", more))
+	}
 	return f.View, warns, nil
 }
 
@@ -97,8 +106,12 @@ func Load(path string) ([]View, []string, error) {
 // bounded, and neither bound can hide a real typo: the warnings exist for a
 // hand-edited file, and a file past either limit is not that.
 const (
-	strictScanLimit       = 32 << 10 // bytes; a nine-view file is under 2KiB
-	maxUnknownKeyWarnings = 20
+	// The cost scales with the NUMBER of keys, not with bytes, and short keys
+	// pack thousands into a small file (4,781 `za=0` lines fit in 32KiB and
+	// still cost ~0.6s), so the guard counts LINES — an upper bound on keys.
+	// A nine-view file with long queries is about 54 lines.
+	maxScanLines    = 400
+	maxViewWarnings = 20
 )
 
 // unknownKeyWarnings is a second, strict decode of the same bytes, demoted
@@ -107,8 +120,8 @@ const (
 // likelier hand-edit than a misspelled value, and it was the one typo with
 // no report at all.
 func unknownKeyWarnings(b []byte) []string {
-	if len(b) > strictScanLimit {
-		return []string{fmt.Sprintf("views.toml is %d bytes; unknown keys not checked", len(b))}
+	if n := bytes.Count(b, []byte{'\n'}) + 1; n > maxScanLines {
+		return []string{fmt.Sprintf("views.toml is %d lines; unknown keys not checked", n)}
 	}
 	d := toml.NewDecoder(bytes.NewReader(b))
 	d.DisallowUnknownFields()
@@ -118,13 +131,8 @@ func unknownKeyWarnings(b []byte) []string {
 	if !errors.As(err, &sme) {
 		return nil // any other error already surfaced from the lenient pass
 	}
-	var warns []string
+	warns := make([]string, 0, len(sme.Errors))
 	for _, de := range sme.Errors {
-		if len(warns) == maxUnknownKeyWarnings {
-			warns = append(warns, fmt.Sprintf("and %d more unknown keys ignored",
-				len(sme.Errors)-maxUnknownKeyWarnings))
-			break
-		}
 		warns = append(warns, fmt.Sprintf("unknown key %q ignored", strings.Join(de.Key(), ".")))
 	}
 	return warns

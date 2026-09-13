@@ -32,26 +32,31 @@ func manyUnknownKeys(n int) string {
 // a few thousand keys used to cost seconds of startup and then a warning
 // string long enough to be re-measured forever.
 func TestUnknownKeyWarningsAreBounded(t *testing.T) {
-	_, warns, err := Load(writeViews(t, manyUnknownKeys(500)))
+	// Under the line guard on purpose: this pins the REPORT cap, not the skip.
+	const keys = 300
+	_, warns, err := Load(writeViews(t, manyUnknownKeys(keys)))
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if len(warns) > maxUnknownKeyWarnings+1 {
-		t.Errorf("500 unknown keys produced %d warnings, want at most %d",
-			len(warns), maxUnknownKeyWarnings+1)
+	if len(warns) > maxViewWarnings+1 {
+		t.Errorf("%d unknown keys produced %d warnings, want at most %d",
+			keys, len(warns), maxViewWarnings+1)
 	}
-	if last := warns[len(warns)-1]; !strings.Contains(last, "more unknown keys") {
+	if last := warns[len(warns)-1]; !strings.Contains(last, "more views.toml warning") {
 		t.Errorf("the bounded report does not say how many it dropped: %q", last)
 	}
 }
 
-// Past the size limit the strict decode is skipped outright — it is the only
-// way to bound a cost that lives inside the TOML decoder. The skip has to
-// SAY so rather than look like a clean file.
+// Past the line limit the strict decode is skipped outright — it is the only
+// way to bound a cost that lives inside the TOML decoder. The skip has to SAY
+// so rather than look like a clean file. The guard counts LINES because the
+// cost scales with the number of KEYS: short keys pack thousands into a small
+// file, so a byte budget left seconds of work inside the "safe" region.
 func TestAnOversizeFileSkipsTheUnknownKeyScanAndSaysSo(t *testing.T) {
-	body := manyUnknownKeys(2000)
-	if len(body) <= strictScanLimit {
-		t.Fatalf("the fixture body is %d bytes, not past the %d limit", len(body), strictScanLimit)
+	body := manyUnknownKeys(maxScanLines + 100)
+	if len(body) > 32<<10 {
+		t.Fatalf("the body is %d bytes — big enough that a byte budget would have caught it too, "+
+			"so this test would not prove the guard counts lines", len(body))
 	}
 	_, warns, err := Load(writeViews(t, body))
 	if err != nil {
@@ -59,6 +64,30 @@ func TestAnOversizeFileSkipsTheUnknownKeyScanAndSaysSo(t *testing.T) {
 	}
 	if len(warns) != 1 || !strings.Contains(warns[0], "unknown keys not checked") {
 		t.Errorf("an oversize file reported %v, want one line saying the check was skipped", warns)
+	}
+}
+
+// clamp is the other warning source, and the UI joins BOTH into one status
+// string it re-measures on every frame. Bounding only the unknown-key half
+// left a 469-view file producing a 140KB status line.
+func TestClampWarningsAreBoundedToo(t *testing.T) {
+	var b strings.Builder
+	for i := 0; i < 60; i++ {
+		fmt.Fprintf(&b, "[[view]]\nname = \"v%d\"\nq = \"\"\nlayout = \"nonsense\"\nsort = \"nonsense\"\nslice = \"nonsense\"\n", i)
+	}
+	_, warns, err := Load(writeViews(t, b.String()))
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(warns) == 0 {
+		t.Fatal("60 views with three bad fields each produced no clamp warnings; the fixture no longer bites")
+	}
+	if len(warns) > maxViewWarnings+1 {
+		t.Errorf("clamp produced %d warnings, want the report bounded at %d", len(warns), maxViewWarnings+1)
+	}
+	joined := strings.Join(warns, "; ")
+	if len(joined) > 4096 {
+		t.Errorf("the joined status line is %d bytes; the UI re-measures it every frame", len(joined))
 	}
 }
 
