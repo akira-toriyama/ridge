@@ -66,25 +66,13 @@ func (m *Model) taskVisible(t *board.Task) bool {
 	return m.qMatched[t.ID]
 }
 
-// oneLineQuery flattens a query to the single line the filter row is. The
-// typed path cannot produce a break — a textinput refuses one — but -filter
-// and views.toml's q are free text, and lipgloss honours a break: the query
-// then rendered as a BLOCK, pushing its tail into the lane-header row below
-// and taking the ⚠ refusal with it, so a query ridge had already refused
-// looked accepted. The query's own grammar has no use for a newline, so
-// folding it to a space loses nothing furrow would have read.
-func oneLineQuery(s string) string {
-	s = strings.NewReplacer("\r\n", " ", "\r", " ", "\n", " ").Replace(s)
-	return strings.TrimSpace(s)
-}
-
 // applyFilter makes s the active typed query. It returns the Cmd that will
 // eventually deliver the store's verdict: a debounce tick on a live store, or
 // nil when the verdict was applied synchronously (fixture, or an empty
 // query).
 func (m *Model) applyFilter(s string) tea.Cmd {
 	prev := m.curTask()
-	m.qRaw = oneLineQuery(s)
+	m.qRaw = strings.TrimSpace(s)
 	if !m.lensOn() {
 		// Nothing is filtering any more (typed AND slice): jump pins have
 		// nothing to pin past. While a slice still narrows the board the

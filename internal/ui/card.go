@@ -85,10 +85,19 @@ func wrapLines(s string, w int) []string {
 // pad right-pads to exactly w display cells, truncating with an ellipsis when
 // too long. Everything that composes a card line goes through this, which is
 // why a double-width Japanese glyph cannot shear the right border.
+//
+// A line break is folded first, because a string carrying one cannot be
+// "exactly w cells" on one row: lipgloss renders it as a BLOCK, which pushes
+// the rest of the frame down a row and paints over whatever was there. Free
+// text reaches this from -filter, from views.toml's q and from a furrow
+// error, and every such value was one break away from shearing a row — so
+// the fold belongs here, where the one-line contract is stated, rather than
+// at each door.
 func pad(s string, w int) string {
 	if w <= 0 {
 		return ""
 	}
+	s = oneLine(s)
 	if lg.Width(s) > w {
 		s = ansi.Truncate(s, w, "…")
 	}
@@ -114,6 +123,19 @@ func capLines(body []string, limit, inner int) []string {
 		body[limit-1] = ansi.Truncate(body[limit-1], inner-1, "") + "…"
 	}
 	return body
+}
+
+// oneLine folds a line break to a space. lipgloss renders a break as a BLOCK,
+// so a value carrying one pushes the rest of the frame down a row and paints
+// over whatever was there. pad calls this last, which makes the one-line
+// contract true for every row; a caller that MEASURES free text before
+// composing it (the filter row) has to call it first, or the width it budgets
+// is the longest line rather than the string.
+func oneLine(s string) string {
+	if !strings.ContainsAny(s, "\n\r") {
+		return s
+	}
+	return strings.NewReplacer("\r\n", " ", "\r", " ", "\n", " ").Replace(s)
 }
 
 // cardLines builds a card's inner content (no border, no padding) at exactly
