@@ -79,10 +79,26 @@ var nowFn = time.Now
 
 // term is one parsed token.
 type term struct {
-	neg   bool
-	key   string // "" = bare word
-	vals  []string
+	neg  bool
+	key  string // "" = bare word
+	vals []qval
+}
+
+// qval is one alternative of a term, carrying its OWN quoting. The flag used
+// to be term-level, so `title:計画,"ダミー"` made 計画 an exact whole-title
+// match too — one quoted alternative silently re-read every other one.
+type qval struct {
+	text  string
 	exact bool // the value was quoted — title: then means the WHOLE title
+}
+
+// texts is the alternatives as plain strings, for the vocabulary refusals.
+func (t term) texts() []string {
+	out := make([]string, len(t.vals))
+	for i, v := range t.vals {
+		out[i] = v.text
+	}
+	return out
 }
 
 type parsedQuery struct {
@@ -330,7 +346,7 @@ func parseQuery(s string, v queryVocab) parsedQuery {
 					q.problems = append(q.problems, fmt.Sprintf("empty term (in %q)", tok))
 					continue
 				}
-				t.vals = []string{strings.ToLower(inner)}
+				t.vals = []qval{{text: strings.ToLower(inner)}}
 				q.terms = append(q.terms, t)
 			case text[closeIdx+2] == ':':
 				q.problems = append(q.problems, fmt.Sprintf(
@@ -348,7 +364,7 @@ func parseQuery(s string, v queryVocab) parsedQuery {
 				q.problems = append(q.problems, fmt.Sprintf("mismatched quotes in %q", tok))
 				continue
 			}
-			t.vals = []string{strings.ToLower(text)}
+			t.vals = []qval{{text: strings.ToLower(text)}}
 			q.terms = append(q.terms, t)
 			continue
 		}
@@ -389,9 +405,8 @@ func parseQuery(s string, v queryVocab) parsedQuery {
 			if !caseSensitiveKeys[k] {
 				pv = strings.ToLower(pv)
 			}
-			t.vals = append(t.vals, pv)
+			t.vals = append(t.vals, qval{text: pv, exact: p.quoted})
 		}
-		t.exact = anyQuoted
 		if len(t.vals) == 0 {
 			// `label:` and `label:,` and `label:""` alike (measured:
 			// "qualifier label: needs a value") — never a term that matches
@@ -408,11 +423,11 @@ func parseQuery(s string, v queryVocab) parsedQuery {
 		}
 		switch k {
 		case "is":
-			q.problems = refuseUnknown(t.vals, isValues, q.problems, "is")
+			q.problems = refuseUnknown(t.texts(), isValues, q.problems, "is")
 		case "no", "has":
-			q.problems = refuseUnknown(t.vals, presenceValues, q.problems, k)
+			q.problems = refuseUnknown(t.texts(), presenceValues, q.problems, k)
 		case "lane":
-			for _, lv := range t.vals {
+			for _, lv := range t.texts() {
 				if !v.knownLane(lv) {
 					q.problems = append(q.problems, fmt.Sprintf(
 						"unknown lane %q (configured: %s)", lv, strings.Join(v.lanes, ", ")))
@@ -424,12 +439,12 @@ func parseQuery(s string, v queryVocab) parsedQuery {
 			// leaves its raw value in place, which never gets read: a problem
 			// refuses the whole query.
 			for i, rv := range t.vals {
-				canon, why := v.resolveRepo(rv)
+				canon, why := v.resolveRepo(rv.text)
 				if why != "" {
 					q.problems = append(q.problems, why)
 					continue
 				}
-				t.vals[i] = canon
+				t.vals[i].text = canon
 			}
 		}
 		if len(t.vals) > 0 {
@@ -481,7 +496,8 @@ func (t term) matches(task *board.Task, g *board.Graph) bool {
 	return false
 }
 
-func (t term) matchOne(task *board.Task, g *board.Graph, v string) bool {
+func (t term) matchOne(task *board.Task, g *board.Graph, qv qval) bool {
+	v := qv.text
 	switch t.key {
 	case "":
 		return strings.Contains(strings.ToLower(task.Title), v) ||
@@ -498,7 +514,7 @@ func (t term) matchOne(task *board.Task, g *board.Graph, v string) bool {
 		return containsExact(task.Labels, v)
 	case "title":
 		lt := strings.ToLower(task.Title)
-		if t.exact {
+		if qv.exact {
 			return lt == v
 		}
 		return strings.Contains(lt, v)

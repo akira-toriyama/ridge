@@ -55,7 +55,7 @@ func TestParseQueryShapes(t *testing.T) {
 		{in: "", terms: 0},
 		{in: "   ", terms: 0},
 		{in: "lane:ready", terms: 1, check: func(t *testing.T, q parsedQuery) {
-			if q.terms[0].key != "lane" || q.terms[0].vals[0] != "ready" {
+			if q.terms[0].key != "lane" || q.terms[0].vals[0].text != "ready" {
 				t.Errorf("got %+v", q.terms[0])
 			}
 		}},
@@ -77,7 +77,7 @@ func TestParseQueryShapes(t *testing.T) {
 		{in: "lane:ready repo:kyushu-trip", terms: 2, check: func(t *testing.T, q parsedQuery) {
 			// A short name resolves to the full repo AT PARSE TIME, the way
 			// furrow resolves -r / repo: before it filters.
-			if got := q.terms[1].vals[0]; got != "tomo/kyushu-trip" {
+			if got := q.terms[1].vals[0].text; got != "tomo/kyushu-trip" {
 				t.Errorf("repo:kyushu-trip must resolve to the full name, got %q", got)
 			}
 		}},
@@ -88,7 +88,7 @@ func TestParseQueryShapes(t *testing.T) {
 		}},
 		// Quotes hold a phrase together — one term, not two.
 		{in: `"filter bar"`, terms: 1, check: func(t *testing.T, q parsedQuery) {
-			if q.terms[0].key != "" || q.terms[0].vals[0] != "filter bar" {
+			if q.terms[0].key != "" || q.terms[0].vals[0].text != "filter bar" {
 				t.Errorf("a quoted phrase is one bare-word term, got %+v", q.terms[0])
 			}
 		}},
@@ -102,12 +102,12 @@ func TestParseQueryShapes(t *testing.T) {
 		}},
 		// A quote AFTER the colon means "the whole field" (title:).
 		{in: `title:"filter bar"`, terms: 1, check: func(t *testing.T, q parsedQuery) {
-			if q.terms[0].key != "title" || !q.terms[0].exact {
+			if q.terms[0].key != "title" || !q.terms[0].vals[0].exact {
 				t.Errorf("a quoted value must be marked exact, got %+v", q.terms[0])
 			}
 		}},
 		{in: `title:filter`, terms: 1, check: func(t *testing.T, q parsedQuery) {
-			if q.terms[0].exact {
+			if q.terms[0].vals[0].exact {
 				t.Error("an unquoted title: is a substring, not the whole field")
 			}
 		}},
@@ -663,4 +663,51 @@ func mustQuery(t *testing.T, s *Store, q string) []string {
 		t.Fatalf("Query(%q): %v", q, err)
 	}
 	return got
+}
+
+// Quoting is per ALTERNATIVE, not per term. `title:計画,"ダミー"` used to set
+// one term-level flag from "any part was quoted", so the UNQUOTED 計画 was
+// re-read as an exact whole-title match too and the row count collapsed —
+// adding a quoted alternative silently changed what the others meant.
+func TestQuotingOneAlternativeLeavesTheOthersSubstrings(t *testing.T) {
+	p := New()
+	base, err := p.Query("title:計画,ダミー")
+	if err != nil {
+		t.Fatalf("unquoted: %v", err)
+	}
+	if len(base) == 0 {
+		t.Fatal("the fixture no longer has a title containing 計画; this test cannot bite")
+	}
+
+	sub, err := p.Query("title:行程")
+	if err != nil {
+		t.Fatalf("plain substring: %v", err)
+	}
+	if len(sub) == 0 {
+		t.Fatal("the fixture no longer has a title containing 行程; this test cannot bite")
+	}
+
+	// Both orderings must leave the UNQUOTED alternative a substring. The
+	// quoted-first spelling is the one that bit: the flag was raised by the
+	// time the later alternatives were read.
+	for _, q := range []string{`title:"計画",行程`, `title:行程,"計画"`} {
+		got, err := p.Query(q)
+		if err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+		if len(got) != len(sub) {
+			t.Errorf("%s matched %d, want %d — quoting one alternative changed what "+
+				"the unquoted one means", q, len(got), len(sub))
+		}
+	}
+
+	// The converse still holds: quoting 計画 itself DOES make it exact.
+	quotedHead, err := p.Query(`title:"計画"`)
+	if err != nil {
+		t.Fatalf("quoted head: %v", err)
+	}
+	if len(quotedHead) >= len(base) {
+		t.Errorf("title:\"計画\" matched %d of the %d that title:計画 did — a quoted "+
+			"value must mean the WHOLE title", len(quotedHead), len(base))
+	}
 }
