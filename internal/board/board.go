@@ -60,11 +60,11 @@ type Task struct {
 	Body      string
 }
 
-// ShortRepo renders "akira-toriyama/vista" as "vista" for a narrow surface,
+// shortRepo renders "akira-toriyama/vista" as "vista" for a narrow surface,
 // and says how many more are attached rather than naming one and hiding the
-// rest. Tasks and boxes both carry a repo list, and both have a row too narrow
-// to spell it out, so the rule lives here once.
-func ShortRepo(repos []string) string {
+// rest. Only a Task reaches it today; a box's row spells its repo with
+// ShortRepoName directly, so there is no exported twin.
+func shortRepo(repos []string) string {
 	if len(repos) == 0 {
 		return ""
 	}
@@ -86,10 +86,7 @@ func ShortRepoName(repo string) string {
 }
 
 // ShortRepo is the task's own repo list, shortened.
-func (t *Task) ShortRepo() string { return ShortRepo(t.Repos) }
-
-// ShortRepo is the box's own repo list, shortened.
-func (e *EpicInfo) ShortRepo() string { return ShortRepo(e.Repos) }
+func (t *Task) ShortRepo() string { return shortRepo(t.Repos) }
 
 // CheckProgress counts the task's own checklist.
 func (t *Task) CheckProgress() (done, total int) {

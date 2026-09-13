@@ -425,7 +425,8 @@ func (m *Model) onSweepKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.loadSweep()
 
 	case key.Matches(msg, m.keys.Commit):
-		return m.armSweepGate(rows)
+		m.armSweepGate(rows)
+		return nil
 
 	case key.Matches(msg, m.keys.SweepSkip):
 		i := sweepIndex(rows, m.sweepSel)
@@ -469,11 +470,11 @@ func (m *Model) onSweepKey(msg tea.KeyPressMsg) tea.Cmd {
 // armSweepGate is the first ⏎: it names the write the row's section means and
 // waits for the second. Refused outright when nothing would happen, so a gate
 // never opens over a no-op.
-func (m *Model) armSweepGate(rows []sweepRow) tea.Cmd {
+func (m *Model) armSweepGate(rows []sweepRow) {
 	i := sweepIndex(rows, m.sweepSel)
 	if i < 0 || m.sweep == nil {
 		m.note("nothing under the cursor to sweep")
-		return nil
+		return
 	}
 	r := rows[i]
 	var g sweepGate
@@ -482,7 +483,7 @@ func (m *Model) armSweepGate(rows []sweepRow) tea.Cmd {
 		ids := sweepArchiveSet(m.sweep, m.sweepSkip)
 		if len(ids) == 0 {
 			m.note("every archive row is skipped — x includes one first")
-			return nil
+			return
 		}
 		g = sweepGate{
 			label: fmt.Sprintf("archive %d task(s)", len(ids)),
@@ -519,7 +520,6 @@ func (m *Model) armSweepGate(rows []sweepRow) tea.Cmd {
 	}
 	m.sweepGate = &g
 	m.note("%s — ⏎ confirms, any other key cancels", g.label)
-	return nil
 }
 
 // sweepIDsBrief spells an id list for the gate line without letting a long

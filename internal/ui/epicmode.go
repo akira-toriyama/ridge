@@ -136,7 +136,7 @@ func (h epicHooks) gateKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 	return nil
 }
-func (h epicHooks) inputCancel(k epicInputKind) tea.Cmd { return h.m.onEpicInputCancel(k) }
+func (h epicHooks) inputCancel(k epicInputKind) { h.m.onEpicInputCancel(k) }
 func (h epicHooks) inputCommit(k epicInputKind, v string) tea.Cmd {
 	return h.m.onEpicInputCommit(k, v)
 }
@@ -465,7 +465,7 @@ func (m *Model) epicListSelect(box *board.EpicInfo, rows []string) tea.Cmd {
 
 // onEpicInputCancel is esc in the input: back to the stage the input was
 // opened from.
-func (m *Model) onEpicInputCancel(k epicInputKind) tea.Cmd {
+func (m *Model) onEpicInputCancel(k epicInputKind) {
 	e := m.epic
 	switch k {
 	case epicInputTitle, epicInputGoal, epicInputReason:
@@ -474,7 +474,6 @@ func (m *Model) onEpicInputCancel(k epicInputKind) tea.Cmd {
 		e.stage = stageList
 	}
 	m.noteEpicStage()
-	return nil
 }
 
 // onEpicInputCommit is ⏎ in the input, v already trimmed and already past the

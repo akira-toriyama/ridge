@@ -20,57 +20,6 @@ import (
 // would have passed all 55 tests. These close that hole by reading the output
 // buffer that e2e_test.go's run() declares, passes to tea.WithOutput, and drops.
 
-// stripANSI removes ALL escape sequences, not just SGR.
-//
-// It is now the same grammar the package's own ansiStrip implements, and
-// TestStrippersAgreeOnCursorSequences pins that. They did NOT always agree:
-// ansiStrip used to end a sequence only on 'm' (SGR) or 'K' (erase-line), which
-// is everything lipgloss puts in View().Content and therefore everything
-// `-dump -plain` has to handle — but real terminal output interleaves cursor
-// positioning (\x1b[6;31H), and a stripper still hunting for an 'm' ate the live
-// text between one sequence and the next SGR. On the frames below that silently
-// deleted "furrow board" and every task id. Harmless where it was used, fatal
-// for anyone who pointed it at a captured stream, so it was widened rather than
-// documented.
-func stripANSI(s string) string {
-	var b strings.Builder
-	for i := 0; i < len(s); {
-		if s[i] != 0x1b {
-			b.WriteByte(s[i])
-			i++
-			continue
-		}
-		i++
-		if i >= len(s) {
-			break
-		}
-		switch s[i] {
-		case '[': // CSI: params, then a final byte in @..~
-			i++
-			for i < len(s) && (s[i] < 0x40 || s[i] > 0x7e) {
-				i++
-			}
-			i++
-		case ']': // OSC: runs to BEL or ST
-			i++
-			for i < len(s) {
-				if s[i] == 0x07 {
-					i++
-					break
-				}
-				if s[i] == 0x1b && i+1 < len(s) && s[i+1] == '\\' {
-					i += 2
-					break
-				}
-				i++
-			}
-		default: // two-byte escape
-			i++
-		}
-	}
-	return b.String()
-}
-
 // runRaw boots a real program and returns exactly what it wrote to its output.
 func runRaw(t *testing.T, w, h int, script ...string) string {
 	t.Helper()
@@ -95,7 +44,7 @@ func runRaw(t *testing.T, w, h int, script ...string) string {
 // being flushed — every other test would still pass, because they all render by
 // calling m.View() by hand. This one only passes if the PROGRAM drew the board.
 func TestProgramActuallyRendersTheBoardToItsOutput(t *testing.T) {
-	out := stripANSI(runRaw(t, 140, 40))
+	out := ansiStrip(runRaw(t, 140, 40))
 
 	if len(out) < 500 {
 		t.Fatalf("the program wrote %d visible chars; it did not draw a board", len(out))
@@ -357,7 +306,7 @@ func TestDragGhostIsRenderedByTheProgram(t *testing.T) {
 
 	// Press and move, but never release — the drag is still in flight when the
 	// frame carrying the ghost is drawn.
-	out := stripANSI(runRaw(t, w, h,
+	out := ansiStrip(runRaw(t, w, h,
 		mousePress(grab.X+3, grab.Y+1),
 		mouseMotion(dst.X+3, dst.Top+2),
 		mouseMotion(dst.X+4, dst.Top+3),
@@ -374,8 +323,7 @@ func TestDragGhostIsRenderedByTheProgram(t *testing.T) {
 // The regression this pins is real and was shipped: a stripper that terminates
 // a sequence on the first 'm' it sees treats \x1b[6;31H as unterminated, keeps
 // hunting, and swallows the 'm' of the WORD "moved" — deleting live text,
-// silently, mid-word. Both strippers must handle the whole CSI/OSC grammar.
-func TestStrippersAgreeOnCursorSequences(t *testing.T) {
+func TestAnsiStripHandlesCursorAndOSCSequences(t *testing.T) {
 	cases := map[string]string{
 		// SGR around text, then a cursor move: the classic corruption.
 		"\x1b[31mred\x1b[0m\x1b[6;31Hmoved": "redmoved",
@@ -387,9 +335,6 @@ func TestStrippersAgreeOnCursorSequences(t *testing.T) {
 	for in, want := range cases {
 		if got := ansiStrip(in); got != want {
 			t.Errorf("ansiStrip(%q) = %q, want %q", in, got, want)
-		}
-		if got := stripANSI(in); got != want {
-			t.Errorf("stripANSI(%q) = %q, want %q", in, got, want)
 		}
 	}
 

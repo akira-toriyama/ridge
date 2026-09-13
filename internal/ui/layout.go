@@ -242,8 +242,11 @@ type measureKey struct {
 	w  int
 }
 
-func newMeasurer(g *board.Graph, th *theme) *measurer {
-	return &measurer{g: g, th: th, cache: map[measureKey]int{}}
+// newMeasurer builds an UNBOUND measurer: rebind supplies the graph and theme,
+// and recompute is what calls it. The constructor took both as parameters and
+// its one caller passed nil for each.
+func newMeasurer() *measurer {
+	return &measurer{cache: map[measureKey]int{}}
 }
 
 // rebind points the measurer at a new graph/theme and drops every cached
