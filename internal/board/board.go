@@ -6,6 +6,7 @@ package board
 
 import (
 	"fmt"
+	"math"
 	"regexp"
 	"slices"
 	"sort"
@@ -582,7 +583,15 @@ func ParseDue(s string) (time.Time, error) {
 				'd': 24 * time.Hour,
 				'w': 7 * 24 * time.Hour,
 			}[s[len(s)-1]]
-			return nowFn().UTC().Add(time.Duration(n) * unit).Truncate(time.Second), nil
+			// A Duration is int64 nanoseconds, so ~292 years' worth of any
+			// unit wraps and lands in the PAST: `+999999d` became 1841, i.e.
+			// a promise for the far future stored as overdue. furrow's own
+			// parseRelativeOffset carries this guard (internal/app/
+			// query_date.go) — mirror it, falling through to the absolute
+			// parsers so the form surfaces as the ordinary refusal below.
+			if int64(n) <= math.MaxInt64/int64(unit) && int64(n) >= math.MinInt64/int64(unit) {
+				return nowFn().UTC().Add(time.Duration(n) * unit).Truncate(time.Second), nil
+			}
 		}
 	}
 	// A bare day is a promise for the whole day, so it lands at its last local
