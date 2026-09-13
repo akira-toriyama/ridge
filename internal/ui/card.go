@@ -98,6 +98,24 @@ func pad(s string, w int) string {
 	return s
 }
 
+// capLines caps a wrapped block at limit lines and MARKS the cut. The ellipsis
+// belongs to the text that was dropped, not to the last line kept: wrapLines
+// already fits every line inside inner, so truncating that LINE appended the
+// mark only when it happened to measure exactly inner — which a Japanese
+// title, wrapping one cell early on a double-width glyph, almost never does.
+// Both surfaces that cap a title (the card and a graph node) had that bug;
+// this is the one spelling of the rule.
+func capLines(body []string, limit, inner int) []string {
+	if limit <= 0 || len(body) <= limit {
+		return body
+	}
+	body = body[:limit]
+	if inner >= 2 {
+		body[limit-1] = ansi.Truncate(body[limit-1], inner-1, "") + "…"
+	}
+	return body
+}
+
 // cardLines builds a card's inner content (no border, no padding) at exactly
 // width w. Height is a pure function of the task and w, so the layout can be
 // computed from the same call the renderer uses — geometry and pixels can never
@@ -106,11 +124,7 @@ func cardLines(t *board.Task, g *board.Graph, th *theme, w int) []string {
 	var out []string
 
 	glyph, styleFor := cardMarker(t, g)
-	body := wrapLines(t.Title, w-2)
-	if len(body) > maxTitleLines {
-		body = body[:maxTitleLines]
-		body[maxTitleLines-1] = ansi.Truncate(body[maxTitleLines-1], w-2-1, "…")
-	}
+	body := capLines(wrapLines(t.Title, w-2), maxTitleLines, w-2)
 	for i, l := range body {
 		lead := "  "
 		if i == 0 {

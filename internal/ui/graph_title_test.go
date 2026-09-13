@@ -48,3 +48,37 @@ func TestGraphNodeMarksATruncatedJapaneseTitle(t *testing.T) {
 		t.Errorf("the node cut %q but drew no ellipsis:\n%s", task.Title, found)
 	}
 }
+
+// capLines is the one spelling of "cap the block and mark the cut", shared by
+// the card and the graph node. The mark belongs to the dropped TEXT, so it
+// must appear whenever lines were dropped — at every inner width, not only
+// where the last kept line happens to measure exactly inner.
+func TestCapLinesMarksEveryCut(t *testing.T) {
+	titles := []string{
+		"行程表 v2 — 阿蘇→高千穂を買い出しと温泉の寄り道込みで引き直す（雨天代替つき）",
+		"予約の総ざらい — 温泉・レンタル品・雨天予備日をまとめて確定し、宿とレンタカーの取り消し期限を一覧にする",
+		"a plain english title long enough to wrap across several lines at any of these widths",
+		"mixed 日本語 and english 混在 title that wraps unevenly depending on the width given",
+	}
+	for _, title := range titles {
+		for inner := 8; inner <= 80; inner++ {
+			for _, limit := range []int{1, 2, 3} {
+				full := wrapLines(title, inner)
+				got := capLines(append([]string(nil), full...), limit, inner)
+				cut := len(full) > limit
+				marked := len(got) > 0 && strings.HasSuffix(got[len(got)-1], "…")
+				if cut && !marked {
+					t.Fatalf("inner=%d limit=%d: %d lines dropped with no mark: %q", inner, limit, len(full)-limit, got[len(got)-1])
+				}
+				if !cut && marked && !strings.HasSuffix(title, "…") {
+					t.Fatalf("inner=%d limit=%d: nothing was cut but the block is marked: %q", inner, limit, got[len(got)-1])
+				}
+				for i, l := range got {
+					if lg.Width(l) > inner {
+						t.Fatalf("inner=%d limit=%d line %d is %d cells: %q", inner, limit, i, lg.Width(l), l)
+					}
+				}
+			}
+		}
+	}
+}
