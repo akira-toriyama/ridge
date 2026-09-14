@@ -336,8 +336,8 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
-// dropToken removes every occurrence of `tok` from a whitespace-separated query,
-// reporting whether it was there.
+// dropBlockedToken removes every `is:blocked` token from a whitespace-separated
+// query, reporting whether it was there.
 func dropBlockedToken(raw string) (string, bool) {
 	const tok = "is:blocked"
 	var keep []string
