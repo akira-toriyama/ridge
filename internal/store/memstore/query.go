@@ -391,6 +391,19 @@ func parseQuery(s string, v queryVocab) parsedQuery {
 			q.problems = append(q.problems, err.Error())
 			continue
 		}
+		// is:/no:/has: read their value as ONE flag: furrow has no comma
+		// alternatives for these keys (`is:open,closed` is exit 2
+		// query-unknown-flag "open,closed"; the OR that does exist is
+		// field-only, `lane:ready,done`). Splitting here let a headless frame
+		// show a full 34/34 board for a query the real store refuses -- the
+		// one thing this evaluator's head comment forbids.
+		if (k == "is" || k == "no" || k == "has") && len(parts) > 1 {
+			whole := valuePart{text: val}
+			for _, p := range parts {
+				whole.quoted = whole.quoted || p.quoted
+			}
+			parts = []valuePart{whole}
+		}
 		anyQuoted := false
 		for _, p := range parts {
 			if p.text == "" {
