@@ -596,14 +596,20 @@ func ParseDue(s string) (time.Time, error) {
 	if t, err := time.ParseInLocation("2006-01-02", s, localZone()); err == nil {
 		return t.AddDate(0, 0, 1).Add(-time.Second).UTC(), nil
 	}
-	if t, err := time.ParseInLocation("2006-01-02T15:04", s, localZone()); err == nil {
-		return t.UTC(), nil
-	}
 	if t, err := time.Parse(time.RFC3339, s); err == nil {
 		return t.UTC(), nil
 	}
+	// The zoneless wall-clock spellings, in furrow's own list and order
+	// (internal/app/due.go dueLayouts). The mirror was two layouts short for
+	// a month: "2026-09-13 10:30" typed into the edit overlay was refused
+	// here and accepted by `furrow set --due`.
+	for _, layout := range []string{"2006-01-02T15:04:05", "2006-01-02T15:04", "2006-01-02 15:04:05", "2006-01-02 15:04"} {
+		if t, err := time.ParseInLocation(layout, s, localZone()); err == nil {
+			return t.UTC(), nil
+		}
+	}
 	return time.Time{}, fmt.Errorf("due %q is not a date: use YYYY-MM-DD (the whole day), "+
-		"YYYY-MM-DDTHH:MM, an RFC3339 instant, or a signed offset like +1d/+2h", s)
+		"YYYY-MM-DDTHH:MM[:SS] (a space works too), an RFC3339 instant, or a signed offset like +1d/+2h", s)
 }
 
 // validateRef mirrors the one refusal furrow's ref flag still has: an empty
