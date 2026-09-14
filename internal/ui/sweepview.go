@@ -375,15 +375,6 @@ func (m *Model) onSweepKey(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 
-	// The listing is the whole frame while it is up, and the gate below acts
-	// on ANY key — so `X ? ⏎ ⏎` armed and applied a bulk archive with nothing
-	// but the help listing on screen. The first key takes the overlay off.
-	// ctrl+c still quits, as it does everywhere.
-	if m.fullHelp && !key.Matches(msg, m.keys.ForceQuit) {
-		m.fullHelp = false
-		return nil
-	}
-
 	if g := m.sweepGate; g != nil {
 		// The gate: ⏎ applies, ANY other key cancels — including the arrows,
 		// because a cursor that moved under an open gate would leave the gate
