@@ -272,11 +272,11 @@ func (m *Model) chromeLayers() []*lg.Layer {
 		// and every lane was full. The syntax belongs in the ? overlay.
 		filter = th.dim.Render("/ Filter by keyword or by field")
 	default:
-		filter = th.dim.Render("/ ") + th.chipAlt.Render(m.qRaw)
+		filter = th.dim.Render("/ ") + th.chipAlt.Render(oneLine(m.qRaw))
 	}
 	filter += chips
 	if m.qErr != "" {
-		filter = joinEnds(filter, th.errText.Render("⚠ "+m.qErr), m.w)
+		filter = joinEnds(filter, th.errText.Render("⚠ "+oneLine(m.qErr)), m.w)
 	}
 	if len(m.pinned) > 0 {
 		filter = joinEnds(filter, th.accent.Render(fmt.Sprintf("+%d pinned by jump", len(m.pinned))), m.w)
