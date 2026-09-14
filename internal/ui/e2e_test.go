@@ -4,16 +4,21 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/akira-toriyama/ridge/internal/store/memstore"
+	"io"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 )
 
 // End-to-end tests drive a REAL tea.Program headlessly by feeding it the bytes a
-// terminal would send and reading the final model back out. No TTY, no
-// teatest harness, no timing assumptions: the whole script is written into an
-// input buffer up front and the program drains it and quits.
+// terminal would send and reading the final model back out. No TTY and no
+// teatest harness. The one ordering the harness enforces is the one the tests
+// depend on: the script reaches the program only after it has applied the
+// test's window size (runProgram) — everything else is the program draining
+// its input and quitting.
 
 const (
 	keyDown  = "\x1b[B"
@@ -47,31 +52,79 @@ func mousePress(x, y int) string   { return sgr(0, x, y, 'M') }
 func mouseMotion(x, y int) string  { return sgr(32, x, y, 'M') }
 func mouseRelease(x, y int) string { return sgr(0, x, y, 'm') }
 
-// run boots a real program at w x h, feeds it script, and returns the final
-// model.
-func run(t *testing.T, w, h int, script ...string) *Model {
-	t.Helper()
-	m := New(memstore.New(), Options{})
+// sizedProgram wraps the Model so the harness learns when the FIRST
+// WindowSizeMsg has been applied. Every press a script sends is hit-tested
+// against m.lay, and until that message lands the layout is the one View()
+// built from newModel's 240x60 defaults — bubbletea renders once before its
+// event loop starts — not the test's w x h. A script fed from a pre-filled
+// buffer raced the size message, and on a slow runner it lost: the press landed
+// on the wrong geometry, drag.go dropped it in silence, and the test read a
+// board nothing had touched. Measured 3 in 80 under -cpu 1 on the old harness;
+// on CI it showed up as "landed at index 0, want 2" and "the status bar never
+// announced the drag", one test at a time, and passed on rerun.
+type sizedProgram struct {
+	m     *Model
+	sized chan struct{}
+	once  sync.Once
+}
 
-	var in bytes.Buffer
-	for _, s := range script {
-		in.WriteString(s)
+func (p *sizedProgram) Init() tea.Cmd  { return p.m.Init() }
+func (p *sizedProgram) View() tea.View { return p.m.View() }
+func (p *sizedProgram) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	next, cmd := p.m.Update(msg)
+	p.m = next.(*Model)
+	if _, ok := msg.(tea.WindowSizeMsg); ok {
+		p.once.Do(func() { close(p.sized) })
 	}
-	in.WriteString("q") // always quit, so Run() returns rather than blocking
+	return p, cmd
+}
 
+// runProgram boots a real program at w x h, feeds it script once the model is
+// sized, appends q so Run returns, and hands back the final model and every
+// byte the renderer wrote. run and runRaw are its two faces.
+func runProgram(t *testing.T, w, h int, script ...string) (*Model, string) {
+	t.Helper()
+	p := &sizedProgram{m: New(memstore.New(), Options{}), sized: make(chan struct{})}
+	pr, pw := io.Pipe()
 	var out bytes.Buffer
-	final, err := tea.NewProgram(m,
-		tea.WithInput(&in), tea.WithOutput(&out),
+	prog := tea.NewProgram(p,
+		tea.WithInput(pr), tea.WithOutput(&out),
 		tea.WithoutSignals(), tea.WithWindowSize(w, h),
-	).Run()
+	)
+	blind := make(chan struct{})
+	go func() {
+		select {
+		case <-p.sized:
+		case <-time.After(10 * time.Second):
+			close(blind) // feed it anyway so Run returns; the test then fails loudly
+		}
+		for _, s := range script {
+			_, _ = io.WriteString(pw, s)
+		}
+		_, _ = io.WriteString(pw, "q")
+	}()
+	final, err := prog.Run()
+	_ = pw.Close()
 	if err != nil {
 		t.Fatalf("program: %v", err)
 	}
-	fm, ok := final.(*Model)
+	select {
+	case <-blind:
+		t.Fatal("the program never applied its window size; the script was fed blind")
+	default:
+	}
+	fp, ok := final.(*sizedProgram)
 	if !ok {
 		t.Fatalf("final model is %T", final)
 	}
-	return fm
+	return fp.m, out.String()
+}
+
+// run is runProgram's model-only face.
+func run(t *testing.T, w, h int, script ...string) *Model {
+	t.Helper()
+	m, _ := runProgram(t, w, h, script...)
+	return m
 }
 
 // geometry builds an identical off-line model so a test can ask where a card
