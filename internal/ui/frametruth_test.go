@@ -29,7 +29,7 @@ func TestViewToggleCarriesTheSelectionBothWays(t *testing.T) {
 		}
 	}
 	if want == "" {
-		t.Skip("the fixture has no lane with two visible cards")
+		t.Fatal("neither ready nor backlog holds two visible cards; this test needs a selection off row 0")
 	}
 
 	press(m, "v")
@@ -58,7 +58,7 @@ func TestViewToggleCarriesAMovedTableRowBackToTheBoard(t *testing.T) {
 	press(m, "j")
 	want := m.curTask()
 	if want == nil {
-		t.Skip("the table is empty")
+		t.Fatal("the table is empty; `v j` needs a second row")
 	}
 	press(m, "v")
 	if got := m.curTask(); got == nil || got.ID != want.ID {
@@ -90,18 +90,11 @@ func TestClosingThePeekAlsoClosesTheTree(t *testing.T) {
 // A pin is a permanent filter exemption. On an unfiltered board nothing is
 // hidden, so jumping and coming back must grant none.
 func TestJumpBackPinsOnlyWhatTheFilterHides(t *testing.T) {
-	m := boardModel(t, 240, 60)
-	var start *board.Task
-	for _, task := range m.b.Tasks() {
-		if len(m.g.BlockedBy(task.ID)) > 0 {
-			start = task
-			break
-		}
+	m := advModel(t, advDepBoard(), 240, 60)
+	if len(m.g.BlockedBy("d1")) == 0 {
+		t.Fatal("setup: d1 is not blocked on advDepBoard")
 	}
-	if start == nil {
-		t.Skip("no blocked task in the fixture")
-	}
-	m.selectID(start.ID, false)
+	m.selectID("d1", false)
 	m.jumpToBlocker()
 	m.jumpBack()
 
@@ -112,6 +105,14 @@ func TestJumpBackPinsOnlyWhatTheFilterHides(t *testing.T) {
 	if strings.Contains(ansiStrip(m.View().Content), "pinned by jump") {
 		t.Error(`the frame shows a "+N pinned by jump" chip for pins nothing needed`)
 	}
+}
+
+func pinIDs(p map[string]bool) []string {
+	var out []string
+	for k := range p {
+		out = append(out, k)
+	}
+	return out
 }
 
 // Closing the graph follows the same rule.
@@ -128,7 +129,7 @@ func TestClosingTheGraphPinsOnlyWhatTheFilterHides(t *testing.T) {
 func TestARefusalDuringAGestureReachesTheFrame(t *testing.T) {
 	m := boardModel(t, 240, 60)
 	if len(m.cols["backlog"]) == 0 {
-		t.Skip("backlog is empty")
+		t.Fatal("the fixture has no backlog task; this test lifts one")
 	}
 	m.selectID(m.cols["backlog"][0].ID, false)
 	press(m, "enter") // lift
@@ -159,7 +160,7 @@ func TestARefusalDuringAGestureReachesTheFrame(t *testing.T) {
 			m := boardModel(t, 240, 60)
 			c := m.lay.Col("backlog")
 			if c == nil || len(c.Cards) == 0 {
-				t.Skip("backlog is empty")
+				t.Fatal("the fixture lays out no backlog card at 240x60; this test drags one")
 			}
 			x, y := c.X+3, c.Top+1
 			if where == "off the board" {
@@ -183,7 +184,7 @@ func TestARefusalDuringAGestureReachesTheFrame(t *testing.T) {
 func TestTheStatusRowFollowsTheEditStage(t *testing.T) {
 	m := boardModel(t, 240, 60)
 	if len(m.cols["backlog"]) == 0 {
-		t.Skip("backlog is empty")
+		t.Fatal("the fixture has no backlog task; this test edits one")
 	}
 	m.selectID(m.cols["backlog"][0].ID, false)
 	m.enterEdit()
@@ -197,7 +198,7 @@ func TestTheStatusRowFollowsTheEditStage(t *testing.T) {
 	t.Run("list stage", func(t *testing.T) {
 		m.openField(fieldChecklist, m.editTask())
 		if m.edit.stage != stageList {
-			t.Skip("checklist did not open a list stage")
+			t.Fatalf("openField(fieldChecklist) opened stage %v, want the list stage", m.edit.stage)
 		}
 		if strings.Contains(m.status, "pick a field") {
 			t.Errorf("the checklist sub-editor still advertises the menu's keys: %q", m.status)
@@ -220,7 +221,7 @@ func TestTheStatusRowFollowsTheEditStage(t *testing.T) {
 	t.Run("pick stage", func(t *testing.T) {
 		m.openField(fieldValue, m.editTask())
 		if m.edit.stage != stageGate {
-			t.Skip("value did not open a pick stage")
+			t.Fatalf("openField(fieldValue) opened stage %v, want the pick stage", m.edit.stage)
 		}
 		if strings.Contains(m.status, "pick a field") {
 			t.Errorf("stageGate makes ⏎ a literal no-op, but the row still advertises it: %q", m.status)
@@ -295,7 +296,7 @@ func itoa(n int) string {
 func TestTheEditStageNoteDoesNotClobberARefusal(t *testing.T) {
 	m := boardModel(t, 240, 60)
 	if len(m.cols["backlog"]) == 0 {
-		t.Skip("backlog is empty")
+		t.Fatal("the fixture has no backlog task; this test edits one")
 	}
 	m.selectID(m.cols["backlog"][0].ID, false)
 	m.enterEdit()
@@ -318,7 +319,7 @@ func TestTheEditStageNoteDoesNotClobberARefusal(t *testing.T) {
 func TestEscapingATextInputRenotesTheStage(t *testing.T) {
 	m := boardModel(t, 240, 60)
 	if len(m.cols["backlog"]) == 0 {
-		t.Skip("backlog is empty")
+		t.Fatal("the fixture has no backlog task; this test edits one")
 	}
 	m.selectID(m.cols["backlog"][0].ID, false)
 	m.enterEdit()

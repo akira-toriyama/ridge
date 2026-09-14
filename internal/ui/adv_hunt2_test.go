@@ -162,7 +162,15 @@ func TestAdvPeekBoxExceedsTheTerminal(t *testing.T) {
 // DIFFERENT task, and every subsequent destructive key (d = done, x = check,
 // enter = move) acts on that one.
 func TestAdvFilterCanSilentlyRepointTheCursor(t *testing.T) {
-	m := boardModel(t, 140, 40)
+	// Five backlog tasks, one of them blocked: the filter must hide the card
+	// under the cursor and leave exactly one for it to land on. Built rather
+	// than taken from the fixture, whose blocked tasks are its own shape.
+	ts := []*board.Task{{ID: "b1", Title: "b1", Status: "backlog", Priority: 10, Deps: []string{"b5"}}}
+	for i := 2; i <= 5; i++ {
+		id := fmt.Sprintf("b%d", i)
+		ts = append(ts, &board.Task{ID: id, Title: id, Status: "backlog", Priority: i * 10})
+	}
+	m := advModel(t, board.NewBoard(ts), 140, 40)
 	m.curLane = m.b.LaneIndex("backlog")
 	m.setPos(3)
 	before := m.curTask()
@@ -177,7 +185,7 @@ func TestAdvFilterCanSilentlyRepointTheCursor(t *testing.T) {
 	}
 	// Now the real defect: pressing `d` closes whatever the cursor landed on.
 	if after == nil {
-		t.Skip("nothing visible")
+		t.Fatal("setup: is:blocked hid every task, but b1 waits on b5")
 	}
 	m.Update(tea.KeyPressMsg{Code: 'd', Text: "d"})
 	if m.b.Task(after.ID).Status != "done" {

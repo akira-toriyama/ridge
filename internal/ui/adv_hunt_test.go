@@ -58,7 +58,8 @@ func TestAdvGhostOverflowsANarrowTerminal(t *testing.T) {
 	m := boardModel(t, 24, 14)
 	col := m.lay.Col(m.curLaneName())
 	if col == nil || len(col.Cards) == 0 {
-		t.Skip("no cards at this size")
+		t.Fatalf("no card laid out for lane %q at 24x14; the cursor's lane holds no task, "+
+			"and this test lifts one", m.curLaneName())
 	}
 	box := col.Cards[0]
 	m.Update(tea.MouseClickMsg{X: box.X + 2, Y: box.Y + 1, Button: tea.MouseLeft})
@@ -246,7 +247,7 @@ func TestAdvDropOutsideAnyColumnStillCommits(t *testing.T) {
 	// the empty area past the last column.
 	off := 139
 	if _, ok := m.lay.laneAtX(off); ok {
-		t.Skip("x=139 is inside a column at this width")
+		t.Fatal("x=139 is inside a column at 140 columns; the gutter this test releases into is gone")
 	}
 	m.Update(tea.MouseMotionMsg{X: off, Y: 38, Button: tea.MouseLeft})
 	m.Update(tea.MouseReleaseMsg{X: off, Y: 38, Button: tea.MouseLeft})
