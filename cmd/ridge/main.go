@@ -1,13 +1,7 @@
 // Command ridge is furrow's TUI front-end: a GitHub-Projects-shaped kanban
 // over furrow's task model, built on bubbletea/v2 + lipgloss/v2's native
-// layer compositor.
-//
-// It started as a proof-of-concept on furrow's poc/tui-bubbletea-v2 branch,
-// which answered three questions: a GH-Projects visual grammar IS achievable
-// in a terminal, mouse drag-and-drop IS possible (~200 lines, because
-// lipgloss v2 ships z-ordered layers and hit-testing), and dependencies CAN
-// be made legible — including a real layered graph, which no Go library
-// draws to text, so both the layout and the renderer here are ours.
+// layer compositor. Both the layered dependency graph's layout and its
+// renderer are ours: no Go library draws one to text.
 //
 // # Data
 //

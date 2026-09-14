@@ -443,7 +443,6 @@ func (p *Store) PersistDepRm(id, _ string) error {
 	return nil
 }
 
-// --- epic writes -----------------------------------------------------------
 //
 // These are STORE-FIRST (board.Provider's epic family): nothing was applied to
 // the board, so unlike the Persist* no-ops the fixture must really apply them

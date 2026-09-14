@@ -632,8 +632,6 @@ func vocabUnion(vocab, own []string) []string {
 	return slices.Sorted(maps.Keys(set))
 }
 
-// ---- rendering --------------------------------------------------------------
-
 // editLayer draws the overlay: the menu with current values, or the active
 // sub-editor.
 func (m *Model) editLayer() *lg.Layer {

@@ -249,8 +249,7 @@ func (m *Model) blockerTag(ids []string, budget int) string {
 }
 
 // taskHidden reports whether the current board filter would hide the task.
-// The three full-screen views with task rows (dep map, roadmap, swimlane) ask
-// this one function: they make the same promise —
+// Every full-screen view that draws task rows asks this one function: they make the same promise —
 // dependency structure is drawn whole and filtered rows are MARKED, never
 // dropped — and two copies of that predicate could disagree about which rows.
 //
@@ -330,8 +329,6 @@ func (m *Model) mapHiddenCount(l *mapLayout) int {
 	return n
 }
 
-// ---- navigation -------------------------------------------------------------
-
 // clampMapSel keeps the cursor on a row that still exists — a scope change
 // removes whole clusters.
 func (m *Model) clampMapSel(l *mapLayout) {
@@ -367,8 +364,6 @@ func (m *Model) scrollMapToSel(l *mapLayout, total, canvasH int) int {
 		return top, r.Y, true
 	})
 }
-
-// ---- keys -------------------------------------------------------------------
 
 // openMap switches to the overview, landing on `seed` when that task is in a
 // cluster at all — arriving from a task and losing it would make the map a

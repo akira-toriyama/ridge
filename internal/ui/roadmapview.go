@@ -321,8 +321,6 @@ func (m *Model) roadHiddenCount(l *roadLayout) int {
 	return n
 }
 
-// ---- navigation -------------------------------------------------------------
-
 // clampRoadSel keeps the cursor on a row that still exists — a reload can
 // close or re-date the task it was on.
 func (m *Model) clampRoadSel(l *roadLayout) {
@@ -410,8 +408,6 @@ func (m *Model) roadPanBy(d int) {
 	}
 	m.roadXOff = clamp(m.roadXOff+d*roadPan(m.roadZoom), 0, maxInt(0, l.Cells-m.roadTLW()))
 }
-
-// ---- keys -------------------------------------------------------------------
 
 // startRoadmap is openRoadmap minus the status line, because the -roadmap
 // flag opens the view from inside New() — where a note would overwrite the

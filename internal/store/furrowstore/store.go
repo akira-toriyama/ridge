@@ -76,8 +76,6 @@ func (p *Store) Sync() error {
 	return err
 }
 
-// --- reads -----------------------------------------------------------------
-
 // boardJSON is `furrow board --json`, the lane vocabulary and store pre-flight.
 type boardJSON struct {
 	Lanes       []string `json:"lanes"`
@@ -333,8 +331,6 @@ func fromPtr(t *time.Time) time.Time {
 	}
 	return *t
 }
-
-// --- persists --------------------------------------------------------------
 
 // setEnvelope is one element of `furrow set --json`'s per-id envelope array;
 // only the respace report matters here. Each renumbered entry is
@@ -600,7 +596,6 @@ func (p *Store) PersistDepRm(id, dep string) error {
 	return err
 }
 
-// --- epic writes -----------------------------------------------------------
 //
 // Store-first (board.Provider's epic family): nothing is applied locally, so
 // these compose argv, run one furrow command and report its verdict. Every

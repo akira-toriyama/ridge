@@ -6,8 +6,9 @@
 #
 # Why this exists: two CI-only lint findings reached CI (PR #8, #10) because
 # a bare local `golangci-lint run` uses a smaller linter set than the hub
-# go-ci reusable. scripts/check.sh is the byte-identical mirror of the CI
-# invocation; this hook makes running it non-optional instead of a habit.
+# go-ci reusable. scripts/check.sh mirrors the CI invocation (its linter list
+# is byte-identical; the deltas are named at its head), and this hook makes
+# running it non-optional instead of a habit.
 #
 # Deliberately NOT skip-when-tools-absent: a silent skip recreates the exact
 # hole this hook closes. If go/golangci-lint are missing or version-skewed,

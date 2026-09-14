@@ -269,8 +269,6 @@ func (m *Model) swimHiddenCount(l *swimLayout) int {
 	return n
 }
 
-// ---- lines ------------------------------------------------------------------
-
 // swimRow composes ONE line from a rail and one segment per drawn lane. Every
 // line in this view goes through it, so a segment can never be one cell wide
 // in the header and another width in the rows below it.
@@ -431,8 +429,6 @@ func (m *Model) swimCell(t *board.Task, key string, w int) string {
 	return head + id + titleStyle.Render(ansi.Truncate(t.Title, maxInt(1, budget), "…"))
 }
 
-// ---- navigation -------------------------------------------------------------
-
 // clampSwimSel keeps the cursor on a row that still exists — a scope change, a
 // fold or a re-read can take the row away.
 func (m *Model) clampSwimSel(l *swimLayout) {
@@ -472,8 +468,6 @@ func (m *Model) swimMove(dx, dy int) {
 	}
 	m.swimSel, m.swimLane = next, lane
 }
-
-// ---- keys -------------------------------------------------------------------
 
 // openSwim switches to the view, seeded on the board's cursor: its band is
 // unfolded and the cell is selected, so `W` shows you where you already are

@@ -141,7 +141,7 @@ func (m *Model) modalLayers() []*lg.Layer {
 // its interactive toggle (`v`), not a listing of everywhere a key could go.
 func (m *Model) fullTabs(active viewKind) string {
 	th := m.th
-	parts := make([]string, 0, 6)
+	parts := make([]string, 0, 8)
 	for _, tab := range []struct {
 		v    viewKind
 		name string

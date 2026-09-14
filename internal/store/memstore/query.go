@@ -85,7 +85,7 @@ type term struct {
 }
 
 // qval is one alternative of a term, carrying its OWN quoting. The flag used
-// to be term-level, so `title:計画,"ダミー"` made 計画 an exact whole-title
+// to be term-level, so `title:x,"y"` made x an exact whole-title
 // match too — one quoted alternative silently re-read every other one.
 type qval struct {
 	text  string

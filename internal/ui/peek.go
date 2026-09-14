@@ -207,7 +207,7 @@ func (m *Model) peekContent(w int) string {
 		}
 	}
 
-	// --- dependencies: resolved, bidirectional, never raw ids ---------------
+	// dependencies: resolved, bidirectional, never raw ids
 	b.WriteString("\n" + sectionRule(th, "dependencies", w) + "\n")
 	b.WriteString(m.depSection(t, w))
 

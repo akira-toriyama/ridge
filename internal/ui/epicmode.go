@@ -705,8 +705,6 @@ func metaKeyOf(row string) string {
 	return k
 }
 
-// ---- rendering --------------------------------------------------------------
-
 func epicInputTitleFor(k epicInputKind) string {
 	switch k {
 	case epicInputTitle:

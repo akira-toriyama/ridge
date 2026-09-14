@@ -126,8 +126,6 @@ func (m *Model) onSweepResult(msg sweepResultMsg) {
 	}
 }
 
-// ---- rendering --------------------------------------------------------------
-
 func (m *Model) renderSweep() string {
 	rows := sweepRows(m.sweep)
 	if sweepIndex(rows, m.sweepSel) < 0 {
@@ -364,8 +362,6 @@ func (m *Model) sweepStrip(rows []sweepRow, h int) string {
 	}
 	return strings.Join(out[:h], "\n")
 }
-
-// ---- keys -------------------------------------------------------------------
 
 func (m *Model) onSweepKey(msg tea.KeyPressMsg) tea.Cmd {
 	rows := sweepRows(m.sweep)

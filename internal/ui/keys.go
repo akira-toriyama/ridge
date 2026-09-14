@@ -87,9 +87,9 @@ type keyMap struct {
 	MapScope key.Binding
 	MapGraph key.Binding
 
-	// Boxes opens the BOX OVERVIEW. Uppercase like the other two full-screen
-	// views (S graph, T map), because those are the keys that replace the whole
-	// screen and the lowercase letters are the board's own edits. `E` is the
+	// Boxes opens the BOX OVERVIEW. Uppercase like every full-screen opener,
+	// because those are the keys that replace the whole screen and the
+	// lowercase letters are the board's own edits. `E` is the
 	// initial of the entity furrow calls an epic, which is the word its CLI
 	// uses even though this repo's UI calls the thing a box.
 	//
@@ -115,13 +115,12 @@ type keyMap struct {
 	// cell here.
 	RoadZoom key.Binding
 
-	// The SWIMLANE's four keys. `W` is the opener — uppercase like the other
-	// four full-screen views (S graph, T map, E boxes, C roadmap), and chosen
-	// by the same test `C` passed: `w` is unbound, so a missed shift does
+	// The SWIMLANE's four keys. `W` is the opener — uppercase like every
+	// full-screen opener, and chosen by the same test `C` passed: `w` is unbound, so a missed shift does
 	// nothing at all. The letters the view's own words suggest are all taken
-	// or unsafe — `G` is Bottom, `L` carries a card a lane over, and `X`/`N`
-	// each sit one missed shift from a key that WRITES (`x` toggles a
-	// checklist item, `n` appends a note).
+	// or unsafe — `G` is Bottom, `L` carries a card a lane over, `X` opens the
+	// sweep, and `N` sits one missed shift from a key that WRITES (`n` appends
+	// a note).
 	//
 	// SwimFold reuses `space` on the licence GraphOrient states for reusing
 	// `o`: the board's Peek and this view are never on screen together (the
@@ -157,8 +156,9 @@ type keyMap struct {
 	EpicNew  key.Binding
 
 	// The sweep (sweepview.go). Sweep opens it from normal mode (uppercase
-	// like every full-screen opener; `x` is the checklist toggle, so the
-	// view's own skip key reuses the letter only INSIDE the view). Commit is
+	// like every full-screen opener). `x` is unbound in normal mode — Check
+	// is matched only inside the overlays — so the view's own skip key can
+	// use the letter INSIDE the view without a clash. Commit is
 	// the gate's ⏎ twice; every other key cancels an open gate.
 	Sweep     key.Binding
 	SweepSkip key.Binding
@@ -323,9 +323,6 @@ func (k keyMap) HelpSections(enterEdits bool) []helpSection {
 			{k.MoveTop, k.MoveBottom},
 			{k.MoveFirst, k.MoveLast},
 		}},
-		// The graph's full surface, not just its two custom bindings: sectioning
-		// turned this block into "your keys right now", so listing 2 of the ~10
-		// keys — and no way out — was an assertion, not an omission.
 		// The dep map's surface. Same rule as the graph's: every key onMapKey
 		// acts on, not just the ones unique to it — a full-screen mode's
 		// section is read as "your keys right now".
@@ -334,8 +331,8 @@ func (k keyMap) HelpSections(enterEdits bool) []helpSection {
 			{k.MapGraph, k.MapScope},
 			{k.PeekScroll, k.Map, k.View, k.Cancel},
 		}},
-		// The box overview's surface. Same rule as the other two full-screen
-		// sections: every key onBoxesKey acts on, because the section is read
+		// The box overview's surface. Same rule as every full-screen
+		// section: every key onBoxesKey acts on, because the section is read
 		// as "your keys right now".
 		{"box overview", [][]key.Binding{
 			{k.Up, k.Down, k.Left, k.Right},

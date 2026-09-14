@@ -40,6 +40,15 @@ Cards wrap their Japanese titles and carry `▸` actionable / `▤` epic chip /
 lifts → arrows move → `Enter` commits / `Esc` cancels) and maps 1:1 onto
 furrow's sparse-priority reordering. Cards can also be dragged with the mouse.
 
+### Table — the flat view
+
+`v` toggles it against the board (it is the `table` layout a saved view can
+name). One row per task, the same population and filter as the board, sorted
+by `o`'s cycle (updated / created / value / effort / due, each with a natural
+direction) or by clicking a header cell — a second click flips it. `Enter`
+opens the same field edit menu the peek has. It has no horizontal scroll
+(under **Known gaps**).
+
 ### Graph — dependency graph
 
 `S` (or `Shift+Space`) on a card. A layered graph rooted at that task:
@@ -174,7 +183,7 @@ honoured).
 
 ```toml
 [[view]]
-name = "今週の締切"      # "this week's deadlines"
+name = "this week's deadlines"
 layout = "roadmap"    # board | table | roadmap (omitted = board)
 q = "is:actionable"   # passed to furrow -q verbatim
 sort = "due asc"      # updated|created|value|effort|due [asc|desc] (table only)
@@ -193,9 +202,9 @@ slice = "epic:e-xxxx" # repo|label|epic :value (same as the slice panel's select
 
 ## Keys
 
-**`?` is the canon for every key** — the list is generated from the
-`key.Binding`s in `internal/ui/keys.go`, so it cannot drift from what the
-handlers match. This table is only a foothold.
+**`?` is the canon for every key** — it is built from the same `key.Binding`s
+the handlers match (`HelpSections` in `internal/ui/keys.go`), so it can never
+advertise a key that does not work. This table is only a foothold.
 
 | Key | Action |
 |---|---|
@@ -214,10 +223,12 @@ handlers match. This table is only a foothold.
 | `i` | Stamp the selected task reviewed (`furrow review <id>`; `updated` does not move) |
 | `q` | Quit |
 
-The bottom of the screen is one line, and it carries only **what is not on
-the screen** (the exit of the mode just entered, failures, load results). It
-never lists keys — a partial key list was worse than none for exactly as much
-as it made a reader think "that is all of them". While the slice panel holds
+The bottom of the screen is one line, and it carries **what is not on the
+screen** (the exit of the mode just entered, failures, load results) — plus,
+inside a full-screen view, that view's own two-to-five keys, because none of
+those views has a footer. It is never a key *reference*: the board's own
+footer lists no keys at all, because a partial list was worse than none for
+exactly as much as it made a reader think "that is all of them". While the slice panel holds
 the keyboard the row names the box under the cursor in full, which is the same
 rule: the panel's rows are scanned, and a title it had to cut is precisely what
 is not on the screen.

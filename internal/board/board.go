@@ -699,8 +699,8 @@ func (b *Board) SetFields(id string, p FieldPatch) error {
 // note` (v4.0.0 appendBody/normalizeNote, re-measured on dev 60074b8): the
 // text loses its own trailing newlines, an empty body becomes the text alone,
 // and any other body is padded up to AT LEAST one blank line before the text —
-// existing trailing newlines are kept, never collapsed ("本文\n\n\n" + note is
-// "本文\n\n\n追記\n"). An empty or whitespace-only text is furrow's "note text
+// existing trailing newlines are kept, never collapsed ("body\n\n\n" + note is
+// "body\n\n\nnote\n"). An empty or whitespace-only text is furrow's "note text
 // is empty" refusal (exit 2), so the same gesture is unreachable here.
 func (b *Board) AppendNote(id, text string) error {
 	t := b.Task(id)
