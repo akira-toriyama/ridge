@@ -86,6 +86,17 @@ func TestWrapLinesEdges(t *testing.T) {
 		{"", 10, []string{""}},
 		{"a  b", 10, []string{"a  b"}},
 		{"ab   cd", 3, []string{"ab", "cd"}},
+		// The independent review's cases: a leading indent stays on its line
+		// and never becomes a blank one; whitespace alone is one empty line;
+		// a tab is four spaces; CRLF is one break; a hyphen is a break
+		// opportunity (lipgloss/ansi.Wordwrap always had it), so a long
+		// hyphenated token fills the line instead of moving whole.
+		{"  indented code line here", 10, []string{"  indented", "code line", "here"}},
+		{"    ", 2, []string{""}},
+		{"a\tb", 10, []string{"a    b"}},
+		{"a\r\nb", 20, []string{"a", "b"}},
+		{"タイトル短縮 — furrow-cli-integration-test-harness を作る", 36,
+			[]string{"タイトル短縮 — furrow-cli-", "integration-test-harness を作る"}},
 	} {
 		got := wrapLines(tc.in, tc.w)
 		if strings.Join(got, "|") != strings.Join(tc.want, "|") {
