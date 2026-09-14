@@ -179,3 +179,29 @@ func TestParseDueRefusesOffsetsThatOverflowInsteadOfWrappingIntoThePast(t *testi
 		})
 	}
 }
+
+// furrow's --due accepts five absolute layouts (internal/app/due.go
+// dueLayouts): RFC3339, then four zoneless wall-clock forms read in the
+// operator's zone. ridge accepted two of the four, so "2026-09-13 10:30" typed
+// into the edit overlay was refused here and accepted by furrow -- the mirror
+// the doc comment claims has to be as wide as the original.
+func TestParseDueAcceptsEveryWallClockLayoutFurrowDoes(t *testing.T) {
+	fixedZone(t, "TEST", 9)
+	want := time.Date(2026, 9, 13, 10, 30, 0, 0, localZone()).UTC()
+	wantSec := want.Add(45 * time.Second)
+	for in, exp := range map[string]time.Time{
+		"2026-09-13T10:30":    want,
+		"2026-09-13T10:30:45": wantSec,
+		"2026-09-13 10:30":    want,
+		"2026-09-13 10:30:45": wantSec,
+	} {
+		got, err := ParseDue(in)
+		if err != nil {
+			t.Errorf("ParseDue(%q) refused a layout furrow accepts: %v", in, err)
+			continue
+		}
+		if !got.Equal(exp) {
+			t.Errorf("ParseDue(%q) = %s, want %s", in, got.Format(time.RFC3339), exp.Format(time.RFC3339))
+		}
+	}
+}
