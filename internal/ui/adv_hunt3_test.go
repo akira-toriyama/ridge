@@ -15,8 +15,10 @@ import (
 // offset to maxScrollFor per FRAME (layout.go), and that clamp is all that
 // stands between a stale offset and a column rendered scrolled past every card
 // it still has. Nothing killed a mutant of it: the fixture version of this
-// test skipped whenever backlog did not fold, and asserted a conjunction that
-// could not hold. This builds the column it needs and asks for the frame.
+// test skipped whenever backlog did not fold, and its guard `Scroll > 0 &&
+// Hidden == 0` was a false positive in waiting — Hidden counts only the cards
+// below the fold, so any column legitimately scrolled to its end satisfies it.
+// This builds the column it needs and asks for the frame.
 func TestAdvStaleScrollHidesCardsAfterFiltering(t *testing.T) {
 	m := advTallModel(t, 140, 24)
 	// Park the cursor in ready: ensureVisible repairs only the FOCUSED lane's
@@ -73,7 +75,7 @@ func TestAdvDragIntoAnEmptyColumn(t *testing.T) {
 // Dropping BELOW the last card of a short column (in the empty space under it)
 // must append, not land at slot 0.
 func TestAdvDragBelowTheLastCardAppends(t *testing.T) {
-	m := advSmallModel(t, 140, 40)
+	m := boardModel(t, 140, 40)
 	src := m.lay.Col("backlog")
 	dst := m.lay.Col("ready")
 	if src == nil || dst == nil || len(src.Cards) < 1 || len(dst.Cards) < 1 {

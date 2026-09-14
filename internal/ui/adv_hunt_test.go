@@ -58,8 +58,8 @@ func TestAdvGhostOverflowsANarrowTerminal(t *testing.T) {
 	m := boardModel(t, 24, 14)
 	col := m.lay.Col(m.curLaneName())
 	if col == nil || len(col.Cards) == 0 {
-		t.Fatalf("no card laid out for lane %q at 24x14; a card's geometry does not depend "+
-			"on the board, so any board with a task there lays one out", m.curLaneName())
+		t.Fatalf("no card laid out for lane %q at 24x14; the cursor's lane holds no task, "+
+			"and this test lifts one", m.curLaneName())
 	}
 	box := col.Cards[0]
 	m.Update(tea.MouseClickMsg{X: box.X + 2, Y: box.Y + 1, Button: tea.MouseLeft})
