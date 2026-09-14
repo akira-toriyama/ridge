@@ -1,9 +1,12 @@
 package ui
 
 import (
-	"github.com/akira-toriyama/ridge/internal/board"
+	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/akira-toriyama/ridge/internal/board"
+	"github.com/akira-toriyama/ridge/internal/store/memstore"
 
 	tea "charm.land/bubbletea/v2"
 	lg "charm.land/lipgloss/v2"
@@ -28,6 +31,61 @@ func advSmallModel(t *testing.T, w, h int) *Model {
 	m.w, m.h = w, h
 	m.recompute()
 	m.relayout()
+	return m
+}
+
+// advTallBoard overflows one column: twelve short cards in backlog, so a
+// short terminal folds it, and the first two carry a label the filter can
+// keep. The shipped fixture folds only at some sizes, and every test that
+// asked it to skipped in silence the day it stopped.
+func advTallBoard() *board.Board {
+	var ts []*board.Task
+	for i := 1; i <= 12; i++ {
+		id := fmt.Sprintf("c%02d", i)
+		task := &board.Task{ID: id, Title: id, Status: "backlog", Priority: i * 10}
+		if i <= 2 {
+			task.Labels = []string{"keep"}
+		}
+		ts = append(ts, task)
+	}
+	// r1 keeps the label too, so a filter to label:keep leaves the cursor
+	// where a test parked it.
+	ts = append(ts, &board.Task{ID: "r1", Title: "r1", Status: "ready", Priority: 10, Labels: []string{"keep"}})
+	return board.NewBoard(ts)
+}
+
+// advDepBoard is one open blocker: d1 waits on d2, both in backlog.
+func advDepBoard() *board.Board {
+	return board.NewBoard([]*board.Task{
+		{ID: "d1", Title: "d1", Status: "backlog", Priority: 10, Deps: []string{"d2"}},
+		{ID: "d2", Title: "d2", Status: "backlog", Priority: 20},
+	})
+}
+
+// advModel serves a synthetic board through memstore, so the filter answers
+// on it (emptyProvider's Query answers nothing).
+func advModel(t *testing.T, b *board.Board, w, h int) *Model {
+	t.Helper()
+	m := New(memstore.NewWith(b), Options{})
+	m.w, m.h = w, h
+	m.recompute()
+	m.relayout()
+	return m
+}
+
+// advTallModel is advTallBoard at a size where backlog folds, and it fails
+// the test outright when it does not: the fold is the whole point.
+func advTallModel(t *testing.T, w, h int) *Model {
+	t.Helper()
+	m := advModel(t, advTallBoard(), w, h)
+	col := m.lay.Col("backlog")
+	if col == nil {
+		t.Fatalf("setup: no backlog column at %dx%d", w, h)
+	}
+	if col.Hidden == 0 || len(col.Cards) == 0 {
+		t.Fatalf("setup: advTallBoard does not fold at %dx%d (cards=%d hidden=%d)",
+			w, h, len(col.Cards), col.Hidden)
+	}
 	return m
 }
 
@@ -86,35 +144,12 @@ func TestAdvWheelUpStopsAtTheTopOfAColumn(t *testing.T) {
 	}
 }
 
-// ensureVisible only ever repairs the FOCUSED lane's scroll offset, so a stale
-// offset in any other lane survives a filter change and hides its cards.
-func TestAdvStaleScrollSurvivesInAnUnfocusedLane(t *testing.T) {
-	m := advSmallModel(t, 140, 40)
-	// focus ready, scroll BACKLOG (unfocused) to its last card
-	m.curLane = m.b.LaneIndex("ready")
-	m.setPos(0)
-	bcol := m.lay.Col("backlog")
-	for i := 0; i < 3; i++ {
-		m.Update(tea.MouseWheelMsg{X: bcol.X + 4, Y: 10, Button: tea.MouseWheelDown})
-	}
-	m.relayout()
-	after := m.lay.Col("backlog")
-	if after.Scroll != 0 {
-		t.Errorf("backlog holds %d cards that all fit (Hidden=%d) yet renders scrolled to %d: "+
-			"%d of them are invisible and the lane is not focused, so ensureVisible will "+
-			"never repair it", len(after.Tasks), after.Hidden, after.Scroll, after.Scroll)
-	}
-}
-
 // A card dropped onto a column that is scrolled can only ever land among the
 // VISIBLE cards: idxAtY caps the insertion index at lastVisible+1, so with
 // cards below the fold there is no gesture that appends to the true end.
 func TestAdvCannotDropBelowTheFold(t *testing.T) {
-	m := boardModel(t, 140, 24) // short: backlog has cards below the fold
+	m := advTallModel(t, 140, 24)
 	col := m.lay.Col("backlog")
-	if col == nil || col.Hidden == 0 {
-		t.Skipf("backlog hidden=%d", col.Hidden)
-	}
 	maxIdx := m.lay.idxAtY("backlog", col.Bot-1)
 	if maxIdx < len(col.Tasks) {
 		t.Errorf("backlog has %d cards (%d below the fold) but the deepest reachable "+

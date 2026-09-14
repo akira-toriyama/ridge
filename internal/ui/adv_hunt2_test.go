@@ -177,7 +177,7 @@ func TestAdvFilterCanSilentlyRepointTheCursor(t *testing.T) {
 	}
 	// Now the real defect: pressing `d` closes whatever the cursor landed on.
 	if after == nil {
-		t.Skip("nothing visible")
+		t.Fatal("is:blocked hid every task; the fixture has no blocked task left, and this test needs one to close")
 	}
 	m.Update(tea.KeyPressMsg{Code: 'd', Text: "d"})
 	if m.b.Task(after.ID).Status != "done" {

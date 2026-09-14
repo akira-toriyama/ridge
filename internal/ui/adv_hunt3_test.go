@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"github.com/akira-toriyama/ridge/internal/board"
 	"github.com/akira-toriyama/ridge/internal/store/memstore"
 	"testing"
 
@@ -11,40 +10,50 @@ import (
 
 // T. scroll offsets survive a filter that makes them meaningless
 
-// m.scroll is never reset when the filter shrinks a column. buildLayout clamps
-// it to len(tasks)-1 per FRAME but the model keeps the stale value, so a column
-// that now holds 2 cards renders scrolled to the last one — cards 0..n-2 are
-// invisible with acres of blank space below, and only a "1 above" hint.
+// m.scroll is never reset when the filter shrinks an UNFOCUSED column
+// (ensureVisible repairs only the focused lane); buildLayout clamps the
+// offset to maxScrollFor per FRAME (layout.go), and that clamp is all that
+// stands between a stale offset and a column rendered scrolled past every card
+// it still has. Nothing killed a mutant of it: the fixture version of this
+// test skipped whenever backlog did not fold, and asserted a conjunction that
+// could not hold. This builds the column it needs and asks for the frame.
 func TestAdvStaleScrollHidesCardsAfterFiltering(t *testing.T) {
-	m := boardModel(t, 140, 40)
+	m := advTallModel(t, 140, 24)
+	// Park the cursor in ready: ensureVisible repairs only the FOCUSED lane's
+	// offset, so a stale one in backlog reaches the layout clamp untouched.
+	m.curLane = m.b.LaneIndex("ready")
+	m.setPos(0)
 	col := m.lay.Col("backlog")
-	if col == nil || col.Hidden == 0 {
-		t.Skip("backlog is not scrollable at this size")
+	for i := 0; i < 20; i++ {
+		m.Update(tea.MouseWheelMsg{X: col.X + 4, Y: col.Top + 2, Button: tea.MouseWheelDown})
 	}
-	// scroll backlog well down
-	for i := 0; i < 6; i++ {
-		m.Update(tea.MouseWheelMsg{X: col.X + 4, Y: 12, Button: tea.MouseWheelDown})
+	m.relayout()
+	if m.lay.Col("backlog").Scroll == 0 {
+		t.Fatal("setup: twenty wheel-downs did not scroll backlog")
 	}
-	// now filter it down to a handful that would all fit
-	m.applyFilter("lane:backlog is:blocked")
+	// Two cards that all fit, with the stale offset still in m.scroll.
+	m.applyFilter("label:keep")
 	m.relayout()
 	after := m.lay.Col("backlog")
 	if after == nil {
-		t.Skip("backlog not visible")
+		t.Fatal("backlog vanished from the layout after filtering")
 	}
-	if after.Scroll > 0 && after.Hidden == 0 {
-		t.Errorf("after filtering, backlog holds %d cards that all fit, yet the column "+
-			"is still scrolled to %d — cards 0..%d are unreachable without scrolling back up",
-			len(after.Tasks), after.Scroll, after.Scroll-1)
+	if len(after.Tasks) != 2 {
+		t.Fatalf("setup: label:keep left %d tasks in backlog, want 2", len(after.Tasks))
+	}
+	if after.Scroll != 0 || after.Hidden != 0 || len(after.Cards) != 2 {
+		t.Errorf("after filtering to 2 cards that fit, backlog renders scroll=%d hidden=%d "+
+			"cards=%d — the stale offset survived and the cards above it are unreachable",
+			after.Scroll, after.Hidden, len(after.Cards))
 	}
 }
 
 // U. dropping into an empty column
 
 func TestAdvDragIntoAnEmptyColumn(t *testing.T) {
-	m := boardModel(t, 140, 40)
+	m := advSmallModel(t, 140, 40)
 	if len(m.cols["inbox"]) != 0 {
-		t.Skip("inbox is not empty in the fixture")
+		t.Fatal("setup: advSmallBoard files nothing in inbox")
 	}
 	src := m.lay.Col("backlog")
 	dst := m.lay.Col("inbox")
@@ -64,7 +73,7 @@ func TestAdvDragIntoAnEmptyColumn(t *testing.T) {
 // Dropping BELOW the last card of a short column (in the empty space under it)
 // must append, not land at slot 0.
 func TestAdvDragBelowTheLastCardAppends(t *testing.T) {
-	m := boardModel(t, 140, 40)
+	m := advSmallModel(t, 140, 40)
 	src := m.lay.Col("backlog")
 	dst := m.lay.Col("ready")
 	if src == nil || dst == nil || len(src.Cards) < 1 || len(dst.Cards) < 1 {
@@ -75,7 +84,7 @@ func TestAdvDragBelowTheLastCardAppends(t *testing.T) {
 	last := dst.Cards[len(dst.Cards)-1]
 	deepY := last.Y + last.H + 3 // empty space well below the last card
 	if deepY >= dst.Bot {
-		t.Skip("no empty space below the last ready card")
+		t.Fatalf("setup: no empty space below the last ready card at 140x40 (deepY=%d bot=%d)", deepY, dst.Bot)
 	}
 	m.Update(tea.MouseClickMsg{X: box.X + 3, Y: box.Y + 1, Button: tea.MouseLeft})
 	m.Update(tea.MouseMotionMsg{X: dst.X + 8, Y: deepY, Button: tea.MouseLeft})
@@ -94,19 +103,17 @@ func TestAdvDragBelowTheLastCardAppends(t *testing.T) {
 // V. the drag ghost when the source card is scrolled off
 
 func TestAdvDragSurvivesTheSourceScrollingAway(t *testing.T) {
-	m := boardModel(t, 140, 40)
+	const w, h = 140, 24
+	m := advTallModel(t, w, h)
 	src := m.lay.Col("backlog")
-	if src == nil || src.Hidden == 0 || len(src.Cards) < 1 {
-		t.Skip("backlog not scrollable")
-	}
 	box := src.Cards[0]
 	id := src.Tasks[box.Idx].ID
 	m.Update(tea.MouseClickMsg{X: box.X + 3, Y: box.Y + 1, Button: tea.MouseLeft})
 	// drag downward hard so the edge auto-scroll kicks in
-	for y := box.Y + 2; y < 40; y++ {
+	for y := box.Y + 2; y < h; y++ {
 		m.Update(tea.MouseMotionMsg{X: box.X + 3, Y: y, Button: tea.MouseLeft})
 	}
-	m.Update(tea.MouseReleaseMsg{X: box.X + 3, Y: 37, Button: tea.MouseLeft})
+	m.Update(tea.MouseReleaseMsg{X: box.X + 3, Y: h - 3, Button: tea.MouseLeft})
 	if m.b.Task(id) == nil {
 		t.Fatalf("%s vanished", id)
 	}
@@ -123,14 +130,11 @@ func TestAdvDragSurvivesTheSourceScrollingAway(t *testing.T) {
 // board under a modal text input. Minor, but it is the kind of asymmetry that
 // says the modality was not thought through.
 func TestAdvWheelWorksInFilterModeButClicksDoNot(t *testing.T) {
-	m := boardModel(t, 140, 40)
+	m := advTallModel(t, 140, 24)
 	m.mode = modeFilter
 	col := m.lay.Col("backlog")
-	if col == nil || col.Hidden == 0 {
-		t.Skip("backlog not scrollable")
-	}
 	before := m.scroll["backlog"]
-	m.Update(tea.MouseWheelMsg{X: col.X + 4, Y: 12, Button: tea.MouseWheelDown})
+	m.Update(tea.MouseWheelMsg{X: col.X + 4, Y: col.Top + 2, Button: tea.MouseWheelDown})
 	after := m.scroll["backlog"]
 	if after != before {
 		t.Errorf("the wheel scrolled backlog %d -> %d while the filter input was modal "+
@@ -138,45 +142,11 @@ func TestAdvWheelWorksInFilterModeButClicksDoNot(t *testing.T) {
 	}
 }
 
-// X. `>` jump pins leak
-
-// Every `<` (jump back) pins its target permanently, and pins are only cleared
-// by emptying the filter. Bouncing between two tasks inflates "+N pinned by
-// jump" forever and progressively defeats the active filter.
-func TestAdvJumpBackLeaksPins(t *testing.T) {
-	m := boardModel(t, 140, 40)
-	m.applyFilter("lane:backlog")
-	var start *board.Task
-	for _, task := range m.cols["backlog"] {
-		if len(m.g.BlockedBy(task.ID)) > 0 {
-			start = task
-			break
-		}
-	}
-	if start == nil {
-		t.Skip("no blocked task in backlog")
-	}
-	m.selectID(start.ID, false)
-	for i := 0; i < 4; i++ {
-		m.jumpToBlocker()
-		m.jumpBack()
-	}
-	// Was `> 1`, a threshold tuned to tolerate exactly the leak this file's own
-	// comment described ("Every `<` (jump back) pins its target permanently").
-	// On an unfiltered board nothing is hidden, so nothing needs an exemption.
-	if len(m.pinned) > 0 {
-		t.Errorf("after 4 jump/back round trips on an UNFILTERED board, %d ids carry a permanent filter exemption: %v",
-			len(m.pinned), pinIDs(m.pinned))
-	}
-}
-
-func pinIDs(p map[string]bool) []string {
-	var out []string
-	for k := range p {
-		out = append(out, k)
-	}
-	return out
-}
+// X. `>` jump pins: TestJumpBackPinsOnlyWhatTheFilterHides (frametruth_test.go)
+// holds the invariant; the copy that lived here filtered to lane:backlog while
+// its comment said "unfiltered", and went red the moment the fixture moved a
+// blocker out of that lane — a false positive, since pinning a filter-hidden
+// jump target is the correct behaviour.
 
 // Y. renderTable panics on a negative width
 
