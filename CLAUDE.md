@@ -71,6 +71,10 @@ Much changed from v1. Each of these was hit and confirmed:
   display width of 85 cells and a p90 of 141 (2026-09-03). One character eats
   two cells, so `len()` always breaks a frame.
 - Never truncate by bytes either (use `ansi.Truncate` or similar).
+- **Wrap with `wrapLines` (card.go), never `Style.Width()` / `ansi.Wrap`.**
+  Both break only on whitespace, and Japanese has none: a 66-cell run was
+  carried whole to the next line, leaving 11 of 73 cells used (t-x8vb).
+  `wrapLines` breaks after whitespace or beside any wide grapheme.
 - **When laying out bordered boxes side by side, always `-dump` at several
   widths and eyeball the column alignment.** Drift accumulates one cell at a
   time: invisible on a narrow screen, exposed on a wide one.
