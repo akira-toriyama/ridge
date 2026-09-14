@@ -290,7 +290,7 @@ func buildEgo(g *board.Graph, focus string, radius, maxCols int, hidden func(str
 	down := longestDist(g.Blocks, focus, radius)
 	l.UpCount, l.DownCount = len(up), len(down)
 
-	// --- 1. layer assignment ------------------------------------------------
+	// 1. layer assignment
 	add := func(id string, layer int, both bool) {
 		n := &egoNode{Key: id, ID: id, Kind: egoReal, Layer: layer, Both: both}
 		n.Focus = id == focus
@@ -332,7 +332,7 @@ func buildEgo(g *board.Graph, focus string, radius, maxCols int, hidden func(str
 		}
 	}
 
-	// --- 2. group into ranks, cap the width ---------------------------------
+	// 2. group into ranks, cap the width
 	byLayer := map[int][]*egoNode{}
 	for _, n := range l.Nodes {
 		byLayer[n.Layer] = append(byLayer[n.Layer], n)
@@ -368,7 +368,7 @@ func buildEgo(g *board.Graph, focus string, radius, maxCols int, hidden func(str
 		l.Layers = append(l.Layers, row)
 	}
 
-	// --- 3. edges over the INDUCED subgraph ---------------------------------
+	// 3. edges over the INDUCED subgraph
 	// Every dep edge whose BOTH ends survived, plus dummies for spans > 1.
 	type raw struct{ from, to string } // from = upstream (the dependency)
 	var raws []raw

@@ -7,8 +7,8 @@ import (
 )
 
 // The SWEEP's row model — pure, deterministic, no lipgloss. sweepview.go
-// paints it. One flat list of rows over three sections (archive candidates,
-// tidy's two classes, the archive store), because the cursor walks them as
+// paints it. One flat list of rows over four sections (the archive
+// candidates, tidy's two classes, the archive store), because the cursor walks them as
 // one column: a section header is a row the cursor skips, an item is a row it
 // can stop on and act from.
 //

@@ -661,8 +661,6 @@ func (m *Model) graphStrip(l *egoLayout, h int) string {
 	return m.taskStrip(m.b.Task(n.ID), n.Hidden, h)
 }
 
-// ---- navigation -------------------------------------------------------------
-
 // clampGraphSel keeps the selection on a node that still exists — a radius
 // change or a re-root can remove the node the cursor was on.
 func (m *Model) clampGraphSel(l *egoLayout) {
@@ -756,8 +754,6 @@ func (m *Model) scrollGraphToSel(l *egoLayout, f graphFrame, total, canvasH int)
 	}
 	return clamp(s, 0, total-canvasH)
 }
-
-// ---- keys -------------------------------------------------------------------
 
 // openGraph roots the graph on the current selection and switches to it.
 func (m *Model) openGraph() {

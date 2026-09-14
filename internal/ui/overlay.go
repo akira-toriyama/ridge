@@ -181,8 +181,6 @@ func wrapIdx(i, n int) int {
 	return ((i % n) + n) % n
 }
 
-// ---- rendering --------------------------------------------------------------
-
 // overlayInner is the body width of both overlays' boxes.
 func (m *Model) overlayInner() int {
 	return clamp(m.w/3, 44, 72)

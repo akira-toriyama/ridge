@@ -114,7 +114,7 @@ type Provider interface {
 	// dep or an empty ref past the flag layer by skipping the modal.
 	Add(title string, o AddOptions) (id string, err error)
 
-	// --- epic writes: store-first, NOT the Persist* contract ---------------
+	// epic writes: store-first, NOT the Persist* contract
 	//
 	// The store-first members are exactly: Add, the eight Epic* methods
 	// below, and the three sweep writes (Archive, Unarchive, Tidy). Every
@@ -182,7 +182,7 @@ type Provider interface {
 	// the removal that matters.
 	EpicDepRm(id, dep string) error
 
-	// --- the sweep: furrow's maintenance passes (sweep.go) ------------------
+	// the sweep: furrow's maintenance passes (sweep.go)
 	//
 	// SweepPreview is the read: `archive` dry-run, `tidy` preview and the
 	// archive store, over the WHOLE board (the empty -r, like load). Every

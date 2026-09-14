@@ -395,8 +395,8 @@ func (m *Model) sliceRows() []sliceRow {
 				// still needs its second line, for the suffix. Deriving "did it
 				// wrap" from the tail is how the numbers ended up over the
 				// row's width, where pad() ate them: measured on the real
-				// board, `chord: action-keys 完成 0/1` rendered `0…` and
-				// `projects/CLAUDE.md の整理 11/11 !` lost its numbers whole.
+				// board, a title that reached its numbers rendered them as `0…`, and
+				// one that ran past the row width lost them whole.
 				title = ansi.Truncate(e.Title, avail, "")
 				tail = ansi.Truncate(strings.TrimPrefix(e.Title, title), one, "…")
 				wrapped = true

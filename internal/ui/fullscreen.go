@@ -8,12 +8,12 @@ import (
 	lg "charm.land/lipgloss/v2"
 )
 
-// What the full-screen views (graph, dep map, box overview, roadmap, swimlane)
-// share: the frame skeleton and title line above, and below it the
-// cursor-pinned scroll, the half-page key, the filter's status-line claim,
-// and the cursor carried back to the board on close. Each view keeps its own
-// layout, keys and words; these hold the invariants once, so five copies
-// cannot drift apart. There is no fullScreenView interface on purpose: the
+// What every full-screen view shares: the frame skeleton and title line
+// above, and below it the cursor-pinned scroll, the half-page key, the
+// filter's status-line claim, and the cursor carried back to the board on
+// close. Each view keeps its own layout, keys and words; these hold the
+// invariants once, so the copies cannot drift apart (a roster of the views
+// used to sit here, and it was one view short within a month). There is no fullScreenView interface on purpose: the
 // layouts share no type, and inventing one would be abstraction for its own
 // sake. The graph's scroll follows a two-axis frame of its own and is not a
 // scrollToSel client.

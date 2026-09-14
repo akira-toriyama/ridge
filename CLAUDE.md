@@ -84,7 +84,7 @@ Much changed from v1. Each of these was hit and confirmed:
 - **The card-height cache persists across frames and is discarded by
   `recompute()`** (measurer — the measured numbers, and what drifts when the
   discard is forgotten, are in the glossary).
-- **Wide by assumption**: the target display is 3840×1620 (32:9). **240
+- **Wide by assumption**: the target display is 3840×1620. **240
   columns is the floor, 400 the target**; no fallback for narrow terminals is
   written.
 
@@ -107,8 +107,9 @@ Much changed from v1. Each of these was hit and confirmed:
 
 ## Pre-merge gate (recurrence prevention for the 2026-08-10 session decay — t-xmry)
 
-- **Run lint/test through `scripts/check.sh`** — a byte-identical local mirror
-  of CI (the hub go-ci reusable). A bare `golangci-lint run` covers only the
+- **Run lint/test through `scripts/check.sh`** — the local mirror of CI (the
+  hub go-ci reusable): its linter list is byte-identical, and the deliberate
+  deltas are named at the head of the script. A bare `golangci-lint run` covers only the
   default set and let CI-only revive findings of the same class through twice
   (PR #8, #10). When the linter list changes, keep it byte-identical against
   the CI log.
