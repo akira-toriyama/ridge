@@ -711,3 +711,21 @@ func TestQuotingOneAlternativeLeavesTheOthersSubstrings(t *testing.T) {
 			"value must mean the WHOLE title", len(quotedHead), len(base))
 	}
 }
+
+// is:/no:/has: take ONE flag; furrow refuses a comma list for them with exit 2
+// (measured: `is:open,closed` -> query-unknown-flag "open,closed",
+// `no:label,repo` -> query-unknown-field "label,repo"), while the comma OR
+// exists for fields (`lane:ready,done` -> 880 rows, no error). The fixture
+// split all three, so `is:open,closed` rendered a full 34/34 board -- a
+// headless frame the real store would never show.
+func TestFlagKeysTakeOneValueLikeFurrow(t *testing.T) {
+	p := New()
+	for _, q := range []string{"is:open,closed", "no:label,repo", "has:label,repo", "is:open,"} {
+		if _, err := p.Query(q); err == nil {
+			t.Errorf("Query(%q) accepted a comma list furrow refuses", q)
+		}
+	}
+	if _, err := p.Query("lane:ready,done"); err != nil {
+		t.Errorf("Query(lane:ready,done) refused the field OR furrow accepts: %v", err)
+	}
+}
