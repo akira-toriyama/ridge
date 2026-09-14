@@ -2,11 +2,15 @@ package ui
 
 import (
 	"fmt"
-	"github.com/akira-toriyama/ridge/internal/board"
 	"strings"
+	"unicode"
+	"unicode/utf8"
+
+	"github.com/akira-toriyama/ridge/internal/board"
 
 	lg "charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/rivo/uniseg"
 )
 
 // maxTitleLines caps a card's title. The board's job is to let you FIND a task;
@@ -68,17 +72,94 @@ func isOverdue(t *board.Task) bool {
 	return !t.Due.IsZero() && t.Due.Before(nowFn()) && t.Closed.IsZero()
 }
 
-// wrapLines wraps to width w, hard-wrapping runs with no breakpoints (a
-// Japanese title has no spaces at all) and returns unpadded lines.
+// wrapLines wraps plain (unstyled) text to width w and returns unpadded
+// lines. Existing line breaks are kept; a tab is four spaces, as lipgloss
+// rendered it.
+//
+// A break may fall after whitespace, after a hyphen (the breakpoint
+// lipgloss/ansi.Wordwrap always has), or on either side of a wide (East
+// Asian) grapheme. The board is mostly Japanese, and Japanese has no spaces:
+// a wrap that breaks only on whitespace treated a 66-cell run as one word,
+// carried it whole to the next line and left the first with 11 of its 73
+// cells — so a graph node showed 11 cells of a 77-cell title. A run with no
+// opportunity at all is hard-wrapped at w, as before. A long spaceless ASCII
+// token (a URL) after a short head still moves whole to the next line, as
+// every word wrap does; that is the old behaviour and stays.
 func wrapLines(s string, w int) []string {
 	if w < 1 {
 		w = 1
 	}
-	wrapped := lg.NewStyle().Width(w).Render(s)
-	lines := strings.Split(wrapped, "\n")
-	for i := range lines {
-		lines[i] = strings.TrimRight(lines[i], " ")
+	s = strings.NewReplacer("\r\n", "\n", "\r", "\n", "\t", "    ").Replace(s)
+	var out []string
+	for _, para := range strings.Split(s, "\n") {
+		out = append(out, wrapPara(para, w)...)
 	}
+	return out
+}
+
+// grapheme is one user-perceived character with its display width.
+type grapheme struct {
+	text  string
+	width int
+	space bool
+}
+
+func graphemes(s string) []grapheme {
+	var out []grapheme
+	state := -1
+	for len(s) > 0 {
+		var g string
+		g, s, _, state = uniseg.FirstGraphemeClusterInString(s, state)
+		r, _ := utf8.DecodeRuneInString(g)
+		out = append(out, grapheme{text: g, width: ansi.StringWidth(g), space: unicode.IsSpace(r)})
+	}
+	return out
+}
+
+// wrapPara wraps one paragraph greedily: the line takes graphemes until the
+// next one would not fit, then breaks at the last opportunity it saw, or
+// hard-breaks when it saw none. Whitespace at a break is dropped on both
+// sides of it, and a line never breaks while it holds nothing but
+// whitespace (a leading indent stays on its line, never becomes a blank one).
+func wrapPara(s string, w int) []string {
+	gs := graphemes(s)
+	var lines []string
+	emit := func(from, to int) {
+		var b strings.Builder
+		for _, g := range gs[from:to] {
+			b.WriteString(g.text)
+		}
+		lines = append(lines, strings.TrimRightFunc(b.String(), unicode.IsSpace))
+	}
+	start, width, brk := 0, 0, -1
+	text := false // the line holds a non-space grapheme
+	for i := 0; i < len(gs); {
+		g := gs[i]
+		// Record the opportunity BEFORE testing the fit: the grapheme that
+		// overflows is often the one a break may fall before.
+		if text && (gs[i-1].space || gs[i-1].text == "-" || gs[i-1].width == 2 || g.width == 2) {
+			brk = i
+		}
+		if width > 0 && width+g.width > w {
+			if text {
+				cut := i
+				if brk > start {
+					cut = brk
+				}
+				emit(start, cut)
+				i = cut
+			}
+			for i < len(gs) && gs[i].space {
+				i++
+			}
+			start, width, brk, text = i, 0, -1, false
+			continue
+		}
+		width += g.width
+		text = text || !g.space
+		i++
+	}
+	emit(start, len(gs))
 	return lines
 }
 
