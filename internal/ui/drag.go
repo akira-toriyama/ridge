@@ -168,10 +168,26 @@ func (m *Model) onMouseDown(msg tea.MouseClickMsg) tea.Cmd {
 
 	lane, idx, ok := m.lay.cardAt(msg.X, msg.Y)
 	if !ok {
-		if lane != "" {
-			if i := m.b.LaneIndex(lane); i >= 0 {
-				m.curLane = i
-			}
+		// A miss inside the column BODY still focuses that lane: the empty
+		// space under the last card belongs to the column. The chrome does
+		// not — cardAt resolves the lane from X ALONE (layout.go), so with
+		// no row check a click on the title bar, the filter row, a lane
+		// header or the footer re-pointed the selection invisibly and the
+		// open peek went on describing the task still on screen; the next
+		// key then acted on a different one.
+		//
+		// syncPeek but NOT ensureVisible: focusing a lane by clicking its
+		// empty space is not a request to move the card cursor, and the one
+		// column the gesture must leave alone is the one the wheel just
+		// scrolled — ensureVisible's own comment names that snap-back as the
+		// thing to avoid.
+		c := m.lay.Col(lane)
+		if c == nil || msg.Y < c.Top || msg.Y >= c.Bot {
+			return nil
+		}
+		if i := m.b.LaneIndex(lane); i >= 0 && i != m.curLane {
+			m.curLane = i
+			m.syncPeek()
 		}
 		return nil
 	}
@@ -291,6 +307,16 @@ func (m *Model) onDragScroll(msg dragScrollMsg) tea.Cmd {
 
 func (m *Model) onMouseUp(msg tea.MouseReleaseMsg) tea.Cmd {
 	if !m.drag.armed {
+		return nil
+	}
+	// Only the button that lifted the card can put it down. The press side
+	// already refuses every other button, so without this the RELEASE of a
+	// right-click during a drag committed the drop — a gesture the user never
+	// finished, landing the card wherever the pointer happened to be.
+	// MouseNone is NOT a different button, it is no report at all (rule 2):
+	// the terminals that drop the button on motion drop it on release too, so
+	// refusing it here would break the drag on exactly those terminals.
+	if msg.Button != tea.MouseNone && msg.Button != m.drag.button {
 		return nil
 	}
 	if m.view != viewBoard || m.fullHelp || m.mode != modeNormal {
