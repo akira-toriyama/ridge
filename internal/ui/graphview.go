@@ -590,11 +590,7 @@ func (m *Model) renderGraphNode(n *egoNode, w, titleLines int) string {
 	}
 	lines = append(lines, joinEnds(head, right, inner))
 
-	body := wrapLines(t.Title, inner)
-	if len(body) > titleLines {
-		body = body[:titleLines]
-		body[titleLines-1] = ansi.Truncate(body[titleLines-1], inner-1, "…")
-	}
+	body := capLines(wrapLines(t.Title, inner), titleLines, inner)
 	titleStyle := th.base
 	if m.g.IsDone(t.ID) {
 		titleStyle = th.dim
