@@ -204,7 +204,7 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 		//
 		// No note either way: `b` edits the filter query itself, so the filter
 		// bar shows `is:blocked` appearing and disappearing.
-		if q, had := dropToken(m.qRaw, "is:blocked"); had {
+		if q, had := dropBlockedToken(m.qRaw); had {
 			cmd := m.applyFilter(q)
 			m.ti.SetValue(m.qRaw)
 			return cmd
@@ -338,7 +338,8 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 
 // dropToken removes every occurrence of `tok` from a whitespace-separated query,
 // reporting whether it was there.
-func dropToken(raw, tok string) (string, bool) {
+func dropBlockedToken(raw string) (string, bool) {
+	const tok = "is:blocked"
 	var keep []string
 	had := false
 	for _, f := range strings.Fields(raw) {

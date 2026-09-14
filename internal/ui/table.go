@@ -7,7 +7,6 @@ import (
 
 	"github.com/akira-toriyama/ridge/internal/board"
 
-	tea "charm.land/bubbletea/v2"
 	lg "charm.land/lipgloss/v2"
 )
 
@@ -226,9 +225,9 @@ func (m *Model) tableGeom() []tableCol {
 // tableClick is the table view's mouse-down surface: a click on a sortable
 // header cell sorts by it, a second click flips it — GitHub's table gesture.
 // Everything below the header row stays keyboard territory.
-func (m *Model) tableClick(x, y int) tea.Cmd {
+func (m *Model) tableClick(x, y int) {
 	if m.mode != modeNormal || y != rowColHdr || m.inPeek(x, y) {
-		return nil
+		return
 	}
 	x -= m.sliceInset()
 	for _, c := range m.tableGeom() {
@@ -243,9 +242,8 @@ func (m *Model) tableClick(x, y int) tea.Cmd {
 		default:
 			m.setSort(c.sort, c.sort.naturalAsc())
 		}
-		return nil
+		return
 	}
-	return nil
 }
 
 func (m *Model) renderTable() string {

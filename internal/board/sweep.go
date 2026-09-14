@@ -83,16 +83,6 @@ func (c TidyClass) Flag() string {
 	return ""
 }
 
-func (c TidyClass) String() string {
-	switch c {
-	case TidyDoneDeps:
-		return "done-deps"
-	case TidyUnknownKeys:
-		return "unknown-keys"
-	}
-	return "unknown"
-}
-
 // ValidateSweepIDs refuses the id list every adapter's Archive/Unarchive must
 // refuse BEFORE exec: an EMPTY list. `furrow archive --yes` with no id is the
 // aged SWEEP over the board scope — the one write this surface must never

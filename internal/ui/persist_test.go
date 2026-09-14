@@ -378,4 +378,4 @@ func (p *scriptedProvider) Archive(ids []string) error {
 func (p *scriptedProvider) Unarchive(ids []string) error {
 	return p.epicCall("unarchive " + strings.Join(ids, ","))
 }
-func (p *scriptedProvider) Tidy(c board.TidyClass) error { return p.epicCall("tidy " + c.String()) }
+func (p *scriptedProvider) Tidy(c board.TidyClass) error { return p.epicCall("tidy " + c.Flag()) }

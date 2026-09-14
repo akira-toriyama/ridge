@@ -360,7 +360,7 @@ func newModel(p board.Provider, dbg *DebugLog) *Model {
 		prov:      p,
 		dbg:       dbg,
 		th:        newTheme(true),
-		ms:        newMeasurer(nil, nil),
+		ms:        newMeasurer(),
 		keys:      defaultKeys(),
 		help:      help.New(),
 		ti:        ti,

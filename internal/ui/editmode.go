@@ -106,7 +106,7 @@ func (h editHooks) openField(f editField) tea.Cmd       { return h.m.openField(f
 func (h editHooks) listSelect(rows []string) tea.Cmd    { return h.m.editListSelect(h.t, rows) }
 func (h editHooks) listKey(msg tea.KeyPressMsg) tea.Cmd { return h.m.onEditListKey(msg, h.t) }
 func (h editHooks) gateKey(msg tea.KeyPressMsg) tea.Cmd { return h.m.onEditPickKey(msg) }
-func (h editHooks) inputCancel(k inputKind) tea.Cmd     { return h.m.onEditInputCancel(k) }
+func (h editHooks) inputCancel(k inputKind)             { h.m.onEditInputCancel(k) }
 func (h editHooks) inputCommit(k inputKind, v string) tea.Cmd {
 	return h.m.onEditInputCommit(k, v, h.t)
 }
@@ -447,7 +447,7 @@ func (m *Model) editListRows(t *board.Task) []string {
 
 // onEditInputCancel is esc in the input: back to the stage the input was
 // opened from.
-func (m *Model) onEditInputCancel(k inputKind) tea.Cmd {
+func (m *Model) onEditInputCancel(k inputKind) {
 	e := m.edit
 	switch k {
 	case inputNote:
@@ -456,14 +456,13 @@ func (m *Model) onEditInputCancel(k inputKind) tea.Cmd {
 		// menu the user never saw.
 		m.exitEdit()
 		m.note("note cancelled — nothing appended")
-		return nil
+		return
 	case inputTitle, inputDue:
 		e.stage = stageMenu
 	default:
 		e.stage = stageList
 	}
 	m.noteEditStage()
-	return nil
 }
 
 // onEditInputCommit is ⏎ in the input, v already trimmed and already past the

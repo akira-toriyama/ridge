@@ -75,7 +75,7 @@ type overlayHooks[F ~int, K ~int] interface {
 	gateKey(msg tea.KeyPressMsg) tea.Cmd
 	// inputCancel is esc in the input, after the blur: the overlay decides
 	// which stage was behind the input.
-	inputCancel(K) tea.Cmd
+	inputCancel(K)
 	// inputCommit is ⏎ in the input, after the blur, with the text trimmed.
 	// v may be empty — an empty ⏎ is a back-out the overlay words itself.
 	inputCommit(K, string) tea.Cmd
@@ -142,7 +142,8 @@ func (s *overlayShell[F, K]) onInputKey(m *Model, msg tea.KeyPressMsg, h overlay
 	switch {
 	case key.Matches(msg, m.keys.Cancel):
 		s.input.Blur()
-		return h.inputCancel(s.inputFor)
+		h.inputCancel(s.inputFor)
+		return nil
 	case key.Matches(msg, m.keys.Commit):
 		v := strings.TrimSpace(s.input.Value())
 		// Refused BEFORE the blur and the stage move in inputCommit. Every

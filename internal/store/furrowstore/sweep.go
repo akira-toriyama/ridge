@@ -181,7 +181,7 @@ func (p *Store) Tidy(class board.TidyClass) error {
 	// `tidy --unknown-keys --yes` on a clean store) — nothing to prune is not a
 	// refusal. Only "there was something and it was not applied" is one.
 	if !reply.Applied && reply.Changed {
-		return fmt.Errorf("furrow tidy %s reported applied=false with changes pending", class)
+		return fmt.Errorf("furrow tidy %s reported applied=false with changes pending", class.Flag())
 	}
 	return nil
 }
