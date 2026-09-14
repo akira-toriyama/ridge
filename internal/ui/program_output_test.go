@@ -23,20 +23,8 @@ import (
 // runRaw boots a real program and returns exactly what it wrote to its output.
 func runRaw(t *testing.T, w, h int, script ...string) string {
 	t.Helper()
-	var in bytes.Buffer
-	for _, s := range script {
-		in.WriteString(s)
-	}
-	in.WriteString("q")
-
-	var out bytes.Buffer
-	if _, err := tea.NewProgram(New(memstore.New(), Options{}),
-		tea.WithInput(&in), tea.WithOutput(&out),
-		tea.WithoutSignals(), tea.WithWindowSize(w, h),
-	).Run(); err != nil {
-		t.Fatalf("program: %v", err)
-	}
-	return out.String()
+	_, out := runProgram(t, w, h, script...)
+	return out
 }
 
 // The canary the suite was missing: if the board stopped rendering — View
