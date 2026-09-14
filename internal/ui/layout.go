@@ -187,6 +187,33 @@ func (l *layout) dropY(lane string, idx int) (int, bool) {
 	return c.Top, true
 }
 
+// slotVisible reports whether insertion index idx has a boundary ON SCREEN in
+// this column — a card drawn at idx, or the row after the last card when that
+// card ends the lane.
+//
+// dropY answers leniently for the DRAG, whose index is resolved from the
+// pointer and is therefore always on screen; a drag off the end must still get
+// the append row. A keyboard move picks its slot with the keyboard, and the
+// wheel may scroll the destination column out from under it, so that caller
+// asks this first: a bar drawn for a slot nobody can see marks a row the
+// commit will not use.
+func (l *layout) slotVisible(lane string, idx int) bool {
+	c := l.byName[lane]
+	if c == nil {
+		return false
+	}
+	if len(c.Cards) == 0 {
+		return len(c.Tasks) == 0
+	}
+	for _, b := range c.Cards {
+		if b.Idx == idx {
+			return true
+		}
+	}
+	last := c.Cards[len(c.Cards)-1]
+	return idx == last.Idx+1 && last.Idx == len(c.Tasks)-1
+}
+
 // measurer memoises card heights ACROSS frames.
 //
 // cardHeight RENDERS the card to measure it (predicting is one lipgloss wrapping

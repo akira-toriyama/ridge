@@ -143,6 +143,14 @@ func (h epicHooks) inputCommit(k epicInputKind, v string) tea.Cmd {
 
 // enterEpic opens the overlay on a box.
 func (m *Model) enterEpic(id string) {
+	// A modal never inherits the `?` overlay. The listing is drawn OVER the
+	// modal while the modal holds the keyboard, so it hides a surface that
+	// is reading keys — and `?` is not bound inside every modal, so it
+	// could not always be taken back off: `? E m` from the box board left
+	// the epic overlay invisible AND in charge. The rule lives on the
+	// entries rather than their callers because a caller that forgot it is
+	// what produced that state.
+	m.fullHelp = false
 	if m.b.Epic(id) == nil {
 		m.fail("%s is not a box on this board", id)
 		return
@@ -173,6 +181,7 @@ func newBoxModal(repo, title string) *epicState {
 // a slice-derived repo is a branch no key sequence can reach; the effective
 // query is what survives the axis switch.
 func (m *Model) enterEpicNew() tea.Cmd {
+	m.fullHelp = false // a modal never inherits the `?` overlay (enterEpic)
 	_, _, repo, _ := inheritContext(m.effectiveQuery())
 	m.epic = newBoxModal(repo, "")
 	m.mode = modeEpic

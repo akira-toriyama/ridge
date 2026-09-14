@@ -18,6 +18,7 @@ import (
 // once each — and the rollingBack refusal applied to every reorder gesture.
 
 func (m *Model) enterMove() {
+	m.fullHelp = false // a modal never inherits the `?` overlay (enterEpic)
 	if m.drag.armed {
 		// The mirror of onMouseDown's guard. Without it a card could be lifted
 		// by the keyboard while the mouse still held it: the release commits one
@@ -75,6 +76,15 @@ func (m *Model) onMoveKey(msg tea.KeyPressMsg) tea.Cmd {
 	// overlay is the only listing of the K/J/H/L extremes.
 	case key.Matches(msg, m.keys.Help):
 		m.fullHelp = !m.fullHelp
+		return nil
+
+	// While the listing is up it is the whole frame: the board, the lifted
+	// card and the drop marker are all behind it. So the FIRST key takes the
+	// overlay off and does nothing else — `⏎ ? J ⏎` used to move a card to the
+	// bottom of another lane while the user could see only the help listing.
+	// esc keeps its own branch below: it also has a second job here.
+	case m.fullHelp && !key.Matches(msg, m.keys.Cancel) && !key.Matches(msg, m.keys.ForceQuit):
+		m.fullHelp = false
 		return nil
 
 	case key.Matches(msg, m.keys.Cancel):

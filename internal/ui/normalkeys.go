@@ -249,7 +249,6 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.syncCmd()
 
 	case key.Matches(msg, m.keys.Add):
-		m.fullHelp = false // same rule as Filter: a modal never inherits the overlay
 		return m.enterAdd()
 
 	case key.Matches(msg, m.keys.Slice):
@@ -290,7 +289,6 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.reviewCmd()
 
 	case key.Matches(msg, m.keys.Note):
-		m.fullHelp = false // same rule as Filter: a modal never inherits the overlay
 		return m.enterNote()
 
 	case key.Matches(msg, m.keys.Move):
@@ -298,10 +296,9 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 		// With the peek open (or on a table row) Enter edits the fields — the
 		// board without a peek keeps Enter as the move-mode muscle memory.
 		//
-		// Close the overlay either way: the edit modal never inherits it, and
-		// a lift needs the board visible — `?` works inside move mode for
-		// whoever wants the listing back.
-		m.fullHelp = false
+		// Both entries close the overlay themselves; a lift needs the board
+		// visible either way, and `?` works inside move mode for whoever
+		// wants the listing back.
 		if m.view == viewTable || m.peekOpen {
 			m.enterEdit()
 		} else {
