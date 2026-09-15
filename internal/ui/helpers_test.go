@@ -17,14 +17,15 @@ import (
 // boardModel / logicModel serve the 34-task fixture through memstore. The
 // adv* boards are 2-40 card synthetic boards for a test whose precondition
 // the fixture does not promise — an empty lane, a column that folds, one open
-// blocker, two clusters that pack side by side, a done member of a box, short
-// ASCII titles that make the arithmetic readable. emptyProvider
-// answers every query with nothing, so a test that filters must use advModel
-// (memstore) instead, and its Reload swaps in an EMPTY board — the state a
-// reload test wants to see survive. A test whose subject does not need the
-// fixture's shape builds its board from these rather than guarding with
-// t.Skip: one task added to the fixture once silenced three tests and broke
-// 21 (t-38fm).
+// blocker, two clusters that pack side by side, one cluster taller than any
+// canvas, a chain with a blocker above and a dependant below its middle under
+// a box with a title, a done member of a box; short ASCII titles that make the
+// arithmetic readable. emptyProvider answers every query with nothing, so a
+// test that filters must use advModel (memstore) instead, and its Reload
+// swaps in an EMPTY board — the state a reload test wants to see survive. A
+// test whose subject does not need the fixture's shape builds its board from
+// these rather than guarding with t.Skip: one task added to the fixture once
+// silenced three tests and broke 21 (t-38fm).
 
 func boardModel(t *testing.T, w, h int) *Model {
 	t.Helper()

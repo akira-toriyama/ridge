@@ -241,6 +241,28 @@ func TestEpicListSubEditorTogglesAndParses(t *testing.T) {
 		if len(p.calls) != 1 || !strings.HasPrefix(p.calls[0], "epicset ") {
 			t.Errorf("calls = %v, want one epicset", p.calls)
 		}
+		// The call string names only the box; the direction is in the patch.
+		// Asserting the call alone stayed green with Add and Rm swapped.
+		if got := p.epicPatch; len(got.AddLabels) != 1 || got.AddLabels[0] != "lab" || len(got.RmLabels) != 0 {
+			t.Errorf("a label the box lacks patched %+v, want AddLabels=[lab]", got)
+		}
+		// The OFF direction on a fresh overlay: the first write is still
+		// pending in this one and storeFirstWrite refuses a second. The
+		// scripted provider records rather than applies, so seed the label
+		// on the box the overlay reads.
+		m, p = newOverlay(t, epicFieldLabels)
+		m.b.Task("t-a").Labels = []string{"lab"}
+		m.b.Epic("e-one").Labels = []string{"lab"}
+		rows = m.epicListRows(m.b.Epic("e-one"))
+		m.epic.listIdx = 0
+		cmd = m.epicListSelect(m.b.Epic("e-one"), rows)
+		if cmd == nil {
+			t.Fatal("selecting a carried label queued no write")
+		}
+		cmd()
+		if got := p.epicPatch; len(got.RmLabels) != 1 || got.RmLabels[0] != "lab" || len(got.AddLabels) != 0 {
+			t.Errorf("a label the box carries patched %+v, want RmLabels=[lab]", got)
+		}
 	})
 
 	// A dep row points ONE way: selecting removes.
