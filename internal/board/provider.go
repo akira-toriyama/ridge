@@ -394,9 +394,13 @@ func QSpellable(value string) bool { return !strings.Contains(value, `"`) }
 
 // QAnd composes terms into one query: whitespace between terms is the
 // lexer's implicit AND, so the parts are joined by a single space, empty
-// parts dropped, and the result trimmed.
+// parts dropped. Each part is trimmed with TrimSpace, which is wider than the
+// lexer (U+3000 and NBSP are value characters there): a part whose edge
+// holds one would lose it, so callers hand in already-trimmed text — the
+// typed query is trimmed where it is stored (filter.go, views.go) — and a
+// term from QTerm has no such edge.
 func QAnd(parts ...string) string {
-	kept := parts[:0:0]
+	var kept []string
 	for _, p := range parts {
 		if p = strings.TrimSpace(p); p != "" {
 			kept = append(kept, p)

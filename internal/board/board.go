@@ -1,7 +1,8 @@
 // Package board is the pure core: furrow's task model (Task, Lane, Board,
-// EpicInfo), the dependency Graph derived from it, and the Provider port the
-// store adapters implement. No I/O, no rendering, no globals beyond the test
-// clock — everything here is deterministic and unit-testable.
+// EpicInfo), the dependency Graph derived from it, the Provider port the
+// store adapters implement, and the two -q spelling facts a caller of that
+// port cannot avoid (QTerm, QAnd). No I/O, no rendering, no globals beyond
+// the test clock — everything here is deterministic and unit-testable.
 package board
 
 import (

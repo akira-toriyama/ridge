@@ -20,3 +20,14 @@ const (
 func (f sliceField) String() string {
 	return [...]string{"repo", "label", "epic"}[f]
 }
+
+// sliceFieldOf is String's inverse, over the same spellings views.SliceFields
+// declares for views.toml.
+func sliceFieldOf(s string) (sliceField, bool) {
+	for f := sliceField(0); f < sliceFieldCount; f++ {
+		if f.String() == s {
+			return f, true
+		}
+	}
+	return 0, false
+}

@@ -59,16 +59,6 @@ func viewKindOf(layout string) viewKind {
 	return viewBoard
 }
 
-// sliceFieldOf is sliceField.String's inverse over views.SliceFields.
-func sliceFieldOf(s string) (sliceField, bool) {
-	for f := sliceField(0); f < sliceFieldCount; f++ {
-		if f.String() == s {
-			return f, true
-		}
-	}
-	return 0, false
-}
-
 // parseSort maps the saved "<key>[ asc| desc]" spelling onto the table's
 // enum, defaulting a missing direction to the key's natural one — exactly
 // what the `o` cycle does on entry. The vocabulary is views.SortKeys;

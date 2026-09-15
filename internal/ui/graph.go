@@ -84,7 +84,8 @@ const (
 
 	// The along-axis extents, left-right: screen ROWS. A node box costs
 	// border(2) + the id line + the meta line on top of its title lines, so its
-	// height is the title budget (graphview.go) plus that fixed chrome. The gap
+	// height is the title budget (graphMinNodeLines..graphMaxNodeLines below)
+	// plus that fixed chrome. The gap
 	// is 1 row against top-down's 3 columns because a terminal cell is about
 	// twice as tall as it is wide, and a routing dummy is a single rule.
 	graphNodeChrome = 4

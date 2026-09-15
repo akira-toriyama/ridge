@@ -5,6 +5,7 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+	"github.com/akira-toriyama/ridge/internal/board"
 )
 
 // onNormalKey is the board's and the table's key surface: every gesture that
@@ -209,7 +210,7 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 			m.ti.SetValue(m.qRaw)
 			return cmd
 		}
-		cmd := m.applyFilter(strings.TrimSpace(m.qRaw + " is:blocked"))
+		cmd := m.applyFilter(board.QAnd(m.qRaw, "is:blocked"))
 		m.ti.SetValue(m.qRaw)
 		return cmd
 
@@ -337,7 +338,10 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 }
 
 // dropBlockedToken removes every `is:blocked` token from a whitespace-separated
-// query, reporting whether it was there.
+// query, reporting whether it was there. strings.Fields splits on every
+// Unicode space, which is wider than furrow's lexer (U+3000 and NBSP are not
+// separators there — board.QTerm), so a quoted value holding one is re-split
+// on the way back: t-j39t.
 func dropBlockedToken(raw string) (string, bool) {
 	const tok = "is:blocked"
 	var keep []string

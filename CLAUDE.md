@@ -31,9 +31,11 @@ same PR as the code change). What this repository is: [README.md](README.md).
   vocabulary and views.toml I/O — the one file ridge writes).
   The filter is a furrow `-q` pass-through — ridge holds no query grammar
   (memstore's approximate evaluator is for -dump and tests only). The two
-  lexer facts it cannot avoid — quoting a value, the whitespace AND — live
-  beside the port as `board.QTerm` / `QAnd`, nowhere else. Layer contracts
-  are canonical in each package's head doc comment.
+  SPELLING facts it cannot avoid — quoting a value, the whitespace AND — live
+  beside the port as `board.QTerm` / `QAnd`; the two token-level readers of a
+  typed query (`dropBlockedToken` in normalkeys.go, `inheritContext` in
+  addmode.go) are the rest of ridge's -q knowledge. Layer contracts are
+  canonical in each package's head doc comment.
 - Tests use the stdlib only (no testify).
 
 ## bubbletea v2 gotchas (known — do not rediscover)
