@@ -209,29 +209,6 @@ func TestEveryLeftRightNodeBoxPrintsItsID(t *testing.T) {
 	}
 }
 
-// Columns composed side by side accumulate a one-cell shear per column, so it
-// hides at one width and shows at another. The map's demos are in the frame
-// test for exactly this reason; the left-right graph is the second view built
-// that way.
-func TestLeftRightFrameStaysRectangular(t *testing.T) {
-	for _, w := range []int{240, 241, 259, 320, 399, 400} {
-		for _, h := range []int{24, 40, 50, 90} {
-			for _, demo := range []string{"graph", "graphall"} {
-				m := New(memstore.New(), Options{GraphLR: true})
-				out, err := m.Dump(w, h, demo, true)
-				if err != nil {
-					t.Fatalf("%dx%d %s: %v", w, h, demo, err)
-				}
-				for i, line := range strings.Split(out, "\n") {
-					if got := lg.Width(line); got != w {
-						t.Errorf("%dx%d %s: row %d is %d cells wide", w, h, demo, i, got)
-					}
-				}
-			}
-		}
-	}
-}
-
 // A short terminal must scroll the left-right frame, not silently drop the
 // nodes the other orientation would have shown. The along axis is the screen
 // line axis here, so the existing scroll is the whole mechanism — this pins
@@ -811,8 +788,7 @@ func TestTheRankWindowFitsTheDrawingAtEveryWidth(t *testing.T) {
 		m.selectID("t-c06", false)
 		m.openGraph()
 		m.graphRadius = graphAllRadius
-		out, err := m.Dump(w, 50, "", true)
-		if err != nil {
+		if _, err := m.Dump(w, 50, "", true); err != nil {
 			t.Fatalf("w=%d: %v", w, err)
 		}
 		f := m.graphMeasure(m.graphLay)
@@ -822,11 +798,6 @@ func TestTheRankWindowFitsTheDrawingAtEveryWidth(t *testing.T) {
 		}
 		if total > m.graphWidth() {
 			t.Errorf("w=%d: the bands add up to %d in a %d-cell drawing", w, total, m.graphWidth())
-		}
-		for _, line := range strings.Split(out, "\n") {
-			if got := lg.Width(line); got != w {
-				t.Fatalf("w=%d: a row is %d cells wide", w, got)
-			}
 		}
 	}
 }

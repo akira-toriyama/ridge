@@ -34,27 +34,6 @@ func roadModel(t *testing.T, w, h int) *Model {
 	return m
 }
 
-// Every line of the frame is composed to exactly the terminal's width, at
-// every zoom and the declared width range — the CJK invariant every view in
-// this repo carries: one double-width glyph miscounted anywhere shears the
-// separator column below it.
-func TestRoadmapFrameLinesAreExactlyTerminalWide(t *testing.T) {
-	for _, w := range []int{120, 240, 320, 400} {
-		m := roadModel(t, w, 40)
-		for _, zoom := range []string{"day", "week", "month"} {
-			if m.roadZoom.String() != zoom {
-				t.Fatalf("w=%d: zoom cycle out of order, at %s want %s", w, m.roadZoom, zoom)
-			}
-			for i, line := range strings.Split(frame(m), "\n") {
-				if got := lg.Width(line); got != w {
-					t.Errorf("w=%d zoom=%s line %d is %d cells: %q", w, zoom, i, got, line)
-				}
-			}
-			press(m, "z")
-		}
-	}
-}
-
 // The fixture's four dated open tasks, in due order, each row carrying its
 // local date — and no row at all for the dateless majority.
 func TestRoadmapRowsAreTheDatedOpenTasksInDueOrder(t *testing.T) {

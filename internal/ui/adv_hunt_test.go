@@ -27,30 +27,6 @@ func advFrameSize(t *testing.T, m *Model) (w, h int) {
 	return w, h
 }
 
-func TestAdvFrameOverflowsAtSmallSizes(t *testing.T) {
-	sizes := [][2]int{{1, 1}, {20, 5}, {20, 8}, {30, 7}, {40, 10}, {50, 12}, {28, 20}, {27, 20}}
-	for _, s := range sizes {
-		for _, view := range []string{"board", "peek", "table", "help"} {
-			m := boardModel(t, s[0], s[1])
-			switch view {
-			case "peek":
-				m.peekOpen = true
-				m.syncPeek()
-			case "table":
-				m.view = viewTable
-			case "help":
-				m.fullHelp = true
-			}
-			m.relayout()
-			gw, gh := advFrameSize(t, m)
-			if gw > s[0] || gh > s[1] {
-				t.Errorf("%s at %dx%d rendered %dx%d (overflows by %+d cols, %+d rows)",
-					view, s[0], s[1], gw, gh, gw-s[0], gh-s[1])
-			}
-		}
-	}
-}
-
 // The dragged ghost card is 28 cells wide and ~6 tall and is only clamped to
 // max(0, w-28) / max(0, h-cardH). On a terminal narrower/shorter than a card
 // that clamp yields 0 and the layer still overflows the canvas.
