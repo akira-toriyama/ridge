@@ -82,18 +82,24 @@ func (m *Model) inPeek(x, y int) bool {
 	return x >= px && x < px+pw && y >= py && y < py+ph
 }
 
-// dropTarget resolves a point to a lane that can actually receive a card: it
-// must be inside a column horizontally AND inside that column's card band
-// vertically, and it must not be under an overlay that hides the board. The
-// chrome rows, the footer, the empty area past the last column and the open
-// side-peek are all "off the board".
+// laneAtPoint resolves a point to the column the BOARD has there: inside a
+// column horizontally AND inside that column's card band vertically, and not
+// under an overlay that hides it. The chrome rows, the footer, the empty area
+// past the last column and the open side-peek are all "off the board".
 //
-// This is the ONE predicate for "would a release here drop": the renderer asks
-// it too (dropLayer, statusLine), so the frame cannot promise a drop that the
-// release then cancels.
-func (m *Model) dropTarget(x, y int) (string, bool) {
+// The three paths that resolve a lane from a POINT hit-test through this — the
+// press, the release and the wheel — so none can disagree with the others
+// about where the board is. The drag's edge auto-scroll (onMouseMove) is the
+// deliberate exception: its hot zone reaches one row PAST c.Top and c.Bot on
+// purpose, because a pointer parked at the edge is how a drag asks the column
+// to scroll.
+//
+// It is deliberately NOT spelled as dropTarget: droppability is a question
+// about a RELEASE, and narrowing it later (a locked lane, a WIP limit) must
+// not silently make the wheel dead there too.
+func (m *Model) laneAtPoint(x, y int) (string, *laneCol, bool) {
 	if m.lay == nil {
-		return "", false
+		return "", nil, false
 	}
 	// The peek sits ABOVE the drop indicator (zPeek > zDrop), so a column under
 	// it is a column the user cannot see — and the indicator that would mark
@@ -102,17 +108,26 @@ func (m *Model) dropTarget(x, y int) (string, bool) {
 	// states. Guarded by POINT, not by column: the strip of a column still
 	// visible beside the peek stays a legal drop.
 	if m.inPeek(x, y) {
-		return "", false
+		return "", nil, false
 	}
 	lane, ok := m.lay.laneAtX(x)
 	if !ok {
-		return "", false
+		return "", nil, false
 	}
 	c := m.lay.Col(lane)
 	if c == nil || y < c.Top || y >= c.Bot {
-		return "", false
+		return "", nil, false
 	}
-	return lane, true
+	return lane, c, true
+}
+
+// dropTarget is laneAtPoint asked as the release asks it. This is the ONE
+// predicate for "would a release here drop": the renderer asks it too
+// (dropLayer, statusLine), so the frame cannot promise a drop that the release
+// then cancels.
+func (m *Model) dropTarget(x, y int) (string, bool) {
+	lane, _, ok := m.laneAtPoint(x, y)
+	return lane, ok
 }
 
 func (m *Model) onMouseDown(msg tea.MouseClickMsg) tea.Cmd {
@@ -182,8 +197,7 @@ func (m *Model) onMouseDown(msg tea.MouseClickMsg) tea.Cmd {
 		// column the gesture must leave alone is the one the wheel just
 		// scrolled — ensureVisible's own comment names that snap-back as the
 		// thing to avoid.
-		c := m.lay.Col(lane)
-		if c == nil || msg.Y < c.Top || msg.Y >= c.Bot {
+		if _, _, ok := m.laneAtPoint(msg.X, msg.Y); !ok {
 			return nil
 		}
 		if i := m.b.LaneIndex(lane); i >= 0 && i != m.curLane {
@@ -407,12 +421,22 @@ func (m *Model) onWheel(msg tea.MouseWheelMsg) {
 		// Table and graph have no board columns on screen to scroll.
 		return
 	}
-	lane, ok := m.lay.laneAtX(msg.X)
+	// The row half is what this path was missing: laneAtX resolves a column
+	// from X ALONE, so the wheel scrolled a lane from the title bar, the filter
+	// row, a lane header or the footer — the same four rows the press path has
+	// refused since a5b0358, and the ones drag_gesture_test.go enumerates as
+	// chrome. A column's own header band goes with them: it is inside the
+	// column's X but outside its card band, and writing m.scroll for a column
+	// the pointer is not on the board over is the model-versus-screen
+	// disagreement the press fix was about. The cost is named rather than
+	// glossed: one of those rows carries the `+N below` count, which is the
+	// chrome a reader might most plausibly point at to scroll.
+	//
+	// laneAtPoint's inPeek check is redundant here — the peek branch above
+	// already returned — but not wrong: this branch is reached only with
+	// m.view == viewBoard, which implies !fullScreen() (strip.go).
+	lane, c, ok := m.laneAtPoint(msg.X, msg.Y)
 	if !ok {
-		return
-	}
-	c := m.lay.Col(lane)
-	if c == nil {
 		return
 	}
 	switch msg.Button {

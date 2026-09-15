@@ -179,3 +179,102 @@ func TestAdvEscInFilterModeIsEatenByAnArmedDrag(t *testing.T) {
 			"(drag.armed=%v cancelled=%v)", m.drag.armed, m.drag.cancelled)
 	}
 }
+
+// The wheel is the third pointer path, and it resolved a lane from X alone
+// long after the press stopped doing so (t-cm11). Every row of the frame sits
+// over some column, so the wheel scrolled a lane from the title bar, the
+// filter row, a lane header and the footer — all four of the rows the test
+// above enumerates as chrome, plus the column's own header band.
+//
+// Lower stakes than the press bug, because a scroll is visible on screen and
+// nothing goes stale behind it. But it is the same rule on the same geometry,
+// and all three paths hit-test through laneAtPoint now.
+//
+// No exemption: all four chrome arms FAIL against the tree before the fix, on
+// exactly the rows the task filed (240x24, backlog, Top=5 Bot=23). The last
+// two subtests pin what must NOT change — the card band, and the peek's own
+// wheel, whose branch runs before the board's.
+func TestTheWheelIgnoresTheChromeTheWayThePressDoes(t *testing.T) {
+	const w, h = 240, 24
+	lane := "backlog"
+
+	fresh := func(t *testing.T) (*Model, *laneCol) {
+		t.Helper()
+		m := boardModel(t, w, h)
+		m.mouseOn = true
+		m.relayout()
+		c := m.lay.Col(lane)
+		if c == nil {
+			t.Fatalf("the fixture has no %s column at %dx%d", lane, w, h)
+		}
+		if c.Hidden == 0 {
+			t.Fatalf("the %s column has nothing below the fold; this no longer tests scrolling", lane)
+		}
+		return m, c
+	}
+
+	_, col := fresh(t)
+	for _, tc := range []struct {
+		name string
+		y    int
+	}{
+		{"the title bar", 0},
+		{"the filter row", 1},
+		{"the lane header band", col.Top - 1},
+		{"the footer", h - 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m, c := fresh(t)
+			m.onWheel(tea.MouseWheelMsg{X: c.X + 2, Y: tc.y, Button: tea.MouseWheelDown})
+			if got := m.scroll[lane]; got != 0 {
+				t.Errorf("a wheel over %s at y=%d scrolled %s to %d — the chrome is not the board",
+					tc.name, tc.y, lane, got)
+			}
+		})
+	}
+
+	// The column BODY still scrolls, which is the whole point of the wheel —
+	// and c.Top is IN the band, so the very first card row must work. That
+	// boundary is why this arm does not start at Top+1: `y < c.Top` widened to
+	// `y <= c.Top` leaves the rest of the package green (measured), and this
+	// predicate now governs the press-miss and the release as well as the
+	// wheel, so one off-by-one there would kill all three at once.
+	for _, tc := range []struct {
+		name string
+		at   func(*laneCol) int
+	}{
+		{"the first card row", func(c *laneCol) int { return c.Top }},
+		{"mid-band", func(c *laneCol) int { return c.Top + 1 }},
+		{"the last card row", func(c *laneCol) int { return c.Bot - 1 }},
+	} {
+		t.Run("the column body still scrolls at "+tc.name, func(t *testing.T) {
+			m, c := fresh(t)
+			m.onWheel(tea.MouseWheelMsg{X: c.X + 2, Y: tc.at(c), Button: tea.MouseWheelDown})
+			if m.scroll[lane] != 1 {
+				t.Errorf("a wheel at %s (y=%d, band %d..%d) left %s at %d, want 1",
+					tc.name, tc.at(c), c.Top, c.Bot-1, lane, m.scroll[lane])
+			}
+		})
+	}
+
+	// The peek owns its own wheel wherever it is open, and that branch runs
+	// before the board's. The first version of this subtest guarded its only
+	// assertion behind a condition that never fires, so it could not fail at
+	// all (found in review of #123) — the fixture's body is far longer than the
+	// panel, so the offset always moves.
+	t.Run("the peek still scrolls under the wheel", func(t *testing.T) {
+		m, _ := fresh(t)
+		m.peekOpen = true
+		m.syncPeek()
+		m.relayout()
+		px, py, _, _ := m.peekBox()
+		before := m.vp.YOffset()
+		m.onWheel(tea.MouseWheelMsg{X: px + 2, Y: py + 2, Button: tea.MouseWheelDown})
+		if m.vp.YOffset() <= before {
+			t.Errorf("a wheel over the peek left its offset at %d", m.vp.YOffset())
+		}
+		if m.scroll[lane] != 0 {
+			t.Error("a wheel over the peek scrolled the board underneath it")
+		}
+	})
+}
