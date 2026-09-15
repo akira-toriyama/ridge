@@ -96,13 +96,7 @@ func (c Cluster) Depth() int {
 // markers, which is the point. Counting a done task as a root put "7
 // unblocked" in green over seven rows the same frame marked `v`.
 func (c Cluster) Roots() int {
-	n := 0
-	for _, nd := range c.Nodes {
-		if !nd.Done && len(nd.Open) == 0 {
-			n++
-		}
-	}
-	return n
+	return c.count(func(nd ClusterNode) bool { return !nd.Done && len(nd.Open) == 0 })
 }
 
 // Blocked counts the UNFINISHED members with at least one unsatisfied dep —
@@ -111,20 +105,21 @@ func (c Cluster) Roots() int {
 // blocked: counting it here too put the three counts one over len(Nodes) at
 // scope=all, and the marker on its row says `v`, not `x`.
 func (c Cluster) Blocked() int {
-	n := 0
-	for _, nd := range c.Nodes {
-		if !nd.Done && len(nd.Open) > 0 {
-			n++
-		}
-	}
-	return n
+	return c.count(func(nd ClusterNode) bool { return !nd.Done && len(nd.Open) > 0 })
 }
 
 // Done counts the finished members. Always 0 at ClusterOpen.
 func (c Cluster) Done() int {
+	return c.count(func(nd ClusterNode) bool { return nd.Done })
+}
+
+// count is the body the three counters above share. They partition Nodes
+// between them; the predicates stay at the call sites, where the doc comments
+// explaining why each reads the way it does already are.
+func (c Cluster) count(pred func(ClusterNode) bool) int {
 	n := 0
 	for _, nd := range c.Nodes {
-		if nd.Done {
+		if pred(nd) {
 			n++
 		}
 	}

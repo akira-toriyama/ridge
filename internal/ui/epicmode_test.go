@@ -10,6 +10,29 @@ import (
 	"github.com/akira-toriyama/ridge/internal/store/memstore"
 )
 
+// epicDepsListOnLastRow parks the epic overlay in e-one's deps list with two
+// edges seeded and the cursor on the LAST of them.
+//
+// The row it points at is the one every caller's removal takes away, so a
+// version of this that opened on row 0 would leave all three tests exercising
+// nothing. listIdx is set AFTER openEpicField, which re-zeroes it.
+//
+// e-three is deliberately unresolvable: scriptedEpicBoard has no such box, and
+// the deps arm of epicListRows hands back the raw ids without resolving them.
+func epicDepsListOnLastRow(t *testing.T) *Model {
+	t.Helper()
+	m, _ := storeFirstModel(t)
+	sliceOnEpicAxis(t, m, "e-one")
+	press(m, "m")
+	m.b.Epic("e-one").Deps = []string{"e-two", "e-three"}
+	m.epic.menuIdx = int(epicFieldDeps)
+	if c := m.openEpicField(epicFieldDeps, m.b.Epic(m.epic.id)); c != nil {
+		_ = c
+	}
+	m.epic.listIdx = 1
+	return m
+}
+
 // sliceOnEpicAxis opens the panel, puts it on the epic axis and lands the cursor
 // on a box — the state every epic gesture starts from.
 func sliceOnEpicAxis(t *testing.T, m *Model, id string) {
@@ -327,17 +350,7 @@ func TestEpicListSubEditorTogglesAndParses(t *testing.T) {
 // refused gesture still re-aimed the next ⏎ at a different row (found by
 // review).
 func TestEpicListCursorPullsBackWhenTheReReadShrinksTheRows(t *testing.T) {
-	m, _ := storeFirstModel(t)
-	sliceOnEpicAxis(t, m, "e-one")
-	press(m, "m")
-	m.b.Epic("e-one").Deps = []string{"e-two", "e-three"}
-	m.epic.menuIdx = int(epicFieldDeps)
-	if c := m.openEpicField(epicFieldDeps, m.b.Epic(m.epic.id)); c != nil {
-		_ = c
-	}
-
-	// Cursor on the LAST row, the one being removed.
-	m.epic.listIdx = 1
+	m := epicDepsListOnLastRow(t)
 	rows := m.epicListRows(m.b.Epic("e-one"))
 	if c := m.epicListSelect(m.b.Epic("e-one"), rows); c == nil {
 		t.Fatal("the removal queued no write")
@@ -395,15 +408,7 @@ func TestEpicLabelRemovalPullsTheCursorBackOnReRead(t *testing.T) {
 // be gated on the list stage (found by review — the gated version regressed
 // the deps arm the old gesture-time clamp happened to cover).
 func TestEpicListCursorClampsEvenWhenTheReReadLandsMidInput(t *testing.T) {
-	m, _ := storeFirstModel(t)
-	sliceOnEpicAxis(t, m, "e-one")
-	press(m, "m")
-	m.b.Epic("e-one").Deps = []string{"e-two", "e-three"}
-	m.epic.menuIdx = int(epicFieldDeps)
-	if c := m.openEpicField(epicFieldDeps, m.b.Epic(m.epic.id)); c != nil {
-		_ = c
-	}
-	m.epic.listIdx = 1
+	m := epicDepsListOnLastRow(t)
 	rows := m.epicListRows(m.b.Epic("e-one"))
 	if c := m.epicListSelect(m.b.Epic("e-one"), rows); c == nil {
 		t.Fatal("the removal queued no write")
@@ -429,15 +434,7 @@ func TestEpicListCursorClampsEvenWhenTheReReadLandsMidInput(t *testing.T) {
 // A refused gesture must leave the cursor exactly where it was — "nothing
 // happened" has to be the whole truth of it.
 func TestARefusedEpicListRemovalDoesNotMoveTheCursor(t *testing.T) {
-	m, _ := storeFirstModel(t)
-	sliceOnEpicAxis(t, m, "e-one")
-	press(m, "m")
-	m.b.Epic("e-one").Deps = []string{"e-two", "e-three"}
-	m.epic.menuIdx = int(epicFieldDeps)
-	if c := m.openEpicField(epicFieldDeps, m.b.Epic(m.epic.id)); c != nil {
-		_ = c
-	}
-	m.epic.listIdx = 1
+	m := epicDepsListOnLastRow(t)
 	m.storeFirstUnread = true
 	rows := m.epicListRows(m.b.Epic("e-one"))
 	if c := m.epicListSelect(m.b.Epic("e-one"), rows); c != nil {
