@@ -41,9 +41,7 @@ type sweepResultMsg struct {
 	err error
 }
 
-func (m *Model) sweepCanvasH() int {
-	return maxInt(1, m.h-fullTop-m.stripHeight()-footerH)
-}
+func (m *Model) sweepCanvasH() int { return m.fullCanvasH(0) }
 
 // openSweep enters the view and asks for the previews.
 func (m *Model) openSweep() tea.Cmd {
@@ -134,20 +132,18 @@ func (m *Model) renderSweep() string {
 	lines := m.sweepLines(rows, maxInt(1, m.w-2))
 	canvasH := m.sweepCanvasH()
 	sel := sweepIndex(rows, m.sweepSel)
-	m.sweepScroll = scrollToSel(m.sweepScroll, len(lines), canvasH, func() (int, int, bool) {
-		if sel < 0 {
-			return 0, 0, false
-		}
-		top := sel
-		if sel > 0 && rows[sel-1].Header {
-			top = sel - 1
-		}
-		return top, sel, true
+	shown := windowBands(&m.sweepScroll, lines, canvasH, func() int {
+		return scrollToSel(m.sweepScroll, len(lines), canvasH, func() (int, int, bool) {
+			if sel < 0 {
+				return 0, 0, false
+			}
+			top := sel
+			if sel > 0 && rows[sel-1].Header {
+				top = sel - 1
+			}
+			return top, sel, true
+		})
 	})
-	shown := lines
-	if len(shown) > canvasH {
-		shown = shown[m.sweepScroll:minInt(len(lines), m.sweepScroll+canvasH)]
-	}
 	return m.composeFullScreen(m.sweepTitleBar(), m.sweepHeader(len(lines) > canvasH),
 		m.fillCanvas(shown, canvasH), func(h int) string { return m.sweepStrip(rows, h) })
 }

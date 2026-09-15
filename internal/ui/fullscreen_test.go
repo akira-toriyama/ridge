@@ -215,3 +215,96 @@ func TestPackedBandsKeepTheGridWidthExact(t *testing.T) {
 		}
 	})
 }
+
+// windowBands is the clamp and the slice held together, so this pins them
+// together: every offset it writes back must be a legal start for the slice it
+// returns. Nothing pinned either before — the sweep in particular has no test
+// of its scroll at all, and the other three were covered only through frames,
+// which -dump always renders from offset 0.
+//
+// bite-exempt: it pins behaviour that already existed. The four views ran this
+// clamp-and-slice inline before it moved here; measured, 756 frames rendered
+// with the offset poisoned to +/-99999 are byte-identical across the change.
+func TestWindowBandsNeverSlicesOutsideWhatItClamped(t *testing.T) {
+	bands := func(n int) []string {
+		out := make([]string, n)
+		for i := range out {
+			out[i] = string(rune('a' + i%26))
+		}
+		return out
+	}
+
+	t.Run("a window shorter than the canvas is returned whole", func(t *testing.T) {
+		scroll := 7
+		got := windowBands(&scroll, bands(3), 10, func() int { return 7 })
+		if len(got) != 3 {
+			t.Errorf("got %d bands, want all 3", len(got))
+		}
+		if scroll != 0 {
+			t.Errorf("offset %d, want 0 — there is nothing to scroll", scroll)
+		}
+	})
+
+	t.Run("an offset past the end is pulled back to the last full window", func(t *testing.T) {
+		scroll := 0
+		got := windowBands(&scroll, bands(20), 6, func() int { return 999 })
+		if scroll != 14 {
+			t.Errorf("offset %d, want 14 (20 bands less a 6-row canvas)", scroll)
+		}
+		if len(got) != 6 || got[0] != bands(20)[14] {
+			t.Errorf("window starts at the wrong band")
+		}
+	})
+
+	t.Run("a negative offset is pulled up to zero", func(t *testing.T) {
+		scroll := 0
+		got := windowBands(&scroll, bands(20), 6, func() int { return -999 })
+		if scroll != 0 {
+			t.Errorf("offset %d, want 0", scroll)
+		}
+		if len(got) != 6 || got[0] != bands(20)[0] {
+			t.Errorf("window starts at the wrong band")
+		}
+	})
+
+	// The pull is called BEFORE the offset is written, and reads it. Every
+	// other case here hands in a toSel that ignores *scroll, so none of them
+	// can see that order — and zeroing the offset ahead of the clamp passes
+	// all of them (found in review of #119). This is the four views' real
+	// shape: scrollToSel keeps the current offset when the selection is gone.
+	t.Run("the pull sees the offset it is about to replace", func(t *testing.T) {
+		scroll := 9
+		var saw int
+		windowBands(&scroll, bands(40), 6, func() int { saw = scroll; return scroll })
+		if saw != 9 {
+			t.Errorf("the pull saw offset %d, want the 9 it was called with", saw)
+		}
+		if scroll != 9 {
+			t.Errorf("offset %d, want the pull's own answer kept", scroll)
+		}
+	})
+
+	// The pairing itself: whatever the pull asks for, the offset written back
+	// has to be a legal start for the slice handed out.
+	for _, total := range []int{0, 1, 5, 20, 41} {
+		for _, canvasH := range []int{1, 3, 6, 40} {
+			for _, want := range []int{-99999, -1, 0, 3, 19, 99999} {
+				scroll := want
+				got := windowBands(&scroll, bands(total), canvasH, func() int { return want })
+				if scroll < 0 {
+					t.Fatalf("total=%d canvasH=%d pull=%d: offset %d is negative", total, canvasH, want, scroll)
+				}
+				if total > canvasH {
+					if len(got) != canvasH {
+						t.Fatalf("total=%d canvasH=%d pull=%d: window is %d rows", total, canvasH, want, len(got))
+					}
+					if scroll+canvasH > total {
+						t.Fatalf("total=%d canvasH=%d pull=%d: offset %d runs past the end", total, canvasH, want, scroll)
+					}
+				} else if len(got) != total {
+					t.Fatalf("total=%d canvasH=%d pull=%d: window is %d rows, want all %d", total, canvasH, want, len(got), total)
+				}
+			}
+		}
+	}
+}
