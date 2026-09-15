@@ -114,12 +114,19 @@ func New(p board.Provider, o Options) *Model {
 	// "fixture · N tasks" over it would be worse than losing it: on a live store
 	// gated by the schema check, "fixture" is the one word that means nothing
 	// you do touches disk.
+	// The count is Tasks(), and a task whose status names no lane is in it
+	// while every lane-driven surface draws it nowhere — so the gap is named,
+	// or "loaded N" is a truthful line over an untruthful board.
+	unlaned := ""
+	if n := len(m.b.Unlaned()); n > 0 {
+		unlaned = fmt.Sprintf(" · %d in no lane (status outside the board's lanes)", n)
+	}
 	switch {
 	case !m.b.Writable():
 	case p.Live():
-		m.note("loaded %d tasks in %dms", len(m.b.Tasks()), o.LoadMS)
+		m.note("loaded %d tasks in %dms%s", len(m.b.Tasks()), o.LoadMS, unlaned)
 	default:
-		m.note("fixture · %d tasks", len(m.b.Tasks()))
+		m.note("fixture · %d tasks%s", len(m.b.Tasks()), unlaned)
 	}
 	// A clamped views.toml is actionable and rare, so it outranks the load
 	// note above — but never the read-only warning, which is set exactly

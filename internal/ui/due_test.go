@@ -107,3 +107,29 @@ func TestPeekDatesCreatedAndOldUpdatedOnTheLocalDay(t *testing.T) {
 		t.Errorf("a stamp was dated in UTC, one day early:\n%s", out)
 	}
 }
+
+// isOverdue is the one overdue predicate (six readers). Its "and not closed"
+// clause was satisfied by luck: the fixture has no closed task with a due
+// date, so dropping the clause failed nothing.
+func TestIsOverdueIgnoresAClosedTask(t *testing.T) {
+	at := time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)
+	prev := nowFn
+	nowFn = func() time.Time { return at }
+	t.Cleanup(func() { nowFn = prev })
+
+	past, future := at.Add(-24*time.Hour), at.Add(24*time.Hour)
+	for _, tc := range []struct {
+		name string
+		task board.Task
+		want bool
+	}{
+		{"past due, open", board.Task{Due: past}, true},
+		{"past due, closed", board.Task{Due: past, Closed: past.Add(time.Hour)}, false},
+		{"future due, open", board.Task{Due: future}, false},
+		{"no due", board.Task{}, false},
+	} {
+		if got := isOverdue(&tc.task); got != tc.want {
+			t.Errorf("%s: isOverdue = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}

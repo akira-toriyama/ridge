@@ -279,3 +279,30 @@ func TestGatedBoardRollsBackAWrite(t *testing.T) {
 		t.Error("a refused write did not surface as an error row")
 	}
 }
+
+// A task whose status names no lane is in Tasks() and in no column, so the
+// load note's count must name the gap: "fixture · 2 tasks" over a board that
+// draws one is the honesty failure this pins. Built off the fixture, which
+// has no such task (and must not grow one: it breaks 21 tests).
+func TestTheLoadNoteNamesTasksThatNoLaneHolds(t *testing.T) {
+	b := board.NewBoard([]*board.Task{
+		{ID: "a", Title: "on the board", Status: "ready", Priority: 10},
+		{ID: "x", Title: "lane removed from config", Status: "archived", Priority: 10},
+	})
+	m := New(memstore.NewWith(b), Options{})
+	held := 0
+	for _, l := range m.b.Lanes() {
+		held += len(m.b.LaneTasks(l.Name))
+	}
+	if held != 1 {
+		t.Fatalf("setup: the lanes hold %d tasks, want 1", held)
+	}
+	got := ansiStrip(m.status)
+	if !strings.Contains(got, "2 tasks") || !strings.Contains(got, "1 in no lane") {
+		t.Errorf("the load note is %q — it must count 2 and say 1 is in no lane", got)
+	}
+	// And the ordinary case stays clean: no gap, no clause.
+	if s := boardModel(t, 240, 40).status; strings.Contains(s, "in no lane") {
+		t.Errorf("a board whose lanes hold every task says %q", s)
+	}
+}

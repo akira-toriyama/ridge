@@ -203,3 +203,41 @@ func TestCloseStampsAndReopenClears(t *testing.T) {
 		t.Error("leaving the done lane must clear Closed")
 	}
 }
+
+// Equal priorities are ordered by id, and every index below rides on that
+// total order: IndexIn, the UI's insertion arithmetic, and respace — which a
+// tied pair is exactly what forces (sparsePriority has no gap to split). The
+// fixture's three tied pairs happen to be declared in id order, so SliceStable
+// alone kept them looking right; the tie-break itself was killed by nothing.
+func TestLaneTiesBreakByIDAndAMoveIntoTheTieLandsWhereTheDisplaySays(t *testing.T) {
+	b := NewBoard([]*Task{
+		{ID: "b", Status: "ready", Priority: 10}, // declared before its tie
+		{ID: "a", Status: "ready", Priority: 10},
+		{ID: "c", Status: "ready", Priority: 20},
+		{ID: "z", Status: "backlog", Priority: 10},
+	})
+	if got := laneIDs(b, "ready"); got != "a,b,c" {
+		t.Fatalf("tied priorities ordered %s, want id-ascending a,b,c", got)
+	}
+	if got := b.IndexIn("ready", "b"); got != 1 {
+		t.Errorf("IndexIn(b) = %d, want 1 — the index must agree with the order drawn", got)
+	}
+
+	// Into the slot between the tied pair: no priority fits between 10 and
+	// 10, so the lane is respaced, and z must land where the display said.
+	renumbered, err := b.MoveTo("z", "ready", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := laneIDs(b, "ready"); got != "a,z,b,c" {
+		t.Errorf("after the move the lane reads %s, want a,z,b,c", got)
+	}
+	if got := strings.Join(renumbered, ","); got != "b,c" {
+		t.Errorf("respace renumbered %q, want b,c — the tasks pushed below the insertion", got)
+	}
+	for i, x := range b.LaneTasks("ready") {
+		if want := (i + 1) * priorityStep; x.Priority != want {
+			t.Errorf("%s respaced to %d, want %d", x.ID, x.Priority, want)
+		}
+	}
+}

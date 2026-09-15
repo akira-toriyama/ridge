@@ -348,6 +348,21 @@ func (b *Board) LaneIndex(name string) int {
 // Tasks returns every task on the board, unordered.
 func (b *Board) Tasks() []*Task { return b.tasks }
 
+// Unlaned is every task whose Status names no lane. Lanes come verbatim from
+// furrow's config, so a lane renamed or removed while shards still carry it
+// leaves such tasks in no column, no table row and no band — and Tasks()
+// still counts them. Any surface that reports a total has to name this gap
+// or the total is a lie about what is on screen.
+func (b *Board) Unlaned() []*Task {
+	var out []*Task
+	for _, t := range b.tasks {
+		if b.Lane(t.Status) == nil {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
 // Task looks a task up by id, nil when absent.
 func (b *Board) Task(id string) *Task {
 	for _, t := range b.tasks {
