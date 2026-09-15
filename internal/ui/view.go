@@ -167,7 +167,10 @@ const minFilterInputW = 20
 // chromeLayers draws the title bar, the filter bar and the status line.
 func (m *Model) chromeLayers() []*lg.Layer {
 	th := m.th
-	total := len(m.b.Tasks())
+	// The lanes' population, not Tasks(): a task whose status names no lane
+	// would read as "1/2 tasks" with no filter on — a filter's shape for a
+	// gap the load note already names.
+	total := len(m.b.Tasks()) - len(m.b.Unlaned())
 	shown := m.countVisible()
 
 	// The Board | Table tab strip. `v` toggled the table view with no on-screen

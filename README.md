@@ -259,6 +259,7 @@ go run ./cmd/ridge -dump -tree               # with the dependency tree open
 go run ./cmd/ridge -demo drag -dump          # a transient state: one frame mid-drag
 go run ./cmd/ridge -h                        # the list of every -demo state (canonical: ui.DemoNames)
 go run ./cmd/ridge -readonly -dump           # a board made read-only by the schema gate
+go run ./cmd/ridge -dump -demo unlaned       # a task whose status names no lane: the load note counts it, the lanes do not
 go run ./cmd/ridge -graphlr -dump -demo graphall  # the dependency graph left-right (the same state as `o`)
 go run ./cmd/ridge -dump -roadmap            # the due timeline (week/month axes: -demo roadmapweek / roadmapmonth)
 go run ./cmd/ridge -dump -demo sweepconfirm  # the sweep with the archive gate open (sweep / sweeprestore / sweepwait are the others)

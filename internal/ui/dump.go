@@ -14,7 +14,7 @@ import (
 // unknown-name error and the tests all read this slice, because the list was
 // duplicated in three places and adding two states updated two of them —
 // `ridge -h` then advertised eight of ten.
-var DemoNames = []string{"move", "drag", "add", "adddraft", "edit", "editpick", "editinput", "editdeps", "editrefs", "note", "refs", "graph", "graphall", "map", "mapall", "mapfiltered", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "revisit", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicshut", "epicdone", "epicreopen", "sliceepicall", "sliceepicclosed", "epicnew", "boxes", "boxesall", "roadmapweek", "roadmapmonth", "swim", "swimopen", "swimrepo", "swimall", "views", "viewsroad", "viewsmany", "sweep", "sweepconfirm", "sweeprestore", "sweepwait", "fail"}
+var DemoNames = []string{"move", "drag", "add", "adddraft", "edit", "editpick", "editinput", "editdeps", "editrefs", "note", "refs", "graph", "graphall", "map", "mapall", "mapfiltered", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "revisit", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicshut", "epicdone", "epicreopen", "sliceepicall", "sliceepicclosed", "epicnew", "boxes", "boxesall", "roadmapweek", "roadmapmonth", "swim", "swimopen", "swimrepo", "swimall", "views", "viewsroad", "viewsmany", "sweep", "sweepconfirm", "sweeprestore", "sweepwait", "fail", "unlaned"}
 
 // Options configures a freshly-constructed Model. The zero value is the
 // default TUI: dark palette, board view, no filter.
@@ -114,13 +114,7 @@ func New(p board.Provider, o Options) *Model {
 	// "fixture · N tasks" over it would be worse than losing it: on a live store
 	// gated by the schema check, "fixture" is the one word that means nothing
 	// you do touches disk.
-	switch {
-	case !m.b.Writable():
-	case p.Live():
-		m.note("loaded %d tasks in %dms", len(m.b.Tasks()), o.LoadMS)
-	default:
-		m.note("fixture · %d tasks", len(m.b.Tasks()))
-	}
+	m.noteLoad(p.Live(), o.LoadMS)
 	// A clamped views.toml is actionable and rare, so it outranks the load
 	// note above — but never the read-only warning, which is set exactly
 	// once per session and restored by nothing (the Writable guard is that
@@ -129,6 +123,25 @@ func New(p board.Provider, o Options) *Model {
 		m.fail("views.toml: %s", strings.Join(o.ViewWarnings, " · "))
 	}
 	return m
+}
+
+// noteLoad is the startup note. The count is Tasks(), and a task whose
+// status names no lane is in it while every lane-driven surface draws it
+// nowhere — so the gap is named, or "loaded N" is a truthful line over an
+// untruthful board. Shared with the unlaned demo, which is the only headless
+// way to see the clause: the fixture has no such task.
+func (m *Model) noteLoad(live bool, loadMS int) {
+	unlaned := ""
+	if n := len(m.b.Unlaned()); n > 0 {
+		unlaned = fmt.Sprintf(" · %d in no lane (status outside the board's lanes)", n)
+	}
+	switch {
+	case !m.b.Writable():
+	case live:
+		m.note("loaded %d tasks in %dms%s", len(m.b.Tasks()), loadMS, unlaned)
+	default:
+		m.note("fixture · %d tasks%s", len(m.b.Tasks()), unlaned)
+	}
 }
 
 // Dump renders one frame at w x h — the headless verification surface — and
@@ -854,6 +867,17 @@ func (m *Model) demoState(kind string) error {
 		if m.sweep != nil || !m.sweepLoading {
 			return fmt.Errorf("demo sweepwait: the read was not deferred (sweep=%v loading=%v)", m.sweep != nil, m.sweepLoading)
 		}
+
+	case "unlaned":
+		// A task whose status names no lane: the load note counts it and
+		// names the gap, the lanes and the title-bar count do not hold it.
+		// Built onto the fixture here rather than in it — one task added to
+		// the fixture breaks 21 tests (t-38fm).
+		tasks := append(append([]*board.Task(nil), m.b.Tasks()...),
+			&board.Task{ID: "t-unlaned", Title: "lane removed from furrow's config", Status: "archived", Priority: 10})
+		m.b = board.NewStoreBoard(m.b.Lanes(), tasks, m.b.EpicsAll(), m.b.Writable(), m.b.SchemaState())
+		m.recompute()
+		m.noteLoad(false, 0)
 
 	case "fail":
 		// A refused write. The ⚠ styling has its own colour and its own row,

@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/akira-toriyama/ridge/internal/board"
 )
 
 // The expectations in this file are FURROW's, measured against a real store
@@ -727,5 +729,30 @@ func TestFlagKeysTakeOneValueLikeFurrow(t *testing.T) {
 	}
 	if _, err := p.Query("lane:ready,done"); err != nil {
 		t.Errorf("Query(lane:ready,done) refused the field OR furrow accepts: %v", err)
+	}
+}
+
+// is:overdue is "due in the past AND not closed" (furrow's meaning, the same
+// as ui's isOverdue). The fixture has no closed task with a due date, so the
+// closed clause was unpinned: dropping it failed nothing. A synthetic board,
+// not a fixture task — one added task breaks 21 tests elsewhere.
+func TestQueryIsOverdueExcludesAClosedTask(t *testing.T) {
+	defer func(f func() time.Time) { nowFn = f }(nowFn)
+	at := time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)
+	nowFn = func() time.Time { return at }
+	past, future := at.Add(-24*time.Hour), at.Add(24*time.Hour)
+
+	b := board.NewBoard([]*board.Task{
+		{ID: "t-late", Status: "backlog", Due: past},
+		{ID: "t-shut", Status: "done", Due: past, Closed: past.Add(time.Hour)},
+		{ID: "t-soon", Status: "backlog", Due: future},
+		{ID: "t-none", Status: "backlog"},
+	})
+	got, err := NewWith(b).Query("is:overdue")
+	if err != nil {
+		t.Fatalf("Query refused: %v", err)
+	}
+	if ids(got...) != ids("t-late") {
+		t.Errorf("is:overdue = %v, want t-late alone — a closed task is not overdue", got)
 	}
 }

@@ -279,3 +279,55 @@ func TestGatedBoardRollsBackAWrite(t *testing.T) {
 		t.Error("a refused write did not surface as an error row")
 	}
 }
+
+// A task whose status names no lane is in Tasks() and in no column, so the
+// load note's count must name the gap: "fixture · 3 tasks" over a board that
+// draws one is the honesty failure this pins — and the title bar's count is
+// the lanes', not Tasks(), or the same board reads "1/3 tasks" as if a filter
+// were on. Two such tasks, so the COUNT is pinned and not merely "some".
+// Built off the fixture, which has no such task (and must not grow one: it
+// breaks 21 tests).
+func TestTheLoadNoteNamesTasksThatNoLaneHolds(t *testing.T) {
+	b := board.NewBoard([]*board.Task{
+		{ID: "a", Title: "on the board", Status: "ready", Priority: 10},
+		{ID: "x", Title: "lane removed from config", Status: "archived", Priority: 10},
+		{ID: "y", Title: "lane renamed in config", Status: "someday", Priority: 20},
+	})
+	m := New(memstore.NewWith(b), Options{})
+	held := 0
+	for _, l := range m.b.Lanes() {
+		held += len(m.b.LaneTasks(l.Name))
+	}
+	if held != 1 {
+		t.Fatalf("setup: the lanes hold %d tasks, want 1", held)
+	}
+	got := ansiStrip(m.status)
+	if !strings.Contains(got, "3 tasks") || !strings.Contains(got, "2 in no lane") {
+		t.Errorf("the load note is %q — it must count 3 and say 2 are in no lane", got)
+	}
+	m.w, m.h = 240, 40
+	m.relayout()
+	if out := frame(m); strings.Contains(out, "1/3 tasks") || !strings.Contains(out, "1 tasks") {
+		t.Errorf("the title bar counts Tasks() rather than the lanes:\n%s", out)
+	}
+	// And the ordinary case stays clean: no gap, no clause.
+	if s := boardModel(t, 240, 40).status; strings.Contains(s, "in no lane") {
+		t.Errorf("a board whose lanes hold every task says %q", s)
+	}
+}
+
+// The state above must be producible headless in one frame (CLAUDE.md), and
+// the fixture cannot carry it, so the demo builds it onto the fixture.
+func TestTheUnlanedDemoShowsTheClause(t *testing.T) {
+	m := New(memstore.New(), Options{})
+	out, err := m.Dump(240, 40, "unlaned", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "1 in no lane") {
+		t.Errorf("-demo unlaned draws no load-note clause:\n%s", out)
+	}
+	if !strings.Contains(out, "34 tasks") {
+		t.Errorf("-demo unlaned: the title bar should count the 34 laned tasks, not 35:\n%s", out)
+	}
+}
