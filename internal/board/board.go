@@ -390,6 +390,33 @@ func (b *Board) Unlaned() []*Task {
 	return out
 }
 
+// checkTarget resolves an id AND a checklist index — the pair the three
+// checklist writes guard before touching anything. The nil-task arm must come
+// first: the bounds test dereferences the task it just refused to find.
+func (b *Board) checkTarget(id string, i int) (*Task, error) {
+	t, err := b.mustTask(id)
+	if err != nil {
+		return nil, err
+	}
+	if i < 0 || i >= len(t.Checklist) {
+		return nil, fmt.Errorf("task %s has no checklist item %d", id, i)
+	}
+	return t, nil
+}
+
+// mustTask resolves an id to the task it names, or the one refusal every write
+// answers an unknown id with. Eleven methods open this way, and a second
+// wording for the same mistake would reach the status line as two different
+// messages for it. memstore repeats the string for its own reads; that copy is
+// across a package boundary and stays.
+func (b *Board) mustTask(id string) (*Task, error) {
+	t := b.Task(id)
+	if t == nil {
+		return nil, fmt.Errorf("unknown task %q", id)
+	}
+	return t, nil
+}
+
 // Task looks a task up by id, nil when absent.
 func (b *Board) Task(id string) *Task {
 	for _, t := range b.tasks {
@@ -448,9 +475,9 @@ func AdjustDropIndex(sameLane bool, fromIdx, idx int) int {
 // Priority field; only when the gap between neighbours is exhausted does it
 // respace the whole lane, returning the ids it renumbered — furrow's contract.
 func (b *Board) MoveTo(id, lane string, idx int) (renumbered []string, err error) {
-	t := b.Task(id)
-	if t == nil {
-		return nil, fmt.Errorf("unknown task %q", id)
+	t, err := b.mustTask(id)
+	if err != nil {
+		return nil, err
 	}
 	dst := b.Lane(lane)
 	if dst == nil {
@@ -567,12 +594,9 @@ func (b *Board) Close(id string) error {
 
 // ToggleCheck flips checklist item i and stamps Updated.
 func (b *Board) ToggleCheck(id string, i int) error {
-	t := b.Task(id)
-	if t == nil {
-		return fmt.Errorf("unknown task %q", id)
-	}
-	if i < 0 || i >= len(t.Checklist) {
-		return fmt.Errorf("task %s has no checklist item %d", id, i)
+	t, err := b.checkTarget(id, i)
+	if err != nil {
+		return err
 	}
 	t.Checklist[i].Done = !t.Checklist[i].Done
 	t.Updated = nowFn().UTC().Truncate(time.Second)
@@ -586,9 +610,9 @@ func (b *Board) ToggleCheck(id string, i int) error {
 // unreachable here and a wiped $EDITOR buffer keeps the old body instead of
 // landing optimistically and getting yanked by the rollback.
 func (b *Board) SetBody(id, body string) error {
-	t := b.Task(id)
-	if t == nil {
-		return fmt.Errorf("unknown task %q", id)
+	t, err := b.mustTask(id)
+	if err != nil {
+		return err
 	}
 	if strings.TrimSpace(body) == "" {
 		return fmt.Errorf("%s: replacement body is empty — a body is never cleared", id)
@@ -670,9 +694,9 @@ func validateRef(r string) error {
 // optimistic half of Provider.PersistFields. It validates BEFORE mutating,
 // so a refused gesture leaves the task untouched.
 func (b *Board) SetFields(id string, p FieldPatch) error {
-	t := b.Task(id)
-	if t == nil {
-		return fmt.Errorf("unknown task %q", id)
+	t, err := b.mustTask(id)
+	if err != nil {
+		return err
 	}
 	for _, v := range []*int{p.Value, p.Effort} {
 		if v != nil && (*v < 0 || *v > 5) {
@@ -751,9 +775,9 @@ func (b *Board) SetFields(id string, p FieldPatch) error {
 // "body\n\n\nnote\n"). An empty or whitespace-only text is furrow's "note text
 // is empty" refusal (exit 2), so the same gesture is unreachable here.
 func (b *Board) AppendNote(id, text string) error {
-	t := b.Task(id)
-	if t == nil {
-		return fmt.Errorf("unknown task %q", id)
+	t, err := b.mustTask(id)
+	if err != nil {
+		return err
 	}
 	text = strings.TrimRight(text, "\n")
 	if strings.TrimSpace(text) == "" {
@@ -789,9 +813,9 @@ func (b *Board) AppendNote(id, text string) error {
 // and a local Updated bump would make the card look edited until the re-read
 // took it back.
 func (b *Board) Review(id string) error {
-	t := b.Task(id)
-	if t == nil {
-		return fmt.Errorf("unknown task %q", id)
+	t, err := b.mustTask(id)
+	if err != nil {
+		return err
 	}
 	t.Reviewed = nowFn().UTC().Truncate(time.Second)
 	return nil
@@ -803,9 +827,9 @@ func (b *Board) Review(id string) error {
 // it a mirror — a form this refuses is a form the UI cannot reach at all, and
 // the acyclic walk here only has to hold until the persist's own verdict.
 func (b *Board) DepAdd(id, dep string) error {
-	t := b.Task(id)
-	if t == nil {
-		return fmt.Errorf("unknown task %q", id)
+	t, err := b.mustTask(id)
+	if err != nil {
+		return err
 	}
 	if b.Task(dep) == nil {
 		return fmt.Errorf("unknown dep %q — every dep must exist", dep)
@@ -847,9 +871,9 @@ func (b *Board) depReaches(id, goal string, seen map[string]bool) bool {
 
 // DepRm removes id's dependency on dep and stamps Updated.
 func (b *Board) DepRm(id, dep string) error {
-	t := b.Task(id)
-	if t == nil {
-		return fmt.Errorf("unknown task %q", id)
+	t, err := b.mustTask(id)
+	if err != nil {
+		return err
 	}
 	if !slices.Contains(t.Deps, dep) {
 		return fmt.Errorf("%s does not depend on %q", id, dep)
@@ -861,9 +885,9 @@ func (b *Board) DepRm(id, dep string) error {
 
 // CheckAdd appends a checklist item and stamps Updated.
 func (b *Board) CheckAdd(id, text string) error {
-	t := b.Task(id)
-	if t == nil {
-		return fmt.Errorf("unknown task %q", id)
+	t, err := b.mustTask(id)
+	if err != nil {
+		return err
 	}
 	if strings.TrimSpace(text) == "" {
 		return fmt.Errorf("a checklist item cannot be empty")
@@ -875,12 +899,9 @@ func (b *Board) CheckAdd(id, text string) error {
 
 // CheckRm deletes checklist item i and stamps Updated.
 func (b *Board) CheckRm(id string, i int) error {
-	t := b.Task(id)
-	if t == nil {
-		return fmt.Errorf("unknown task %q", id)
-	}
-	if i < 0 || i >= len(t.Checklist) {
-		return fmt.Errorf("task %s has no checklist item %d", id, i)
+	t, err := b.checkTarget(id, i)
+	if err != nil {
+		return err
 	}
 	t.Checklist = append(t.Checklist[:i], t.Checklist[i+1:]...)
 	t.Updated = nowFn().UTC().Truncate(time.Second)
@@ -889,12 +910,9 @@ func (b *Board) CheckRm(id string, i int) error {
 
 // CheckReword replaces checklist item i's text and stamps Updated.
 func (b *Board) CheckReword(id string, i int, text string) error {
-	t := b.Task(id)
-	if t == nil {
-		return fmt.Errorf("unknown task %q", id)
-	}
-	if i < 0 || i >= len(t.Checklist) {
-		return fmt.Errorf("task %s has no checklist item %d", id, i)
+	t, err := b.checkTarget(id, i)
+	if err != nil {
+		return err
 	}
 	if strings.TrimSpace(text) == "" {
 		return fmt.Errorf("a checklist item cannot be empty")
