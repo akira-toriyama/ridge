@@ -878,19 +878,6 @@ func (m *Model) closeGraph() {
 // nasty surprise.
 func (m *Model) onGraphKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
-	case key.Matches(msg, m.keys.Quit):
-		return m.quitOrFlush()
-
-	case key.Matches(msg, m.keys.Help):
-		m.fullHelp = !m.fullHelp
-
-	case key.Matches(msg, m.keys.Cancel):
-		if m.fullHelp {
-			m.fullHelp = false
-			return nil
-		}
-		m.closeGraph()
-
 	case key.Matches(msg, m.keys.GraphRoot):
 		m.rerootGraph()
 
@@ -933,9 +920,6 @@ func (m *Model) onGraphKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		m.graphScroll = maxInt(0, m.graphScroll)
 
-	case key.Matches(msg, m.keys.View):
-		m.closeGraph()
-
 	case key.Matches(msg, m.keys.Up):
 		m.graphMove(0, -1)
 	case key.Matches(msg, m.keys.Down):
@@ -944,6 +928,13 @@ func (m *Model) onGraphKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.graphMove(-1, 0)
 	case key.Matches(msg, m.keys.Right):
 		m.graphMove(+1, 0)
+
+	default:
+		// No own key: keys.Graph re-roots above rather than closing, so the
+		// graph is the one view that brings an empty binding here.
+		if cmd, ok := m.fullScreenKey(msg, key.Binding{}, m.closeGraph); ok {
+			return cmd
+		}
 	}
 	return nil
 }

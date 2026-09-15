@@ -609,9 +609,11 @@ func (m *Model) onSwimKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.clampSwimSel(l)
 	}
 	switch {
-	// SwimSlice and SwimFold come FIRST: `enter` also matches keys.Move and
-	// `space` also matches keys.Peek, and this handler runs before
-	// onNormalKey, so local statement order is what decides. The dep map's and
+	// SwimSlice and SwimFold come FIRST because `enter` is also keys.Move and
+	// `space` is also keys.Peek: a case matching either, placed above these,
+	// would take the view's own gestures.
+	// Nothing below claims either key — the shared closer in the default arm
+	// answers q / ctrl+c / ? / esc / W / v and nothing else. The dep map's and
 	// the box overview's handlers live by the same rule.
 	case key.Matches(msg, m.keys.SwimSlice):
 		return m.sliceToSwimBand(l)
@@ -619,19 +621,6 @@ func (m *Model) onSwimKey(msg tea.KeyPressMsg) tea.Cmd {
 	case key.Matches(msg, m.keys.SwimFold):
 		m.toggleSwimFold(l)
 		m.swimLay = nil
-
-	case key.Matches(msg, m.keys.Cancel):
-		if m.fullHelp {
-			m.fullHelp = false
-			return nil
-		}
-		m.closeSwim()
-
-	case key.Matches(msg, m.keys.Swim), key.Matches(msg, m.keys.View):
-		m.closeSwim()
-
-	case key.Matches(msg, m.keys.Quit):
-		return m.quitOrFlush()
 
 	case key.Matches(msg, m.keys.SwimAxis):
 		d := 1
@@ -671,8 +660,10 @@ func (m *Model) onSwimKey(msg tea.KeyPressMsg) tea.Cmd {
 			return m.swimSel != at
 		}, "the swimlane")
 
-	case key.Matches(msg, m.keys.Help):
-		m.fullHelp = !m.fullHelp
+	default:
+		if cmd, ok := m.fullScreenKey(msg, m.keys.Swim, m.closeSwim); ok {
+			return cmd
+		}
 	}
 	return nil
 }
