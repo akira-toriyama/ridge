@@ -27,30 +27,37 @@ import (
 // push, freezing cycleGraphRadius, or removing closeGraph's cursor carry each
 // turns one of them red.
 
-// graphModel opens the graph rooted on a task that has structure in both
-// directions, and renders once so graphLay exists.
+// graphModel opens the graph rooted on g2 of advGraphBoard — the node with a
+// blocker above it and a dependant below — and renders once so graphLay
+// exists.
 func graphModel(t *testing.T, w, h int) *Model {
 	t.Helper()
-	m := boardModel(t, w, h)
-	for _, task := range m.b.Tasks() {
-		if len(m.g.BlockedBy(task.ID)) > 0 && len(m.g.Blocks(task.ID)) > 0 {
-			m.selectID(task.ID, false)
-			m.openGraph()
-			m.View()
-			return m
+	m := advModel(t, advGraphBoard(), w, h)
+	if len(m.g.BlockedBy("g2")) == 0 || len(m.g.Blocks("g2")) == 0 {
+		t.Fatal("setup: g2 has no structure in both directions")
+	}
+	if !m.selectID("g2", false) {
+		t.Fatal("setup: could not select g2")
+	}
+	m.openGraph()
+	m.View()
+	return m
+}
+
+// graphMoveOffRoot walks the selection off the root in the first direction
+// that has a neighbour, and fails the test when none does: on advGraphBoard
+// the root has one in each vertical direction.
+func graphMoveOffRoot(t *testing.T, m *Model) string {
+	t.Helper()
+	start := m.graphSel
+	for _, dir := range [][2]int{{0, -1}, {0, +1}, {+1, 0}, {-1, 0}} {
+		m.graphMove(dir[0], dir[1])
+		if m.graphSel != start {
+			return m.graphSel
 		}
 	}
-	// Fall back to anything with structure at all.
-	for _, task := range m.b.Tasks() {
-		if len(m.g.BlockedBy(task.ID))+len(m.g.Blocks(task.ID)) > 0 {
-			m.selectID(task.ID, false)
-			m.openGraph()
-			m.View()
-			return m
-		}
-	}
-	t.Skip("the fixture has no task with dependencies")
-	return nil
+	t.Fatalf("setup: no neighbour of %s is reachable from the root", start)
+	return ""
 }
 
 // S then esc with no render in between must not panic. bubbletea renders after
@@ -76,19 +83,7 @@ func TestClosingTheGraphBeforeItRendersDoesNotPanic(t *testing.T) {
 func TestGraphWalkRerootsAndRetraces(t *testing.T) {
 	m := graphModel(t, 240, 60)
 	start := m.graphFocus
-
-	moved := false
-	for _, dir := range [][2]int{{0, -1}, {0, +1}, {+1, 0}, {-1, 0}} {
-		m.graphMove(dir[0], dir[1])
-		if m.graphSel != start {
-			moved = true
-			break
-		}
-	}
-	if !moved {
-		t.Skip("no reachable neighbour to move the graph selection to")
-	}
-	target := m.graphSel
+	target := graphMoveOffRoot(t, m)
 
 	m.rerootGraph()
 	if m.graphFocus != target {
@@ -138,7 +133,7 @@ func TestGraphBackAtTheStartOfTheWalkReports(t *testing.T) {
 func TestGraphRadiusCyclesAndWraps(t *testing.T) {
 	m := graphModel(t, 240, 60)
 	if len(graphRadii) < 2 {
-		t.Skip("only one radius configured")
+		t.Fatal("graphRadii has one entry; z would have nothing to cycle")
 	}
 	seen := make([]int, 0, len(graphRadii))
 	for range graphRadii {
@@ -169,22 +164,10 @@ func TestGraphRadiusCyclesAndWraps(t *testing.T) {
 // walk was navigation, so it should have moved you.
 func TestClosingTheGraphCarriesTheCursorToWhereTheWalkEnded(t *testing.T) {
 	m := graphModel(t, 240, 60)
-	start := m.graphFocus
-
-	moved := false
-	for _, dir := range [][2]int{{0, -1}, {0, +1}, {+1, 0}, {-1, 0}} {
-		m.graphMove(dir[0], dir[1])
-		if m.graphSel != start {
-			moved = true
-			break
-		}
-	}
-	if !moved {
-		t.Skip("no reachable neighbour to move the graph selection to")
-	}
+	graphMoveOffRoot(t, m)
 	n := m.graphLay.Node(m.graphSel)
 	if n == nil || n.Kind != egoReal {
-		t.Skip("the selection is not a real node")
+		t.Fatalf("setup: the walk landed on %q, which is not a real node", m.graphSel)
 	}
 	want := n.ID
 
@@ -233,16 +216,11 @@ func TestGraphRendersATaskWhoseLaneIsNotInTheVocabulary(t *testing.T) {
 // The epic id is an internal handle. Every other view resolves it to a title;
 // the graph strip printed it raw.
 func TestGraphStripResolvesTheEpicTitle(t *testing.T) {
-	m := boardModel(t, 240, 60)
-	var withEpic *board.Task
-	for _, task := range m.b.Tasks() {
-		if task.Epic != "" && m.b.Epic(task.Epic) != nil {
-			withEpic = task
-			break
-		}
-	}
-	if withEpic == nil {
-		t.Skip("no fixture task belongs to a resolvable epic")
+	m := advModel(t, advGraphBoard(), 240, 60)
+	withEpic := m.b.Task("g2")
+	box := m.b.Epic(withEpic.Epic)
+	if box == nil || box.Title == "" {
+		t.Fatalf("setup: g2's box %q does not resolve to a title", withEpic.Epic)
 	}
 	m.selectID(withEpic.ID, false)
 	m.openGraph()
@@ -255,12 +233,9 @@ func TestGraphStripResolvesTheEpicTitle(t *testing.T) {
 	// On the line that actually carries the strip's "epic " label, not merely
 	// somewhere in the frame: the title also appears on cards, so a
 	// frame-wide Contains passes against a strip that resolves nothing.
-	title := m.b.Epic(withEpic.Epic).Title
-	if title == "" {
-		t.Skip("the fixture epic has no title to resolve")
-	}
-	// A needle long enough to be this epic's, not merely a common prefix:
-	// "vista:" alone is shared by ten fixture titles.
+	title := box.Title
+	// A needle long enough to be this box's, not merely a common prefix: on
+	// the real board "vista:" alone is shared by ten titles.
 	want := truncatedPrefix(title)
 	for _, line := range strings.Split(frame, "\n") {
 		if strings.Contains(line, "epic ") && strings.Contains(line, want) {
@@ -288,19 +263,7 @@ var _ = tea.KeyPressMsg{}
 func TestGraphKeysAreRoutedToTheRightHandlers(t *testing.T) {
 	m := graphModel(t, 240, 60)
 	start := m.graphFocus
-
-	moved := false
-	for _, dir := range [][2]int{{0, -1}, {0, +1}, {+1, 0}, {-1, 0}} {
-		m.graphMove(dir[0], dir[1])
-		if m.graphSel != start {
-			moved = true
-			break
-		}
-	}
-	if !moved {
-		t.Skip("no reachable neighbour to move the graph selection to")
-	}
-	target := m.graphSel
+	target := graphMoveOffRoot(t, m)
 
 	press(m, "enter") // must RE-ROOT, not retrace
 	if m.graphFocus != target {

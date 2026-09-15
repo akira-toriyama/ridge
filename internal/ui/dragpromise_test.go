@@ -53,11 +53,11 @@ func TestDropOnThePeekDoesNotCommitIntoTheHiddenColumn(t *testing.T) {
 	// without the guard this resolves through m.lay to whatever is underneath.
 	hidden, ok := m.lay.laneAtX(px + 4)
 	if !ok {
-		t.Skip("no column lies under the peek at this size")
+		t.Fatalf("setup: no column lies under the peek at x=%d of 240", px+4)
 	}
 	id := dragFrom(t, m, "backlog", px+4, py+6)
 	if from := m.b.Task(id).Status; from == hidden {
-		t.Skip("the dragged card already lives in the hidden column")
+		t.Fatalf("setup: %s already lives in %s, the column under the peek", id, hidden)
 	}
 	before := m.b.Task(id).Status
 
@@ -82,7 +82,7 @@ func TestNoDropPromiseWhileThePointerIsOverThePeek(t *testing.T) {
 
 	px, py, _, _ := m.peekBox()
 	if _, ok := m.lay.laneAtX(px + 4); !ok {
-		t.Skip("no column lies under the peek at this size")
+		t.Fatalf("setup: no column lies under the peek at x=%d of 240", px+4)
 	}
 	dragFrom(t, m, "backlog", px+4, py+6)
 
@@ -165,7 +165,7 @@ func TestTheDropPromiseAgreesWithTheReleaseEverywhere(t *testing.T) {
 func TestTheDropPromiseFollowsTheColumnsAcrossAResize(t *testing.T) {
 	m := boardModel(t, 240, 60)
 	if len(m.lay.Cols) < 3 {
-		t.Skip("need at least three visible columns")
+		t.Fatalf("setup: %d columns at 240, need three", len(m.lay.Cols))
 	}
 	// A point deep in the third column at this width.
 	third := m.lay.Cols[2]
@@ -184,10 +184,10 @@ func TestTheDropPromiseFollowsTheColumnsAcrossAResize(t *testing.T) {
 
 	want, ok := m.dropTarget(x, y)
 	if !ok {
-		t.Skip("the point left the board entirely at the new width")
+		t.Fatalf("setup: (%d,%d) left the board entirely at 400 columns", x, y)
 	}
 	if want == cached {
-		t.Skip("the resize did not move this point into a different lane")
+		t.Fatalf("setup: (%d,%d) still falls in %q at 400 columns", x, y, cached)
 	}
 
 	status := ansiStrip(m.statusLine())

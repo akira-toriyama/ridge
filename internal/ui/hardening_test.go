@@ -367,17 +367,8 @@ func TestPeekWheelScrollsUnderTheEditOverlay(t *testing.T) {
 // A lifted card is not a modal overlay: the wheel keeps scrolling columns in
 // move mode so the destination can be found.
 func TestBoardWheelStillWorksInMoveMode(t *testing.T) {
-	m := boardModel(t, 140, 12) // short enough that a column overflows
-	var lane string
-	for _, l := range m.b.Lanes() {
-		if c := m.lay.Col(l.Name); c != nil && c.Hidden > 0 {
-			lane = l.Name
-			break
-		}
-	}
-	if lane == "" {
-		t.Skip("no overflowing column at this size")
-	}
+	m := advTallModel(t, 140, 12) // short enough that backlog overflows
+	const lane = "backlog"
 	m.enterMove()
 	c := m.lay.Col(lane)
 	before := c.Scroll

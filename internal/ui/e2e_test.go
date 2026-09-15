@@ -466,16 +466,8 @@ func TestE2EMouseDragSurvivesButtonlessMotion(t *testing.T) {
 }
 
 func TestE2EWheelScrollsTheHoveredColumn(t *testing.T) {
-	const w, h = 140, 40
-	m := New(memstore.New(), Options{})
-	m.w, m.h = w, h
-	m.recompute()
-	m.relayout()
-
+	m := advTallModel(t, 140, 40) // backlog folds, so there is something to scroll
 	col := m.lay.Col("backlog")
-	if col.Hidden == 0 {
-		t.Skip("backlog fits entirely; nothing to scroll")
-	}
 	x := col.X + 3
 	m.Update(tea.MouseWheelMsg{X: x, Y: col.Top + 2, Button: tea.MouseWheelDown})
 	if m.scroll["backlog"] != 1 {

@@ -10,10 +10,20 @@ import (
 	"github.com/akira-toriyama/ridge/internal/board"
 )
 
-// swimModel is a board with the swimlane open, at the default axis and scope.
+// swimModel is the fixture with the swimlane open, at the default axis and
+// scope; advSwimModel is advSwimBoard the same way, for a test whose subject
+// is the walk rather than the fixture's population.
 func swimModel(t *testing.T, w, h int) *Model {
 	t.Helper()
 	m := boardModel(t, w, h)
+	m.openSwim()
+	m.relayout()
+	return m
+}
+
+func advSwimModel(t *testing.T, w, h int) *Model {
+	t.Helper()
+	m := advModel(t, advSwimBoard(), w, h)
 	m.openSwim()
 	m.relayout()
 	return m
@@ -221,7 +231,7 @@ func TestSwimBottomReachesTheLastRowNotTheLastHeader(t *testing.T) {
 	l = m.buildSwim()
 	m.swimLay = l
 	if l.Lines[len(l.Lines)-1].Kind == swimLineHeader {
-		t.Skip("the last band is folded on this fixture; nothing below its header")
+		t.Fatal("setup: every lane is drawn at 240, so an unfolded band cannot end on its header")
 	}
 	m.onSwimKey(keyMsg("G"))
 	// Holding Down from here must not move: G already landed where the walk ends.
@@ -274,17 +284,8 @@ func TestSwimSliceReportsAClearRatherThanAnEmptyTerm(t *testing.T) {
 // Seeding is all-or-nothing: a cursor the pack cannot hold (a done card at the
 // open scope) must not leave its band unfolded with nothing selected in it.
 func TestSwimSeedingADoneCardLeavesTheFrameFolded(t *testing.T) {
-	m := boardModel(t, 240, 50)
-	var done *board.Task
-	for _, tk := range m.b.Tasks() {
-		if m.g.IsDone(tk.ID) && tk.Epic != "" {
-			done = tk
-			break
-		}
-	}
-	if done == nil {
-		t.Skip("the fixture has no done task in a box")
-	}
+	m := advModel(t, advSwimBoard(), 240, 50)
+	done := m.b.Task("s4") // done, inside box a
 	if !m.selectID(done.ID, true) {
 		t.Fatalf("could not put the board cursor on %s", done.ID)
 	}
@@ -371,7 +372,7 @@ func TestSwimDropsLanesItCannotDrawAndSaysSo(t *testing.T) {
 // walking down through a header dumps the cursor into lane 0 and the reader
 // loses the column they were reading.
 func TestSwimCursorKeepsItsColumnAcrossABandHeader(t *testing.T) {
-	m := swimModel(t, 240, 50)
+	m := advSwimModel(t, 240, 50)
 	l := m.buildSwim()
 	m.swimLay = l
 
@@ -390,7 +391,7 @@ func TestSwimCursorKeepsItsColumnAcrossABandHeader(t *testing.T) {
 		}
 	}
 	if lane < 0 {
-		t.Skip("this fixture has no lane populated in two bands")
+		t.Fatal("setup: advSwimBoard's backlog holds a task of each box")
 	}
 	for _, b := range l.Bands {
 		m.swimOpen[b.Key] = true
@@ -522,7 +523,7 @@ func TestSwimFilterMutesRatherThanShrinkingTheBands(t *testing.T) {
 // re-selection — the frametruth class this repo already pins for the map and
 // the roadmap.
 func TestSwimCarriesOnlyAMovedCursorBackToTheBoard(t *testing.T) {
-	m := swimModel(t, 240, 50)
+	m := advSwimModel(t, 240, 50)
 	was := ""
 	if tk := m.curTask(); tk != nil {
 		was = tk.ID
@@ -535,7 +536,7 @@ func TestSwimCarriesOnlyAMovedCursorBackToTheBoard(t *testing.T) {
 		}
 	}
 
-	m = swimModel(t, 240, 50)
+	m = advSwimModel(t, 240, 50)
 	l := m.buildSwim()
 	m.swimLay = l
 	for i := 0; i < 40; i++ {
@@ -548,7 +549,7 @@ func TestSwimCarriesOnlyAMovedCursorBackToTheBoard(t *testing.T) {
 			return
 		}
 	}
-	t.Skip("the walk never left the seeded task")
+	t.Fatal("the walk never left the seeded task on a five-task board")
 }
 
 // Re-grouping is not filtering. swimAxis is separate from sliceField on

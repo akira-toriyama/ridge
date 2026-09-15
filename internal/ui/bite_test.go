@@ -126,17 +126,8 @@ func TestRecomputeDropsTheCacheAndTheLayoutFollowsTheRender(t *testing.T) {
 // a terminal only emits motion when the pointer MOVES. The handler was 0%
 // covered, so both its stale-seq guard and its self-re-arm could be deleted.
 func TestEdgeAutoScrollKeepsTickingAndStopsAtTheEnd(t *testing.T) {
-	m := boardModel(t, 240, 24) // short, so a column has cards below the fold
-	var lane string
-	for _, l := range m.b.Lanes() {
-		if c := m.lay.Col(l.Name); c != nil && c.Hidden > 0 && len(c.Cards) > 0 {
-			lane = l.Name
-			break
-		}
-	}
-	if lane == "" {
-		t.Skip("no column has cards below the fold at this size")
-	}
+	m := advTallModel(t, 240, 24) // short, so backlog has cards below the fold
+	const lane = "backlog"
 	c := m.lay.Col(lane)
 	box := c.Cards[0]
 
@@ -177,18 +168,12 @@ func TestEdgeAutoScrollKeepsTickingAndStopsAtTheEnd(t *testing.T) {
 // test that merely moves off the edge is killed by the scrollDir check alone
 // and proves nothing about the seq guard.
 func TestASupersededAutoScrollTickIsDropped(t *testing.T) {
-	m := boardModel(t, 240, 22)
-	var lane string
-	for _, l := range m.b.Lanes() {
-		if c := m.lay.Col(l.Name); c != nil && c.Hidden > 3 && len(c.Cards) > 0 {
-			lane = l.Name
-			break
-		}
-	}
-	if lane == "" {
-		t.Skip("no column has enough cards below the fold at this size")
-	}
+	m := advTallModel(t, 240, 22)
+	const lane = "backlog"
 	c := m.lay.Col(lane)
+	if c.Hidden <= 3 {
+		t.Fatalf("setup: backlog hides %d cards at 240x22, the tick chain needs more than 3", c.Hidden)
+	}
 	box := c.Cards[0]
 
 	m.Update(tea.MouseClickMsg{X: box.X + 3, Y: box.Y + 1, Button: tea.MouseLeft})

@@ -224,9 +224,13 @@ func TestEpicListSubEditorTogglesAndParses(t *testing.T) {
 	// A label the box does NOT carry toggles ON; one it carries toggles OFF.
 	t.Run("labels", func(t *testing.T) {
 		m, p := newOverlay(t, epicFieldLabels)
+		// The vocabulary is the union of the labels on the board's tasks,
+		// and the scripted board carries none: label its one task so the
+		// list has a row to toggle. (This subtest skipped on every run.)
+		m.b.Task("t-a").Labels = []string{"lab"}
 		rows := m.epicListRows(m.b.Epic("e-one"))
 		if len(rows) == 0 {
-			t.Skip("the scripted board has no label vocabulary")
+			t.Fatal("setup: a labelled task left the vocabulary empty")
 		}
 		m.epic.listIdx = 0
 		cmd := m.epicListSelect(m.b.Epic("e-one"), rows)
