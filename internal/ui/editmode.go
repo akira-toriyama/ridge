@@ -732,22 +732,10 @@ func (m *Model) renderEditList(t *board.Task, inner, budget int) string {
 	switch e.field {
 	case fieldLabels:
 		hdr, foot = "labels", "⏎/x toggle · a new label · esc back"
-		mark = func(_ int, row string) string {
-			box := "[ ] "
-			if slices.Contains(t.Labels, row) {
-				box = "[x] "
-			}
-			return box + row
-		}
+		mark = checkboxMark(t.Labels)
 	case fieldRepos:
 		hdr, foot = "repos", "⏎/x attach/detach · a new repo · esc back"
-		mark = func(_ int, row string) string {
-			box := "[ ] "
-			if slices.Contains(t.Repos, row) {
-				box = "[x] "
-			}
-			return box + row
-		}
+		mark = checkboxMark(t.Repos)
 	case fieldDeps:
 		hdr, foot = "deps — waits on", "⏎/x remove · a add · esc back"
 		mark = func(_ int, row string) string {

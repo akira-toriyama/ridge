@@ -201,7 +201,7 @@ func (m *Model) reopenRefusedAdd(op persistOp) tea.Cmd {
 func (m *Model) addLayer() *lg.Layer {
 	th := m.th
 	a := m.add
-	inner := clamp(m.w/3, 44, 72)
+	inner := m.overlayInner()
 
 	_, tk := parseAddLine(a.input.Value())
 
@@ -273,14 +273,9 @@ func (m *Model) addLayer() *lg.Layer {
 		rows = append(rows, th.danger.Render(l))
 	}
 
-	box := th.peek.Render(
-		pad(th.peekHdr.Render("add item"), inner) + "\n\n" +
-			a.input.View() + "\n\n" +
-			strings.Join(rows, "\n") + "\n" +
-			th.dim.Render(pad("⏎ create · esc cancel · ^c quit · more via the edit menu", inner)) + "\n" +
+	return m.overlayLayer("add", "add item",
+		a.input.View()+"\n\n"+
+			strings.Join(rows, "\n")+"\n"+
+			th.dim.Render(pad("⏎ create · esc cancel · ^c quit · more via the edit menu", inner))+"\n"+
 			th.dim.Render(pad("inline: value:4 effort:2 due:+1d dep:t-x check:\"…\" ref:… is:draft", inner)))
-	box = lg.NewStyle().MaxWidth(m.w).MaxHeight(m.h).Render(box)
-	x := maxInt(0, (m.w-lg.Width(box))/2)
-	y := maxInt(0, (m.h-lg.Height(box))/3)
-	return lg.NewLayer(box).ID("add").X(x).Y(y).Z(zEdit)
 }
