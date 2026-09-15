@@ -394,19 +394,6 @@ func (m *Model) onSweepKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 
 	switch {
-	case key.Matches(msg, m.keys.Cancel):
-		if m.fullHelp {
-			m.fullHelp = false
-			return nil
-		}
-		m.closeSweep()
-
-	case key.Matches(msg, m.keys.Sweep), key.Matches(msg, m.keys.View):
-		m.closeSweep()
-
-	case key.Matches(msg, m.keys.Quit):
-		return m.quitOrFlush()
-
 	case key.Matches(msg, m.keys.Reload):
 		m.note("re-reading the sweep previews")
 		return m.loadSweep()
@@ -448,8 +435,10 @@ func (m *Model) onSweepKey(msg tea.KeyPressMsg) tea.Cmd {
 			return m.sweepSel != at
 		}, "the sweep")
 
-	case key.Matches(msg, m.keys.Help):
-		m.fullHelp = !m.fullHelp
+	default:
+		if cmd, ok := m.fullScreenKey(msg, m.keys.Sweep, m.closeSweep); ok {
+			return cmd
+		}
 	}
 	return nil
 }

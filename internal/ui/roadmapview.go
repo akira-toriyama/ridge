@@ -518,19 +518,6 @@ func (m *Model) cycleRoadZoom() {
 // due-editing drag until the read-only form has proven its worth.
 func (m *Model) onRoadKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
-	case key.Matches(msg, m.keys.Quit):
-		return m.quitOrFlush()
-
-	case key.Matches(msg, m.keys.Help):
-		m.fullHelp = !m.fullHelp
-
-	case key.Matches(msg, m.keys.Cancel):
-		if m.fullHelp {
-			m.fullHelp = false
-			return nil
-		}
-		m.closeRoadmap()
-
 	case key.Matches(msg, m.keys.RoadZoom):
 		m.cycleRoadZoom()
 
@@ -542,9 +529,6 @@ func (m *Model) onRoadKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.switchView(viewTabDigit(msg))
 	case key.Matches(msg, m.keys.ViewSave):
 		m.saveView()
-
-	case key.Matches(msg, m.keys.Roadmap), key.Matches(msg, m.keys.View):
-		m.closeRoadmap()
 
 	case key.Matches(msg, m.keys.Top):
 		m.roadJump(false)
@@ -566,6 +550,11 @@ func (m *Model) onRoadKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.roadPanBy(-1)
 	case key.Matches(msg, m.keys.Right):
 		m.roadPanBy(+1)
+
+	default:
+		if cmd, ok := m.fullScreenKey(msg, m.keys.Roadmap, m.closeRoadmap); ok {
+			return cmd
+		}
 	}
 	return nil
 }

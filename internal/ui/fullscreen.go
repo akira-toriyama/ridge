@@ -4,16 +4,18 @@ import (
 	"fmt"
 	"strings"
 
+	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	lg "charm.land/lipgloss/v2"
 )
 
 // What every full-screen view shares: the frame skeleton and title line
 // above, and below it the cursor-pinned scroll, the half-page key, the
-// filter's status-line claim, and the cursor carried back to the board on
-// close. Each view keeps its own layout, keys and words; these hold the
-// invariants once, so the copies cannot drift apart (a roster of the views
-// used to sit here, and it was one view short within a month). There is no fullScreenView interface on purpose: the
+// filter's status-line claim, the four keys every view answers alike, and the
+// cursor carried back to the board on close. Each view keeps its own layout,
+// keys and words; these hold the invariants once, so the copies cannot drift
+// apart (a roster of the views used to sit here, and it was one view short
+// within a month). There is no fullScreenView interface on purpose: the
 // layouts share no type, and inventing one would be abstraction for its own
 // sake. The graph's scroll follows a two-axis frame of its own and is not a
 // scrollToSel client.
@@ -76,6 +78,54 @@ func (m *Model) composeFullScreen(titleBar, header string, canvas []string, stri
 			[]*lg.Layer{lg.NewLayer(frame).X(0).Y(0).Z(zChrome)}, layers...)...).Render())
 	}
 	return frame
+}
+
+// fullScreenKey is the four keys every full-screen view answers the same way:
+// quit, the help overlay, esc, and the pair that closes the view — its own
+// opener pressed again, or `v`. It reports whether the key was one of them.
+//
+// Views call it from their switch's DEFAULT arm, not before the switch, so a
+// view's own bindings are tested first and a shared closer can never shadow a
+// local meaning. The graph is why that ordering is the safe one: ⇧space/S
+// re-roots there rather than closing, and a pre-switch call handed
+// m.keys.Graph would have made it close instead.
+//
+// own is the view's own opener, which closes it again. The graph has none, so
+// it passes a zero Binding — key.Matches never matches one. From the default
+// arm that is belt-and-braces rather than load-bearing: keys.Graph is already
+// answered by a case above. It is simply the honest spelling of "no own key".
+//
+// The exits are last in every view now, where main tested them first in three
+// of the six. Nothing collides today, and a view whose default arm stopped
+// calling this would be caught by TestEveryFullScreenViewAnswersTheSharedKeys
+// rather than by a reader.
+//
+// The sweep reaches its Cancel and Help arms only with the overlay already
+// down, because its own pre-switch guard takes the overlay off on any key
+// first (the bulk-archive gate must not sit under it). They are not dead in
+// the other five.
+func (m *Model) fullScreenKey(msg tea.KeyPressMsg, own key.Binding, closeView func()) (tea.Cmd, bool) {
+	switch {
+	case key.Matches(msg, m.keys.Quit):
+		return m.quitOrFlush(), true
+
+	case key.Matches(msg, m.keys.Help):
+		m.fullHelp = !m.fullHelp
+
+	case key.Matches(msg, m.keys.Cancel):
+		if m.fullHelp {
+			m.fullHelp = false
+			return nil, true
+		}
+		closeView()
+
+	case key.Matches(msg, own, m.keys.View):
+		closeView()
+
+	default:
+		return nil, false
+	}
+	return nil, true
 }
 
 // scrollToSel returns the scroll offset that keeps the selected row on screen,

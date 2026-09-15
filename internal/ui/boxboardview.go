@@ -449,10 +449,12 @@ func (m *Model) onBoxesKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.boxesLay = l
 	}
 	switch {
-	// Commit and EpicEdit come FIRST: `enter` also matches keys.Move and `m`
-	// also matches keys.EpicEdit's sibling binding, and this handler runs
-	// before onNormalKey, so local order is what decides. The dep map's
-	// handler lives with the same rule.
+	// BoxSlice and EpicEdit come FIRST because keys.Move spells both `enter`
+	// and `m`: a case matching it, placed above these, would take the view's
+	// own gestures.
+	// Nothing below claims either key — the shared closer in the default arm
+	// answers q / ctrl+c / ? / esc / E / v and nothing else. The dep map's and
+	// the swimlane's handlers live by the same rule.
 	case key.Matches(msg, m.keys.BoxSlice):
 		return m.drillIntoBox(l)
 
@@ -463,19 +465,6 @@ func (m *Model) onBoxesKey(msg tea.KeyPressMsg) tea.Cmd {
 			return nil
 		}
 		m.enterEpic(r.ID)
-
-	case key.Matches(msg, m.keys.Cancel):
-		if m.fullHelp {
-			m.fullHelp = false
-			return nil
-		}
-		m.closeBoxes()
-
-	case key.Matches(msg, m.keys.Boxes), key.Matches(msg, m.keys.View):
-		m.closeBoxes()
-
-	case key.Matches(msg, m.keys.Quit):
-		return m.quitOrFlush()
 
 	case key.Matches(msg, m.keys.MapScope):
 		// Only the scope changes; the next frame rebuilds the pack, and
@@ -506,8 +495,10 @@ func (m *Model) onBoxesKey(msg tea.KeyPressMsg) tea.Cmd {
 			return m.boxesSel != at
 		}, "this column")
 
-	case key.Matches(msg, m.keys.Help):
-		m.fullHelp = !m.fullHelp
+	default:
+		if cmd, ok := m.fullScreenKey(msg, m.keys.Boxes, m.closeBoxes); ok {
+			return cmd
+		}
 	}
 	return nil
 }

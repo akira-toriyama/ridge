@@ -441,27 +441,11 @@ func (m *Model) graphFromMap() {
 // and walking tool: nothing here writes to the board.
 func (m *Model) onMapKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
-	case key.Matches(msg, m.keys.Quit):
-		return m.quitOrFlush()
-
-	case key.Matches(msg, m.keys.Help):
-		m.fullHelp = !m.fullHelp
-
-	case key.Matches(msg, m.keys.Cancel):
-		if m.fullHelp {
-			m.fullHelp = false
-			return nil
-		}
-		m.closeMap()
-
 	case key.Matches(msg, m.keys.MapGraph):
 		m.graphFromMap()
 
 	case key.Matches(msg, m.keys.MapScope):
 		m.cycleMapScope()
-
-	case key.Matches(msg, m.keys.Map), key.Matches(msg, m.keys.View):
-		m.closeMap()
 
 	case key.Matches(msg, m.keys.PeekScroll):
 		m.halfPage(msg, m.mapCanvasH(), func(dir int) bool {
@@ -478,6 +462,11 @@ func (m *Model) onMapKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.mapMove(-1, 0)
 	case key.Matches(msg, m.keys.Right):
 		m.mapMove(+1, 0)
+
+	default:
+		if cmd, ok := m.fullScreenKey(msg, m.keys.Map, m.closeMap); ok {
+			return cmd
+		}
 	}
 	return nil
 }
