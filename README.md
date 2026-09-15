@@ -268,7 +268,7 @@ go run ./cmd/ridge -dump -demo sweepconfirm  # the sweep with the archive gate o
 What `-dump` / `-demo` / `-graphlr` / `-readonly` mean, and why the latter two
 are flags rather than `-demo` states, is in the glossary's "Internals"
 section. The one-line description of each `-demo` state lives in
-`internal/ui/dump.go`'s `demoState` (the comment on each case).
+`internal/ui/demo.go`'s `demoState` (the comment on each case).
 
 ### `-debuglog` — a structured log of the session's operations
 

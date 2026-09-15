@@ -9,25 +9,21 @@ import (
 	"github.com/akira-toriyama/ridge/internal/store/memstore"
 )
 
-// fixedZone pins THIS package's localZone (never time.Local — see its
-// declaration) for the duration of a test. board.localZone stays at the
-// runner's zone: a test that pins here and then parses a due through
-// board.ParseDue would compute the instant in one zone and render it in
-// another. A due is stored as a
+// fixedZone pins the one zone (board.Zone; never time.Local — see the
+// clock's declaration) for the duration of a test, so a due parsed through
+// board.ParseDue and rendered here agree on the day. A due is stored as a
 // UTC instant, so "which day is this?" is only a real question off UTC.
 func fixedZone(t *testing.T, name string, offsetHours int) {
 	t.Helper()
-	prev := localZone
 	zone := time.FixedZone(name, offsetHours*3600)
-	localZone = func() *time.Location { return zone }
-	t.Cleanup(func() { localZone = prev })
+	t.Cleanup(board.SetClock(nil, func() *time.Location { return zone }))
 }
 
 // eveningDue builds the instant furrow stores for "2026-09-02 08:00 local" on a
 // UTC+9 box: 2026-09-01T23:00:00Z. Formatting that in UTC reads 2026-09-01 —
 // one day early, and it does NOT self-heal on reload, because the wrong day
 // comes straight off furrow's own JSON.
-func eveningDue() time.Time { return time.Date(2026, 9, 2, 8, 0, 0, 0, localZone()).UTC() }
+func eveningDue() time.Time { return time.Date(2026, 9, 2, 8, 0, 0, 0, board.Zone()).UTC() }
 
 func TestPeekRendersDueOnItsLocalDay(t *testing.T) {
 	fixedZone(t, "TEST", 9)
@@ -113,9 +109,7 @@ func TestPeekDatesCreatedAndOldUpdatedOnTheLocalDay(t *testing.T) {
 // date, so dropping the clause failed nothing.
 func TestIsOverdueIgnoresAClosedTask(t *testing.T) {
 	at := time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)
-	prev := nowFn
-	nowFn = func() time.Time { return at }
-	t.Cleanup(func() { nowFn = prev })
+	fixedNow(t, at)
 
 	past, future := at.Add(-24*time.Hour), at.Add(24*time.Hour)
 	for _, tc := range []struct {
@@ -131,5 +125,29 @@ func TestIsOverdueIgnoresAClosedTask(t *testing.T) {
 		if got := isOverdue(&tc.task); got != tc.want {
 			t.Errorf("%s: isOverdue = %v, want %v", tc.name, got, tc.want)
 		}
+	}
+}
+
+// A due typed as a bare day is parsed in the zone board.ParseDue reads and
+// rendered in the zone the peek formats with. They are the same clock now;
+// when ui and board each had their own, a test that pinned only ui's parsed
+// the instant in the runner's zone (UTC on CI) and rendered it in the pinned
+// one, so the day slid by one — and the same slide was reachable in a
+// headless frame. Pinned off UTC on purpose: on UTC the two clocks agreed by
+// accident.
+func TestATypedDueRendersOnTheDayItWasTyped(t *testing.T) {
+	fixedZone(t, "JST", 9)
+	due, err := board.ParseDue("2026-09-02")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := boardModel(t, 240, 50)
+	task := m.b.Task("t-jv3j")
+	task.Due = due
+	m.selectID(task.ID, false)
+	m.peekOpen = true
+	m.syncPeek()
+	if out := ansiStrip(m.peekContent(80)); !strings.Contains(out, "due 2026-09-02") {
+		t.Errorf("the peek renders the typed day through another zone:\n%s", out)
 	}
 }

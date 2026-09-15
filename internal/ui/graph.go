@@ -10,8 +10,7 @@ import (
 // knowledge of lipgloss, the theme or the terminal. graphview.go draws what
 // this file decides. The only names it reaches for outside this file and
 // internal/board are the numeric helpers (abs, clamp, maxInt, minInt); a
-// second reach is a contract break, not a convenience (t-fw3y closed three;
-// the test clock is t-xy0c's).
+// second reach is a contract break, not a convenience (t-fw3y, t-xy0c).
 //
 // The shape is an EGO GRAPH around one focus task: "what must finish before
 // this" on one side of it, "what closing this unblocks" on the other. Direction

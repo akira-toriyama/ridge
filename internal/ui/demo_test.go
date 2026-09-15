@@ -9,7 +9,7 @@ import (
 	"github.com/akira-toriyama/ridge/internal/store/memstore"
 )
 
-// The demo subjects are chosen by shape (dump.go's demo* selectors), so on
+// The demo subjects are chosen by shape (demo.go's demo* selectors), so on
 // the fixture every selector must land on the row its frame was written for
 // — otherwise a fixture edit moves a demo onto another row and every fit
 // test stays green while the frame quietly changes subject.
@@ -113,7 +113,7 @@ func TestEveryDemoIsProducibleWithoutTheFixtureIDs(t *testing.T) {
 
 // A selector's refusal must say what shape it needed, on a board that has
 // none of it, so the next person adding a demo over other data learns the
-// precondition from the error and not from reading dump.go. advSmallBoard
+// precondition from the error and not from reading demo.go. advSmallBoard
 // carries no labels, repos, refs, checklists, deps or boxes, so any of those
 // vocabularies hardcoded in a demo would draw here instead of refusing.
 func TestDemoRefusalNamesTheMissingShape(t *testing.T) {

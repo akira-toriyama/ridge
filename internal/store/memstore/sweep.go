@@ -64,7 +64,7 @@ func sweepTaskOf(t *board.Task) board.SweepTask {
 func (p *Store) SweepPreview() (board.Sweep, error) {
 	b := p.snapshot()
 	done := b.DoneLane()
-	now := nowFn()
+	now := board.Now()
 	s := board.Sweep{OlderThanDays: fixtureOlderThanDays}
 	for _, t := range b.Tasks() {
 		if t.Status == done && !t.Closed.IsZero() && now.Sub(t.Closed).Hours() > float64(fixtureOlderThanDays*24) {

@@ -10,9 +10,7 @@ import (
 
 // The ROADMAP's layout engine — pure, deterministic, and with no knowledge of
 // lipgloss, the theme or the terminal. roadmapview.go draws what this file
-// decides. One edge still breaks that: localZone, a clock this file reads
-// from theme.go, which t-xy0c moves into internal/board (t-fw3y closed the
-// other engines' edges and left this one for that PR).
+// decides.
 //
 // The shape is ONE ROW PER OPEN PROMISE: every open task that carries a due,
 // sorted by that due, its ◆ placed on a shared time axis. It is deliberately
@@ -72,7 +70,7 @@ type roadLayout struct {
 // derived from the LOCAL y/m/d and nothing else, so two instants on the same
 // local day always share it and a DST-shortened day still counts as one.
 func dayNum(t time.Time) int {
-	y, m, d := t.In(localZone()).Date()
+	y, m, d := t.In(board.Zone()).Date()
 	return int(time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Unix() / 86400)
 }
 
@@ -83,7 +81,7 @@ func weekNum(t time.Time) int { return floorDiv(dayNum(t)-4, 7) }
 
 // monthNum counts calendar months from year zero.
 func monthNum(t time.Time) int {
-	y, m, _ := t.In(localZone()).Date()
+	y, m, _ := t.In(board.Zone()).Date()
 	return y*12 + int(m) - 1
 }
 
@@ -113,7 +111,7 @@ func unitStart(z roadZoom, u int) time.Time {
 	case zoomWeek:
 		return dayStart(u*7 + 4)
 	case zoomMonth:
-		return time.Date(u/12, time.Month(u%12+1), 1, 0, 0, 0, 0, localZone())
+		return time.Date(u/12, time.Month(u%12+1), 1, 0, 0, 0, 0, board.Zone())
 	}
 	return dayStart(u)
 }
@@ -121,7 +119,7 @@ func unitStart(z roadZoom, u int) time.Time {
 // dayStart is dayNum's inverse: that day's local midnight.
 func dayStart(dn int) time.Time {
 	u := time.Unix(int64(dn)*86400, 0).UTC()
-	return time.Date(u.Year(), u.Month(), u.Day(), 0, 0, 0, 0, localZone())
+	return time.Date(u.Year(), u.Month(), u.Day(), 0, 0, 0, 0, board.Zone())
 }
 
 // packRoad lays the dated population onto the axis. The caller owns the

@@ -348,7 +348,7 @@ func (p *Store) Revisit(q string) ([]board.Revisit, error) {
 		return nil, fmt.Errorf("%s", strings.Join(parsed.problems, "; "))
 	}
 	g := board.NewGraph(b)
-	now := nowFn()
+	now := board.Now()
 	var out []board.Revisit
 	for _, t := range b.Tasks() {
 		if terminalLanes[t.Status] || !parsed.match(t, g) {
@@ -643,7 +643,7 @@ func (p *Store) EpicDone(id string) (board.EpicPrevious, error) {
 		if target < 0 {
 			return fmt.Errorf("unknown epic %q", id)
 		}
-		epics[target].Closed = time.Now().UTC().Truncate(time.Second)
+		epics[target].Closed = board.Now().UTC().Truncate(time.Second)
 		epics[target].Active = false
 		for i := range epics {
 			epics[i].OpenDeps = slices.DeleteFunc(epics[i].OpenDeps, func(s string) bool { return s == id })
