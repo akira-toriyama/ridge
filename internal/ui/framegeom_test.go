@@ -25,20 +25,25 @@ import (
 // both. The design floor is 240 columns (CLAUDE.md); the tiny sizes are
 // panic and clamp hunting, not layout policy.
 //
-// Exactness is asserted from 100 columns up. Below that a layer wider than
+// Exactness is asserted from 29 columns up. Below that a layer wider than
 // the terminal is clipped by MaxWidth, and a clip that lands on a
-// double-width glyph leaves the row one cell short (measured: the slice
-// panel's wrapped epic rows at 28 columns render 27) — a fact about
-// clipping, not about the layout.
+// double-width glyph leaves the row one cell short — a fact about clipping,
+// not about the layout. Measured with no exemption at all: exactly three
+// rows in the whole table are short, the filterchips demo's wrapped slice
+// rows at 28x20, each 27 cells and each ending on a clipped wide glyph.
+//
+// The large sizes are few on purpose: every frame here is rendered under
+// -race in scripts/check.sh and CI, and a 400-column frame costs about as
+// much as all the tiny ones together (measured: 77s under -race for these
+// 28 sizes, 94s for 31).
 func TestEveryFrameFitsItsTerminal(t *testing.T) {
 	sizes := [][2]int{
 		{-1, -1}, {0, 0}, {1, 1}, {2, 2}, {3, 3}, {60, 1}, {400, 1}, {1, 100},
 		{20, 5}, {20, 8}, {28, 6}, {30, 7}, {40, 10}, {50, 12}, {27, 20}, {28, 20},
-		{100, 5}, {100, 6}, {100, 7}, {120, 40}, {140, 24},
-		{240, 24}, {240, 50}, {240, 60}, {241, 50}, {259, 50}, {320, 40}, {320, 90},
-		{399, 50}, {400, 40}, {400, 50},
+		{100, 5}, {100, 7}, {120, 40}, {140, 24},
+		{240, 24}, {240, 50}, {241, 50}, {259, 50}, {320, 90}, {399, 50}, {400, 40},
 	}
-	states := append([]string{"", "table", "peektree", "roadmap"}, DemoNames...)
+	states := append([]string{"", "table", "peektree", "peekhelp", "roadmap"}, DemoNames...)
 	for _, s := range sizes {
 		w, h := s[0], s[1]
 		for _, state := range states {
@@ -71,7 +76,7 @@ func TestEveryFrameFitsItsTerminal(t *testing.T) {
 						switch {
 						case got > wantW:
 							t.Errorf("row %d is %d cells, over the terminal's %d: %q", i, got, wantW, line)
-						case got < wantW && w >= 100:
+						case got < wantW && w >= 29:
 							t.Errorf("row %d is %d cells, want exactly %d: %q", i, got, wantW, line)
 						}
 					}
@@ -82,20 +87,21 @@ func TestEveryFrameFitsItsTerminal(t *testing.T) {
 }
 
 // frameFor renders one state at one size, plain. A -demo that refuses a size
-// below the floor (drag needs two cards on screen) is not a finding; at or
-// above the floor it is.
+// under 120 columns or 24 rows (drag needs two cards on screen; measured,
+// every refusal in the table is drag at 100 columns or fewer, or at one row)
+// is not a finding; at a size it used to draw, it is.
 func frameFor(t *testing.T, w, h int, state string, lr bool) (string, bool) {
 	t.Helper()
 	m := New(memstore.New(), Options{GraphLR: lr})
 	demo := state
 	switch state {
-	case "table", "peektree", "roadmap":
+	case "table", "peektree", "peekhelp", "roadmap":
 		demo = ""
 	}
 	out, err := m.Dump(w, h, demo, true)
 	if err != nil {
-		if w >= 240 && h >= 24 {
-			t.Fatalf("demo refused a size at or above the floor: %v", err)
+		if w >= 120 && h >= 24 {
+			t.Fatalf("demo refused a size it used to draw: %v", err)
 		}
 		return "", false
 	}
@@ -104,6 +110,11 @@ func frameFor(t *testing.T, w, h int, state string, lr bool) (string, bool) {
 		m.view = viewTable
 	case "peektree":
 		m.peekOpen, m.treeOpen = true, true
+		m.syncPeek()
+		m.relayout()
+	case "peekhelp":
+		// The `?` listing over an open peek: two overlays at once.
+		m.peekOpen, m.fullHelp = true, true
 		m.syncPeek()
 		m.relayout()
 	case "roadmap":
