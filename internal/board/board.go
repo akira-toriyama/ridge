@@ -16,8 +16,12 @@ import (
 	"time"
 )
 
-// nowFn and localZone are indirected so tests get deterministic timestamps and
-// a chosen zone. Tests override THESE, never time.Local: time.Now reads
+// nowFn and localZone are the ONE clock every package reads — the board,
+// the UI and the fixture store alike, through Now and Zone — so a due parsed
+// here and rendered there cannot compute its instant in one zone and its day
+// in another (ui and memstore once carried a private copy each, pinned
+// independently, so a test that froze one got a half-frozen clock: t-xy0c).
+// Tests pin them through SetClock, never time.Local: time.Now reads
 // time.Local from the runtime's timer goroutine, so a test writing it races
 // with any timer still alive from an earlier test (measured under -race).
 // Both are plain vars read on the UI thread only; a test must not pin them
@@ -26,6 +30,26 @@ var (
 	nowFn     = time.Now
 	localZone = func() *time.Location { return time.Local }
 )
+
+// Now is the clock.
+func Now() time.Time { return nowFn() }
+
+// Zone is the local zone: what ParseDue reads a bare day in, and what every
+// date rendering formats an instant in.
+func Zone() *time.Location { return localZone() }
+
+// SetClock pins the clock and the zone for a test; a nil argument keeps that
+// half. The returned func restores both. Not for product code.
+func SetClock(now func() time.Time, zone func() *time.Location) (restore func()) {
+	prevNow, prevZone := nowFn, localZone
+	if now != nil {
+		nowFn = now
+	}
+	if zone != nil {
+		localZone = zone
+	}
+	return func() { nowFn, localZone = prevNow, prevZone }
+}
 
 // priorityStep is furrow's sparse-priority spacing: reordering edits one
 // integer field rather than renumbering a lane.

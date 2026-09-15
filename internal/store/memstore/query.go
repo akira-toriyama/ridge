@@ -73,10 +73,6 @@ func isStale(t *board.Task, now time.Time) bool {
 	return !t.Updated.IsZero() && now.Sub(t.Updated) >= staleDays*24*time.Hour
 }
 
-// nowFn is indirected so the clock-dependent predicates (is:stale,
-// is:overdue) are testable, matching board's own test clock.
-var nowFn = time.Now
-
 // term is one parsed token.
 type term struct {
 	neg  bool
@@ -558,11 +554,11 @@ func (t term) matchIs(task *board.Task, g *board.Graph, v string) bool {
 	case "unfiled":
 		return task.Epic == ""
 	case "overdue":
-		return !task.Due.IsZero() && task.Due.Before(nowFn()) && task.Closed.IsZero()
+		return !task.Due.IsZero() && task.Due.Before(board.Now()) && task.Closed.IsZero()
 	case "stale":
 		// Measured: furrow flags a DONE task too — is:stale is the update
 		// window alone, not "open and forgotten".
-		return isStale(task, nowFn())
+		return isStale(task, board.Now())
 	}
 	return false
 }

@@ -3,7 +3,6 @@ package ui
 import (
 	"github.com/akira-toriyama/ridge/internal/board"
 	"image/color"
-	"time"
 
 	lg "charm.land/lipgloss/v2"
 )
@@ -243,14 +242,3 @@ func (t *theme) laneDot(l board.Lane) lg.Style {
 	}
 	return t.dim
 }
-
-// nowFn and localZone are indirected so tests get deterministic timestamps and
-// a chosen zone. Tests override THESE, never time.Local: time.Now reads
-// time.Local from the runtime's timer goroutine, so a test writing it races
-// with any timer still alive from an earlier test (measured under -race).
-// Both are plain vars read on the UI thread only; a test must not pin them
-// while a real tea.Program is running.
-var (
-	nowFn     = time.Now
-	localZone = func() *time.Location { return time.Local }
-)

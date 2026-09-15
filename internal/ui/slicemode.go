@@ -660,7 +660,7 @@ func (m *Model) sliceReadout() string {
 	head := th.chipAlt.Render(e.ID) + " " + th.base.Render(e.Title)
 	if !e.Closed.IsZero() {
 		// Beside the title, where boxStrip puts it.
-		head += th.dim.Render("  closed " + e.Closed.In(localZone()).Format("2006-01-02"))
+		head += th.dim.Render("  closed " + e.Closed.In(board.Zone()).Format("2006-01-02"))
 	}
 	meta := []string{fmt.Sprintf("%d/%d done", e.Done, e.Total)}
 	if e.Active {

@@ -348,7 +348,7 @@ func (p *Store) Revisit(q string) ([]board.Revisit, error) {
 		return nil, fmt.Errorf("%s", strings.Join(parsed.problems, "; "))
 	}
 	g := board.NewGraph(b)
-	now := nowFn()
+	now := board.Now()
 	var out []board.Revisit
 	for _, t := range b.Tasks() {
 		if terminalLanes[t.Status] || !parsed.match(t, g) {

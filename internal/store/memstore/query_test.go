@@ -176,9 +176,7 @@ func TestQueryMatchesFixture(t *testing.T) {
 	// The clock-dependent predicates (is:overdue here) are pinned to the day
 	// this file's expectations were measured — the fixture's dues are fixed
 	// instants, so a wall clock would walk tasks across the overdue line.
-	prev := nowFn
-	nowFn = func() time.Time { return time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC) }
-	t.Cleanup(func() { nowFn = prev })
+	t.Cleanup(board.SetClock(func() time.Time { return time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC) }, nil))
 
 	tests := []struct {
 		q    string
@@ -537,16 +535,14 @@ func TestQueryTitleAndBodyQualifiers(t *testing.T) {
 func TestQueryIsStaleUsesFurrowsWindow(t *testing.T) {
 	// furrow's [revisit].stale_days default is 30, and the measurement showed
 	// is:stale is the update window ALONE — a done task went stale too.
-	defer func(f func() time.Time) { nowFn = f }(nowFn)
-
 	// The fixture was snapshotted 2026-07-16..17. A clock just past it makes
 	// nothing stale...
-	nowFn = func() time.Time { return time.Date(2026, 7, 20, 0, 0, 0, 0, time.UTC) }
+	t.Cleanup(board.SetClock(func() time.Time { return time.Date(2026, 7, 20, 0, 0, 0, 0, time.UTC) }, nil))
 	if got := matched(t, "is:stale"); len(got) != 0 {
 		t.Errorf("nothing is 30 days old on 2026-07-20, got %v", got)
 	}
 	// ...and a clock well past it makes everything stale, done cards included.
-	nowFn = func() time.Time { return time.Date(2026, 9, 30, 0, 0, 0, 0, time.UTC) }
+	t.Cleanup(board.SetClock(func() time.Time { return time.Date(2026, 9, 30, 0, 0, 0, 0, time.UTC) }, nil))
 	stale := matched(t, "is:stale")
 	if len(stale) != len(matched(t, "")) {
 		t.Errorf("is:stale = %d on 2026-09-30, want the whole board", len(stale))
@@ -555,11 +551,11 @@ func TestQueryIsStaleUsesFurrowsWindow(t *testing.T) {
 		t.Error("is:stale must include a DONE task: furrow's window ignores the lane")
 	}
 	// The boundary: 30 days is not yet stale, 31 is.
-	nowFn = func() time.Time { return time.Date(2026, 8, 15, 0, 0, 0, 0, time.UTC) }
+	t.Cleanup(board.SetClock(func() time.Time { return time.Date(2026, 8, 15, 0, 0, 0, 0, time.UTC) }, nil))
 	if got := matched(t, "is:stale"); len(got) != 0 {
 		t.Errorf("30 days is inside the window, got %v", got)
 	}
-	nowFn = func() time.Time { return time.Date(2026, 8, 17, 0, 0, 0, 0, time.UTC) }
+	t.Cleanup(board.SetClock(func() time.Time { return time.Date(2026, 8, 17, 0, 0, 0, 0, time.UTC) }, nil))
 	if got := matched(t, "is:stale"); len(got) == 0 {
 		t.Error("32 days is outside the window; is:stale should have fired")
 	}
@@ -737,9 +733,8 @@ func TestFlagKeysTakeOneValueLikeFurrow(t *testing.T) {
 // closed clause was unpinned: dropping it failed nothing. A synthetic board,
 // not a fixture task — one added task breaks 21 tests elsewhere.
 func TestQueryIsOverdueExcludesAClosedTask(t *testing.T) {
-	defer func(f func() time.Time) { nowFn = f }(nowFn)
 	at := time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)
-	nowFn = func() time.Time { return at }
+	t.Cleanup(board.SetClock(func() time.Time { return at }, nil))
 	past, future := at.Add(-24*time.Hour), at.Add(24*time.Hour)
 
 	b := board.NewBoard([]*board.Task{

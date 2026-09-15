@@ -8,24 +8,20 @@ import (
 	"time"
 )
 
-// fixedZone pins THIS package's localZone (never time.Local — see its
-// declaration) for the duration of a test; ui.localZone is separate. The whole point of the
-// due grammar is that furrow reads dates in LOCAL time, and that is invisible
-// on a machine (or a CI runner) whose zone happens to be UTC.
+// fixedZone pins the zone (never time.Local — see the clock's declaration)
+// for the duration of a test. The whole point of the due grammar is that
+// furrow reads dates in LOCAL time, and that is invisible on a machine (or a
+// CI runner) whose zone happens to be UTC.
 func fixedZone(t *testing.T, name string, offsetHours int) {
 	t.Helper()
-	prev := localZone
 	zone := time.FixedZone(name, offsetHours*3600)
-	localZone = func() *time.Location { return zone }
-	t.Cleanup(func() { localZone = prev })
+	t.Cleanup(SetClock(nil, func() *time.Location { return zone }))
 }
 
-// fixedNow pins the board clock so an offset form has a computable answer.
+// fixedNow pins the clock so an offset form has a computable answer.
 func fixedNow(t *testing.T, at time.Time) {
 	t.Helper()
-	prev := nowFn
-	nowFn = func() time.Time { return at }
-	t.Cleanup(func() { nowFn = prev })
+	t.Cleanup(SetClock(func() time.Time { return at }, nil))
 }
 
 // The grammar is furrow's, measured against the real binary (2026-08-10):

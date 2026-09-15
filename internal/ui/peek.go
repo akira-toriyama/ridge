@@ -166,7 +166,7 @@ func (m *Model) peekContent(w int) string {
 	// furrow's JSON exactly like due, and dating one locally and the other in
 	// UTC put "due 09-02" and "created 09-01" on the same panel for one
 	// instant (measured at UTC+9).
-	stamps := []string{"updated " + ago(t.Updated), "created " + t.Created.In(localZone()).Format("2006-01-02")}
+	stamps := []string{"updated " + ago(t.Updated), "created " + t.Created.In(board.Zone()).Format("2006-01-02")}
 	if !t.Reviewed.IsZero() {
 		// furrow's review clock, separate from updated on purpose (a review
 		// changes no content). Absent when never stamped: "reviewed never"
@@ -176,7 +176,7 @@ func (m *Model) peekContent(w int) string {
 	if !t.Due.IsZero() {
 		// Local: the instant furrow stores is UTC, and an evening-local due
 		// renders one day early if it is formatted in that zone.
-		due := "due " + t.Due.In(localZone()).Format("2006-01-02")
+		due := "due " + t.Due.In(board.Zone()).Format("2006-01-02")
 		if isOverdue(t) {
 			due = th.danger.Render(due + " · OVERDUE")
 		} else {
@@ -422,7 +422,7 @@ func ago(t time.Time) string {
 	if t.IsZero() {
 		return "never"
 	}
-	d := nowFn().Sub(t)
+	d := board.Now().Sub(t)
 	switch {
 	case d < time.Hour:
 		return fmt.Sprintf("%dm ago", int(d.Minutes()))
@@ -431,5 +431,5 @@ func ago(t time.Time) string {
 	case d < 90*24*time.Hour:
 		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
 	}
-	return t.In(localZone()).Format("2006-01-02")
+	return t.In(board.Zone()).Format("2006-01-02")
 }

@@ -19,7 +19,7 @@ import (
 func roadModel(t *testing.T, w, h int) *Model {
 	t.Helper()
 	fixedZone(t, "TEST", 9)
-	fixedNow(t, time.Date(2026, 8, 31, 12, 0, 0, 0, localZone()))
+	fixedNow(t, time.Date(2026, 8, 31, 12, 0, 0, 0, board.Zone()))
 	m := boardModel(t, w, h)
 	// The real program's order: the terminal reports its size, then keys
 	// arrive, and a frame follows every Update. The window is only placed on
@@ -79,7 +79,7 @@ func TestRoadmapDiamondColoursByOverdue(t *testing.T) {
 
 	// Due exactly today: the one kind the reader must not scan past.
 	b := board.NewBoard([]*board.Task{
-		{ID: "t-now", Status: "ready", Title: "today", Due: nowFn().Add(2 * time.Hour)},
+		{ID: "t-now", Status: "ready", Title: "today", Due: board.Now().Add(2 * time.Hour)},
 	})
 	m2 := New(memstore.NewWith(b), Options{})
 	m2.Update(tea.WindowSizeMsg{Width: 240, Height: 40})
@@ -226,7 +226,7 @@ func TestRoadmapCarriesTheCursorBothWaysButOnlyWhenWalked(t *testing.T) {
 // what the wrong sentence costs).
 func TestRoadmapSeedOnADoneTaskNamesTheRightReason(t *testing.T) {
 	fixedZone(t, "TEST", 9)
-	fixedNow(t, time.Date(2026, 8, 31, 12, 0, 0, 0, localZone()))
+	fixedNow(t, time.Date(2026, 8, 31, 12, 0, 0, 0, board.Zone()))
 	b := board.NewBoard([]*board.Task{
 		{ID: "t-kept", Status: "done", Title: "kept", Due: at(2026, 8, 20, 8), Closed: at(2026, 8, 19, 8)},
 		{ID: "t-open", Status: "ready", Title: "open", Due: at(2026, 9, 20, 8)},
@@ -324,7 +324,7 @@ func TestRoadmapHelpSectionSaysYouAreHere(t *testing.T) {
 // An empty axis says so in words — and still draws the frame around them.
 func TestRoadmapEmptyBoardSaysSo(t *testing.T) {
 	fixedZone(t, "TEST", 9)
-	fixedNow(t, time.Date(2026, 8, 31, 12, 0, 0, 0, localZone()))
+	fixedNow(t, time.Date(2026, 8, 31, 12, 0, 0, 0, board.Zone()))
 	b := board.NewBoard([]*board.Task{
 		{ID: "t-none", Status: "ready", Title: "dateless"},
 	})
@@ -364,7 +364,7 @@ func TestRoadmapTodayGridlineSurvivesTheEpicChip(t *testing.T) {
 // on the pre-size frame.
 func TestRoadmapOpensWithTodayPlacedAgainstTheRealWidth(t *testing.T) {
 	fixedZone(t, "TEST", 9)
-	fixedNow(t, time.Date(2026, 8, 31, 12, 0, 0, 0, localZone()))
+	fixedNow(t, time.Date(2026, 8, 31, 12, 0, 0, 0, board.Zone()))
 	b := board.NewBoard([]*board.Task{
 		{ID: "t-old", Status: "ready", Title: "a year late", Due: at(2025, 9, 1, 12)},
 		{ID: "t-soon", Status: "ready", Title: "soon", Due: at(2026, 9, 2, 12)},

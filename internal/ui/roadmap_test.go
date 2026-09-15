@@ -11,7 +11,7 @@ import (
 // at builds a local instant inside the zone the test pinned. Every date here
 // goes through it so a test cannot accidentally mix zones.
 func at(y int, m time.Month, d, hh int) time.Time {
-	return time.Date(y, m, d, hh, 0, 0, 0, localZone())
+	return time.Date(y, m, d, hh, 0, 0, 0, board.Zone())
 }
 
 // The population rule and the order in one sweep: dateless absent, done
@@ -27,7 +27,7 @@ func TestRoadPopulationDropsDatelessAndDoneAndOrdersByDue(t *testing.T) {
 		{ID: "t-a", Status: "backlog", Title: "tied a", Due: at(2026, 9, 10, 8)},
 	})
 	m := New(memstore.NewWith(b), Options{})
-	l := packRoad(m.roadPopulation(), zoomDay, nowFn())
+	l := packRoad(m.roadPopulation(), zoomDay, board.Now())
 
 	var got []string
 	for _, r := range l.Rows {
@@ -56,7 +56,7 @@ func TestRoadCellsSplitOnLocalDaysNotUTCDays(t *testing.T) {
 	l := packRoad([]*board.Task{
 		{ID: "t-noon", Due: at(2026, 9, 1, 12)},
 		{ID: "t-eve", Due: evening},
-	}, zoomDay, nowFn())
+	}, zoomDay, board.Now())
 
 	noon, eve := l.Row("t-noon"), l.Row("t-eve")
 	if noon == nil || eve == nil {
@@ -79,7 +79,7 @@ func TestRoadWeekAndMonthCellsSplitOnCalendarBoundaries(t *testing.T) {
 		{ID: "t-sun", Due: at(2026, 9, 6, 12)},
 		{ID: "t-mon", Due: at(2026, 9, 7, 12)},
 		{ID: "t-nextsun", Due: at(2026, 9, 13, 12)},
-	}, zoomWeek, nowFn())
+	}, zoomWeek, board.Now())
 	if l.Row("t-mon").X != l.Row("t-sun").X+1 {
 		t.Errorf("Sunday and the Monday after it share a week cell (%d vs %d)",
 			l.Row("t-sun").X, l.Row("t-mon").X)
@@ -93,7 +93,7 @@ func TestRoadWeekAndMonthCellsSplitOnCalendarBoundaries(t *testing.T) {
 		{ID: "t-aug", Due: at(2026, 8, 31, 12)},
 		{ID: "t-sep1", Due: at(2026, 9, 1, 12)},
 		{ID: "t-sep30", Due: at(2026, 9, 30, 12)},
-	}, zoomMonth, nowFn())
+	}, zoomMonth, board.Now())
 	if l.Row("t-sep1").X != l.Row("t-aug").X+1 {
 		t.Errorf("Aug 31 and Sep 1 share a month cell (%d vs %d)",
 			l.Row("t-aug").X, l.Row("t-sep1").X)
@@ -111,7 +111,7 @@ func TestRoadAxisPadsItsEndsAndAlwaysCarriesToday(t *testing.T) {
 	l := packRoad([]*board.Task{
 		{ID: "t-a", Due: at(2026, 9, 5, 12)},
 		{ID: "t-b", Due: at(2026, 9, 10, 12)},
-	}, zoomDay, nowFn())
+	}, zoomDay, board.Now())
 
 	if got := l.Row("t-a").X; got != 1 {
 		t.Errorf("the earliest due sits at cell %d, want 1 (one pad cell before it)", got)
@@ -124,7 +124,7 @@ func TestRoadAxisPadsItsEndsAndAlwaysCarriesToday(t *testing.T) {
 	}
 
 	// Every due behind today: the axis must still reach forward to hold it.
-	l = packRoad([]*board.Task{{ID: "t-old", Due: at(2026, 8, 1, 12)}}, zoomDay, nowFn())
+	l = packRoad([]*board.Task{{ID: "t-old", Due: at(2026, 8, 1, 12)}}, zoomDay, board.Now())
 	if l.TodayX != l.Cells-2 {
 		t.Errorf("today sits at %d of %d cells, want the last content cell before the pad", l.TodayX, l.Cells)
 	}
@@ -176,7 +176,7 @@ func TestRoadStepWalksTheListAndClampsAtTheEnds(t *testing.T) {
 	l := packRoad([]*board.Task{
 		{ID: "t-a", Due: at(2026, 9, 2, 12)},
 		{ID: "t-b", Due: at(2026, 9, 3, 12)},
-	}, zoomDay, nowFn())
+	}, zoomDay, board.Now())
 
 	if got := l.step("t-a", +1); got != "t-b" {
 		t.Errorf("step down from t-a = %q, want t-b", got)

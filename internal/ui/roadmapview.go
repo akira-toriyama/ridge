@@ -62,7 +62,7 @@ func (m *Model) roadPopulation() []*board.Task {
 }
 
 func (m *Model) buildRoad() *roadLayout {
-	return packRoad(m.roadPopulation(), m.roadZoom, nowFn())
+	return packRoad(m.roadPopulation(), m.roadZoom, board.Now())
 }
 
 // roadPaneW is the identity pane's width this frame — the preferred constant,
@@ -185,7 +185,7 @@ func (m *Model) roadRowLine(l *roadLayout, r *roadRow, tlW int) string {
 	inner := maxInt(1, paneW-mapSelGutter)
 	head := styleFor(th).Render(glyph) + " " + th.chipAlt.Render(t.ID) + " "
 	pane := gutter + joinEnds(head+titleStyle.Render(t.Title),
-		dateStyle.Render(t.Due.In(localZone()).Format("01-02")), inner)
+		dateStyle.Render(t.Due.In(board.Zone()).Format("01-02")), inner)
 
 	return pane + th.rule.Render("│") + m.roadCells(l, t, r, tlW)
 }
@@ -412,7 +412,7 @@ func (m *Model) roadPanBy(d int) {
 // startRoadmap is openRoadmap minus the status line, because the -roadmap
 // flag opens the view from inside New() — where a note would overwrite the
 // read-only warning that is set exactly once per session and never restored
-// (dump.go's own switch documents that trap; -table dodges it by being a
+// (demo.go's own switch documents that trap; -table dodges it by being a
 // bare view assignment, and this split is how -roadmap dodges it). It
 // returns the fallback sentence the interactive path owes, "" when the seed
 // landed.

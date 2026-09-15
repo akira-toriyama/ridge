@@ -69,7 +69,7 @@ func cardMarker(t *board.Task, g *board.Graph) (glyph string, style func(*theme)
 // peek's due line, the roadmap's ◆), and two copies had already grown before
 // the third reader arrived.
 func isOverdue(t *board.Task) bool {
-	return !t.Due.IsZero() && t.Due.Before(nowFn()) && t.Closed.IsZero()
+	return !t.Due.IsZero() && t.Due.Before(board.Now()) && t.Closed.IsZero()
 }
 
 // wrapLines wraps plain (unstyled) text to width w and returns unpadded
