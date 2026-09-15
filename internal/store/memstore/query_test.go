@@ -537,12 +537,13 @@ func TestQueryIsStaleUsesFurrowsWindow(t *testing.T) {
 	// is:stale is the update window ALONE — a done task went stale too.
 	// The fixture was snapshotted 2026-07-16..17. A clock just past it makes
 	// nothing stale...
+	// One restore for the whole test: the later pins ride under it.
 	t.Cleanup(board.SetClock(func() time.Time { return time.Date(2026, 7, 20, 0, 0, 0, 0, time.UTC) }, nil))
 	if got := matched(t, "is:stale"); len(got) != 0 {
 		t.Errorf("nothing is 30 days old on 2026-07-20, got %v", got)
 	}
 	// ...and a clock well past it makes everything stale, done cards included.
-	t.Cleanup(board.SetClock(func() time.Time { return time.Date(2026, 9, 30, 0, 0, 0, 0, time.UTC) }, nil))
+	board.SetClock(func() time.Time { return time.Date(2026, 9, 30, 0, 0, 0, 0, time.UTC) }, nil)
 	stale := matched(t, "is:stale")
 	if len(stale) != len(matched(t, "")) {
 		t.Errorf("is:stale = %d on 2026-09-30, want the whole board", len(stale))
@@ -551,11 +552,11 @@ func TestQueryIsStaleUsesFurrowsWindow(t *testing.T) {
 		t.Error("is:stale must include a DONE task: furrow's window ignores the lane")
 	}
 	// The boundary: 30 days is not yet stale, 31 is.
-	t.Cleanup(board.SetClock(func() time.Time { return time.Date(2026, 8, 15, 0, 0, 0, 0, time.UTC) }, nil))
+	board.SetClock(func() time.Time { return time.Date(2026, 8, 15, 0, 0, 0, 0, time.UTC) }, nil)
 	if got := matched(t, "is:stale"); len(got) != 0 {
 		t.Errorf("30 days is inside the window, got %v", got)
 	}
-	t.Cleanup(board.SetClock(func() time.Time { return time.Date(2026, 8, 17, 0, 0, 0, 0, time.UTC) }, nil))
+	board.SetClock(func() time.Time { return time.Date(2026, 8, 17, 0, 0, 0, 0, time.UTC) }, nil)
 	if got := matched(t, "is:stale"); len(got) == 0 {
 		t.Error("32 days is outside the window; is:stale should have fired")
 	}

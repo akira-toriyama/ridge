@@ -10,11 +10,14 @@ import (
 	"github.com/akira-toriyama/ridge/internal/views"
 )
 
-// The package's exported surface, whole: DemoNames, Options, New and Dump —
-// everything internal/cli can call. Nothing else lives here. The -demo
-// harness that Dump hands a state name to is demo.go, kept out of this file
-// so "what is this package's API" is answered by opening one file; it once
-// shared 900 lines with the harness and its churn (t-xy0c).
+// The constructor and headless surface: DemoNames, Options, New (with
+// noteLoad, its startup note) and Dump — what internal/cli calls to build a
+// Model and to render one frame of it. The rest of the exported surface is
+// the tea.Model contract (Init, Update in model.go; View in view.go) and the
+// -debuglog recorder (debuglog.go). The -demo harness Dump hands a state
+// name to is demo.go, kept out of this file so the API is read without
+// wading through it; the two once shared 900 lines and the harness's churn
+// (t-xy0c).
 
 // DemoNames is every -demo state, spelled once. The flag's usage string, the
 // unknown-name error and the tests all read this slice, because the list was

@@ -31,7 +31,8 @@ var (
 	localZone = func() *time.Location { return time.Local }
 )
 
-// Now is the clock.
+// Now is the instant every overdue check, staleness window and relative
+// stamp compares against.
 func Now() time.Time { return nowFn() }
 
 // Zone is the local zone: what ParseDue reads a bare day in, and what every

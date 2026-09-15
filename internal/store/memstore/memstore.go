@@ -643,7 +643,7 @@ func (p *Store) EpicDone(id string) (board.EpicPrevious, error) {
 		if target < 0 {
 			return fmt.Errorf("unknown epic %q", id)
 		}
-		epics[target].Closed = time.Now().UTC().Truncate(time.Second)
+		epics[target].Closed = board.Now().UTC().Truncate(time.Second)
 		epics[target].Active = false
 		for i := range epics {
 			epics[i].OpenDeps = slices.DeleteFunc(epics[i].OpenDeps, func(s string) bool { return s == id })
