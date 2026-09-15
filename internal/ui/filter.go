@@ -41,7 +41,7 @@ type filterResultMsg struct {
 // edits the user's text.
 func (m *Model) effectiveQuery() string {
 	if t := m.sliceTerm(); t != "" {
-		return strings.TrimSpace(m.qRaw + " " + t)
+		return board.QAnd(m.qRaw, t)
 	}
 	return m.qRaw
 }

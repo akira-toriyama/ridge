@@ -8,7 +8,10 @@ import (
 
 // The dependency GRAPH view's layout engine — pure, deterministic, and with no
 // knowledge of lipgloss, the theme or the terminal. graphview.go draws what
-// this file decides.
+// this file decides. The only names it reaches for outside this file and
+// internal/board are the numeric helpers (abs, clamp, maxInt, minInt); a
+// second reach is a contract break, not a convenience (t-fw3y closed three;
+// the test clock is t-xy0c's).
 //
 // The shape is an EGO GRAPH around one focus task: "what must finish before
 // this" on one side of it, "what closing this unblocks" on the other. Direction
@@ -89,6 +92,28 @@ const (
 	graphNodeMaxH   = graphMaxNodeLines + graphNodeChrome
 	graphNodeGapLR  = 1
 	graphDummyLR    = 1
+
+	// The title-line budget a node box may spend, which the engine's height
+	// extents above derive from and graphview.go clamps its negotiated
+	// budget into. Engine constants: the renderer reads them, it does not
+	// own them.
+	graphMinNodeLines = 1
+	graphMaxNodeLines = 3
+
+	// The two arrowheads, one per orientation. Every edge in one picture
+	// points the same way — down when the graph runs top-down, right when
+	// it runs left-right, always in the direction unblocking flows. Position
+	// and arrowhead carry the same fact, which is deliberate redundancy: a
+	// reader must never have to remember which way the arrows go.
+	//
+	// Both triangles are already in theme.go's glyph vocabulary for
+	// something else (glyphSortDesc, glyphEpicActive). That is not a
+	// collision: a directional triangle reads as direction on every surface,
+	// and the graph has pointed with glyphSortDesc's character since it was
+	// written. They live here, not with the palette, because the engine
+	// places them: an arrowhead is geometry, not styling.
+	glyphArrowDown  = '▼'
+	glyphArrowRight = '▶'
 
 	// graphNodeMinWLR is how narrow a node box may get in the left-right frame,
 	// where WIDTH is the negotiated axis rather than the given one.
@@ -859,4 +884,12 @@ func drawChannel(o graphOrient, along int, routes []routedEdge, depth int) *edge
 		}
 	}
 	return c
+}
+
+// graphArrow is the arrowhead that terminates an edge in the given orientation.
+func graphArrow(o graphOrient) rune {
+	if o == orientLeftRight {
+		return glyphArrowRight
+	}
+	return glyphArrowDown
 }
