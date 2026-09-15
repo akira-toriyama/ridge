@@ -31,9 +31,7 @@ import (
 // their own title.
 const boxDepBudget = 4
 
-func (m *Model) boxCanvasH() int {
-	return maxInt(1, m.h-fullTop-m.stripHeight()-footerH)
-}
+func (m *Model) boxCanvasH() int { return m.fullCanvasH(0) }
 
 // boxPopulation is what the overview shows: the open boxes, or everything.
 func (m *Model) boxPopulation() []board.EpicInfo {
@@ -60,13 +58,9 @@ func (m *Model) renderBoxes() string {
 
 	bands := m.boxBands(l)
 	canvasH := m.boxCanvasH()
-	m.boxesScroll = clamp(m.boxesScroll, 0, maxInt(0, len(bands)-canvasH))
-	m.boxesScroll = m.scrollBoxesToSel(l, len(bands), canvasH)
-
-	shown := bands
-	if len(shown) > canvasH {
-		shown = shown[m.boxesScroll:minInt(len(bands), m.boxesScroll+canvasH)]
-	}
+	shown := windowBands(&m.boxesScroll, bands, canvasH, func() int {
+		return m.scrollBoxesToSel(l, len(bands), canvasH)
+	})
 	return m.composeFullScreen(m.boxTitleBar(l), m.boxHeader(l, len(bands) > canvasH),
 		m.fillCanvas(shown, canvasH), func(h int) string { return m.boxStrip(m.selectedBox(l), h) })
 }

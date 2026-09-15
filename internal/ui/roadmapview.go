@@ -77,9 +77,7 @@ func (m *Model) roadTLW() int {
 }
 
 // roadRowsH is how many task rows fit between the axis and the strip.
-func (m *Model) roadRowsH() int {
-	return maxInt(1, m.h-fullTop-roadAxisH-m.stripHeight()-footerH)
-}
+func (m *Model) roadRowsH() int { return m.fullCanvasH(roadAxisH) }
 
 func (m *Model) renderRoadmap() string {
 	l := m.buildRoad()
@@ -87,6 +85,10 @@ func (m *Model) renderRoadmap() string {
 	m.clampRoadSel(l)
 
 	rowsH := m.roadRowsH()
+	// Inline rather than windowBands: the roadmap renders l.Rows inside the
+	// window and never materialises a band per row (swimlaneview.go says why
+	// render-then-cut is refused). The pre-clamp is redundant — scrollRoadToSel
+	// re-clamps — and is kept only because this pairing is spelled here.
 	m.roadScroll = clamp(m.roadScroll, 0, maxInt(0, len(l.Rows)-rowsH))
 	m.roadScroll = m.scrollRoadToSel(l, len(l.Rows), rowsH)
 	tlW := m.roadTLW()

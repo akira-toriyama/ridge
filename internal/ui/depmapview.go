@@ -31,9 +31,7 @@ import (
 const mapBlockerBudget = 3
 
 // mapCanvasH is how many rows the packed grid itself may use.
-func (m *Model) mapCanvasH() int {
-	return maxInt(1, m.h-fullTop-m.stripHeight()-footerH)
-}
+func (m *Model) mapCanvasH() int { return m.fullCanvasH(0) }
 
 // buildMap groups the board and packs it for the current width.
 //
@@ -54,13 +52,9 @@ func (m *Model) renderMap() string {
 
 	bands := m.mapBands(l)
 	canvasH := m.mapCanvasH()
-	m.mapScroll = clamp(m.mapScroll, 0, maxInt(0, len(bands)-canvasH))
-	m.mapScroll = m.scrollMapToSel(l, len(bands), canvasH)
-
-	shown := bands
-	if len(shown) > canvasH {
-		shown = shown[m.mapScroll:minInt(len(bands), m.mapScroll+canvasH)]
-	}
+	shown := windowBands(&m.mapScroll, bands, canvasH, func() int {
+		return m.scrollMapToSel(l, len(bands), canvasH)
+	})
 	return m.composeFullScreen(m.mapTitleBar(l), m.mapHeader(l, len(bands) > canvasH),
 		m.fillCanvas(shown, canvasH), func(h int) string {
 			return m.taskStrip(m.b.Task(m.mapSel), m.taskHidden(m.mapSel), h)

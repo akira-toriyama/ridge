@@ -57,9 +57,7 @@ func radiusLabel(r int) string {
 }
 
 // graphCanvasH is how many rows the drawing itself may use.
-func (m *Model) graphCanvasH() int {
-	return maxInt(1, m.h-fullTop-m.stripHeight()-footerH)
-}
+func (m *Model) graphCanvasH() int { return m.fullCanvasH(0) }
 
 // graphWidth is how many columns the drawing may use: the frame insets it by
 // one cell on each side, and every band is measured against this.
@@ -250,13 +248,9 @@ func (m *Model) renderGraph() string {
 		bands = m.graphBandsTopDown(l, f)
 	}
 
-	m.graphScroll = clamp(m.graphScroll, 0, maxInt(0, len(bands)-canvasH))
-	m.graphScroll = m.scrollGraphToSel(l, f, len(bands), canvasH)
-
-	shown := bands
-	if len(shown) > canvasH {
-		shown = shown[m.graphScroll:minInt(len(bands), m.graphScroll+canvasH)]
-	}
+	shown := windowBands(&m.graphScroll, bands, canvasH, func() int {
+		return m.scrollGraphToSel(l, f, len(bands), canvasH)
+	})
 	return m.composeFullScreen(m.graphTitleBar(l), m.graphHeader(l, f, len(bands) > canvasH),
 		m.fillCanvas(shown, canvasH), func(h int) string { return m.graphStrip(l, h) })
 }

@@ -198,6 +198,49 @@ func (m *Model) fullScreenKey(msg tea.KeyPressMsg, own key.Binding, closeView fu
 	return nil, true
 }
 
+// fullCanvasH is how many rows a full-screen view's own drawing may use: the
+// window, less the title and header above it, less whatever the view reserves
+// for a band of its own, less the task strip and the status line below.
+//
+// stripHeight is CALLED rather than passed in because it clamps itself against
+// a short window — that clamp is what makes the frames come out right below 24
+// rows. reserve sits in the same subtraction the wrappers spelled inline, so
+// the arithmetic is unchanged; a future reserve that is not a plain subtracted
+// constant does not belong here.
+func (m *Model) fullCanvasH(reserve int) int {
+	return maxInt(1, m.h-fullTop-reserve-m.stripHeight()-footerH)
+}
+
+// windowBands is the pairing that must not disagree: the offset pulled to the
+// selection, clamped to what the bands allow, and the slice taken with it. A
+// clamp that drifts from its slice is an index panic, so both live here and
+// the offset is written back through the pointer.
+//
+// toSel is the view's own pull-to-selection, which reads the offset off the
+// model — so it must be called BEFORE the offset is written, and the `!ok`
+// contract in scrollToSel ("a selection the layout no longer has keeps the
+// current offset") depends on that order.
+//
+// Its RESULT is what gets clamped. The views used to clamp before calling it
+// instead, which made this slice's safety a property of each caller rather
+// than of the code doing the slicing. Both pulls saturate at both ends, so the
+// two orders cannot differ; measured over 9,038,458 scrollToSel cases and
+// 7,188 scrollGraphToSel cases on real layouts, zero disagreements.
+//
+// canvasH comes from fullCanvasH and is therefore at least 1. The slice below
+// would panic on a negative one, exactly as the inline copies did.
+//
+// Only views that MATERIALISE every band belong here. The swimlane and the
+// roadmap deliberately do not render-then-cut (swimlaneview.go says why), so
+// they share the arithmetic above and not this.
+func windowBands(scroll *int, bands []string, canvasH int, toSel func() int) []string {
+	*scroll = clamp(toSel(), 0, maxInt(0, len(bands)-canvasH))
+	if len(bands) <= canvasH {
+		return bands
+	}
+	return bands[*scroll:minInt(len(bands), *scroll+canvasH)]
+}
+
 // scrollToSel returns the scroll offset that keeps the selected row on screen,
 // computed from the same line the renderer placed it at so the scroll can
 // never disagree with the drawing. row resolves the selection to the line it

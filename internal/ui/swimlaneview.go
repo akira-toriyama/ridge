@@ -168,9 +168,7 @@ func (m *Model) buildSwim() *swimLayout {
 }
 
 // swimCanvasH is how many band lines fit between the lane bar and the strip.
-func (m *Model) swimCanvasH() int {
-	return maxInt(1, m.h-fullTop-swimBarH-m.stripHeight()-footerH)
-}
+func (m *Model) swimCanvasH() int { return m.fullCanvasH(swimBarH) }
 
 func (m *Model) renderSwim() string {
 	l := m.buildSwim()
