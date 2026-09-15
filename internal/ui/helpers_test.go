@@ -20,9 +20,10 @@ import (
 // blocker, short ASCII titles that make the arithmetic readable. emptyProvider
 // answers every query with nothing, so a test that filters must use advModel
 // (memstore) instead, and its Reload swaps in an EMPTY board — the state a
-// reload test wants to see survive. A test whose subject does not need the fixture's shape
-// builds its board from these rather than guarding with t.Skip: one task
-// added to the fixture once silenced three tests and broke 21 (t-38fm).
+// reload test wants to see survive. A test whose subject does not need the
+// fixture's shape builds its board from these rather than guarding with
+// t.Skip: one task added to the fixture once silenced three tests and broke
+// 21 (t-38fm).
 
 func boardModel(t *testing.T, w, h int) *Model {
 	t.Helper()
@@ -174,6 +175,15 @@ func ids(ts []*board.Task) []string {
 		out[i] = t.ID
 	}
 	return out
+}
+
+func indexOf(ts []*board.Task, id string) int {
+	for i, t := range ts {
+		if t.ID == id {
+			return i
+		}
+	}
+	return -1
 }
 
 func pinIDs(p map[string]bool) []string {

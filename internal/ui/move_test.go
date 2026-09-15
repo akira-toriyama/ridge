@@ -70,15 +70,6 @@ func TestCommitMoveRespectsHiddenTasks(t *testing.T) {
 	}
 }
 
-func indexOf(ts []*board.Task, id string) int {
-	for i, t := range ts {
-		if t.ID == id {
-			return i
-		}
-	}
-	return -1
-}
-
 // quickReorder (shift+K / shift+J) goes through the same arithmetic.
 func TestQuickReorder(t *testing.T) {
 	m := New(memstore.New(), Options{})

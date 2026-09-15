@@ -10,8 +10,8 @@ import (
 
 // A board with no task at all: every key and a whole mouse gesture must
 // survive it. Nothing is laid out, so every "first card" and "current lane"
-// lookup answers nil, and this is the package's only net for a handler that
-// dereferences one.
+// lookup answers nil, and this is the board view's only net for a handler
+// that dereferences one (the boxes view has its own in boxboard_test.go).
 
 func TestAdvEmptyBoardSurvivesEveryGesture(t *testing.T) {
 	m := New(&emptyProvider{b: board.NewBoard(nil)}, Options{})
