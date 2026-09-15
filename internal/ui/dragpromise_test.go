@@ -365,14 +365,14 @@ func TestAdvStatusLineClaimsARepositionThatDidNotHappen(t *testing.T) {
 	col := m.lay.Col("ready")
 	box := col.Cards[0]
 	id := col.Tasks[0].ID
-	before := advIDs(m.b.LaneTasks("ready"))
+	before := ids(m.b.LaneTasks("ready"))
 
 	// drag a1 upward, above the top of its own column, and release there
 	m.Update(tea.MouseClickMsg{X: box.X + 3, Y: box.Y + 1, Button: tea.MouseLeft})
 	m.Update(tea.MouseMotionMsg{X: box.X + 3, Y: box.Y - 2, Button: tea.MouseLeft})
 	m.Update(tea.MouseReleaseMsg{X: box.X + 3, Y: box.Y - 2, Button: tea.MouseLeft})
 
-	after := advIDs(m.b.LaneTasks("ready"))
+	after := ids(m.b.LaneTasks("ready"))
 	if strings.Join(before, ",") == strings.Join(after, ",") &&
 		strings.Contains(m.status, "repositioned") {
 		t.Errorf("nothing moved (%v) but the status line reports %q — every drop reports "+

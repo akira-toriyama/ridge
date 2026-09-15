@@ -8,7 +8,7 @@ import (
 
 // The wheel and the per-column scroll offset it writes: the two clamps, the
 // offset a filter can make stale, and the wheel while the filter input is
-// modal. The keyboard's ^d/^u are in ctrlscroll_test.go.
+// modal. ^d/^u, the keyboard's scroll, is ctrlscroll_test.go's subject.
 
 // m.scroll is never reset when the filter shrinks an UNFOCUSED column
 // (ensureVisible repairs only the focused lane); buildLayout clamps the

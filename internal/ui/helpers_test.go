@@ -10,15 +10,17 @@ import (
 	"github.com/akira-toriyama/ridge/internal/store/memstore"
 )
 
-// Shared constructors for the package's tests, and nothing else: no
-// assertions live here.
+// Shared constructors for the package's tests, and nothing else. The only
+// t.Fatal here is a setup guard (advTallModel refusing a size at which its
+// column does not fold); no test's subject is asserted in this file.
 //
 // boardModel / logicModel serve the 34-task fixture through memstore. The
 // adv* boards are 2-13 card synthetic boards for a test whose precondition
 // the fixture does not promise — an empty lane, a column that folds, one open
 // blocker, short ASCII titles that make the arithmetic readable. emptyProvider
 // answers every query with nothing, so a test that filters must use advModel
-// (memstore) instead. A test whose subject does not need the fixture's shape
+// (memstore) instead, and its Reload swaps in an EMPTY board — the state a
+// reload test wants to see survive. A test whose subject does not need the fixture's shape
 // builds its board from these rather than guarding with t.Skip: one task
 // added to the fixture once silenced three tests and broke 21 (t-38fm).
 
@@ -166,7 +168,7 @@ func advDepBoard() *board.Board {
 	})
 }
 
-func advIDs(ts []*board.Task) []string {
+func ids(ts []*board.Task) []string {
 	out := make([]string, len(ts))
 	for i, t := range ts {
 		out[i] = t.ID

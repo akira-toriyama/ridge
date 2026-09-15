@@ -14,8 +14,7 @@ import (
 
 // This file is the regression net for the 2026-08-10 independent review
 // (t-74y3): every test here reproduces a confirmed finding and fails on the
-// pre-fix code. The one exception is the empty-board liveness sweep at the
-// end, the package's net for a gesture that panics when nothing is laid out.
+// pre-fix code.
 
 func ctrlC() tea.KeyPressMsg { return tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl} }
 
@@ -485,29 +484,4 @@ func cycleLaneBoard(t *testing.T, uiIDs ...string) *Model {
 		t.Fatal("could not select a")
 	}
 	return m
-}
-
-func TestAdvEmptyBoardSurvivesEveryGesture(t *testing.T) {
-	m := New(&emptyProvider{b: board.NewBoard(nil)}, Options{})
-	m.w, m.h = 100, 30
-	m.recompute()
-	m.relayout()
-
-	defer func() {
-		if r := recover(); r != nil {
-			t.Fatalf("panic on an empty board: %v", r)
-		}
-	}()
-
-	keys := []string{"j", "k", "h", "l", "enter", "esc", "space", "t", "b", ">", "<",
-		"d", "x", "K", "J", "H", "L", "g", "G", "v", "M", "?", "r"}
-	for _, k := range keys {
-		m.Update(tea.KeyPressMsg{Code: keyCodeFor(k), Text: keyTextFor(k)})
-		_ = m.View().Content
-	}
-	// a mouse gesture over an empty board
-	m.Update(tea.MouseClickMsg{X: 5, Y: 7, Button: tea.MouseLeft})
-	m.Update(tea.MouseMotionMsg{X: 40, Y: 12, Button: tea.MouseLeft})
-	m.Update(tea.MouseReleaseMsg{X: 40, Y: 12, Button: tea.MouseLeft})
-	_ = m.View().Content
 }

@@ -70,14 +70,6 @@ func TestCommitMoveRespectsHiddenTasks(t *testing.T) {
 	}
 }
 
-func ids(ts []*board.Task) []string {
-	out := make([]string, len(ts))
-	for i, t := range ts {
-		out[i] = t.ID
-	}
-	return out
-}
-
 func indexOf(ts []*board.Task, id string) int {
 	for i, t := range ts {
 		if t.ID == id {
@@ -350,14 +342,14 @@ func TestAdvMoveArithmeticAgainstAReference(t *testing.T) {
 					id := m.cols[from][fi].ID
 					before := map[string][]string{}
 					for _, l := range lanes {
-						before[l] = advIDs(m.cols[l])
+						before[l] = ids(m.cols[l])
 					}
 					want := advReference(before, id, from, to, di)
 					if _, _, err := m.commitMove(id, from, to, di); err != nil {
 						t.Fatalf("%s[%d] -> %s[%d]: %v", from, fi, to, di, err)
 					}
 					for _, l := range lanes {
-						got := advIDs(m.cols[l])
+						got := ids(m.cols[l])
 						if strings.Join(got, ",") != strings.Join(want[l], ",") {
 							t.Errorf("%s[%d] -> %s[%d]: lane %s is %v, want %v",
 								from, fi, to, di, l, got, want[l])
@@ -396,7 +388,7 @@ func TestAdvMoveIntoAnEmptyFilteredLaneAppendsToTheRealEnd(t *testing.T) {
 	if len(m.cols["backlog"]) != 0 {
 		t.Fatal("backlog should be empty under this filter")
 	}
-	full := advIDs(m.b.LaneTasks("backlog"))
+	full := ids(m.b.LaneTasks("backlog"))
 	if len(full) < 2 {
 		t.Fatal("need a populated backlog")
 	}
@@ -404,7 +396,7 @@ func TestAdvMoveIntoAnEmptyFilteredLaneAppendsToTheRealEnd(t *testing.T) {
 	if _, _, err := m.commitMove(id, "ready", "backlog", 0); err != nil {
 		t.Fatal(err)
 	}
-	got := advIDs(m.b.LaneTasks("backlog"))
+	got := ids(m.b.LaneTasks("backlog"))
 	if got[0] != id {
 		t.Errorf("dropped into slot 0 of a (filtered-empty) backlog; the card landed at "+
 			"index %d of the real lane %v — the gesture said TOP, the board says BOTTOM",
