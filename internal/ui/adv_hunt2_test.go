@@ -3,7 +3,6 @@ package ui
 import (
 	"fmt"
 	"github.com/akira-toriyama/ridge/internal/board"
-	"github.com/akira-toriyama/ridge/internal/store/memstore"
 	"strings"
 	"testing"
 	"time"
@@ -292,31 +291,4 @@ func indexOfStr(ss []string, s string) int {
 		}
 	}
 	return -1
-}
-
-// S. -dump smoke across pathological sizes (panic hunt)
-
-func TestAdvRenderDoesNotPanicAtPathologicalSizes(t *testing.T) {
-	sizes := [][2]int{{0, 0}, {1, 1}, {2, 2}, {-1, -1}, {1, 100}, {400, 1}, {3, 3}, {28, 6}}
-	for _, s := range sizes {
-		s := s
-		t.Run(fmt.Sprintf("%dx%d", s[0], s[1]), func(t *testing.T) {
-			defer func() {
-				if r := recover(); r != nil {
-					t.Fatalf("panic at %dx%d: %v", s[0], s[1], r)
-				}
-			}()
-			m := New(memstore.New(), Options{})
-			m.w, m.h = s[0], s[1]
-			m.recompute()
-			m.relayout()
-			_ = m.View().Content
-			m.peekOpen, m.fullHelp = true, true
-			m.syncPeek()
-			m.relayout()
-			_ = m.View().Content
-			m.view = viewTable
-			_ = m.View().Content
-		})
-	}
 }

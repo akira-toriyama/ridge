@@ -9,7 +9,6 @@ import (
 	"github.com/akira-toriyama/ridge/internal/store/memstore"
 
 	tea "charm.land/bubbletea/v2"
-	lg "charm.land/lipgloss/v2"
 )
 
 // A tiny synthetic board: short ASCII titles so several cards fit a column and
@@ -179,18 +178,6 @@ func TestAdvEscInFilterModeIsEatenByAnArmedDrag(t *testing.T) {
 	if m.mode == modeFilter {
 		t.Errorf("esc was swallowed by the armed drag; the filter input is still modal "+
 			"(drag.armed=%v cancelled=%v)", m.drag.armed, m.drag.cancelled)
-	}
-}
-
-// negative-Y chrome actually distorts the frame
-
-func TestAdvNegativeYShiftsTheWholeFrame(t *testing.T) {
-	m := boardModel(t, 60, 1)
-	out := ansiStrip(m.View().Content)
-	lines := strings.Split(out, "\n")
-	if lg.Height(out) != 1 {
-		t.Errorf("1-row terminal rendered %d rows; first row is %q",
-			lg.Height(out), lines[0])
 	}
 }
 

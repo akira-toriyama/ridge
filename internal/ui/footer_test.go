@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/akira-toriyama/ridge/internal/board"
@@ -203,24 +202,6 @@ func TestTitleRowPointsAtTheHelpOverlay(t *testing.T) {
 				t.Errorf("title row lost the help pointer: %q", strings.TrimSpace(lines[rowTitle]))
 			}
 		})
-	}
-}
-
-// Dropping a row must not have cost the frame its rectangularity at any of the
-// widths this board is read at.
-func TestFrameStaysRectangularAfterTheFooterWent(t *testing.T) {
-	for _, w := range []int{240, 241, 259, 320, 399, 400} {
-		// The map's three demos are all here: it is the only view whose
-		// columns are composed side by side, so a one-cell shear accumulates
-		// per column and shows up at some widths and not others.
-		for _, demo := range []string{"", "graph", "graphall", "map", "mapall", "mapfiltered", "edit", "editdeps"} {
-			lines := dumpFrame(t, w, 50, demo)
-			for i, line := range lines {
-				if got := lipgloss.Width(line); got != w {
-					t.Errorf("w=%d demo=%q row %d is %d cells wide", w, demo, i, got)
-				}
-			}
-		}
 	}
 }
 

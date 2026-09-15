@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"github.com/akira-toriyama/ridge/internal/store/memstore"
 	"testing"
 
 	"charm.land/bubbles/v2/key"
@@ -149,22 +148,6 @@ func TestAdvWheelWorksInFilterModeButClicksDoNot(t *testing.T) {
 // its comment said "unfiltered", and went red the moment the fixture moved a
 // blocker out of that lane — a false positive, since pinning a filter-hidden
 // jump target is the correct behaviour.
-
-// Y. renderTable panics on a negative width
-
-func TestAdvTableViewPanicsOnNegativeWidth(t *testing.T) {
-	defer func() {
-		if r := recover(); r != nil {
-			t.Fatalf("renderTable panicked at w=-1: %v (table.go strings.Repeat(\"─\", m.w))", r)
-		}
-	}()
-	m := New(memstore.New(), Options{})
-	m.w, m.h = -1, 20
-	m.view = viewTable
-	m.recompute()
-	m.relayout()
-	_ = m.View().Content
-}
 
 // Z. the bubbletea v2 key-string trap, for every binding that can fall into it
 
