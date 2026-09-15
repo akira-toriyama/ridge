@@ -276,44 +276,20 @@ func (m *Model) boxStrip(e *board.EpicInfo, h int) string {
 		}
 	}
 
-	head := th.chipAlt.Render(e.ID) + " " + th.base.Render(e.Title)
-	if !e.Closed.IsZero() {
-		head += th.dim.Render("  closed " + e.Closed.In(board.Zone()).Format("2006-01-02"))
-	}
-	push(pad(head, inner))
+	push(pad(m.boxHead(e), inner))
 	if e.Goal != "" {
 		for _, l := range wrapLines("goal "+e.Goal, inner) {
 			push(th.muted.Render(pad(l, inner)))
 		}
 	}
 
-	meta := []string{fmt.Sprintf("%d/%d done", e.Done, e.Total)}
-	if e.Active {
-		meta = append(meta, th.ok.Render("active"))
-	}
-	if e.Standing {
-		meta = append(meta, "standing")
-	}
-	if e.Pinned {
-		meta = append(meta, "pinned")
-	}
-	if e.Stuck {
-		meta = append(meta, th.warn.Render("STUCK"))
-	}
-	if len(e.Repos) > 0 {
-		meta = append(meta, "repos "+strings.Join(e.Repos, ","))
-	}
-	if len(e.Labels) > 0 {
-		meta = append(meta, "labels "+strings.Join(e.Labels, ","))
-	}
-	if keys := e.MetaKeys(); len(keys) > 0 {
-		meta = append(meta, "meta "+strings.Join(keys, ","))
-	}
-	push(strings.Split(th.muted.Render(wrapJoin(meta, " · ", inner)), "\n")...)
+	push(strings.Split(th.muted.Render(wrapJoin(m.boxMeta(e, true), " · ", inner)), "\n")...)
 
-	// The dep edges resolved, in the peek's own three words — this view is
+	// The dep edges resolved, in the words epicfacts.go holds — this view is
 	// where the board's four epic edges are actually visible, so it must not
-	// invent a fourth vocabulary for them.
+	// invent a second vocabulary for them. Gated on Deps, NOT on OpenDeps: the
+	// strip lists every edge and says which are settled, where the peek's line
+	// exists only while one is still open.
 	if len(e.Deps) > 0 {
 		open := make(map[string]bool, len(e.OpenDeps))
 		for _, d := range e.OpenDeps {
@@ -322,15 +298,17 @@ func (m *Model) boxStrip(e *board.EpicInfo, h int) string {
 		parts := []string{"waits on"}
 		for _, d := range e.Deps {
 			de := m.b.Epic(d)
-			switch {
-			case open[d] && de == nil:
+			switch epicDepStateOf(de, open[d]) {
+			case epicDepUnresolved:
 				parts = append(parts, d)
-			case open[d]:
-				parts = append(parts, fmt.Sprintf("%s (%d/%d) %s", d, de.Done, de.Total, de.Title))
-			case de == nil:
+			case epicDepStuck, epicDepOpen:
+				// This surface does not distinguish a stuck dep from an open
+				// one; only the peek marks that.
+				parts = append(parts, epicDepLabel(d, de, ""))
+			case epicDepMissing:
 				parts = append(parts, d+" (missing)")
-			case !de.Closed.IsZero():
-				parts = append(parts, fmt.Sprintf("%s (%d/%d) %s (closed)", d, de.Done, de.Total, de.Title))
+			case epicDepClosed:
+				parts = append(parts, epicDepLabel(d, de, "")+" (closed)")
 			default:
 				parts = append(parts, d+" (satisfied)")
 			}

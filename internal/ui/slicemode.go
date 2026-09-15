@@ -655,37 +655,11 @@ func (m *Model) sliceReadout() string {
 		// whole owner/repo is on screen; a label is its own whole value.
 		return th.muted.Render(r.value)
 	}
-	// furrow's own words for a box, in boxStrip's order — this line must not
-	// invent a second vocabulary for the same facts.
-	head := th.chipAlt.Render(e.ID) + " " + th.base.Render(e.Title)
-	if !e.Closed.IsZero() {
-		// Beside the title, where boxStrip puts it.
-		head += th.dim.Render("  closed " + e.Closed.In(board.Zone()).Format("2006-01-02"))
-	}
-	meta := []string{fmt.Sprintf("%d/%d done", e.Done, e.Total)}
-	if e.Active {
-		meta = append(meta, th.ok.Render("active"))
-	}
-	if e.Standing {
-		meta = append(meta, "standing")
-	}
-	if e.Pinned {
-		meta = append(meta, "pinned")
-	}
-	if e.Stuck {
-		meta = append(meta, th.warn.Render("STUCK"))
-	}
-	if n := len(e.OpenDeps); n > 0 {
-		meta = append(meta, fmt.Sprintf("waits on %d", n))
-	}
-	if len(e.Repos) > 0 {
-		// The one field that separates the reserved boxes: 99 of the real
-		// board's 133 open boxes are titled mandate / parking-lot / requests,
-		// one per repo (measured 2026-09-11), so for three quarters of the
-		// epic axis the repo is the only thing that tells two rows apart.
-		meta = append(meta, "repos "+strings.Join(e.Repos, ","))
-	}
-	return head + th.muted.Render("  "+strings.Join(meta, " · "))
+	// furrow's own words for a box, in boxStrip's order (epicfacts.go holds
+	// both) — this line must not invent a second vocabulary for the same
+	// facts. Joined UNWRAPPED: the readout is one status line, where the strip
+	// has a panel's width to wrap into.
+	return m.boxHead(e) + th.muted.Render("  "+strings.Join(m.boxMeta(e, false), " · "))
 }
 
 // sliceRowBody styles one row's segments. The row's TEXT is composed once, in
