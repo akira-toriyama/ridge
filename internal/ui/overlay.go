@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -184,6 +185,27 @@ func wrapIdx(i, n int) int {
 // overlayInner is the body width of both overlays' boxes.
 func (m *Model) overlayInner() int {
 	return clamp(m.w/3, 44, 72)
+}
+
+// checkboxMark is renderOverlayList's mark for a toggle list over a vocabulary:
+// every row is a candidate and the box says whether this task or box carries
+// it. The task's labels and repos and the box's labels and repos are the four,
+// and they were four spellings of it — two of them forced apart because
+// renderEpicList's own parameter is named `box`.
+//
+// set is read at CONSTRUCTION. Both callers build the mark and hand it straight
+// to renderOverlayList in the same call, so there is nothing to observe; a
+// caller that mutated the slice in between would not see the change.
+//
+// The checklist's mark is NOT one of these: it indexes the row's own Done
+// rather than testing membership of a set.
+func checkboxMark(set []string) func(int, string) string {
+	return func(_ int, row string) string {
+		if slices.Contains(set, row) {
+			return "[x] " + row
+		}
+		return "[ ] " + row
+	}
 }
 
 // overlayLayer boxes body under head in the peek's style and floats it a third

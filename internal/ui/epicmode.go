@@ -846,21 +846,11 @@ func (m *Model) renderEpicList(box *board.EpicInfo, inner, budget int) string {
 	switch e.field {
 	case epicFieldLabels:
 		foot = "⏎/x toggle · a new label · esc back"
-		mark = func(_ int, row string) string {
-			if slices.Contains(box.Labels, row) {
-				return "[x] " + row
-			}
-			return "[ ] " + row
-		}
+		mark = checkboxMark(box.Labels)
 	case epicFieldRepos:
 		hdr = "repos — a box with none cannot be activated"
 		foot = "⏎/x attach/detach · a new repo · esc back"
-		mark = func(_ int, row string) string {
-			if slices.Contains(box.Repos, row) {
-				return "[x] " + row
-			}
-			return "[ ] " + row
-		}
+		mark = checkboxMark(box.Repos)
 	case epicFieldDeps:
 		hdr = "deps — open this box after those close"
 		foot = "⏎/x remove · a add · esc back"
