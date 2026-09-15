@@ -142,9 +142,8 @@ func (m *Model) boxHeader(l *boxLayout, clipped bool) string {
 	return joinEnds(left, th.dim.Render(strings.Join(bits, " · ")), m.w)
 }
 
-// boxBands renders the packed grid to one string per screen line. Every column
-// contributes exactly ColW cells at every row, so the join is width-exact and
-// the columns cannot drift apart.
+// boxBands renders each repo group and hands the placed blocks to packBands,
+// which holds the grid's width-exactness.
 func (m *Model) boxBands(l *boxLayout) []string {
 	if l.Empty() {
 		msg := "— no open boxes on this board (z includes the closed ones) —"
@@ -154,37 +153,15 @@ func (m *Model) boxBands(l *boxLayout) []string {
 		return []string{"", m.th.dim.Render(msg)}
 	}
 
-	blank := strings.Repeat(" ", l.ColW)
-	cols := make([][]string, l.Cols)
-	for c := range cols {
-		cols[c] = make([]string, l.H)
-		for y := range cols[c] {
-			cols[c][y] = blank
-		}
-	}
+	blocks := make([]placedBlock, 0, len(l.Groups))
 	for _, g := range l.Groups {
-		for j, line := range m.renderBoxGroup(g, l.ColW) {
-			if y := g.Y + j; y < l.H {
-				cols[g.Col][y] = line
-			}
-		}
+		blocks = append(blocks, placedBlock{Col: g.Col, Y: g.Y, Lines: m.renderBoxGroup(g, l.ColW)})
 	}
-
-	gap := strings.Repeat(" ", boxPanelGap)
-	bands := make([]string, l.H)
-	row := make([]string, l.Cols)
-	for y := 0; y < l.H; y++ {
-		for c := range cols {
-			row[c] = cols[c][y]
-		}
-		bands[y] = strings.TrimRight(strings.Join(row, gap), " ")
-	}
-	return bands
+	return packBands(blocks, l.Cols, l.ColW, l.H, boxPanelGap)
 }
 
 // renderBoxGroup draws one repo: the rule that names it, then its boxes.
 func (m *Model) renderBoxGroup(g boxGroup, w int) []string {
-	th := m.th
 	out := make([]string, 0, g.H)
 
 	name := g.Repo
@@ -195,11 +172,7 @@ func (m *Model) renderBoxGroup(g boxGroup, w int) []string {
 	if g.Total > 0 {
 		label = fmt.Sprintf(" %s  %d · %d/%d ", name, len(g.Boxes), g.Done, g.Total)
 	}
-	head := th.rule.Render("──") + th.peekHdr.Render(label)
-	if n := w - lg.Width(head); n > 0 {
-		head += th.rule.Render(strings.Repeat("─", n))
-	}
-	out = append(out, pad(head, w))
+	out = append(out, m.ruleHead(label, w))
 	for _, e := range g.Boxes {
 		out = append(out, m.boxRowLine(g.Repo, e, w))
 	}

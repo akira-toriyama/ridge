@@ -67,9 +67,8 @@ func (m *Model) renderMap() string {
 		})
 }
 
-// mapBands renders the packed grid to one string per screen line. Every column
-// contributes exactly ColW cells at every row, so the join is width-exact and
-// the columns cannot drift apart as the rows below them get longer.
+// mapBands renders each cluster panel and hands the placed blocks to
+// packBands, which holds the grid's width-exactness.
 func (m *Model) mapBands(l *mapLayout) []string {
 	if l.Empty() {
 		var msg string
@@ -81,32 +80,11 @@ func (m *Model) mapBands(l *mapLayout) []string {
 		return []string{"", m.th.dim.Render(msg)}
 	}
 
-	blank := strings.Repeat(" ", l.ColW)
-	cols := make([][]string, l.Cols)
-	for c := range cols {
-		cols[c] = make([]string, l.H)
-		for y := range cols[c] {
-			cols[c][y] = blank
-		}
-	}
+	blocks := make([]placedBlock, 0, len(l.Panels))
 	for _, p := range l.Panels {
-		for j, line := range m.renderMapPanel(p, l.ColW) {
-			if y := p.Y + j; y < l.H {
-				cols[p.Col][y] = line
-			}
-		}
+		blocks = append(blocks, placedBlock{Col: p.Col, Y: p.Y, Lines: m.renderMapPanel(p, l.ColW)})
 	}
-
-	gap := strings.Repeat(" ", mapPanelGap)
-	bands := make([]string, l.H)
-	row := make([]string, l.Cols)
-	for y := 0; y < l.H; y++ {
-		for c := range cols {
-			row[c] = cols[c][y]
-		}
-		bands[y] = strings.TrimRight(strings.Join(row, gap), " ")
-	}
-	return bands
+	return packBands(blocks, l.Cols, l.ColW, l.H, mapPanelGap)
 }
 
 // renderMapPanel draws one cluster: the rule that names it, one row per node,
@@ -117,11 +95,7 @@ func (m *Model) renderMapPanel(p mapPanel, w int) []string {
 	out := make([]string, 0, p.H)
 
 	label := fmt.Sprintf(" #%d  %d nodes · depth %d ", p.Num, len(c.Nodes), c.Depth())
-	head := th.rule.Render("──") + th.peekHdr.Render(label)
-	if n := w - lg.Width(head); n > 0 {
-		head += th.rule.Render(strings.Repeat("─", n))
-	}
-	out = append(out, pad(head, w))
+	out = append(out, m.ruleHead(label, w))
 
 	for _, n := range c.Nodes {
 		out = append(out, m.mapNodeRow(n, w))

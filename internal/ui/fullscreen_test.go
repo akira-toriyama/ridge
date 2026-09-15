@@ -1,9 +1,11 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	lg "charm.land/lipgloss/v2"
 )
 
 // The keys every full-screen view answers alike — quit, help, esc, and the
@@ -144,6 +146,72 @@ func TestEveryFullScreenViewAnswersTheSharedKeys(t *testing.T) {
 		m.onKey(keyMsg("S"))
 		if m.view != viewGraph {
 			t.Errorf("S closed the graph; it must re-root (view %v)", m.view)
+		}
+	})
+}
+
+// packBands's geometry, which nothing pinned before. Measured 2026-09-15:
+// deleting the inter-column gap left the ENTIRE internal/ui suite green,
+// including the two column-width tests the task that filed this named as its
+// safety net — they assert on the block renderers, which run one level down.
+//
+// bite-exempt: it pins behaviour that already existed. mapBands and boxBands
+// composed bands exactly this way before they were merged into packBands; all
+// 236 -demo frames are byte-identical across the change.
+func TestPackedBandsKeepTheGridWidthExact(t *testing.T) {
+	const cols, colW, h, gap = 3, 4, 3, 2
+	blocks := []placedBlock{
+		{Col: 0, Y: 0, Lines: []string{"aaaa", "bbbb"}},
+		{Col: 2, Y: 1, Lines: []string{"cccc"}},
+		// Starts on the last row and runs two lines past the canvas.
+		{Col: 1, Y: 2, Lines: []string{"dddd", "eeee", "ffff"}},
+	}
+	bands := packBands(blocks, cols, colW, h, gap)
+
+	if len(bands) != h {
+		t.Fatalf("packBands returned %d bands, want %d", len(bands), h)
+	}
+	// Row 1 is the one with a block in the LAST column, so nothing is trimmed
+	// off its end and the full grid width is measurable. This is the assertion
+	// the deleted gap has to fail.
+	if w, want := lg.Width(bands[1]), cols*colW+(cols-1)*gap; w != want {
+		t.Errorf("a band reaching the last column measures %d cells, want %d "+
+			"(%d columns of %d, %d gaps of %d)", w, want, cols, colW, cols-1, gap)
+	}
+	// 4 cells of block, then gap + blank column + gap, then 4 more.
+	if want := "bbbb" + strings.Repeat(" ", gap+colW+gap) + "cccc"; bands[1] != want {
+		t.Errorf("band 1 = %q, want %q", bands[1], want)
+	}
+	// Trailing blank columns are trimmed; fillCanvas re-pads them.
+	if bands[0] != "aaaa" {
+		t.Errorf("band 0 = %q, want the trailing blank columns trimmed to %q", bands[0], "aaaa")
+	}
+	// The over-long block contributed its first line and no more.
+	if bands[2] != "      dddd" {
+		t.Errorf("band 2 = %q, want the clipped block's first line only", bands[2])
+	}
+
+	// The same join in Japanese. It catches nothing the ASCII case does not —
+	// packBands places lines and never measures them — but the grid is composed
+	// in DISPLAY cells, and this is the worked example that says a two-cell
+	// glyph does not shear the column to its right.
+	t.Run("the same grid in Japanese", func(t *testing.T) {
+		const colW, gap = 8, 2
+		// The LAST column must fill its width exactly: TrimRight strips a
+		// padded tail, so a band ending in pad()'s spaces is legitimately
+		// short. Four Japanese glyphs are eight cells, colW with nothing over.
+		first, last := pad("常備菜", colW), "九州旅行"
+		for _, s := range []string{first, last} {
+			if lg.Width(s) != colW {
+				t.Fatalf("setup: %q measures %d cells, want %d", s, lg.Width(s), colW)
+			}
+		}
+		bands := packBands([]placedBlock{
+			{Col: 0, Y: 0, Lines: []string{first}},
+			{Col: 1, Y: 0, Lines: []string{last}},
+		}, 2, colW, 1, gap)
+		if w, want := lg.Width(bands[0]), 2*colW+gap; w != want {
+			t.Errorf("a Japanese band measures %d cells, want %d", w, want)
 		}
 	})
 }
