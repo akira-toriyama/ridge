@@ -171,13 +171,14 @@ func TestGraphAgreesWithFixtureFacts(t *testing.T) {
 	}
 }
 
-// The real board's task titles, in display cells (the ridge repo, 2026-09-13):
-// p50 81, p90 160, p99 229. The fixture peaked at 85, so one title in ten of
-// what the real board draws had no headless frame at all (t-360e). Five
-// titles now sit in those bands on purpose, spread over backlog, in-progress
-// and done because the card, the table and the sweep each wrap or truncate
-// on their own; this pins the bands so a retitle cannot quietly shrink the
-// fixture back under the real board.
+// The real board's task titles, in display cells (the ridge repo's 107,
+// lipgloss.Width, 2026-09-15): p50 81, p90 153, p99 193, max 229; every repo
+// together, p90 160. The fixture peaked at 85, so one ridge title in ten had
+// no headless frame at all (t-360e). Five titles now sit in those bands on
+// purpose, spread over backlog, in-progress and done because the card, the
+// table and the sweep each wrap or truncate on their own; this pins the
+// bands with no slack (the fixture holds exactly five at 150+) so a single
+// retitle cannot quietly shrink the fixture back under the real board.
 func TestFixtureTitlesReachTheRealBoardsBands(t *testing.T) {
 	b := New().Board()
 	lanesAt150 := map[string]bool{}
@@ -195,8 +196,8 @@ func TestFixtureTitlesReachTheRealBoardsBands(t *testing.T) {
 			at220++
 		}
 	}
-	if at150 < 4 || at190 < 1 || at220 < 1 {
-		t.Errorf("titles ≥150/≥190/≥220 cells: %d/%d/%d, want at least 4/1/1", at150, at190, at220)
+	if at150 < 5 || at190 < 1 || at220 < 1 {
+		t.Errorf("titles ≥150/≥190/≥220 cells: %d/%d/%d, want at least 5/1/1", at150, at190, at220)
 	}
 	for _, lane := range []string{"backlog", "in-progress", "done"} {
 		if !lanesAt150[lane] {

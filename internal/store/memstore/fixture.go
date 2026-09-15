@@ -6,14 +6,16 @@
 // priority, dependency, timestamp and checklist shape — the structure is
 // what the demos and tests exercise, and CJK-heavy titles are the point
 // (the width bugs this app guards against live there). Five titles reach
-// the real board's long bands on purpose — t-7mcc and t-g8bn ~160 cells (the
-// p90 of the real ridge board, 2026-09-13), t-p7xw ~170, t-c9dm ~193 (p99)
-// and t-rmtc ~229 (its longest) — across backlog, in-progress and done, so a
-// long-title regression has a headless frame in every lane; before that the
-// fixture peaked at 85 cells and one task in ten of the real board was a
-// width no -dump could render (t-360e). fixture_test pins the bands. Epics
-// are not tasks and hold no lane. This is a static in-memory copy; the mock provider
-// never reads or writes a real .furrow store.
+// the real board's long bands on purpose — t-7mcc and t-g8bn 161 cells,
+// t-p7xw 170, t-c9dm 193 and t-rmtc 229 — across backlog, in-progress and
+// done, so a long-title regression has a headless frame in every lane. The
+// real board, measured 2026-09-15 with lipgloss.Width over `furrow ls
+// --json`: the ridge repo's 107 titles run p50 81 / p90 153 / p99 193 /
+// max 229, and every repo together (1300) has p90 160. Before that the
+// fixture peaked at 85 cells and one ridge title in ten (11 of 107, at 150+)
+// had no -dump frame at all (t-360e). fixture_test pins the bands. Epics
+// are not tasks and hold no lane. This is a static in-memory copy; the mock
+// provider never reads or writes a real .furrow store.
 //
 // t-dg7k is NOT from the snapshot, like the Due values and t-9sa6's refs: it
 // is the board's one DRAFT (no repo attached — furrow's `add --draft` shape),

@@ -91,8 +91,10 @@ func TestDemoSubjectsAreTheFixtureRowsTheyWereWrittenFor(t *testing.T) {
 // board here is the fixture with every id renamed, so any demo that still
 // names a fixture id fails here and nowhere else; the shapes the predicates
 // ask for are all still present, so a refusal is a hardcoded id, not a
-// missing shape.
-func TestEveryDemoIsProducibleOffTheFixture(t *testing.T) {
+// missing shape. Labels, repos, lanes and titles stay the fixture's — a
+// literal from those vocabularies is caught by the bare-board refusals
+// below, not here.
+func TestEveryDemoIsProducibleWithoutTheFixtureIDs(t *testing.T) {
 	b := renamedFixture(t)
 	for _, d := range DemoNames {
 		m := New(memstore.NewWith(b), Options{})
@@ -111,12 +113,14 @@ func TestEveryDemoIsProducibleOffTheFixture(t *testing.T) {
 
 // A selector's refusal must say what shape it needed, on a board that has
 // none of it, so the next person adding a demo over other data learns the
-// precondition from the error and not from reading dump.go.
+// precondition from the error and not from reading dump.go. advSmallBoard
+// carries no labels, repos, refs, checklists, deps or boxes, so any of those
+// vocabularies hardcoded in a demo would draw here instead of refusing.
 func TestDemoRefusalNamesTheMissingShape(t *testing.T) {
 	m := advSmallModel(t, 240, 50)
 	for _, tc := range []struct{ demo, want string }{
 		{"edit", "checklist"},
-		{"refs", "refs"},
+		{"refs", "two or more refs"},
 		{"editdeps", "waits on both"},
 		{"epicdeps", "filed under a box"},
 		{"epic", "inactive box"},
@@ -182,4 +186,98 @@ func renamedFixture(t *testing.T) *board.Board {
 		t.Fatal("the rename did not take")
 	}
 	return b
+}
+
+// Each selector's clauses are the frame's preconditions, so a near miss —
+// the shape with one clause short — must be REFUSED, not picked: a one-item
+// checklist parks edit's cursor past the list, one ref draws the refs editor
+// half-empty, a box with a free repo slot has no precondition line to show.
+// Without these a clause can be deleted and every fixture pin stays green,
+// because the fixture never holds the near miss (measured: three such
+// deletions survived the pins above).
+func TestDemoSelectorsRefuseTheNearMiss(t *testing.T) {
+	one := []board.ChecklistItem{{Text: "one"}}
+	two := []board.ChecklistItem{{Text: "one"}, {Text: "two"}}
+	openBox := board.EpicInfo{ID: "e-open", Title: "open", Repos: []string{"r/a"}}
+	held := board.EpicInfo{ID: "e-held", Title: "held", Active: true, Repos: []string{"r/a"}}
+	task := func(f func(string) (*board.Task, error)) func(*Model) (string, error) {
+		return func(*Model) (string, error) { x, err := f("t"); return idOf(x), err }
+	}
+	for _, tc := range []struct {
+		name  string
+		tasks []*board.Task
+		epics []board.EpicInfo
+		pick  func(*Model) (string, error)
+	}{
+		{"edit: a one-item checklist with a label", []*board.Task{
+			{ID: "t-a", Title: "a", Status: "backlog", Priority: 1, Labels: []string{"l"}, Checklist: one},
+		}, nil, func(m *Model) (string, error) { return task(m.demoEditTask)(m) }},
+		{"edit: a two-item checklist with no label", []*board.Task{
+			{ID: "t-a", Title: "a", Status: "backlog", Priority: 1, Checklist: two},
+		}, nil, func(m *Model) (string, error) { return task(m.demoEditTask)(m) }},
+		{"refs: one ref", []*board.Task{
+			{ID: "t-a", Title: "a", Status: "backlog", Priority: 1, Refs: []string{"https://x"}},
+		}, nil, func(m *Model) (string, error) { return task(m.demoRefsTask)(m) }},
+		{"mixed deps: both deps open", []*board.Task{
+			{ID: "t-a", Title: "a", Status: "backlog", Priority: 1, Deps: []string{"t-b", "t-c"}},
+			{ID: "t-b", Title: "b", Status: "backlog", Priority: 2},
+			{ID: "t-c", Title: "c", Status: "backlog", Priority: 3},
+		}, nil, func(m *Model) (string, error) { return task(m.demoMixedDepsTask)(m) }},
+		{"mixed deps: both deps done", []*board.Task{
+			{ID: "t-a", Title: "a", Status: "backlog", Priority: 1, Deps: []string{"t-b", "t-c"}},
+			{ID: "t-b", Title: "b", Status: "done", Priority: 2},
+			{ID: "t-c", Title: "c", Status: "done", Priority: 3},
+		}, nil, func(m *Model) (string, error) { return task(m.demoMixedDepsTask)(m) }},
+		{"root: the blocker waits on something itself", []*board.Task{
+			{ID: "t-a", Title: "a", Status: "backlog", Priority: 1, Deps: []string{"t-b"}},
+			{ID: "t-b", Title: "b", Status: "backlog", Priority: 2, Deps: []string{"t-c"}},
+			{ID: "t-c", Title: "c", Status: "done", Priority: 3},
+		}, nil, func(m *Model) (string, error) { return task(m.demoRootTask)(m) }},
+		{"epic deps: the box's every dep is still open", []*board.Task{
+			{ID: "t-a", Title: "a", Status: "backlog", Priority: 1, Epic: "e-w"},
+		}, []board.EpicInfo{openBox, {ID: "e-w", Title: "w", Deps: []string{"e-open"}, OpenDeps: []string{"e-open"}}},
+			func(m *Model) (string, error) { return task(m.demoEpicDepsTask)(m) }},
+		{"rich box: its repo slot is free", []*board.Task{
+			{ID: "t-a", Title: "a", Status: "backlog", Priority: 1, Repos: []string{"r/a", "r/b"}},
+		}, []board.EpicInfo{openBox, {ID: "e-x", Title: "x", Goal: "g", Repos: []string{"r/b"}, Deps: []string{"e-open"}, OpenDeps: []string{"e-open"}}},
+			func(m *Model) (string, error) { x, err := m.demoRichBox("t"); return x.ID, err }},
+		{"rich box: no goal", []*board.Task{
+			{ID: "t-a", Title: "a", Status: "backlog", Priority: 1, Repos: []string{"r/a"}},
+		}, []board.EpicInfo{openBox, held, {ID: "e-x", Title: "x", Repos: []string{"r/a"}, Deps: []string{"e-open"}, OpenDeps: []string{"e-open"}}},
+			func(m *Model) (string, error) { x, err := m.demoRichBox("t"); return x.ID, err }},
+		{"rich box: it is the active one", []*board.Task{
+			{ID: "t-a", Title: "a", Status: "backlog", Priority: 1, Repos: []string{"r/a"}},
+		}, []board.EpicInfo{openBox, {ID: "e-x", Title: "x", Goal: "g", Active: true, Repos: []string{"r/a"}, Deps: []string{"e-open"}, OpenDeps: []string{"e-open"}}},
+			func(m *Model) (string, error) { x, err := m.demoRichBox("t"); return x.ID, err }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := New(memstore.NewWith(board.NewBoard(tc.tasks, tc.epics...)), Options{})
+			got, err := tc.pick(m)
+			if err == nil {
+				t.Errorf("picked %s; the near miss must be refused", got)
+			}
+		})
+	}
+	// And the shape itself, one clause over the near miss, IS picked — so the
+	// refusals above are the clauses' doing, not a selector that refuses
+	// everything.
+	m := New(memstore.NewWith(board.NewBoard([]*board.Task{
+		{ID: "t-a", Title: "a", Status: "backlog", Priority: 1, Repos: []string{"r/a"}, Labels: []string{"l"}, Checklist: two, Refs: []string{"a.go:1", "https://x"}},
+	}, openBox, held, board.EpicInfo{ID: "e-x", Title: "x", Goal: "g", Repos: []string{"r/a"}, Deps: []string{"e-open"}, OpenDeps: []string{"e-open"}})), Options{})
+	if x, err := m.demoEditTask("t"); err != nil || x.ID != "t-a" {
+		t.Errorf("demoEditTask on the full shape: %v, %v", idOf(x), err)
+	}
+	if x, err := m.demoRefsTask("t"); err != nil || x.ID != "t-a" {
+		t.Errorf("demoRefsTask on the full shape: %v, %v", idOf(x), err)
+	}
+	if x, err := m.demoRichBox("t"); err != nil || x.ID != "e-x" {
+		t.Errorf("demoRichBox on the full shape: %v, %v", x.ID, err)
+	}
+}
+
+func idOf(t *board.Task) string {
+	if t == nil {
+		return ""
+	}
+	return t.ID
 }

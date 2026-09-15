@@ -117,7 +117,7 @@ func TestSwitchViewOutOfRangeSaysWhy(t *testing.T) {
 		t.Errorf("no views: status %q does not say why the key did nothing", m.status)
 	}
 
-	m = New(memstore.New(), Options{Views: demoViews()})
+	m = New(memstore.New(), Options{Views: demoViews("bbq")})
 	if c := pressKey(m, '9'); c != nil {
 		c()
 	}
@@ -272,7 +272,7 @@ func TestSaveViewInsideTheRoadmap(t *testing.T) {
 }
 
 func TestViewTabStripShowsDigitsNamesAndTheDirtyDot(t *testing.T) {
-	m := New(memstore.New(), Options{Views: demoViews()})
+	m := New(memstore.New(), Options{Views: demoViews("bbq")})
 	strip := ansiStrip(m.viewTabStrip(200))
 	for _, want := range []string{"1 火の粉", "2 締切", "3 表で総覧"} {
 		if !strings.Contains(strip, want) {

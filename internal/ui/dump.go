@@ -361,9 +361,10 @@ func (m *Model) demoState(kind string) error {
 	case "mapall":
 		// The same board at scope=all: one 19-node cluster, depth 5, which is
 		// the frame that proves the indent ladder and the "+N" blocker tag
-		// (demoMostDepsTask; the fixture's t-t38k has three blockers). Also the only demo where a panel is
-		// taller than one column's share of the canvas, so it proves the pack
-		// does not silently drop the overflow.
+		// (demoMostDepsTask; the fixture's t-t38k has three blockers). Also
+		// the only demo where a panel is taller than one column's share of
+		// the canvas, so it proves the pack does not silently drop the
+		// overflow.
 		seed, err := m.demoMostDepsTask("mapall")
 		if err != nil {
 			return err
@@ -561,7 +562,7 @@ func (m *Model) demoState(kind string) error {
 		if err != nil {
 			return err
 		}
-		if err := m.demoEpicPanel(box.ID); err != nil {
+		if err := m.demoEpicPanel("epic", box.ID); err != nil {
 			return err
 		}
 		m.epic.menuIdx = int(epicFieldActive)
@@ -577,7 +578,7 @@ func (m *Model) demoState(kind string) error {
 		if err != nil {
 			return err
 		}
-		if err := m.demoEpicPanel(box.ID); err != nil {
+		if err := m.demoEpicPanel("epiclist", box.ID); err != nil {
 			return err
 		}
 		m.epic.menuIdx = int(epicFieldDeps)
@@ -593,7 +594,7 @@ func (m *Model) demoState(kind string) error {
 		if err != nil {
 			return err
 		}
-		if err := m.demoEpicPanel(box.ID); err != nil {
+		if err := m.demoEpicPanel("epicreason", box.ID); err != nil {
 			return err
 		}
 		m.epic.menuIdx = int(epicFieldActive)
@@ -608,7 +609,7 @@ func (m *Model) demoState(kind string) error {
 		if err != nil {
 			return err
 		}
-		if err := m.demoEpicPanel(active.ID); err != nil {
+		if err := m.demoEpicPanel("epicconfirm", active.ID); err != nil {
 			return err
 		}
 		m.epic.menuIdx = int(epicFieldActive)
@@ -625,7 +626,7 @@ func (m *Model) demoState(kind string) error {
 			return err
 		}
 		m.sliceEpicAll = true
-		if err := m.demoEpicPanel(closed.ID); err != nil {
+		if err := m.demoEpicPanel("epicshut", closed.ID); err != nil {
 			return err
 		}
 		m.epic.menuIdx = int(epicFieldClosed)
@@ -640,7 +641,7 @@ func (m *Model) demoState(kind string) error {
 		if err != nil {
 			return err
 		}
-		if err := m.demoEpicPanel(active.ID); err != nil {
+		if err := m.demoEpicPanel("epicdone", active.ID); err != nil {
 			return err
 		}
 		m.epic.menuIdx = int(epicFieldClosed)
@@ -657,7 +658,7 @@ func (m *Model) demoState(kind string) error {
 			return err
 		}
 		m.sliceEpicAll = true
-		if err := m.demoEpicPanel(closed.ID); err != nil {
+		if err := m.demoEpicPanel("epicreopen", closed.ID); err != nil {
 			return err
 		}
 		m.epic.menuIdx = int(epicFieldClosed)
@@ -863,7 +864,11 @@ func (m *Model) demoState(kind string) error {
 		// the applied bundle (table view, due ▲) — and then one sort
 		// keystroke of drift on top, so the SAME frame proves GH's
 		// unsaved-changes dot against the saved bundle.
-		m.views = demoViews()
+		label, err := m.demoLabel("views")
+		if err != nil {
+			return err
+		}
+		m.views = demoViews(label)
 		if c := m.onNormalKey(tea.KeyPressMsg{Code: '3', Text: "3"}); c != nil {
 			_ = c
 		}
@@ -883,7 +888,11 @@ func (m *Model) demoState(kind string) error {
 		// roadmap, whose own title row must carry the strip (lit tab 2, no
 		// dot) — the frame that proves the tabs survive leaving the board's
 		// chrome, which is exactly where a hand-kept second strip would rot.
-		m.views = demoViews()
+		label, err := m.demoLabel("viewsroad")
+		if err != nil {
+			return err
+		}
+		m.views = demoViews(label)
 		if c := m.onNormalKey(tea.KeyPressMsg{Code: '2', Text: "2"}); c != nil {
 			_ = c
 		}
@@ -1021,12 +1030,13 @@ func (m *Model) demoState(kind string) error {
 	return nil
 }
 
-// demoViews is the fixture view set the two demos inject — CJK names on
-// purpose: the tab band measures its cells the way every other chrome does,
-// and only a CJK name can prove it.
-func demoViews() []views.View {
+// demoViews is the view set the two demos inject — CJK names on purpose:
+// the tab band measures its cells the way every other chrome does, and only
+// a CJK name can prove it. The first tab's query is the board's commonest
+// label (demoLabel), so the set holds no fixture vocabulary.
+func demoViews(label string) []views.View {
 	return []views.View{
-		{Name: "火の粉", Layout: "board", Q: "label:bbq"},
+		{Name: "火の粉", Layout: "board", Q: "label:" + label},
 		{Name: "締切", Layout: "roadmap"},
 		{Name: "表で総覧", Layout: "table", Sort: "due asc"},
 	}
@@ -1036,7 +1046,7 @@ func demoViews() []views.View {
 // panel, on the epic axis, with the cursor on the box — so the frame behind the
 // overlay is the real one and `esc` in the resulting state would land back in
 // modeSlice rather than on a bare board.
-func (m *Model) demoEpicPanel(id string) error {
+func (m *Model) demoEpicPanel(demo, id string) error {
 	m.toggleSlice()
 	m.sliceField = sliceEpic
 	rows := m.sliceRows()
@@ -1047,11 +1057,11 @@ func (m *Model) demoEpicPanel(id string) error {
 		}
 	}
 	if !found {
-		return fmt.Errorf("demo epic: %s is not a box on the fixture board", id)
+		return fmt.Errorf("demo %s: %s is not a box on this board", demo, id)
 	}
 	m.enterEpic(id)
 	if m.epic == nil {
-		return fmt.Errorf("demo epic: the overlay did not open on %s", id)
+		return fmt.Errorf("demo %s: the overlay did not open on %s", demo, id)
 	}
 	return nil
 }
@@ -1090,7 +1100,10 @@ func (m *Model) demoBox(demo, need string, pred func(board.EpicInfo) bool) (boar
 // demoAnyTask is the board's first task, for the demos that only need an id
 // to print (a queued op's label, a refused write's message, a typed dep:).
 func (m *Model) demoAnyTask(demo string) (*board.Task, error) {
-	return m.demoTask(demo, "exists — the board is empty", func(*board.Task) bool { return true })
+	if ts := m.b.Tasks(); len(ts) > 0 {
+		return ts[0], nil
+	}
+	return nil, fmt.Errorf("demo %s: the board is empty", demo)
 }
 
 // demoEditTask is the subject of the edit-overlay demos: a checklist of two
@@ -1197,10 +1210,13 @@ func (m *Model) demoActiveBox(demo string) (board.EpicInfo, error) {
 // first closed box at all when none does (a board whose only finished boxes
 // are reserved ones still has a reopen frame).
 func (m *Model) demoClosedBox(demo string) (board.EpicInfo, error) {
-	if e, err := m.demoBox(demo, "", func(e board.EpicInfo) bool { return !e.Closed.IsZero() && e.Goal != "" }); err == nil {
-		return e, nil
+	closed := func(e board.EpicInfo) bool { return !e.Closed.IsZero() }
+	for _, e := range m.b.EpicsAll() {
+		if closed(e) && e.Goal != "" {
+			return e, nil
+		}
 	}
-	return m.demoBox(demo, "is closed", func(e board.EpicInfo) bool { return !e.Closed.IsZero() })
+	return m.demoBox(demo, "is closed", closed)
 }
 
 // demoLabel is the label the most tasks carry (ties: the first in label
