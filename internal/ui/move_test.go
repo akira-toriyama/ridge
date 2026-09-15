@@ -209,3 +209,214 @@ func TestMoveModeDropIndexArithmetic(t *testing.T) {
 		t.Errorf("dropLane = %s, want the first lane", m.dropLane)
 	}
 }
+
+// The status line and doc.go both promise "esc restores". The BOARD is restored
+// (nothing was mutated), but the CURSOR is left wherever the arrows parked the
+// drop target: cancel never puts the selection back on the card you lifted.
+func TestAdvMoveModeCancelLeavesTheCursorOnTheWrongTask(t *testing.T) {
+	m := boardModel(t, 140, 40)
+	m.curLane = m.b.LaneIndex("backlog")
+	m.setPos(0)
+	lifted := m.curTask()
+	if lifted == nil {
+		t.Fatal("no card to lift")
+	}
+	m.enterMove()
+	// place it two lanes over and two slots down
+	m.Update(tea.KeyPressMsg{Code: tea.KeyRight})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+
+	if m.mode != modeNormal {
+		t.Fatalf("esc did not leave move mode")
+	}
+	if got := m.curTask(); got == nil || got.ID != lifted.ID {
+		gotID := "<nil>"
+		if got != nil {
+			gotID = got.ID
+		}
+		t.Errorf("after esc the selection is %s, want the lifted card %s (lane %s idx %d)",
+			gotID, lifted.ID, m.curLaneName(), m.curPos())
+	}
+}
+
+// A mouse drag can be started and then a keyboard move mode entered on top of
+// it, giving one card two owners. The reverse direction IS guarded
+// (onMouseDown refuses while mode==modeMove); this direction is not, so the
+// release commits one move and the following Enter commits a second.
+func TestAdvKeyboardMoveModeCanBeEnteredMidDrag(t *testing.T) {
+	m := boardModel(t, 140, 40)
+	src := m.lay.Col("backlog")
+	dst := m.lay.Col("ready")
+	if src == nil || dst == nil || len(src.Cards) < 2 {
+		t.Fatal("board too small")
+	}
+	box := src.Cards[1]
+	id := src.Tasks[box.Idx].ID
+
+	m.Update(tea.MouseClickMsg{X: box.X + 3, Y: box.Y + 1, Button: tea.MouseLeft})
+	m.Update(tea.MouseMotionMsg{X: dst.X + 8, Y: dst.Top + 2, Button: tea.MouseLeft})
+	if !m.drag.moved {
+		t.Fatal("drag did not arm")
+	}
+	// The user presses `m` while still holding the button.
+	m.Update(tea.KeyPressMsg{Code: 'm', Text: "m"})
+	if m.mode == modeMove && m.drag.armed {
+		t.Errorf("card %s now has two owners: drag armed AND move mode active "+
+			"(moveID=%s dropLane=%s / drag.id=%s dropLane=%s)",
+			id, m.moveID, m.dropLane, m.drag.id, m.drag.dropLane)
+	}
+}
+
+// shift+J/K reorder inside a FILTERED column. The visible neighbour is not the
+// board neighbour, so "lower by one" must land immediately after the next
+// VISIBLE card and must not jump over hidden ones... but it must also actually
+// change the board order.
+func TestAdvQuickReorderUnderAFilterMovesExactlyOneVisibleSlot(t *testing.T) {
+	m := boardModel(t, 140, 40)
+	m.applyFilter("lane:backlog")
+	m.curLane = m.b.LaneIndex("backlog")
+	m.setPos(0)
+	vis := append([]*board.Task(nil), m.cols["backlog"]...)
+	if len(vis) < 3 {
+		t.Fatal("need >=3 visible backlog tasks")
+	}
+	first, second := vis[0].ID, vis[1].ID
+	m.quickReorder(+1)
+	got := m.cols["backlog"]
+	if got[0].ID != second || got[1].ID != first {
+		t.Errorf("after shift+J the visible order is %s,%s; want %s,%s",
+			got[0].ID, got[1].ID, second, first)
+	}
+}
+
+// reference is what a human means by "drop this card into slot d of lane L, as
+// the lane is currently DISPLAYED".
+func advReference(cols map[string][]string, id, from, to string, dispIdx int) map[string][]string {
+	out := map[string][]string{}
+	for k, v := range cols {
+		out[k] = append([]string(nil), v...)
+	}
+	// remove
+	src := out[from]
+	for i, x := range src {
+		if x == id {
+			src = append(src[:i], src[i+1:]...)
+			break
+		}
+	}
+	out[from] = src
+	// insert: dispIdx counts the destination AS DISPLAYED, i.e. still holding
+	// the moving card when from==to.
+	idx := dispIdx
+	if from == to && dispIdx > 0 {
+		// the vacated slot above absorbs one
+		fromIdx := -1
+		for i, x := range cols[from] {
+			if x == id {
+				fromIdx = i
+			}
+		}
+		if dispIdx > fromIdx {
+			idx = dispIdx - 1
+		}
+	}
+	dst := out[to]
+	if idx > len(dst) {
+		idx = len(dst)
+	}
+	if idx < 0 {
+		idx = 0
+	}
+	dst = append(dst[:idx:idx], append([]string{id}, dst[idx:]...)...)
+	out[to] = dst
+	return out
+}
+
+func TestAdvMoveArithmeticAgainstAReference(t *testing.T) {
+	lanes := []string{"inbox", "backlog", "ready", "in-progress", "done", "icebox"}
+	for _, from := range lanes {
+		for _, to := range lanes {
+			// logicModel: this loop reads m.cols and commits moves; it never
+			// touches m.lay, and 1,361 layouts cost 39s under -race.
+			base := logicModel(t, 140, 40)
+			src := base.cols[from]
+			if len(src) == 0 {
+				continue
+			}
+			for fi := range src {
+				for di := 0; di <= len(base.cols[to]); di++ {
+					m := logicModel(t, 140, 40)
+					id := m.cols[from][fi].ID
+					before := map[string][]string{}
+					for _, l := range lanes {
+						before[l] = advIDs(m.cols[l])
+					}
+					want := advReference(before, id, from, to, di)
+					if _, _, err := m.commitMove(id, from, to, di); err != nil {
+						t.Fatalf("%s[%d] -> %s[%d]: %v", from, fi, to, di, err)
+					}
+					for _, l := range lanes {
+						got := advIDs(m.cols[l])
+						if strings.Join(got, ",") != strings.Join(want[l], ",") {
+							t.Errorf("%s[%d] -> %s[%d]: lane %s is %v, want %v",
+								from, fi, to, di, l, got, want[l])
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+func TestAdvMoveModeAcrossTheWholeStrip(t *testing.T) {
+	m := boardModel(t, 90, 40) // only ~3 columns fit
+	m.curLane = m.b.LaneIndex("backlog")
+	m.setPos(0)
+	id := m.curTask().ID
+	m.enterMove()
+	for i := 0; i < 5; i++ {
+		m.Update(tea.KeyPressMsg{Code: tea.KeyRight})
+	}
+	wantLane := m.dropLane
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if got := m.b.Task(id).Status; got != wantLane {
+		t.Errorf("committed into %s, want %s", got, wantLane)
+	}
+	if m.lay.Col(wantLane) == nil {
+		t.Errorf("committed into %s but that lane is not in the visible strip "+
+			"(laneOff=%d visible=%d)", wantLane, m.laneOff, m.lay.Visible)
+	}
+}
+
+func TestAdvMoveIntoAnEmptyFilteredLaneAppendsToTheRealEnd(t *testing.T) {
+	m := boardModel(t, 140, 40)
+	// hide everything in backlog, then move a ready card into backlog slot 0.
+	m.applyFilter("lane:ready")
+	if len(m.cols["backlog"]) != 0 {
+		t.Fatal("backlog should be empty under this filter")
+	}
+	full := advIDs(m.b.LaneTasks("backlog"))
+	if len(full) < 2 {
+		t.Fatal("need a populated backlog")
+	}
+	id := m.cols["ready"][0].ID
+	if _, _, err := m.commitMove(id, "ready", "backlog", 0); err != nil {
+		t.Fatal(err)
+	}
+	got := advIDs(m.b.LaneTasks("backlog"))
+	if got[0] != id {
+		t.Errorf("dropped into slot 0 of a (filtered-empty) backlog; the card landed at "+
+			"index %d of the real lane %v — the gesture said TOP, the board says BOTTOM",
+			indexOfStr(got, id), got)
+	}
+}
+
+func indexOfStr(ss []string, s string) int {
+	for i, x := range ss {
+		if x == s {
+			return i
+		}
+	}
+	return -1
+}

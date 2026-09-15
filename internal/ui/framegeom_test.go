@@ -129,3 +129,85 @@ func frameFor(t *testing.T, w, h int, state string, lr bool) (string, bool) {
 	}
 	return ansiStrip(m.View().Content), true
 }
+
+func advFrameSize(t *testing.T, m *Model) (w, h int) {
+	t.Helper()
+	out := m.View().Content
+	h = lg.Height(out)
+	for _, line := range strings.Split(out, "\n") {
+		if lw := lg.Width(line); lw > w {
+			w = lw
+		}
+	}
+	return w, h
+}
+
+// The dragged ghost card is 28 cells wide and ~6 tall and is only clamped to
+// max(0, w-28) / max(0, h-cardH). On a terminal narrower/shorter than a card
+// that clamp yields 0 and the layer still overflows the canvas.
+func TestAdvGhostOverflowsANarrowTerminal(t *testing.T) {
+	m := boardModel(t, 24, 14)
+	col := m.lay.Col(m.curLaneName())
+	if col == nil || len(col.Cards) == 0 {
+		t.Fatalf("no card laid out for lane %q at 24x14; the cursor's lane holds no task, "+
+			"and this test lifts one", m.curLaneName())
+	}
+	box := col.Cards[0]
+	m.Update(tea.MouseClickMsg{X: box.X + 2, Y: box.Y + 1, Button: tea.MouseLeft})
+	m.Update(tea.MouseMotionMsg{X: box.X + 6, Y: box.Y + 3, Button: tea.MouseLeft})
+	if !m.drag.moved {
+		t.Fatal("drag did not arm")
+	}
+	gw, gh := advFrameSize(t, m)
+	if gw > 24 || gh > 14 {
+		t.Errorf("ghost frame is %dx%d, terminal is 24x14", gw, gh)
+	}
+}
+
+// At h<2 the status and help bars are placed at NEGATIVE y.
+func TestAdvChromeIsPlacedAtNegativeY(t *testing.T) {
+	m := boardModel(t, 60, 1)
+	for _, l := range m.chromeLayers() {
+		if l.GetY() < 0 {
+			t.Errorf("a chrome layer is placed at y=%d on a 1-row terminal", l.GetY())
+		}
+	}
+}
+
+// peekBox floors its height at 6 rows and anchors it at y=rowColHdr(2) without
+// consulting m.h, so on any terminal shorter than 8 rows the panel hangs off
+// the bottom of the frame. helpLayer has a MaxWidth/MaxHeight backstop; the
+// peek has none.
+func TestAdvPeekBoxExceedsTheTerminal(t *testing.T) {
+	for _, h := range []int{5, 6, 7} {
+		m := boardModel(t, 100, h)
+		x, y, w, ph := m.peekBox()
+		if y+ph > h {
+			t.Errorf("h=%d: peek box y=%d h=%d ends at row %d (terminal has %d); x=%d w=%d",
+				h, y, ph, y+ph, h, x, w)
+		}
+	}
+}
+
+func TestAdvPeekLinesFitTheirBox(t *testing.T) {
+	for _, size := range [][2]int{{140, 40}, {100, 30}, {80, 24}, {60, 20}} {
+		m := boardModel(t, size[0], size[1])
+		m.peekOpen, m.treeOpen = true, true
+		// pick a task with both directions populated
+		for _, task := range m.b.Tasks() {
+			if len(task.Deps) > 0 && len(m.g.Blocks(task.ID)) > 0 {
+				m.selectID(task.ID, false)
+				break
+			}
+		}
+		m.syncPeek()
+		_, _, w, _ := m.peekBox()
+		inner := maxInt(10, w-4)
+		for i, line := range strings.Split(ansiStrip(m.peekContent(inner)), "\n") {
+			if lw := lg.Width(line); lw > inner {
+				t.Errorf("%dx%d peek line %d is %d cells, box inner width is %d: %q",
+					size[0], size[1], i, lw, inner, line)
+			}
+		}
+	}
+}

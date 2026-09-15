@@ -424,3 +424,19 @@ func TestDemoSortShowsTheSortedTable(t *testing.T) {
 		t.Errorf("due ▲ must put the earliest-dated fixture task first, got %v", rows[:minInt(3, len(rows))])
 	}
 }
+
+// The table view pads a Japanese title to a fixed cell count. A double-width
+// glyph straddling the boundary must not make the row short or long.
+func TestAdvTableRowsAreExactlyTerminalWidth(t *testing.T) {
+	for _, w := range []int{72, 73, 74, 75, 100, 101, 140, 141} {
+		m := boardModel(t, w, 30)
+		m.view = viewTable
+		m.relayout()
+		out := ansiStrip(m.View().Content)
+		for i, line := range strings.Split(out, "\n") {
+			if lw := lg.Width(line); lw > w {
+				t.Errorf("table w=%d row %d measures %d cells: %q", w, i, lw, line)
+			}
+		}
+	}
+}
