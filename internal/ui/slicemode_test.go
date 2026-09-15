@@ -421,19 +421,13 @@ func TestPanelWheelScrollsTheWindow(t *testing.T) {
 // The board columns keep scrolling while the panel holds the keyboard — the
 // panel sits beside them, not over them.
 func TestBoardWheelWorksWhileThePanelHoldsTheKeyboard(t *testing.T) {
-	m := boardModel(t, 140, 12)
+	m := advTallModel(t, 140, 12)
 	press(m, "s")
-	var lane string
-	for _, l := range m.b.Lanes() {
-		if c := m.lay.Col(l.Name); c != nil && c.Hidden > 0 {
-			lane = l.Name
-			break
-		}
-	}
-	if lane == "" {
-		t.Skip("no overflowing column at this size")
-	}
+	const lane = "backlog"
 	c := m.lay.Col(lane)
+	if c == nil || c.Hidden == 0 {
+		t.Fatalf("setup: backlog no longer folds at 140x12 with the panel open (%+v)", c)
+	}
 	before := c.Scroll
 	m.Update(tea.MouseWheelMsg{X: c.X + 2, Y: boardTop + 2, Button: tea.MouseWheelDown})
 	if m.scroll[lane] != before+1 {

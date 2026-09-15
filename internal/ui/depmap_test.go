@@ -11,18 +11,18 @@ import (
 	"github.com/akira-toriyama/ridge/internal/store/memstore"
 )
 
-// mapModel opens the dep map and renders once, so the layout the key handlers
-// walk is the one a frame was actually built from — the same setup contract
-// graphModel has.
+// mapModel opens the dep map on advMapBoard and renders once, so the layout
+// the key handlers walk is the one a frame was actually built from — the same
+// setup contract graphModel has.
 func mapModel(t *testing.T, w, h int) *Model {
 	t.Helper()
-	m := boardModel(t, w, h)
+	m := advModel(t, advMapBoard(), w, h)
 	m.openMap("")
 	if _, err := m.Dump(w, h, "", true); err != nil {
 		t.Fatal(err)
 	}
 	if m.mapLay == nil || len(m.mapLay.Rows) == 0 {
-		t.Skip("the fixture board has no dependency clusters")
+		t.Fatal("setup: advMapBoard packed into no rows")
 	}
 	return m
 }
@@ -86,11 +86,11 @@ func TestMapPacksEveryClusterExactlyOnce(t *testing.T) {
 // first cut reserved a column per possible column and truncated every row to a
 // third of the screen while two thirds stayed blank.
 func TestOneClusterGetsTheWholeWidth(t *testing.T) {
-	m := boardModel(t, 240, 50)
+	m := advModel(t, advDepBoard(), 240, 50)
 	m.mapScope = board.ClusterAll
 	l := m.buildMap()
 	if len(l.Panels) != 1 {
-		t.Skipf("this fixture has %d all-scope clusters, not one", len(l.Panels))
+		t.Fatalf("setup: advDepBoard is one cluster, the map packed %d", len(l.Panels))
 	}
 	if l.Cols != 1 {
 		t.Errorf("one cluster laid into %d columns", l.Cols)
@@ -127,7 +127,7 @@ func TestMapCursorWalksRowsAndColumns(t *testing.T) {
 	}
 
 	if l.Cols < 2 {
-		t.Skip("the fixture packs into one column; the sideways walk needs two")
+		t.Fatalf("setup: advMapBoard's two open clusters packed into %d column(s) at 240", l.Cols)
 	}
 	m.mapSel = first
 	m.mapMove(+1, 0)
@@ -145,11 +145,11 @@ func TestMapCursorWalksRowsAndColumns(t *testing.T) {
 // grid no longer draws.
 func TestScopeCycleKeepsTheCursorOnARowThatExists(t *testing.T) {
 	m := mapModel(t, 240, 50)
-	// t-t38k is done: present at scope=all, gone at scope=open.
+	// m6 is done: present at scope=all, gone at scope=open.
 	m.mapScope = board.ClusterAll
-	m.mapSel = "t-t38k"
-	if l := m.buildMap(); l.Row("t-t38k") == nil {
-		t.Skip("this fixture does not carry t-t38k in an all-scope cluster")
+	m.mapSel = "m6"
+	if l := m.buildMap(); l.Row("m6") == nil {
+		t.Fatal("setup: m6 is not in an all-scope cluster")
 	}
 	m.cycleMapScope()
 	if m.mapScope != board.ClusterOpen {
@@ -206,16 +206,13 @@ func TestBlockerTagDropsWholeIDsAndSaysHowMany(t *testing.T) {
 // come back to it, carrying wherever the graph walk ended.
 func TestTheGraphOpenedFromTheMapReturnsToTheMap(t *testing.T) {
 	m := mapModel(t, 240, 50)
-	m.mapSel = "t-jv3j"
-	if m.b.Task(m.mapSel) == nil {
-		t.Skip("t-jv3j is not on the fixture board")
-	}
+	m.mapSel = "m1" // waits on m2, so the graph has a blocker to walk to
 	m.graphFromMap()
 	if m.view != viewGraph {
 		t.Fatalf("view is %s, want graph", m.view)
 	}
-	if m.graphFocus != "t-jv3j" {
-		t.Errorf("the graph rooted on %s, want t-jv3j", m.graphFocus)
+	if m.graphFocus != "m1" {
+		t.Errorf("the graph rooted on %s, want m1", m.graphFocus)
 	}
 
 	if _, err := m.Dump(240, 50, "", true); err != nil {
@@ -267,18 +264,9 @@ func TestClosingTheMapCarriesAWALKEDCursorToTheBoard(t *testing.T) {
 // cursor on a fallback row nobody chose; following that back to the board is a
 // silent re-selection, which is exactly the failure frametruth_test.go names.
 func TestAReadOnlyTripThroughTheMapDoesNotMoveTheBoardCursor(t *testing.T) {
-	m := boardModel(t, 240, 50)
+	m := advModel(t, advMapBoard(), 240, 50)
 
-	var lone string
-	for _, task := range m.b.Tasks() {
-		if len(task.Deps) == 0 && len(m.g.Blocks(task.ID)) == 0 {
-			lone = task.ID
-			break
-		}
-	}
-	if lone == "" {
-		t.Skip("every fixture task has a dep edge")
-	}
+	const lone = "m8" // no dep edge in either direction
 	if !m.selectID(lone, false) {
 		t.Fatalf("setup: could not select %s", lone)
 	}
@@ -288,7 +276,7 @@ func TestAReadOnlyTripThroughTheMapDoesNotMoveTheBoardCursor(t *testing.T) {
 		t.Fatal(err)
 	}
 	if m.mapSel == lone {
-		t.Skipf("%s turned out to be in a cluster", lone)
+		t.Fatalf("setup: %s turned out to be in a cluster", lone)
 	}
 	if !strings.Contains(ansiStrip(m.statusLine()), lone) {
 		t.Errorf("the map moved the cursor off %s without saying so: %q",
@@ -304,15 +292,12 @@ func TestAReadOnlyTripThroughTheMapDoesNotMoveTheBoardCursor(t *testing.T) {
 // are all done is not a task without dependencies, and the flat sentence was a
 // falsehood for every done task with deps.
 func TestOpenMapNamesWhyTheSeedIsNotOnTheMap(t *testing.T) {
-	m := boardModel(t, 240, 50)
-	// t-t38k is done and has three deps: present at scope=all, absent at open.
-	if task := m.b.Task("t-t38k"); task == nil || len(task.Deps) == 0 {
-		t.Skip("the fixture has no done task carrying deps")
-	}
-	m.openMap("t-t38k")
+	m := advModel(t, advMapBoard(), 240, 50)
+	// m6 is done and waited on m7: present at scope=all, absent at open.
+	m.openMap("m6")
 	got := ansiStrip(m.statusLine())
 	if strings.Contains(got, "has no dependencies") {
-		t.Errorf("t-t38k has 3 deps and the map says it has none: %q", got)
+		t.Errorf("m6 has a dep and the map says it has none: %q", got)
 	}
 	if !strings.Contains(got, "z") {
 		t.Errorf("the note does not point at the key that would show it: %q", got)
@@ -415,12 +400,11 @@ func TestIndentFollowsDepthAndIsCapped(t *testing.T) {
 // at, so "the cursor is off screen" cannot happen while the frame says it is
 // visible.
 func TestMapScrollFollowsTheCursor(t *testing.T) {
-	m := boardModel(t, 240, 24) // short enough that the all-scope tangle clips
-	m.mapScope = board.ClusterAll
+	m := advModel(t, advChainBoard(40), 240, 24) // a 42-row panel on a canvas far shorter
 	m.openMap("")
 	l := m.buildMap()
 	if l.H <= m.mapCanvasH() {
-		t.Skip("the fixture's clusters fit without scrolling at this height")
+		t.Fatalf("setup: a %d-row map fits a %d-row canvas at 240x24", l.H, m.mapCanvasH())
 	}
 	last := l.Rows[len(l.Rows)-1]
 	m.mapSel = last.ID
@@ -442,7 +426,7 @@ func TestMapScrollFollowsTheCursor(t *testing.T) {
 // board, T from the graph, z, ⏎, and the onKey route itself — could be cut
 // while the whole suite stayed green.
 func TestTheMapKeysAreActuallyBound(t *testing.T) {
-	m := boardModel(t, 240, 50)
+	m := advModel(t, advMapBoard(), 240, 50)
 	if _, err := m.Dump(240, 50, "", true); err != nil {
 		t.Fatal(err)
 	}
@@ -454,8 +438,8 @@ func TestTheMapKeysAreActuallyBound(t *testing.T) {
 	if _, err := m.Dump(240, 50, "", true); err != nil {
 		t.Fatal(err)
 	}
-	if len(m.mapLay.Rows) == 0 {
-		t.Skip("the fixture board has no dependency clusters")
+	if len(m.mapLay.Rows) < 2 {
+		t.Fatalf("setup: advMapBoard packed into %d row(s); j needs a second", len(m.mapLay.Rows))
 	}
 
 	m.Update(keyMsg("z"))
@@ -546,7 +530,7 @@ func TestTheHeadlineNumbersMatchTheRowsTheySitUnder(t *testing.T) {
 		m.openMap("")
 		l := m.buildMap()
 		if len(l.Panels) == 0 {
-			t.Skip("no clusters on the fixture board")
+			t.Fatalf("the fixture has no cluster at scope=%s; this test is pinned against it", scope)
 		}
 		for _, p := range l.Panels {
 			c := p.Cluster
@@ -595,13 +579,13 @@ func TestTheHeadlineNumbersMatchTheRowsTheySitUnder(t *testing.T) {
 // The seed openMap is handed must actually be honoured — discarding it left
 // every test green because they all opened with "".
 func TestOpenMapLandsOnItsSeed(t *testing.T) {
-	m := boardModel(t, 240, 50)
-	m.openMap("t-rmtc")
-	if m.buildMap().Row("t-rmtc") == nil {
-		t.Skip("t-rmtc is in no open cluster on this fixture")
+	m := advModel(t, advDepBoard(), 240, 50)
+	m.openMap("d1")
+	if m.buildMap().Row("d1") == nil {
+		t.Fatal("setup: d1 is in no open cluster")
 	}
-	if m.mapSel != "t-rmtc" {
-		t.Errorf("openMap seeded with t-rmtc landed on %q", m.mapSel)
+	if m.mapSel != "d1" {
+		t.Errorf("openMap seeded with d1 landed on %q", m.mapSel)
 	}
 	if m.mapMoved {
 		t.Error("opening the map counts as a cursor move the board should follow")
@@ -612,14 +596,13 @@ func TestOpenMapLandsOnItsSeed(t *testing.T) {
 // inert: renderMap re-pins the window to the cursor every frame, so nudging
 // the offset snapped straight back.
 func TestPagingTheMapActuallyMovesTheView(t *testing.T) {
-	m := boardModel(t, 240, 22)
-	m.mapScope = board.ClusterAll
+	m := advModel(t, advChainBoard(40), 240, 22)
 	m.openMap("")
 	if _, err := m.Dump(240, 22, "", true); err != nil {
 		t.Fatal(err)
 	}
 	if m.mapLay.H <= m.mapCanvasH() {
-		t.Skip("the fixture's clusters fit without paging at this height")
+		t.Fatalf("setup: a %d-row map fits a %d-row canvas at 240x22", m.mapLay.H, m.mapCanvasH())
 	}
 	// The first press need not scroll — half a page of cursor can still land
 	// inside the window. What must not happen is the window never moving at

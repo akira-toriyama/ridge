@@ -627,10 +627,7 @@ func TestGraphRootAndSelectionKeepDistinctBorderShapes(t *testing.T) {
 }
 
 func TestEmptyLaneIsFocusableSoItCanReceiveADrop(t *testing.T) {
-	m := boardModel(t, 140, 40)
-	if len(m.cols["inbox"]) != 0 {
-		t.Skip("inbox is not empty in this fixture")
-	}
+	m := advSmallModel(t, 140, 40) // nothing in inbox by construction
 	m.curLane = m.b.LaneIndex("backlog")
 	m.moveCursor(-1, 0)
 	if m.curLaneName() != "inbox" {

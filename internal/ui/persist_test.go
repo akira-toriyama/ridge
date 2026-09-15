@@ -29,7 +29,10 @@ type scriptedProvider struct {
 	addCalls  int
 	// epicErr is returned by the epicFailAt'th epic write (1-based; 0 = never);
 	// epicPrev is what EpicDeactivate suggests.
-	epicErr    error
+	epicErr error
+	// epicPatch is the last EpicSet patch, because the call string names only
+	// the box: a toggle's DIRECTION is visible nowhere else.
+	epicPatch  board.EpicPatch
 	epicFailAt int
 	epicCalls  int
 	epicPrev   board.EpicPrevious
@@ -169,7 +172,10 @@ func (p *scriptedProvider) EpicAdd(title string, _ board.EpicAddOptions) (string
 	return "e-new", nil
 }
 
-func (p *scriptedProvider) EpicSet(id string, _ board.EpicPatch) error {
+func (p *scriptedProvider) EpicSet(id string, patch board.EpicPatch) error {
+	p.mu.Lock()
+	p.epicPatch = patch
+	p.mu.Unlock()
 	return p.epicCall("epicset " + id)
 }
 

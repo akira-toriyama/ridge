@@ -224,9 +224,13 @@ func TestEpicListSubEditorTogglesAndParses(t *testing.T) {
 	// A label the box does NOT carry toggles ON; one it carries toggles OFF.
 	t.Run("labels", func(t *testing.T) {
 		m, p := newOverlay(t, epicFieldLabels)
+		// The vocabulary is the union of the labels on the board's tasks,
+		// and the scripted board carries none: label its one task so the
+		// list has a row to toggle. (This subtest skipped on every run.)
+		m.b.Task("t-a").Labels = []string{"lab"}
 		rows := m.epicListRows(m.b.Epic("e-one"))
 		if len(rows) == 0 {
-			t.Skip("the scripted board has no label vocabulary")
+			t.Fatal("setup: a labelled task left the vocabulary empty")
 		}
 		m.epic.listIdx = 0
 		cmd := m.epicListSelect(m.b.Epic("e-one"), rows)
@@ -236,6 +240,28 @@ func TestEpicListSubEditorTogglesAndParses(t *testing.T) {
 		cmd()
 		if len(p.calls) != 1 || !strings.HasPrefix(p.calls[0], "epicset ") {
 			t.Errorf("calls = %v, want one epicset", p.calls)
+		}
+		// The call string names only the box; the direction is in the patch.
+		// Asserting the call alone stayed green with Add and Rm swapped.
+		if got := p.epicPatch; len(got.AddLabels) != 1 || got.AddLabels[0] != "lab" || len(got.RmLabels) != 0 {
+			t.Errorf("a label the box lacks patched %+v, want AddLabels=[lab]", got)
+		}
+		// The OFF direction on a fresh overlay: the first write is still
+		// pending in this one and storeFirstWrite refuses a second. The
+		// scripted provider records rather than applies, so seed the label
+		// on the box the overlay reads.
+		m, p = newOverlay(t, epicFieldLabels)
+		m.b.Task("t-a").Labels = []string{"lab"}
+		m.b.Epic("e-one").Labels = []string{"lab"}
+		rows = m.epicListRows(m.b.Epic("e-one"))
+		m.epic.listIdx = 0
+		cmd = m.epicListSelect(m.b.Epic("e-one"), rows)
+		if cmd == nil {
+			t.Fatal("selecting a carried label queued no write")
+		}
+		cmd()
+		if got := p.epicPatch; len(got.RmLabels) != 1 || got.RmLabels[0] != "lab" || len(got.AddLabels) != 0 {
+			t.Errorf("a label the box carries patched %+v, want RmLabels=[lab]", got)
 		}
 	})
 
