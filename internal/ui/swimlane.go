@@ -410,10 +410,14 @@ func (l *swimLayout) stepY(p swimPos, lane, dy int) string {
 	return l.keyOf(p)
 }
 
-// stepX moves to the nearest row of a neighbouring column, the rule the dep
-// map and the box overview already walk by. On a HEADER it moves the desired
-// column only: the header is one row spanning every lane, so there is nothing
-// to move to, but the column it will descend into has to be choosable.
+// stepX moves to the nearest row of a neighbouring column — the same rule the
+// dep map and the box overview walk by (stepPacked, packwalk.go), and measured
+// to agree with it on the real swim fixture. It is reproduced rather than
+// shared for three reasons the shared walk has no room for: the search stays
+// inside one band, a header carries no lane at all, and this must RETURN a
+// lane alongside the key. On a HEADER it moves the desired column only: the
+// header is one row spanning every lane, so there is nothing to move to, but
+// the column it will descend into has to be choosable.
 func (l *swimLayout) stepX(p swimPos, lane, dx int) (string, int) {
 	if p.Header {
 		next := clamp(lane+dx, 0, maxInt(0, len(l.Lanes)-1))

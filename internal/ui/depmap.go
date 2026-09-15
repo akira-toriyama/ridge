@@ -143,55 +143,12 @@ func packMap(scope board.ClusterScope, clusters []board.Cluster, avail int) *map
 	return l
 }
 
-// step walks the cursor. dy moves within a column, dx crosses to the nearest
-// row of a neighbouring column — the same "keep the position, change the axis"
-// rule the graph's node walk uses, so the two full-screen views move alike.
+func (r mapRow) at() packedAt { return packedAt{Key: r.ID, Col: r.Col, Y: r.Y} }
+
+// step walks the cursor: dy within a column, dx to the nearest row of a
+// neighbouring column — the "keep the position, change the axis" rule the box
+// overview walks by too, held once in packwalk.go. A map row's key IS the task
+// id, which is what lets the walked cursor be carried back to the board.
 func (l *mapLayout) step(from string, dx, dy int) string {
-	cur := l.Row(from)
-	if cur == nil {
-		if len(l.Rows) == 0 {
-			return from
-		}
-		return l.Rows[0].ID
-	}
-	if dy != 0 {
-		best, bestD := "", 1<<30
-		for _, r := range l.Rows {
-			if r.Col != cur.Col {
-				continue
-			}
-			if dy > 0 && r.Y <= cur.Y {
-				continue
-			}
-			if dy < 0 && r.Y >= cur.Y {
-				continue
-			}
-			if d := abs(r.Y - cur.Y); d < bestD {
-				best, bestD = r.ID, d
-			}
-		}
-		if best == "" {
-			return from
-		}
-		return best
-	}
-	if dx == 0 {
-		return from
-	}
-	// Skip columns that hold no rows rather than stopping dead on one.
-	for c := cur.Col + dx; c >= 0 && c < l.Cols; c += dx {
-		best, bestD := "", 1<<30
-		for _, r := range l.Rows {
-			if r.Col != c {
-				continue
-			}
-			if d := abs(r.Y - cur.Y); d < bestD {
-				best, bestD = r.ID, d
-			}
-		}
-		if best != "" {
-			return best
-		}
-	}
-	return from
+	return stepPacked(l.Rows, l.Cols, l.Row(from), from, dx, dy)
 }

@@ -202,52 +202,12 @@ func packBoxes(boxes []board.EpicInfo, all bool, avail int) *boxLayout {
 	return l
 }
 
+func (r boxRow) at() packedAt { return packedAt{Key: r.Key, Col: r.Col, Y: r.Y} }
+
 // step walks the cursor: dy within a column, dx to the nearest row of a
-// neighbouring column. The same rule the dep map and the graph use, so the
-// three full-screen views move alike.
+// neighbouring column — the rule the dep map walks by too, held once in
+// packwalk.go. The box overview keys its rows by repo+id, so `←`/`→` across a
+// box listed under two repos lands on the copy in the column it crossed into.
 func (l *boxLayout) step(from string, dx, dy int) string {
-	cur := l.Row(from)
-	if cur == nil {
-		if len(l.Rows) == 0 {
-			return from
-		}
-		return l.Rows[0].Key
-	}
-	if dy != 0 {
-		best, bestD := "", 1<<30
-		for _, r := range l.Rows {
-			if r.Col != cur.Col {
-				continue
-			}
-			if (dy > 0 && r.Y <= cur.Y) || (dy < 0 && r.Y >= cur.Y) {
-				continue
-			}
-			if d := abs(r.Y - cur.Y); d < bestD {
-				best, bestD = r.Key, d
-			}
-		}
-		if best == "" {
-			return from
-		}
-		return best
-	}
-	if dx == 0 {
-		return from
-	}
-	// Skip columns that hold no rows rather than stopping dead on one.
-	for c := cur.Col + dx; c >= 0 && c < l.Cols; c += dx {
-		best, bestD := "", 1<<30
-		for _, r := range l.Rows {
-			if r.Col != c {
-				continue
-			}
-			if d := abs(r.Y - cur.Y); d < bestD {
-				best, bestD = r.Key, d
-			}
-		}
-		if best != "" {
-			return best
-		}
-	}
-	return from
+	return stepPacked(l.Rows, l.Cols, l.Row(from), from, dx, dy)
 }

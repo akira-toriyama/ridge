@@ -17,7 +17,13 @@ import (
 // apart (a roster of the views used to sit here, and it was one view short
 // within a month). There is no fullScreenView interface on purpose: the
 // layouts share no type, and inventing one would be abstraction for its own
-// sake. The graph's scroll follows a two-axis frame of its own and is not a
+// sake.
+//
+// Not everything here serves all six. packBands and ruleHead are the two
+// PACKED overviews' (the dep map's and the box overview's), and windowBands
+// serves the four views that materialise every band; each says so itself.
+// They live here because this is where the frame is built, not because the
+// roster grew. The graph's scroll follows a two-axis frame of its own and is not a
 // scrollToSel client.
 
 // fullScreenTitleBar is the title line a full-screen view draws in place of
@@ -50,6 +56,70 @@ func (m *Model) fillCanvas(lines []string, h int) []string {
 		out = append(out, strings.Repeat(" ", maxInt(1, m.w)))
 	}
 	return out
+}
+
+// placedBlock is one rendered block and the packed cell it starts at. Lines
+// are already composed to the column's width by the block renderer.
+type placedBlock struct {
+	Col, Y int
+	Lines  []string
+}
+
+// packBands lays placed blocks into a cols x h grid and returns one string per
+// screen row. Every column contributes exactly colW cells at every row, so the
+// join is width-exact and the columns cannot drift apart as the rows below
+// them get longer. gap stays a parameter: the two overviews' gaps are separate
+// constants that happen to be equal, and hard-coding one here would retune the
+// other view's geometry the next time either is tuned.
+//
+// Col is indexed UNGUARDED on purpose. packColumns answers ncols as the last
+// column it actually used, so an out-of-range Col is a packing bug; a bounds
+// guard here would turn that panic into a block silently dropped off the
+// frame. The Y clip is the same shape in reverse and equally unreachable —
+// both block renderers return exactly the height the packer measured.
+func packBands(blocks []placedBlock, cols, colW, h, gap int) []string {
+	blank := strings.Repeat(" ", colW)
+	grid := make([][]string, cols)
+	for c := range grid {
+		grid[c] = make([]string, h)
+		for y := range grid[c] {
+			grid[c][y] = blank
+		}
+	}
+	for _, b := range blocks {
+		for j, line := range b.Lines {
+			if y := b.Y + j; y < h {
+				grid[b.Col][y] = line
+			}
+		}
+	}
+
+	sep := strings.Repeat(" ", gap)
+	bands := make([]string, h)
+	row := make([]string, cols)
+	for y := 0; y < h; y++ {
+		for c := range grid {
+			row[c] = grid[c][y]
+		}
+		// Right-trimmed, and re-padded later by fillCanvas: the trailing blank
+		// of the last column is the one part of a band no frame needs.
+		bands[y] = strings.TrimRight(strings.Join(row, sep), " ")
+	}
+	return bands
+}
+
+// ruleHead is the rule line naming a packed block: two rule cells, the label,
+// then rule out to the column's width. Only the two packed overviews draw it.
+// The sweep's section header looks like this and is not one — it carries a
+// third styled segment and ends in ansi.Truncate rather than pad, so folding
+// it in would give it both trailing padding and an ellipsis it does not have
+// — and peek.go's sectionRule is the peek's own shape.
+func (m *Model) ruleHead(label string, w int) string {
+	head := m.th.rule.Render("──") + m.th.peekHdr.Render(label)
+	if n := w - lg.Width(head); n > 0 {
+		head += m.th.rule.Render(strings.Repeat("─", n))
+	}
+	return pad(head, w)
 }
 
 // composeFullScreen is the frame every full-screen view ends in: title bar,
