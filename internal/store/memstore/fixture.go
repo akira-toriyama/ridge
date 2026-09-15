@@ -5,9 +5,17 @@
 // bodies, label/repo names, the epic title) while keeping every id, lane,
 // priority, dependency, timestamp and checklist shape — the structure is
 // what the demos and tests exercise, and CJK-heavy titles are the point
-// (the width bugs this app guards against live there). Epics are not tasks
-// and hold no lane. This is a static in-memory copy; the mock provider
-// never reads or writes a real .furrow store.
+// (the width bugs this app guards against live there). Five titles reach
+// the real board's long bands on purpose — t-7mcc and t-g8bn 161 cells,
+// t-p7xw 170, t-c9dm 193 and t-rmtc 229 — across backlog, in-progress and
+// done, so a long-title regression has a headless frame in every lane. The
+// real board, measured 2026-09-15 with lipgloss.Width over `furrow ls
+// --json`: the ridge repo's 107 titles run p50 81 / p90 153 / p99 193 /
+// max 229, and every repo together (1300) has p90 160. Before that the
+// fixture peaked at 85 cells and one ridge title in ten (11 of 107, at 150+)
+// had no -dump frame at all (t-360e). fixture_test pins the bands. Epics
+// are not tasks and hold no lane. This is a static in-memory copy; the mock
+// provider never reads or writes a real .furrow store.
 //
 // t-dg7k is NOT from the snapshot, like the Due values and t-9sa6's refs: it
 // is the board's one DRAFT (no repo attached — furrow's `add --draft` shape),
@@ -207,7 +215,7 @@ func fixtureTasks() []*board.Task {
 		},
 		{
 			ID:       "t-g8bn",
-			Title:    "車の12ヶ月点検とタイヤ交換見積 — 霧の高千穂の山道に備える",
+			Title:    "車の12ヶ月点検とタイヤ交換見積 — 霧の高千穂の山道に備える（点検はディーラー 7/20 予約済み / タイヤは 4 本交換で 6.8 万、溝 3mm なので今回は交換してから出発する）",
 			Status:   "done",
 			Priority: 1610,
 			Value:    4,
@@ -238,7 +246,7 @@ func fixtureTasks() []*board.Task {
 		},
 		{
 			ID:       "t-rmtc",
-			Title:    "予約の総ざらい — 温泉・レンタル品・雨天予備日をまとめて確定する",
+			Title:    "予約の総ざらい — 温泉・レンタル品・雨天予備日をまとめて確定する（家族風呂は受付 14:00 まで / レンタルはタープ 1 張と焚き火台 1 台 / 予備日は 8/23-24 で仮押さえ）+ キャンセル期限をカレンダーに転記して確認メールを共有フォルダへ置く",
 			Status:   "backlog",
 			Priority: 670,
 			Value:    5,
@@ -332,7 +340,7 @@ func fixtureTasks() []*board.Task {
 		},
 		{
 			ID:       "t-7mcc",
-			Title:    "グループサイト化の検討 — 友人家族と合流する場合の区画と食事分担",
+			Title:    "グループサイト化の検討 — 友人家族と合流する場合の区画と食事分担（区画は A-7 隣の A-8 を追加予約 / 食事は 2 日目夜のダッチオーブンだけ合同、朝は各家庭で用意する）",
 			Status:   "backlog",
 			Priority: 700,
 			Value:    3,
@@ -460,7 +468,7 @@ func fixtureTasks() []*board.Task {
 		},
 		{
 			ID:       "t-c9dm",
-			Title:    "スパイスボックスの詰め替え — 使い切り小分けで現地の塩胡椒問題を消す",
+			Title:    "スパイスボックスの詰め替え — 使い切り小分けで現地の塩胡椒問題を消す（前回は塩の瓶が湿気で固まり、胡椒は挽き器ごと忘れた / 小分け袋 8 種を朝・昼・夜の袋に振り分けて出発前夜の積み込み箱へ入れる）",
 			Status:   "in-progress",
 			Priority: 3020,
 			Value:    2,
@@ -500,7 +508,7 @@ func fixtureTasks() []*board.Task {
 		},
 		{
 			ID:       "t-p7xw",
-			Title:    "ポータブル電源の容量計画 — 冷蔵ボックス連続稼働を実測して決める",
+			Title:    "ポータブル電源の容量計画 — 冷蔵ボックス連続稼働を実測して決める（設定 4℃・外気 30℃ で 24h 回して残量を記録 / 足りなければソーラーパネル 100W を追加して 2 日目に充電する）",
 			Status:   "backlog",
 			Priority: 720,
 			Value:    4,

@@ -202,15 +202,19 @@ func (m *Model) demoState(kind string) error {
 	case "slice":
 		// Panel open + focused, sliced to the bbq label: the inset board, the
 		// selected row and the composed verdict all land in one frame.
+		label, err := m.demoLabel("slice")
+		if err != nil {
+			return err
+		}
 		m.toggleSlice()
 		m.sliceField = sliceLabel
 		rows := m.sliceRows()
 		for i, r := range rows {
-			if r.value == "bbq" {
+			if r.value == label {
 				m.sliceIdx = i
 			}
 		}
-		if c := m.selectSlice(sliceLabel, "bbq"); c != nil {
+		if c := m.selectSlice(sliceLabel, label); c != nil {
 			_ = c
 		}
 
@@ -219,8 +223,16 @@ func (m *Model) demoState(kind string) error {
 		// filter's label lands in the chips, not silently on the task. The
 		// typed line carries the inline tokens (t-69v9) plus one bad one, so
 		// this single frame also proves the live echo AND the warning row.
-		m.ti.SetValue("label:bbq")
-		m.applyFilter("label:bbq")
+		label, err := m.demoLabel("add")
+		if err != nil {
+			return err
+		}
+		dep, err := m.demoAnyTask("add")
+		if err != nil {
+			return err
+		}
+		m.ti.SetValue("label:" + label)
+		m.applyFilter("label:" + label)
 		m.relayout()
 		if c := m.enterAdd(); c != nil {
 			_ = c
@@ -228,7 +240,7 @@ func (m *Model) demoState(kind string) error {
 		// Short enough for the 56-cell input window (cursor included): the
 		// frame must show the typed TITLE too, not just the scrolled-to
 		// tail. Quoted values are unit-tested; the frame's job is the echo.
-		m.add.input.SetValue("盤面起票 value:4 due:+1d dep:t-jv3j check:再現 effort:高")
+		m.add.input.SetValue(fmt.Sprintf("盤面起票 value:4 due:+1d dep:%s check:再現 effort:高", dep.ID))
 
 	case "adddraft":
 		// The draft half of quick add (t-v4pp): the board narrowed to
@@ -248,19 +260,24 @@ func (m *Model) demoState(kind string) error {
 
 	case "edit":
 		// Open the field-edit overlay on a task with a checklist AND labels
+		// (demoEditTask; t-9sa6 on the fixture)
 		// and advance straight into the checklist sub-editor — the stage with
 		// a cursor, which is the one a still frame can say something about.
 		// The menu rows themselves are NOT exercised by this demo; they are
 		// covered by unit tests instead.
-		if !m.selectID("t-9sa6", false) {
-			return fmt.Errorf("demo edit: t-9sa6 is not on the fixture board")
+		subj, err := m.demoEditTask("edit")
+		if err != nil {
+			return err
+		}
+		if !m.selectID(subj.ID, false) {
+			return fmt.Errorf("demo edit: %s is on the board but not in view", subj.ID)
 		}
 		m.enterEdit()
 		if m.edit == nil {
 			return fmt.Errorf("demo edit: the edit menu did not open")
 		}
 		m.edit.menuIdx = int(fieldChecklist)
-		m.openField(fieldChecklist, m.b.Task("t-9sa6"))
+		m.openField(fieldChecklist, subj)
 		m.edit.listIdx = 1
 
 	case "editpick":
@@ -270,15 +287,19 @@ func (m *Model) demoState(kind string) error {
 		// blanked them could ship unseen. stageMenu is still -dump-less on
 		// purpose — due_test frames it directly, and a menu is not a
 		// mid-keystroke state.
-		if !m.selectID("t-9sa6", false) {
-			return fmt.Errorf("demo editpick: t-9sa6 is not on the fixture board")
+		subj, err := m.demoEditTask("editpick")
+		if err != nil {
+			return err
+		}
+		if !m.selectID(subj.ID, false) {
+			return fmt.Errorf("demo editpick: %s is on the board but not in view", subj.ID)
 		}
 		m.enterEdit()
 		if m.edit == nil {
 			return fmt.Errorf("demo editpick: the edit menu did not open")
 		}
 		m.edit.menuIdx = int(fieldValue)
-		if c := m.openField(fieldValue, m.b.Task("t-9sa6")); c != nil {
+		if c := m.openField(fieldValue, subj); c != nil {
 			_ = c
 		}
 
@@ -286,15 +307,19 @@ func (m *Model) demoState(kind string) error {
 		// The retitle input, focused and pre-seeded with the task's CJK
 		// title: one frame proves the prompt, the seeded value (its tail —
 		// the cursor sits at the end) and the apply/back keys.
-		if !m.selectID("t-9sa6", false) {
-			return fmt.Errorf("demo editinput: t-9sa6 is not on the fixture board")
+		subj, err := m.demoEditTask("editinput")
+		if err != nil {
+			return err
+		}
+		if !m.selectID(subj.ID, false) {
+			return fmt.Errorf("demo editinput: %s is on the board but not in view", subj.ID)
 		}
 		m.enterEdit()
 		if m.edit == nil {
 			return fmt.Errorf("demo editinput: the edit menu did not open")
 		}
 		m.edit.menuIdx = int(fieldTitle)
-		if c := m.openField(fieldTitle, m.b.Task("t-9sa6")); c != nil {
+		if c := m.openField(fieldTitle, subj); c != nil {
 			_ = c
 		}
 
@@ -324,18 +349,28 @@ func (m *Model) demoState(kind string) error {
 	case "map":
 		// The dependency map at its DEFAULT scope: done tasks dropped, so the
 		// fixture's one 19-node tangle breaks into the three live clusters
-		// that are actually in the way. Seeded on a blocked task, so the frame
-		// also proves the selection gutter and the strip below it.
-		m.openMap("t-jv3j")
+		// that are actually in the way. Seeded on a blocked task
+		// (demoMixedDepsTask), so the frame also proves the selection gutter
+		// and the strip below it.
+		seed, err := m.demoMixedDepsTask("map")
+		if err != nil {
+			return err
+		}
+		m.openMap(seed.ID)
 
 	case "mapall":
 		// The same board at scope=all: one 19-node cluster, depth 5, which is
 		// the frame that proves the indent ladder and the "+N" blocker tag
-		// (t-t38k has three blockers). Also the only demo where a panel is
-		// taller than one column's share of the canvas, so it proves the pack
-		// does not silently drop the overflow.
+		// (demoMostDepsTask; the fixture's t-t38k has three blockers). Also
+		// the only demo where a panel is taller than one column's share of
+		// the canvas, so it proves the pack does not silently drop the
+		// overflow.
+		seed, err := m.demoMostDepsTask("mapall")
+		if err != nil {
+			return err
+		}
 		m.mapScope = board.ClusterAll
-		m.openMap("t-t38k")
+		m.openMap(seed.ID)
 
 	case "mapfiltered":
 		// The map UNDER a board filter. The map deliberately shows what the
@@ -345,11 +380,16 @@ func (m *Model) demoState(kind string) error {
 		// is:blocked is the filter that makes the point: the board narrows to
 		// the tasks that are stuck, and the map still draws the ROOTS that are
 		// doing the blocking — muted and counted, because a cluster missing
-		// the task at the top of it explains nothing.
+		// the task at the top of it explains nothing. The seed is such a root
+		// (demoRootTask; t-ehk7 on the fixture).
+		root, err := m.demoRootTask("mapfiltered")
+		if err != nil {
+			return err
+		}
 		m.ti.SetValue("is:blocked")
 		m.applyFilter("is:blocked")
 		m.relayout()
-		m.openMap("t-ehk7")
+		m.openMap(root.ID)
 
 	case "sort":
 		// The table sorted by due ascending: the ▲ marker in the header, the
@@ -376,14 +416,18 @@ func (m *Model) demoState(kind string) error {
 		// it is focused mid-keystroke.
 		m.view = viewTable
 		m.setSort(sortUpdated, false)
+		active, err := m.demoActiveBox("filterchips")
+		if err != nil {
+			return err
+		}
 		m.toggleSlice()
 		m.sliceField = sliceEpic
 		for i, r := range m.sliceRows() {
-			if r.value == "e-fw2m" {
+			if r.value == active.ID {
 				m.sliceIdx = i
 			}
 		}
-		if c := m.selectSlice(sliceEpic, "e-fw2m"); c != nil {
+		if c := m.selectSlice(sliceEpic, active.ID); c != nil {
 			_ = c
 		}
 		m.mode = modeFilter
@@ -393,44 +437,58 @@ func (m *Model) demoState(kind string) error {
 
 	case "editdeps":
 		// The deps sub-editor on a task whose two deps resolve differently —
-		// t-jv3j waits on an open task and a done one, so one frame proves
+		// demoMixedDepsTask: t-jv3j on the fixture, which waits on an open
+		// task and a done one — so one frame proves
 		// both state glyphs, the resolved titles and the remove/add keys.
-		if !m.selectID("t-jv3j", false) {
-			return fmt.Errorf("demo editdeps: t-jv3j is not on the fixture board")
+		subj, err := m.demoMixedDepsTask("editdeps")
+		if err != nil {
+			return err
+		}
+		if !m.selectID(subj.ID, false) {
+			return fmt.Errorf("demo editdeps: %s is on the board but not in view", subj.ID)
 		}
 		m.enterEdit()
 		if m.edit == nil {
 			return fmt.Errorf("demo editdeps: the edit menu did not open")
 		}
 		m.edit.menuIdx = int(fieldDeps)
-		m.openField(fieldDeps, m.b.Task("t-jv3j"))
+		m.openField(fieldDeps, subj)
 
 	case "editrefs":
 		// The refs sub-editor on the task whose two refs are the two forms
-		// furrow documents — a file:line and a URL — so one frame proves the
+		// furrow documents — a file:line and a URL (demoRefsTask; t-9sa6 on
+		// the fixture) — so one frame proves the
 		// rows, the cursor and the remove/add keys.
-		if !m.selectID("t-9sa6", false) {
-			return fmt.Errorf("demo editrefs: t-9sa6 is not on the fixture board")
+		subj, err := m.demoRefsTask("editrefs")
+		if err != nil {
+			return err
+		}
+		if !m.selectID(subj.ID, false) {
+			return fmt.Errorf("demo editrefs: %s is on the board but not in view", subj.ID)
 		}
 		m.enterEdit()
 		if m.edit == nil {
 			return fmt.Errorf("demo editrefs: the edit menu did not open")
 		}
 		m.edit.menuIdx = int(fieldRefs)
-		m.openField(fieldRefs, m.b.Task("t-9sa6"))
+		m.openField(fieldRefs, subj)
 
 	case "revisit":
 		// The revisit lens with the peek on a flagged task: the ↻ chip in
 		// the filter row, the board narrowed to what furrow revisit flags,
-		// and the peek's reason line. t-jv3j carries the dep_done signal
-		// (its dep t-t38k is done) on top of the fixture-wide staleness.
+		// and the peek's reason line. demoMixedDepsTask's row carries the
+		// dep_done signal (a done dep) on top of the fixture-wide staleness.
 		// setRevisit(true), not a toggle: -revisit may already have turned
 		// the lens on, and a toggle would cancel it.
+		subj, err := m.demoMixedDepsTask("revisit")
+		if err != nil {
+			return err
+		}
 		if c := m.setRevisit(true); c != nil {
 			return fmt.Errorf("demo revisit: the fixture lens must answer synchronously")
 		}
-		if !m.selectID("t-jv3j", false) {
-			return fmt.Errorf("demo revisit: t-jv3j is not on the fixture board")
+		if !m.selectID(subj.ID, false) {
+			return fmt.Errorf("demo revisit: the lens did not flag %s, or it is not in view", subj.ID)
 		}
 		m.peekOpen = true
 		m.syncPeek()
@@ -438,8 +496,12 @@ func (m *Model) demoState(kind string) error {
 	case "note":
 		// The note input, focused and holding a typed CJK paragraph — the
 		// state between `n` and ⏎ that no bare flag combination can reach.
-		if !m.selectID("t-9sa6", false) {
-			return fmt.Errorf("demo note: t-9sa6 is not on the fixture board")
+		subj, err := m.demoEditTask("note")
+		if err != nil {
+			return err
+		}
+		if !m.selectID(subj.ID, false) {
+			return fmt.Errorf("demo note: %s is on the board but not in view", subj.ID)
 		}
 		if c := m.enterNote(); c == nil {
 			return fmt.Errorf("demo note: the note input did not open")
@@ -450,20 +512,29 @@ func (m *Model) demoState(kind string) error {
 		// The peek's refs section, both documented forms (file:line and URL)
 		// in furrow's own order. The default -dump selection has no refs, so
 		// no bare flag combination reaches this frame.
-		if !m.selectID("t-9sa6", false) {
-			return fmt.Errorf("demo refs: t-9sa6 is not on the fixture board")
+		subj, err := m.demoRefsTask("refs")
+		if err != nil {
+			return err
+		}
+		if !m.selectID(subj.ID, false) {
+			return fmt.Errorf("demo refs: %s is on the board but not in view", subj.ID)
 		}
 		m.peekOpen = true
 		m.syncPeek()
 
 	case "epicdeps":
-		// The peek's epic-dep line, both resolutions at once: t-y4st's box
+		// The peek's epic-dep line, both resolutions at once: the row's box
+		// (demoEpicDepsTask; t-y4st's e-c4mt on the fixture)
 		// waits on an OPEN box (resolved to id+progress+title) and carries
 		// a dep furrow already resolved away (outside open_deps —
 		// satisfied). The default -dump selection is an unfiled task, so no
 		// bare flag combination can reach this frame.
-		if !m.selectID("t-y4st", false) {
-			return fmt.Errorf("demo epicdeps: t-y4st is not on the fixture board")
+		subj, err := m.demoEpicDepsTask("epicdeps")
+		if err != nil {
+			return err
+		}
+		if !m.selectID(subj.ID, false) {
+			return fmt.Errorf("demo epicdeps: %s is on the board but not in view", subj.ID)
 		}
 		m.peekOpen = true
 		m.syncPeek()
@@ -479,23 +550,35 @@ func (m *Model) demoState(kind string) error {
 		m.noteSliceAxis()
 
 	case "epic":
-		// The overlay's menu on the one fully-populated box, cursor parked on
-		// `active` — so the frame proves every row's value AND the activate
-		// precondition ("slot held by e-fw2m"), which is what stops furrow's
+		// The overlay's menu on the one fully-populated box (demoRichBox;
+		// e-c4mt on the fixture), cursor parked on `active` — so the frame
+		// proves every row's value AND the activate precondition ("slot held
+		// by e-fw2m"), which is what stops furrow's
 		// exit 2 from being the user's first news of the one-active-per-repo
 		// rule. `-table -demo epic` composes, which is the frame that covers the
 		// overlay over the table view — a modal that owns the keyboard must be
 		// visible in both, and it was not.
-		if err := m.demoEpicPanel("e-c4mt"); err != nil {
+		box, err := m.demoRichBox("epic")
+		if err != nil {
+			return err
+		}
+		if err := m.demoEpicPanel("epic", box.ID); err != nil {
 			return err
 		}
 		m.epic.menuIdx = int(epicFieldActive)
 
 	case "epiclist":
-		// The deps sub-editor, all three resolutions in one frame: e-c4mt waits
-		// on an OPEN box, on one the board holds CLOSED, and on an id no read
-		// serves.
-		if err := m.demoEpicPanel("e-c4mt"); err != nil {
+		// The deps sub-editor, all three resolutions in one frame: the
+		// fixture's e-c4mt waits on an OPEN box, on one the board holds
+		// CLOSED, and on an id no read serves. demoRichBox asks only for the
+		// open one — a dangling epic dep is a lint ERROR in furrow, so a real
+		// board rarely has the other two — and demo_test pins that the
+		// fixture's box is the one with all three.
+		box, err := m.demoRichBox("epiclist")
+		if err != nil {
+			return err
+		}
+		if err := m.demoEpicPanel("epiclist", box.ID); err != nil {
 			return err
 		}
 		m.epic.menuIdx = int(epicFieldDeps)
@@ -507,7 +590,11 @@ func (m *Model) demoState(kind string) error {
 		// The activate input. It is the confirm step AND the collection of
 		// furrow's --reason, which is appended to the box's body as the
 		// activation record — a stage that exists only between two keystrokes.
-		if err := m.demoEpicPanel("e-c4mt"); err != nil {
+		box, err := m.demoRichBox("epicreason")
+		if err != nil {
+			return err
+		}
+		if err := m.demoEpicPanel("epicreason", box.ID); err != nil {
 			return err
 		}
 		m.epic.menuIdx = int(epicFieldActive)
@@ -518,7 +605,11 @@ func (m *Model) demoState(kind string) error {
 
 	case "epicconfirm":
 		// The deactivate gate, reachable only on the ACTIVE box.
-		if err := m.demoEpicPanel("e-fw2m"); err != nil {
+		active, err := m.demoActiveBox("epicconfirm")
+		if err != nil {
+			return err
+		}
+		if err := m.demoEpicPanel("epicconfirm", active.ID); err != nil {
 			return err
 		}
 		m.epic.menuIdx = int(epicFieldActive)
@@ -530,8 +621,12 @@ func (m *Model) demoState(kind string) error {
 		// The MENU on a closed box — the only frame where the `closed` row
 		// reads its own state back. Without it the row could say "no — open"
 		// on a box whose ⏎ reopens, and nothing would catch it.
+		closed, err := m.demoClosedBox("epicshut")
+		if err != nil {
+			return err
+		}
 		m.sliceEpicAll = true
-		if err := m.demoEpicPanel("e-2b7h"); err != nil {
+		if err := m.demoEpicPanel("epicshut", closed.ID); err != nil {
 			return err
 		}
 		m.epic.menuIdx = int(epicFieldClosed)
@@ -542,7 +637,11 @@ func (m *Model) demoState(kind string) error {
 		// this frame is the only warning there is — and closing the active box
 		// vacates its repo slot in the same write, which is the other half the
 		// gate owes the user.
-		if err := m.demoEpicPanel("e-fw2m"); err != nil {
+		active, err := m.demoActiveBox("epicdone")
+		if err != nil {
+			return err
+		}
+		if err := m.demoEpicPanel("epicdone", active.ID); err != nil {
 			return err
 		}
 		m.epic.menuIdx = int(epicFieldClosed)
@@ -554,8 +653,12 @@ func (m *Model) demoState(kind string) error {
 		// The same row on the CLOSED box, which is the other verb and the
 		// other wording. Reaching it needs the widened scope, which is the
 		// point: without it the box `reopen` targets is not on any list.
+		closed, err := m.demoClosedBox("epicreopen")
+		if err != nil {
+			return err
+		}
 		m.sliceEpicAll = true
-		if err := m.demoEpicPanel("e-2b7h"); err != nil {
+		if err := m.demoEpicPanel("epicreopen", closed.ID); err != nil {
 			return err
 		}
 		m.epic.menuIdx = int(epicFieldClosed)
@@ -604,8 +707,12 @@ func (m *Model) demoState(kind string) error {
 		// repo: is the one form that can still be in force when `A` fires.
 		// Without a repo a new box cannot be activated at all, which is why
 		// this one is worth a frame of its own.
-		m.ti.SetValue("repo:tomo/kyushu-trip")
-		m.applyFilter("repo:tomo/kyushu-trip")
+		repo, err := m.demoRepo("epicnew")
+		if err != nil {
+			return err
+		}
+		m.ti.SetValue("repo:" + repo)
+		m.applyFilter("repo:" + repo)
 		m.relayout()
 		m.toggleSlice()
 		m.sliceField = sliceEpic
@@ -632,16 +739,27 @@ func (m *Model) demoState(kind string) error {
 		// The widened scope, cursor parked on the closed box — the row whose
 		// dim styling and done marker have no other frame, and the proof that
 		// a closed box keeps its repo group rather than collecting in one.
+		closed, err := m.demoClosedBox("boxesall")
+		if err != nil {
+			return err
+		}
 		m.openBoxes()
 		if c := m.onBoxesKey(tea.KeyPressMsg{Code: 'z', Text: "z"}); c != nil {
 			_ = c
 		}
 		l := m.buildBoxes()
 		m.boxesLay = l
-		if l.Row(boxKey("tomo/kyushu-trip", "e-2b7h")) == nil {
+		// The row's group is its first repo, or the no-repo group packBoxes
+		// files a repo-less box under.
+		repo := boxNoRepo
+		if len(closed.Repos) > 0 {
+			repo = closed.Repos[0]
+		}
+		key := boxKey(repo, closed.ID)
+		if l.Row(key) == nil {
 			return fmt.Errorf("demo boxesall: z did not widen the population")
 		}
-		m.boxesSel = boxKey("tomo/kyushu-trip", "e-2b7h")
+		m.boxesSel = key
 
 	case "swim":
 		// The swimlane as `W` opens it: every band folded to its per-lane
@@ -746,7 +864,11 @@ func (m *Model) demoState(kind string) error {
 		// the applied bundle (table view, due ▲) — and then one sort
 		// keystroke of drift on top, so the SAME frame proves GH's
 		// unsaved-changes dot against the saved bundle.
-		m.views = demoViews()
+		label, err := m.demoLabel("views")
+		if err != nil {
+			return err
+		}
+		m.views = demoViews(label)
 		if c := m.onNormalKey(tea.KeyPressMsg{Code: '3', Text: "3"}); c != nil {
 			_ = c
 		}
@@ -766,7 +888,11 @@ func (m *Model) demoState(kind string) error {
 		// roadmap, whose own title row must carry the strip (lit tab 2, no
 		// dot) — the frame that proves the tabs survive leaving the board's
 		// chrome, which is exactly where a hand-kept second strip would rot.
-		m.views = demoViews()
+		label, err := m.demoLabel("viewsroad")
+		if err != nil {
+			return err
+		}
+		m.views = demoViews(label)
 		if c := m.onNormalKey(tea.KeyPressMsg{Code: '2', Text: "2"}); c != nil {
 			_ = c
 		}
@@ -859,7 +985,11 @@ func (m *Model) demoState(kind string) error {
 		// deferred to the drain (it would race the queue's furrow process), and
 		// the header must say so — four empty sections here would claim there
 		// is nothing to sweep. The op is a stand-in; nothing runs it.
-		m.pending = append(m.pending, persistOp{label: "move t-jv3j", run: func() ([]string, error) { return nil, nil }})
+		subj, err := m.demoAnyTask("sweepwait")
+		if err != nil {
+			return err
+		}
+		m.pending = append(m.pending, persistOp{label: "move " + subj.ID, run: func() ([]string, error) { return nil, nil }})
 		m.inflight = true
 		if c := m.openSweep(); c != nil {
 			_ = c
@@ -885,8 +1015,12 @@ func (m *Model) demoState(kind string) error {
 		// onPersistDone sets lastPersist BEFORE it branches on the error, so a
 		// real refusal always carries the latency readout too. Leaving it
 		// empty rendered a frame the app cannot actually be in.
-		m.lastPersist = "move t-jv3j 96ms"
-		m.fail("t-jv3j: the store refused the write — the board is rolling back")
+		subj, err := m.demoAnyTask("fail")
+		if err != nil {
+			return err
+		}
+		m.lastPersist = "move " + subj.ID + " 96ms"
+		m.fail("%s: the store refused the write — the board is rolling back", subj.ID)
 		m.rollingBack = true
 
 	default:
@@ -896,12 +1030,13 @@ func (m *Model) demoState(kind string) error {
 	return nil
 }
 
-// demoViews is the fixture view set the two demos inject — CJK names on
-// purpose: the tab band measures its cells the way every other chrome does,
-// and only a CJK name can prove it.
-func demoViews() []views.View {
+// demoViews is the view set the two demos inject — CJK names on purpose:
+// the tab band measures its cells the way every other chrome does, and only
+// a CJK name can prove it. The first tab's query is the board's commonest
+// label (demoLabel), so the set holds no fixture vocabulary.
+func demoViews(label string) []views.View {
 	return []views.View{
-		{Name: "火の粉", Layout: "board", Q: "label:bbq"},
+		{Name: "火の粉", Layout: "board", Q: "label:" + label},
 		{Name: "締切", Layout: "roadmap"},
 		{Name: "表で総覧", Layout: "table", Sort: "due asc"},
 	}
@@ -911,7 +1046,7 @@ func demoViews() []views.View {
 // panel, on the epic axis, with the cursor on the box — so the frame behind the
 // overlay is the real one and `esc` in the resulting state would land back in
 // modeSlice rather than on a bare board.
-func (m *Model) demoEpicPanel(id string) error {
+func (m *Model) demoEpicPanel(demo, id string) error {
 	m.toggleSlice()
 	m.sliceField = sliceEpic
 	rows := m.sliceRows()
@@ -922,11 +1057,195 @@ func (m *Model) demoEpicPanel(id string) error {
 		}
 	}
 	if !found {
-		return fmt.Errorf("demo epic: %s is not a box on the fixture board", id)
+		return fmt.Errorf("demo %s: %s is not a box on this board", demo, id)
 	}
 	m.enterEpic(id)
 	if m.epic == nil {
-		return fmt.Errorf("demo epic: the overlay did not open on %s", id)
+		return fmt.Errorf("demo %s: the overlay did not open on %s", demo, id)
 	}
 	return nil
+}
+
+// The demos pick their subject by the shape the frame needs, never by id.
+// About twenty of them once named t-9sa6 / t-jv3j / e-c4mt outright and died
+// with "is not on the fixture board" over any other data, so no demo state
+// could be produced on a synthetic or real-shaped board (t-360e). Each
+// predicate is the frame's own precondition, spelled out in the error when
+// the board has no such row; the first match in board order wins, so the
+// fixture keeps drawing the frames it always drew — demo_test pins the rows
+// the predicates land on there, and runs every demo over a board that holds
+// none of the fixture's ids.
+
+// demoTask is the first task in board order that pred accepts; the error
+// names the shape the demo needs.
+func (m *Model) demoTask(demo, need string, pred func(*board.Task) bool) (*board.Task, error) {
+	for _, t := range m.b.Tasks() {
+		if pred(t) {
+			return t, nil
+		}
+	}
+	return nil, fmt.Errorf("demo %s: no task on this board %s", demo, need)
+}
+
+// demoBox is demoTask over every box, closed ones included.
+func (m *Model) demoBox(demo, need string, pred func(board.EpicInfo) bool) (board.EpicInfo, error) {
+	for _, e := range m.b.EpicsAll() {
+		if pred(e) {
+			return e, nil
+		}
+	}
+	return board.EpicInfo{}, fmt.Errorf("demo %s: no box on this board %s", demo, need)
+}
+
+// demoAnyTask is the board's first task, for the demos that only need an id
+// to print (a queued op's label, a refused write's message, a typed dep:).
+func (m *Model) demoAnyTask(demo string) (*board.Task, error) {
+	if ts := m.b.Tasks(); len(ts) > 0 {
+		return ts[0], nil
+	}
+	return nil, fmt.Errorf("demo %s: the board is empty", demo)
+}
+
+// demoEditTask is the subject of the edit-overlay demos: a checklist of two
+// or more items (the checklist stage parks its cursor on the second) and a
+// label, so every menu row has a value to show.
+func (m *Model) demoEditTask(demo string) (*board.Task, error) {
+	return m.demoTask(demo, "has both a checklist of two or more items and a label", func(t *board.Task) bool {
+		return len(t.Checklist) >= 2 && len(t.Labels) > 0
+	})
+}
+
+// demoRefsTask carries two or more refs — on the fixture, furrow's two
+// documented forms, a file:line and a URL.
+func (m *Model) demoRefsTask(demo string) (*board.Task, error) {
+	return m.demoTask(demo, "carries two or more refs", func(t *board.Task) bool {
+		return len(t.Refs) >= 2
+	})
+}
+
+// demoMixedDepsTask is an open task waiting on one open task and one done
+// one: both dep glyphs in a single frame, the dep_done revisit signal, and
+// an open blocker for the map to seed on.
+func (m *Model) demoMixedDepsTask(demo string) (*board.Task, error) {
+	return m.demoTask(demo, "is open and waits on both an open task and a done one", func(t *board.Task) bool {
+		if m.g.IsDone(t.ID) {
+			return false
+		}
+		var open, done bool
+		for _, d := range t.Deps {
+			switch {
+			case m.g.IsDone(d):
+				done = true
+			case m.g.Known(d):
+				open = true
+			}
+		}
+		return open && done
+	})
+}
+
+// demoMostDepsTask is the task with the most deps, done or not — the deepest
+// row scope=all can show, and the "+N" blocker tag's site. Ties keep the
+// first in board order.
+func (m *Model) demoMostDepsTask(demo string) (*board.Task, error) {
+	var best *board.Task
+	for _, t := range m.b.Tasks() {
+		if len(t.Deps) > 0 && (best == nil || len(t.Deps) > len(best.Deps)) {
+			best = t
+		}
+	}
+	if best == nil {
+		return nil, fmt.Errorf("demo %s: no task on this board has a dep", demo)
+	}
+	return best, nil
+}
+
+// demoRootTask is the open root doing the most blocking: no deps of its own,
+// and more open dependants than any other such task (ties: board order).
+// Under is:blocked it is a row the filter HIDES, which is the frame's point.
+func (m *Model) demoRootTask(demo string) (*board.Task, error) {
+	var best *board.Task
+	var bestN int
+	for _, t := range m.b.Tasks() {
+		if m.g.IsDone(t.ID) || len(t.Deps) > 0 {
+			continue
+		}
+		if n := len(m.g.OpenBlocks(t.ID)); n > bestN {
+			best, bestN = t, n
+		}
+	}
+	if best == nil {
+		return nil, fmt.Errorf("demo %s: no open task on this board blocks another without waiting on anything itself", demo)
+	}
+	return best, nil
+}
+
+// demoEpicDepsTask is filed under a box that both waits on an open box and
+// carries a dep furrow already resolved away, so the peek's epic-dep line
+// shows both resolutions at once.
+func (m *Model) demoEpicDepsTask(demo string) (*board.Task, error) {
+	return m.demoTask(demo, "is filed under a box that waits on an open box and also carries a dep already resolved away", func(t *board.Task) bool {
+		e := m.b.Epic(t.Epic)
+		return e != nil && len(e.OpenDeps) > 0 && len(e.Deps) > len(e.OpenDeps)
+	})
+}
+
+// demoRichBox is the populated inactive box the epic overlay's menu is worth
+// a frame on: a goal, a wait on an open box, and a repo slot some active box
+// already holds, so the `active` row has a precondition to state.
+func (m *Model) demoRichBox(demo string) (board.EpicInfo, error) {
+	return m.demoBox(demo, "is an open, inactive box with a goal, a wait on an open box, and a repo slot the active box holds", func(e board.EpicInfo) bool {
+		return !e.Active && e.Closed.IsZero() && e.Goal != "" && len(e.OpenDeps) > 0 && m.b.ActiveHolder(e.ID) != ""
+	})
+}
+
+// demoActiveBox is the board's active box — the only one deactivate and the
+// close gate's "vacates its repo slot" clause are reachable on.
+func (m *Model) demoActiveBox(demo string) (board.EpicInfo, error) {
+	return m.demoBox(demo, "is active", func(e board.EpicInfo) bool { return e.Active })
+}
+
+// demoClosedBox is the closed box the overlay has the most to show on — the
+// first one carrying a goal, so the menu's goal row is not blank — and the
+// first closed box at all when none does (a board whose only finished boxes
+// are reserved ones still has a reopen frame).
+func (m *Model) demoClosedBox(demo string) (board.EpicInfo, error) {
+	closed := func(e board.EpicInfo) bool { return !e.Closed.IsZero() }
+	for _, e := range m.b.EpicsAll() {
+		if closed(e) && e.Goal != "" {
+			return e, nil
+		}
+	}
+	return m.demoBox(demo, "is closed", closed)
+}
+
+// demoLabel is the label the most tasks carry (ties: the first in label
+// order) — the context the slice and the add modal inherit.
+func (m *Model) demoLabel(demo string) (string, error) {
+	return demoMostCommon(demo, "carries a label", m.b.Tasks(), func(t *board.Task) []string { return t.Labels })
+}
+
+// demoRepo is the repo the most tasks carry (ties: the first in repo order),
+// so a new box filed under it can actually be activated.
+func (m *Model) demoRepo(demo string) (string, error) {
+	return demoMostCommon(demo, "carries a repo", m.b.Tasks(), func(t *board.Task) []string { return t.Repos })
+}
+
+func demoMostCommon(demo, need string, tasks []*board.Task, of func(*board.Task) []string) (string, error) {
+	count := map[string]int{}
+	for _, t := range tasks {
+		for _, v := range of(t) {
+			count[v]++
+		}
+	}
+	best := ""
+	for v, n := range count {
+		if best == "" || n > count[best] || n == count[best] && v < best {
+			best = v
+		}
+	}
+	if best == "" {
+		return "", fmt.Errorf("demo %s: no task on this board %s", demo, need)
+	}
+	return best, nil
 }
