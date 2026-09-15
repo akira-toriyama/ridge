@@ -110,22 +110,11 @@ func (m *Model) peekContent(w int) string {
 	// on", in its wording. Gated on furrow's derived open_deps, the same
 	// field the slice panel counts for →N, so the two surfaces cannot
 	// disagree about whether a box still waits; with every dep satisfied
-	// there is no line, exactly as there is no arrow.
+	// there is no line, exactly as there is no arrow. That gate is this
+	// surface's own — the box overview renders its dep line over Deps
+	// instead — so it stays here rather than moving into the classifier.
 	//
-	// Three states, and furrow names all three itself: `epic dep --list`
-	// prints [open], [closed] and [?]. Over the --all read they are decidable
-	// from what the board holds — measured on v5.0.0 with one box carrying all
-	// three at once, open_deps was exactly the OPEN dep, excluding both the
-	// closed and the dangling one. So this renders (closed) for a resolved-away
-	// dep the board holds as closed, and (missing) — furrow's lint code is
-	// epic-dep-missing, at severity ERROR — for one it cannot resolve at all.
-	// Calling that second one "satisfied" would put a reassuring word on a
-	// broken reference.
-	//
-	// "(satisfied)" survives for the case the measurement says cannot happen:
-	// furrow settled a dep whose box this board still shows OPEN. It has no
-	// fixture site because no board furrow produces has one, and it says the
-	// weakest true thing rather than inventing a reason.
+	// The words, and why each is the one furrow uses, are in epicfacts.go.
 	if e := m.b.Epic(t.Epic); e != nil && len(e.OpenDeps) > 0 {
 		open := make(map[string]bool, len(e.OpenDeps))
 		for _, d := range e.OpenDeps {
@@ -134,30 +123,27 @@ func (m *Model) peekContent(w int) string {
 		parts := []string{"epic waits on"}
 		for _, d := range e.Deps {
 			de := m.b.Epic(d)
-			switch {
-			case !open[d] && de == nil:
+			switch epicDepStateOf(de, open[d]) {
+			case epicDepMissing:
 				parts = append(parts, d+" (missing)")
-			case !open[d] && !de.Closed.IsZero():
+			case epicDepClosed:
 				// Resolved, so the numbers and the title are available — and
 				// they are the half a CJK ellipsis must not eat, exactly as on
 				// the waiting rows below.
-				parts = append(parts, fmt.Sprintf("%s (%d/%d) %s (closed)", d, de.Done, de.Total, de.Title))
-			case !open[d]:
+				parts = append(parts, epicDepLabel(d, de, "")+" (closed)")
+			case epicDepSatisfied:
 				parts = append(parts, d+" (satisfied)")
-			case de == nil:
+			case epicDepUnresolved:
 				// Open per furrow's verdict but not in this read's epic
 				// set: show the raw id rather than inventing a state.
 				parts = append(parts, d)
-			case de.Stuck:
+			case epicDepStuck:
 				// warn, like the own-epic line's STUCK: a marker that
 				// reads as dim body text is the one thing it must not be.
-				parts = append(parts, fmt.Sprintf("%s (%d/%d) %s %s",
-					d, de.Done, de.Total, th.warn.Render("STUCK"), de.Title))
+				// This is the only surface that marks a dep's stuck state.
+				parts = append(parts, epicDepLabel(d, de, th.warn.Render("STUCK")))
 			default:
-				// Progress BEFORE the title: a CJK epic title routinely
-				// overflows the box and truncates, and the numbers are
-				// the half that must survive the ellipsis.
-				parts = append(parts, fmt.Sprintf("%s (%d/%d) %s", d, de.Done, de.Total, de.Title))
+				parts = append(parts, epicDepLabel(d, de, ""))
 			}
 		}
 		b.WriteString(th.muted.Render(wrapJoin(parts, " · ", w)) + "\n")

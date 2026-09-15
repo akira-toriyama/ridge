@@ -869,25 +869,24 @@ func (m *Model) renderEpicList(box *board.EpicInfo, inner, budget int) string {
 			open[d] = true
 		}
 		mark = func(_ int, row string) string {
-			// The peek's wording, not a second vocabulary — see the block
-			// above `epic waits on` in peek.go for why each word is the one
-			// furrow itself uses.
+			// The peek's wording, not a second vocabulary — epicfacts.go says
+			// why each word is the one furrow itself uses.
 			de := m.b.Epic(row)
-			label := row
-			if de != nil {
-				label = fmt.Sprintf("%s (%d/%d) %s", row, de.Done, de.Total, de.Title)
+			label := epicDepLabel(row, de, "")
+			switch epicDepStateOf(de, open[row]) {
+			case epicDepMissing:
+				return glyphDone + " " + label + " (missing)"
+			case epicDepClosed:
+				return glyphDone + " " + label + " (closed)"
+			case epicDepSatisfied:
+				// The one surface that shows a satisfied dep's numbers: this
+				// is the editing list, where the row is also the handle.
+				return glyphDone + " " + label + " (satisfied)"
+			default:
+				// One glyph for every open state — the list does not
+				// distinguish unresolvable or stuck from plain open.
+				return glyphOpen + " " + label
 			}
-			if !open[row] {
-				switch {
-				case de == nil:
-					return glyphDone + " " + label + " (missing)"
-				case !de.Closed.IsZero():
-					return glyphDone + " " + label + " (closed)"
-				default:
-					return glyphDone + " " + label + " (satisfied)"
-				}
-			}
-			return glyphOpen + " " + label
 		}
 	case epicFieldMeta:
 		hdr = "meta — furrow stores it and never reads it"
