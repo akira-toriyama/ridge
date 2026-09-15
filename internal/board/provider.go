@@ -367,3 +367,44 @@ type FieldPatch struct {
 	AddRefs []string
 	RmRefs  []string
 }
+
+// The two pieces of -q knowledge ridge holds, kept beside the port that
+// passes -q through so "ridge holds no query grammar" (CLAUDE.md) stays true
+// to within this block. Both facts were measured against the real furrow
+// binary, and neither is derivable from anything furrow exports — a `furrow
+// q quote` would delete them (filed toward furrow, e-vakm).
+
+// QTerm spells one field:value term. The value is wrapped in double quotes
+// when it holds a character the lexer would reinterpret: ASCII whitespace
+// splits terms (a bare `label:needs review` becomes TWO terms — exit 0,
+// empty result, no warning) and a comma OR-splits (`label:a,b` answers a
+// BROADER query). Quoting suppresses each; U+3000 and NBSP do NOT split, so
+// they need none. A value QSpellable refuses cannot be spelled at all and is
+// passed through unchanged — refuse it before it reaches here.
+func QTerm(field, value string) string {
+	if strings.ContainsAny(value, " \t\r\n,") {
+		return field + `:"` + value + `"`
+	}
+	return field + ":" + value
+}
+
+// QSpellable reports whether a value has a -q spelling at all: the quoting
+// has no escape, so a value containing a double quote has none.
+func QSpellable(value string) bool { return !strings.Contains(value, `"`) }
+
+// QAnd composes terms into one query: whitespace between terms is the
+// lexer's implicit AND, so the parts are joined by a single space, empty
+// parts dropped. Each part is trimmed with TrimSpace, which is wider than the
+// lexer (U+3000 and NBSP are value characters there): a part whose edge
+// holds one would lose it, so callers hand in already-trimmed text — the
+// typed query is trimmed where it is stored (filter.go, views.go) — and a
+// term from QTerm has no such edge.
+func QAnd(parts ...string) string {
+	var kept []string
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			kept = append(kept, p)
+		}
+	}
+	return strings.Join(kept, " ")
+}

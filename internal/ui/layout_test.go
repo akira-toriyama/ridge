@@ -19,9 +19,9 @@ import (
 // here would fail on all of them and on the borders — the "ambiguous renders
 // narrow" assumption is load-bearing for the whole UI, not just these runes.
 func TestGlyphsAreSingleWidth(t *testing.T) {
-	// Every glyph const in theme.go that reaches a CARD or a panel row.
-	// glyphArrowDown is deliberately absent: it terminates a graph edge, where
-	// the channel router owns the width, not a bordered box.
+	// Every glyph const that reaches a CARD or a panel row. The graph's
+	// arrowheads (graph.go) are deliberately absent: they terminate an edge,
+	// where the channel router owns the width, not a bordered box.
 	glyphs := map[string]string{
 		"actionable": glyphActionable, "blocked": glyphBlocked, "epic": glyphEpic,
 		"done": glyphDone, "open": glyphOpen,

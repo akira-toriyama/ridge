@@ -47,28 +47,7 @@ const (
 	// -plain strips, so the two verticals must differ by shape.
 	glyphDue   = "◆"
 	glyphToday = "┊"
-
-	// The two graph arrowheads. Every edge in one picture points the same way —
-	// down when the graph runs top-down, right when it runs left-right, always
-	// in the direction unblocking flows. Position and arrowhead carry the same
-	// fact, which is deliberate redundancy: a reader must never have to
-	// remember which way the arrows go.
-	//
-	// Both triangles are already in the vocabulary for something else
-	// (glyphSortDesc, glyphEpicActive). That is not a collision: a directional
-	// triangle reads as direction on every surface, and the graph has pointed
-	// with glyphSortDesc's character since it was written.
-	glyphArrowDown  = '▼'
-	glyphArrowRight = '▶'
 )
-
-// graphArrow is the arrowhead that terminates an edge in the given orientation.
-func graphArrow(o graphOrient) rune {
-	if o == orientLeftRight {
-		return glyphArrowRight
-	}
-	return glyphArrowDown
-}
 
 // theme is the whole palette. lipgloss v2 removed AdaptiveColor, so the light /
 // dark choice is made once, from tea.BackgroundColorMsg, and baked in here.

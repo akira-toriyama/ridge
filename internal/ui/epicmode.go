@@ -630,57 +630,6 @@ func (m *Model) epicWriteOp(op persistOp) tea.Cmd {
 	return m.storeFirstWrite(op, "a box write")
 }
 
-// storeFirstWrite is the funnel every store-first surface (the epic overlay,
-// the sweep) queues through: the repeat refusal, the rollback-window refusal,
-// then the "waiting for furrow" note. what names the surface's write in the
-// refusal ("a box write", "a sweep write").
-func (m *Model) storeFirstWrite(op persistOp, what string) tea.Cmd {
-	if m.refuseWhileWriting(op.label, what) {
-		return nil
-	}
-	queued := len(m.pending)
-	cmd := m.enqueueStoreFirstOp(op)
-	if len(m.pending) == queued {
-		// Refused inside the rollback window, which already said why. A nil cmd
-		// alone does NOT mean refused — an epic write queued behind an
-		// in-flight task write also returns nil — so the queue length is what
-		// distinguishes them, and noting unconditionally would erase the
-		// refusal the user has not read yet.
-		return nil
-	}
-	m.note("%s — waiting for furrow", op.label)
-	return cmd
-}
-
-// refuseWhileWriting reports (and explains) that a second store-first gesture
-// must wait.
-//
-// A store-first write changes nothing on screen until it lands, so pressing
-// again is the natural mistake — and the queue would happily carry both. The
-// harm is not that furrow refuses the repeat (measured on v4.0.0: re-activating
-// the same box is exit 0, changed:[], and does not even add a second activation
-// record). It is that the overlay's rows still show the PRE-write values, so the
-// second gesture is aimed at a board the user cannot yet see, and its report
-// lands on the status line over the first write's.
-func (m *Model) refuseWhileWriting(label, what string) bool {
-	switch {
-	case m.storeFirstInflight():
-		m.fail("%s — %s is still in flight; the board re-reads when it lands", label, what)
-	case m.storeFirstUnread:
-		// The window AFTER the write landed and BEFORE its re-read arrives. The
-		// queue is empty, so the in-flight check above passes — but the rows are
-		// still the pre-write ones, so a toggle here recomputes from a stale
-		// value and a dep removal addresses an edge furrow has already dropped
-		// ("X is not a dependency of Y").
-		// Names the way out: `r` is not routed inside the overlay, and after
-		// a failed rollback re-read nothing else will fire one.
-		m.fail("%s — the last store-first write landed; waiting for the board to re-read it (esc out, then r)", label)
-	default:
-		return false
-	}
-	return true
-}
-
 // epicListRows is the current list stage's rows, as raw values.
 func (m *Model) epicListRows(box *board.EpicInfo) []string {
 	switch m.epic.field {

@@ -32,12 +32,9 @@ import (
 //     out of it and the title-line budget is whatever height the channels
 //     leave. Left-right is given the height: the title-line budget falls out of
 //     it and the node WIDTH is whatever width the channels leave. That is why
-//     the same graph reads as 2 title lines at 240x60 and 3 at 400x90.
-
-const (
-	graphMinNodeLines = 1
-	graphMaxNodeLines = 3
-)
+//     the same graph reads as 2 title lines at 240x60 and 3 at 400x90 —
+//     clamped into the engine's graphMinNodeLines..graphMaxNodeLines
+//     (graph.go), which is what its height extents are derived from.
 
 // What an isolated focus is told, spelled once because the left-right frame has
 // to reserve their width before it can size a box. Top-down stacks them above

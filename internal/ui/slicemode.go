@@ -23,19 +23,6 @@ import (
 // the slice are held separately — switching slices never edits the typed
 // text.
 
-type sliceField int
-
-const (
-	sliceRepo sliceField = iota
-	sliceLabel
-	sliceEpic
-	sliceFieldCount
-)
-
-func (f sliceField) String() string {
-	return [...]string{"repo", "label", "epic"}[f]
-}
-
 const (
 	// 32 costs the board no LANE: boardCols derives the lane count from
 	// colMinW+colGap, so at the 240-column floor an inset of 27, 29 or 33 all
@@ -97,22 +84,7 @@ func (m *Model) sliceTerm() string {
 	if m.sliceVal == "" {
 		return ""
 	}
-	return m.sliceField.String() + ":" + quoteQVal(m.sliceVal)
-}
-
-// quoteQVal wraps a -q value in double quotes when it contains a character
-// furrow's lexer would reinterpret: ASCII whitespace splits terms (a bare
-// `label:needs review` becomes TWO terms — exit 0, empty result, no warning)
-// and a comma OR-splits (`label:a,b` answers a BROADER query). Both verified
-// against the real binary, including that quoting suppresses each, and that
-// U+3000/NBSP do NOT split (so they need no quoting). Values containing a
-// double quote cannot be expressed at all and are refused upstream in
-// selectSlice.
-func quoteQVal(v string) string {
-	if strings.ContainsAny(v, " \t\r\n,") {
-		return `"` + v + `"`
-	}
-	return v
+	return board.QTerm(m.sliceField.String(), m.sliceVal)
 }
 
 // toggleSlice is the `s` key: closed → open with the keyboard; focused →
@@ -263,8 +235,7 @@ func (m *Model) cycleSliceField(d int) tea.Cmd {
 // selectSlice applies a row: selecting the active value again un-slices
 // (radio semantics — GH's panel shows one value at a time).
 func (m *Model) selectSlice(f sliceField, val string) tea.Cmd {
-	if strings.Contains(val, `"`) {
-		// furrow's -q quoting has no escape, so this value has no spelling.
+	if !board.QSpellable(val) {
 		// Refusing loudly beats issuing a query that means something else.
 		m.fail("cannot slice to %q — a double quote has no -q spelling", val)
 		return nil

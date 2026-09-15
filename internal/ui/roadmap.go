@@ -10,7 +10,9 @@ import (
 
 // The ROADMAP's layout engine — pure, deterministic, and with no knowledge of
 // lipgloss, the theme or the terminal. roadmapview.go draws what this file
-// decides.
+// decides. One edge still breaks that: localZone, a clock this file reads
+// from theme.go, which t-xy0c moves into internal/board (t-fw3y closed the
+// other engines' edges and left this one for that PR).
 //
 // The shape is ONE ROW PER OPEN PROMISE: every open task that carries a due,
 // sorted by that due, its ◆ placed on a shared time axis. It is deliberately
