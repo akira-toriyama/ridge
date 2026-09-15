@@ -89,26 +89,6 @@ func TestCardTitleIsCapped(t *testing.T) {
 	}
 }
 
-func boardModel(t *testing.T, w, h int) *Model {
-	t.Helper()
-	m := logicModel(t, w, h)
-	m.relayout()
-	return m
-}
-
-// logicModel is boardModel without the layout pass, for tests that only
-// exercise the board/column logic (commitMove, cursor arithmetic) and never
-// read m.lay. relayout is 97% of boardModel's cost (measured: 1.90ms of
-// 1.96ms), and a test that builds 1,361 models paid 39s of a 141s -race run
-// for layouts it never looked at.
-func logicModel(t *testing.T, w, h int) *Model {
-	t.Helper()
-	m := New(memstore.New(), Options{})
-	m.w, m.h = w, h
-	m.recompute()
-	return m
-}
-
 func TestLayoutHitTestRoundTrips(t *testing.T) {
 	m := boardModel(t, 140, 40)
 	col := m.lay.Col("backlog")
@@ -271,4 +251,46 @@ func fixtureGraph(t *testing.T) (*board.Board, *board.Graph) {
 	t.Helper()
 	b := memstore.New().Board()
 	return b, board.NewGraph(b)
+}
+
+// Every rendered frame line must measure <= the terminal width AND the board
+// must line up: with Japanese titles, one mis-measured cell shears a column.
+func TestAdvCJKColumnsAlignAtManyWidths(t *testing.T) {
+	for w := 56; w <= 160; w += 3 {
+		m := boardModel(t, w, 30)
+		out := ansiStrip(m.View().Content)
+		for i, line := range strings.Split(out, "\n") {
+			if lw := lg.Width(line); lw > w {
+				t.Errorf("w=%d line %d measures %d: %q", w, i, lw, line)
+				break
+			}
+		}
+		// the vertical borders of every visible column must be at the exact
+		// same x on every card row.
+		for _, c := range m.lay.Cols {
+			for _, box := range c.Cards {
+				card := renderCard(c.Tasks[box.Idx], m.g, m.th, c.W, cardNormal)
+				for j, l := range strings.Split(card, "\n") {
+					if cw := lg.Width(l); cw != c.W {
+						t.Errorf("w=%d lane=%s card %s line %d is %d wide, want %d",
+							w, c.Lane.Name, box.ID, j, cw, c.W)
+					}
+				}
+			}
+		}
+	}
+}
+
+// A card dropped onto a column that is scrolled can only ever land among the
+// VISIBLE cards: idxAtY caps the insertion index at lastVisible+1, so with
+// cards below the fold there is no gesture that appends to the true end.
+func TestAdvCannotDropBelowTheFold(t *testing.T) {
+	m := advTallModel(t, 140, 24)
+	col := m.lay.Col("backlog")
+	maxIdx := m.lay.idxAtY("backlog", col.Bot-1)
+	if maxIdx < len(col.Tasks) {
+		t.Errorf("backlog has %d cards (%d below the fold) but the deepest reachable "+
+			"insertion index is %d — the bottom of the lane is not a droppable target",
+			len(col.Tasks), col.Hidden, maxIdx)
+	}
 }

@@ -88,7 +88,9 @@ func TestClosingThePeekAlsoClosesTheTree(t *testing.T) {
 }
 
 // A pin is a permanent filter exemption. On an unfiltered board nothing is
-// hidden, so jumping and coming back must grant none.
+// hidden, so jumping and coming back must grant none. (Under a filter that
+// hides the jump target, pinning it is the correct behaviour — a copy of this
+// test that filtered to one lane went red for exactly that and was deleted.)
 func TestJumpBackPinsOnlyWhatTheFilterHides(t *testing.T) {
 	m := advModel(t, advDepBoard(), 240, 60)
 	if len(m.g.BlockedBy("d1")) == 0 {
@@ -105,14 +107,6 @@ func TestJumpBackPinsOnlyWhatTheFilterHides(t *testing.T) {
 	if strings.Contains(ansiStrip(m.View().Content), "pinned by jump") {
 		t.Error(`the frame shows a "+N pinned by jump" chip for pins nothing needed`)
 	}
-}
-
-func pinIDs(p map[string]bool) []string {
-	var out []string
-	for k := range p {
-		out = append(out, k)
-	}
-	return out
 }
 
 // Closing the graph follows the same rule.

@@ -141,3 +141,41 @@ func missRowIn(t *testing.T, m *Model, lane string) int {
 	t.Fatalf("every row of the %s column body is on a card; this test needs empty space", lane)
 	return 0
 }
+
+// The threshold is Manhattan >= 2, so a diagonal 1+1 twitch — the single most
+// common accidental mouse movement — is a full drag, not a click.
+func TestAdvDiagonalOneCellTwitchIsADrag(t *testing.T) {
+	m := boardModel(t, 140, 40)
+	col := m.lay.Col("backlog")
+	if col == nil || len(col.Cards) < 2 {
+		t.Fatal("board too small")
+	}
+	box := col.Cards[1]
+	m.Update(tea.MouseClickMsg{X: box.X + 3, Y: box.Y + 1, Button: tea.MouseLeft})
+	m.Update(tea.MouseMotionMsg{X: box.X + 4, Y: box.Y + 2, Button: tea.MouseLeft})
+	if m.drag.moved {
+		t.Errorf("a 1-cell diagonal twitch (dx=1,dy=1, Manhattan 2) armed a real drag")
+	}
+}
+
+// onKey checks cancelDrag() BEFORE the mode switch, so an Esc meant to dismiss
+// the filter input is eaten by a still-armed drag instead.
+func TestAdvEscInFilterModeIsEatenByAnArmedDrag(t *testing.T) {
+	m := boardModel(t, 140, 40)
+	col := m.lay.Col(m.curLaneName())
+	if col == nil || len(col.Cards) == 0 {
+		t.Fatal("no card")
+	}
+	box := col.Cards[0]
+	m.Update(tea.MouseClickMsg{X: box.X + 3, Y: box.Y + 1, Button: tea.MouseLeft})
+	// user presses / while still holding the button, types, then presses esc
+	m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
+	if m.mode != modeFilter {
+		t.Fatal("did not enter filter mode")
+	}
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if m.mode == modeFilter {
+		t.Errorf("esc was swallowed by the armed drag; the filter input is still modal "+
+			"(drag.armed=%v cancelled=%v)", m.drag.armed, m.drag.cancelled)
+	}
+}

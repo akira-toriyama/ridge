@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/akira-toriyama/ridge/internal/board"
 	"github.com/akira-toriyama/ridge/internal/store/memstore"
 )
@@ -226,3 +228,70 @@ func (p *liveQueryProvider) SweepPreview() (board.Sweep, error) { return board.S
 func (p *liveQueryProvider) Archive([]string) error             { return nil }
 func (p *liveQueryProvider) Unarchive([]string) error           { return nil }
 func (p *liveQueryProvider) Tidy(board.TidyClass) error         { return nil }
+
+// The `b` (blocked-only) toggle does a raw string ReplaceAll on the query, so a
+// NEGATED is:blocked term leaves a stray "-" token behind.
+func TestAdvBlockedToggleCorruptsANegatedQuery(t *testing.T) {
+	m := boardModel(t, 140, 40)
+	m.applyFilter("-is:blocked")
+	m.ti.SetValue("-is:blocked")
+	before := m.countVisible()
+	m.Update(tea.KeyPressMsg{Code: 'b', Text: "b"})
+	if m.qRaw == "-" {
+		t.Errorf("pressing b on %q left the query %q (a bare '-' bare-word term); "+
+			"visible went %d -> %d", "-is:blocked", m.qRaw, before, m.countVisible())
+	}
+}
+
+// Typing a filter that hides the selected card silently leaves the cursor on a
+// DIFFERENT task, and every subsequent destructive key (d = done, x = check,
+// enter = move) acts on that one.
+func TestAdvFilterCanSilentlyRepointTheCursor(t *testing.T) {
+	// Five backlog tasks, one of them blocked: the filter must hide the card
+	// under the cursor and leave exactly one for it to land on. Built rather
+	// than taken from the fixture, whose blocked tasks are its own shape.
+	ts := []*board.Task{{ID: "b1", Title: "b1", Status: "backlog", Priority: 10, Deps: []string{"b5"}}}
+	for i := 2; i <= 5; i++ {
+		id := fmt.Sprintf("b%d", i)
+		ts = append(ts, &board.Task{ID: id, Title: id, Status: "backlog", Priority: i * 10})
+	}
+	m := advModel(t, board.NewBoard(ts), 140, 40)
+	m.curLane = m.b.LaneIndex("backlog")
+	m.setPos(3)
+	before := m.curTask()
+	if before == nil {
+		t.Fatal("no selection")
+	}
+	m.applyFilter("is:blocked")
+	after := m.curTask()
+	if after != nil && after.ID != before.ID {
+		t.Logf("selection moved %s -> %s after filtering (expected); the danger is "+
+			"that nothing tells the user", before.ID, after.ID)
+	}
+	// Now the real defect: pressing `d` closes whatever the cursor landed on.
+	if after == nil {
+		t.Fatal("setup: is:blocked hid every task, but b1 waits on b5")
+	}
+	m.Update(tea.KeyPressMsg{Code: 'd', Text: "d"})
+	if m.b.Task(after.ID).Status != "done" {
+		t.Fatal("d did not close the selection")
+	}
+	if before.ID != after.ID && !strings.Contains(m.status, after.ID) {
+		t.Errorf("closed %s but the status line says %q", after.ID, m.status)
+	}
+}
+
+func TestAdvUnknownIsValueEmptiesTheBoardWhileClaimingToBeNonFatal(t *testing.T) {
+	m := boardModel(t, 140, 40)
+	total := m.countVisible()
+	m.applyFilter("is:bogus")
+	// -q semantics: the store REFUSES the query; the last good verdict (all
+	// tasks) stays on screen and the refusal is surfaced.
+	if m.countVisible() != total {
+		t.Errorf("a refused query must keep the last good verdict: %d -> %d visible",
+			total, m.countVisible())
+	}
+	if m.qErr == "" {
+		t.Error("the refusal must be surfaced in qErr")
+	}
+}

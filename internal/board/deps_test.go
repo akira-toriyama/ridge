@@ -281,3 +281,45 @@ func TestDepRmRemovesTheEdge(t *testing.T) {
 		t.Error("a sits in ready with every dep done — actionable")
 	}
 }
+
+func advCyclicBoard() *Board {
+	return NewBoard([]*Task{
+		{ID: "a", Title: "A", Status: "ready", Priority: 10, Deps: []string{"b"}},
+		{ID: "b", Title: "B", Status: "ready", Priority: 20, Deps: []string{"c"}},
+		{ID: "c", Title: "C", Status: "ready", Priority: 30, Deps: []string{"a"}},
+		{ID: "s", Title: "S", Status: "ready", Priority: 40, Deps: []string{"s"}},
+	})
+}
+
+func TestAdvDepCycleIsSurvivable(t *testing.T) {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("panic on a cyclic dep graph: %v", r)
+			}
+		}()
+		b := advCyclicBoard()
+		g := NewGraph(b)
+		for _, id := range []string{"a", "b", "c", "s"} {
+			_ = g.Actionable(id)
+			_ = g.BlockedBy(id)
+			_ = g.TreeOf(id, DirBlockedBy, 4)
+			_ = g.TreeOf(id, DirBlocks, 4)
+		}
+	}()
+	<-done
+}
+
+// A self-dep must block: `s` depends on `s`, which is not done, so `s` can
+// never be actionable.
+func TestAdvSelfDepBlocks(t *testing.T) {
+	g := NewGraph(advCyclicBoard())
+	if g.Actionable("s") {
+		t.Error("a task that depends on itself is reported actionable")
+	}
+	if len(g.BlockedBy("s")) == 0 {
+		t.Error("a self-dep is not counted as a blocker")
+	}
+}

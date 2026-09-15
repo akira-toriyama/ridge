@@ -3,6 +3,7 @@ package ui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -200,4 +201,183 @@ func TestTheDropPromiseFollowsTheColumnsAcrossAResize(t *testing.T) {
 				l.GetX(), want, col.X)
 		}
 	}
+}
+
+// Dragging a card out of every column and releasing there still commits a move
+// into whichever lane the pointer last crossed, because dropLane is sticky and
+// nothing checks that the RELEASE landed on a column. Releasing in the gutter,
+// the title bar, or the footer should be a cancel, not a drop.
+func TestAdvDropOutsideAnyColumnStillCommits(t *testing.T) {
+	m := boardModel(t, 140, 40)
+	src := m.lay.Col("backlog")
+	dst := m.lay.Col("ready")
+	if src == nil || dst == nil || len(src.Cards) < 2 {
+		t.Fatal("board too small")
+	}
+	box := src.Cards[1]
+	id := src.Tasks[box.Idx].ID
+	before := m.b.Task(id).Status
+
+	m.Update(tea.MouseClickMsg{X: box.X + 3, Y: box.Y + 1, Button: tea.MouseLeft})
+	// cross "ready" ...
+	m.Update(tea.MouseMotionMsg{X: dst.X + 8, Y: dst.Top + 2, Button: tea.MouseLeft})
+	// ... then leave the board entirely and release far off to the right, in
+	// the empty area past the last column.
+	off := 139
+	if _, ok := m.lay.laneAtX(off); ok {
+		t.Fatal("x=139 is inside a column at 140 columns; the gutter this test releases into is gone")
+	}
+	m.Update(tea.MouseMotionMsg{X: off, Y: 38, Button: tea.MouseLeft})
+	m.Update(tea.MouseReleaseMsg{X: off, Y: 38, Button: tea.MouseLeft})
+
+	if after := m.b.Task(id).Status; after != before {
+		t.Errorf("released outside every column at x=%d,y=38 and %s still moved %s -> %s",
+			off, id, before, after)
+	}
+}
+
+// Releasing in the title/filter rows (y=0..1) — above every column — is also
+// treated as a drop into the lane under x.
+func TestAdvDropOnTheTitleBarCommits(t *testing.T) {
+	m := boardModel(t, 140, 40)
+	src := m.lay.Col("backlog")
+	if src == nil || len(src.Cards) < 2 {
+		t.Fatal("board too small")
+	}
+	box := src.Cards[1]
+	id := src.Tasks[box.Idx].ID
+	before := m.b.Task(id).Status
+	beforeIdx := m.b.IndexIn(before, id)
+
+	m.Update(tea.MouseClickMsg{X: box.X + 3, Y: box.Y + 1, Button: tea.MouseLeft})
+	dst := m.lay.Col("in-progress")
+	if dst == nil {
+		t.Fatal("no in-progress column")
+	}
+	m.Update(tea.MouseMotionMsg{X: dst.X + 5, Y: 0, Button: tea.MouseLeft})
+	m.Update(tea.MouseReleaseMsg{X: dst.X + 5, Y: 0, Button: tea.MouseLeft})
+
+	after := m.b.Task(id).Status
+	if after != before || m.b.IndexIn(after, id) != beforeIdx {
+		t.Errorf("released on the TITLE BAR (y=0) and %s moved %s[%d] -> %s[%d]",
+			id, before, beforeIdx, after, m.b.IndexIn(after, id))
+	}
+}
+
+// A drop that lands exactly where the card already was should be a NO-OP. It
+// currently stamps Updated, which is furrow's staleness signal — the same
+// signal the real store deliberately refuses to advance on a positional
+// respace.
+func TestAdvNoOpDropStampsUpdated(t *testing.T) {
+	m := boardModel(t, 140, 40)
+	id := m.cols["backlog"][1].ID
+	task := m.b.Task(id)
+	task.Updated = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	before := task.Updated
+
+	// drag it two cells and put it straight back in its own slot
+	col := m.lay.Col("backlog")
+	box := col.Cards[1]
+	m.Update(tea.MouseClickMsg{X: box.X + 3, Y: box.Y + 1, Button: tea.MouseLeft})
+	m.Update(tea.MouseMotionMsg{X: box.X + 5, Y: box.Y + 2, Button: tea.MouseLeft})
+	m.Update(tea.MouseMotionMsg{X: box.X + 3, Y: box.Y + 1, Button: tea.MouseLeft})
+	m.Update(tea.MouseReleaseMsg{X: box.X + 3, Y: box.Y + 1, Button: tea.MouseLeft})
+
+	if got := m.b.Task(id).Updated; !got.Equal(before) {
+		t.Errorf("a drop into the card's own slot advanced updated %s -> %s (and the "+
+			"status line claims %q)", before.Format(time.RFC3339), got.Format(time.RFC3339), m.status)
+	}
+}
+
+func TestAdvDragIntoAnEmptyColumn(t *testing.T) {
+	m := advSmallModel(t, 140, 40)
+	if len(m.cols["inbox"]) != 0 {
+		t.Fatal("setup: advSmallBoard files nothing in inbox")
+	}
+	src := m.lay.Col("backlog")
+	dst := m.lay.Col("inbox")
+	if src == nil || dst == nil || len(src.Cards) < 1 {
+		t.Fatal("board too small")
+	}
+	box := src.Cards[0]
+	id := src.Tasks[box.Idx].ID
+	m.Update(tea.MouseClickMsg{X: box.X + 3, Y: box.Y + 1, Button: tea.MouseLeft})
+	m.Update(tea.MouseMotionMsg{X: dst.X + 8, Y: dst.Top + 3, Button: tea.MouseLeft})
+	m.Update(tea.MouseReleaseMsg{X: dst.X + 8, Y: dst.Top + 3, Button: tea.MouseLeft})
+	if got := m.b.Task(id).Status; got != "inbox" {
+		t.Errorf("dropped %s into the empty inbox column; it is in %s", id, got)
+	}
+}
+
+// Dropping BELOW the last card of a short column (in the empty space under it)
+// must append, not land at slot 0.
+func TestAdvDragBelowTheLastCardAppends(t *testing.T) {
+	m := boardModel(t, 140, 40)
+	src := m.lay.Col("backlog")
+	dst := m.lay.Col("ready")
+	if src == nil || dst == nil || len(src.Cards) < 1 || len(dst.Cards) < 1 {
+		t.Fatal("board too small")
+	}
+	box := src.Cards[0]
+	id := src.Tasks[box.Idx].ID
+	last := dst.Cards[len(dst.Cards)-1]
+	deepY := last.Y + last.H + 3 // empty space well below the last card
+	if deepY >= dst.Bot {
+		t.Fatalf("setup: no empty space below the last ready card at 140x40 (deepY=%d bot=%d)", deepY, dst.Bot)
+	}
+	m.Update(tea.MouseClickMsg{X: box.X + 3, Y: box.Y + 1, Button: tea.MouseLeft})
+	m.Update(tea.MouseMotionMsg{X: dst.X + 8, Y: deepY, Button: tea.MouseLeft})
+	m.Update(tea.MouseReleaseMsg{X: dst.X + 8, Y: deepY, Button: tea.MouseLeft})
+	got := m.b.LaneTasks("ready")
+	if got[len(got)-1].ID != id {
+		var ids []string
+		for _, x := range got {
+			ids = append(ids, x.ID)
+		}
+		t.Errorf("dropped %s in the empty space below every ready card; lane is now %v",
+			id, ids)
+	}
+}
+
+func TestAdvDragSurvivesTheSourceScrollingAway(t *testing.T) {
+	const w, h = 140, 24
+	m := advTallModel(t, w, h)
+	src := m.lay.Col("backlog")
+	box := src.Cards[0]
+	id := src.Tasks[box.Idx].ID
+	m.Update(tea.MouseClickMsg{X: box.X + 3, Y: box.Y + 1, Button: tea.MouseLeft})
+	// drag downward hard so the edge auto-scroll kicks in
+	for y := box.Y + 2; y < h; y++ {
+		m.Update(tea.MouseMotionMsg{X: box.X + 3, Y: y, Button: tea.MouseLeft})
+	}
+	m.Update(tea.MouseReleaseMsg{X: box.X + 3, Y: h - 3, Button: tea.MouseLeft})
+	if m.b.Task(id) == nil {
+		t.Fatalf("%s vanished", id)
+	}
+	if m.b.Task(id).Status != "backlog" {
+		t.Errorf("a straight-down drag inside backlog moved %s to %s",
+			id, m.b.Task(id).Status)
+	}
+}
+
+func TestAdvStatusLineClaimsARepositionThatDidNotHappen(t *testing.T) {
+	m := advSmallModel(t, 140, 40)
+	col := m.lay.Col("ready")
+	box := col.Cards[0]
+	id := col.Tasks[0].ID
+	before := ids(m.b.LaneTasks("ready"))
+
+	// drag a1 upward, above the top of its own column, and release there
+	m.Update(tea.MouseClickMsg{X: box.X + 3, Y: box.Y + 1, Button: tea.MouseLeft})
+	m.Update(tea.MouseMotionMsg{X: box.X + 3, Y: box.Y - 2, Button: tea.MouseLeft})
+	m.Update(tea.MouseReleaseMsg{X: box.X + 3, Y: box.Y - 2, Button: tea.MouseLeft})
+
+	after := ids(m.b.LaneTasks("ready"))
+	if strings.Join(before, ",") == strings.Join(after, ",") &&
+		strings.Contains(m.status, "repositioned") {
+		t.Errorf("nothing moved (%v) but the status line reports %q — every drop reports "+
+			"success, so a clamped or no-op drop is indistinguishable from a real one",
+			after, m.status)
+	}
+	_ = id
 }
