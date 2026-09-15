@@ -350,9 +350,10 @@ func (b *Board) Tasks() []*Task { return b.tasks }
 
 // Unlaned is every task whose Status names no lane. Lanes come verbatim from
 // furrow's config, so a lane renamed or removed while shards still carry it
-// leaves such tasks in no column, no table row and no band — and Tasks()
-// still counts them. Any surface that reports a total has to name this gap
-// or the total is a lie about what is on screen.
+// leaves such tasks off every lane-driven surface (column, table row, band)
+// while Tasks() still counts them; the roadmap and the dep graph read Tasks()
+// and do draw them. A total reported against Tasks() has to name this gap or
+// count the lanes instead, or it is a lie about what is on screen.
 func (b *Board) Unlaned() []*Task {
 	var out []*Task
 	for _, t := range b.tasks {
