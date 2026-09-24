@@ -49,10 +49,9 @@ const (
 
 // cardBox is one card's measured place on screen.
 type cardBox struct {
-	ID   string
 	Idx  int // index within the column's FILTERED task list
 	X, Y int
-	W, H int
+	H    int
 }
 
 // laneCol is one visible column.
@@ -69,12 +68,10 @@ type laneCol struct {
 
 // layout is one frame's geometry.
 type layout struct {
-	W, H    int
 	ColW    int // the negotiated column width for this frame
 	Cols    []laneCol
 	byName  map[string]*laneCol
 	LaneOff int // index of the leftmost visible lane
-	Visible int // how many columns fit
 }
 
 // boardCols negotiates how many columns fit in w and how wide each one is.
@@ -280,7 +277,7 @@ func layCards(tasks []*board.Task, scroll, x, top, bot, colW int, ms *measurer) 
 		if y+h > bot {
 			break
 		}
-		out = append(out, cardBox{ID: tasks[idx].ID, Idx: idx, X: x, Y: y, W: colW, H: h})
+		out = append(out, cardBox{Idx: idx, X: x, Y: y, H: h})
 		y += h + cardGapY
 	}
 	return out
@@ -305,8 +302,7 @@ func buildLayout(w, h, x0 int, lanes []board.Lane, cols map[string][]*board.Task
 	// band overlap the footer, which is how a 1-row terminal rendered 6 rows.
 	bot := h - footerH
 
-	l := &layout{W: w, H: h, ColW: colW, LaneOff: laneOff, Visible: vis,
-		byName: map[string]*laneCol{}}
+	l := &layout{ColW: colW, LaneOff: laneOff, byName: map[string]*laneCol{}}
 	for i := 0; i < vis && laneOff+i < len(lanes); i++ {
 		lane := lanes[laneOff+i]
 		c := laneCol{

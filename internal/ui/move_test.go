@@ -368,7 +368,7 @@ func TestAdvMoveModeAcrossTheWholeStrip(t *testing.T) {
 	}
 	if m.lay.Col(wantLane) == nil {
 		t.Errorf("committed into %s but that lane is not in the visible strip "+
-			"(laneOff=%d visible=%d)", wantLane, m.laneOff, m.lay.Visible)
+			"(laneOff=%d visible=%d)", wantLane, m.laneOff, len(m.lay.Cols))
 	}
 }
 

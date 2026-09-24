@@ -51,8 +51,6 @@ const (
 // theme is the whole palette. lipgloss v2 removed AdaptiveColor, so the light /
 // dark choice is made once, from tea.BackgroundColorMsg, and baked in here.
 type theme struct {
-	dark bool
-
 	base    lg.Style
 	muted   lg.Style
 	dim     lg.Style
@@ -122,7 +120,7 @@ func newTheme(dark bool) *theme {
 		sel    = c("#7aa2f7", "#2f5fd0")
 		panel  = c("#22242e", "#eef0f6")
 	)
-	t := &theme{dark: dark}
+	t := &theme{}
 	t.base = lg.NewStyle().Foreground(fg)
 	t.muted = lg.NewStyle().Foreground(muted)
 	t.dim = lg.NewStyle().Foreground(dim)

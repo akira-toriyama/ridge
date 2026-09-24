@@ -50,8 +50,10 @@ const (
 	orientLeftRight
 )
 
-// String is the word the header and the status line use, so the two surfaces
-// cannot drift apart.
+// String names an orientation in test failure messages, its only readers. The
+// header does not use it — graphHeader points with arrows it picks from the
+// orientation itself — so this word reaches no frame. Deleting it fails go vet
+// at the tests' %s, not the build.
 func (o graphOrient) String() string {
 	if o == orientLeftRight {
 		return "left-right"
@@ -160,10 +162,9 @@ type egoNode struct {
 	Rank  int // index into egoLayout.Layers (0 = the outermost upstream layer)
 	Slot  int // position within the layer, in along-axis order
 
-	Focus   bool // the task the graph is rooted on
-	Both    bool // reachable both upstream AND downstream (only possible in a cycle)
-	Hidden  bool // the current board filter would hide this task
-	Unknown bool // a dep pointing at an id that is not on the board
+	Focus  bool // the task the graph is rooted on
+	Both   bool // reachable both upstream AND downstream (only possible in a cycle)
+	Hidden bool // the current board filter would hide this task
 
 	// Filled by place(). Along is the node's offset on the ALONG axis and Span
 	// is its extent there. The extent on the ACROSS axis is uniform across the
@@ -319,7 +320,6 @@ func buildEgo(g *board.Graph, focus string, radius, maxCols int, hidden func(str
 	add := func(id string, layer int, both bool) {
 		n := &egoNode{Key: id, ID: id, Kind: egoReal, Layer: layer, Both: both}
 		n.Focus = id == focus
-		n.Unknown = !g.Known(id)
 		if hidden != nil {
 			n.Hidden = hidden(id)
 		}

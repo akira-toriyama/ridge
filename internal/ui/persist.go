@@ -40,15 +40,15 @@ type persistOp struct {
 	// The submission the add carried, kept so a store refusal can hand the
 	// typed text back (reopen the modal) instead of eating it (t-74y3).
 	// addRaw is the line as TYPED, inline tokens and all — the reopened modal
-	// restores it, so a due form furrow refused comes back editable; addTitle
-	// is the parsed title, which is what labels and failure notes quote.
+	// restores it, so a due form furrow refused comes back editable. The parsed
+	// title is NOT kept: label already carries it as "add <title>", and that is
+	// what a failure note quotes.
 	// addOpts is the INHERITED context only, pre-apply: the reopened modal
 	// re-parses addRaw live, and Draft is the one field apply() ORs instead
 	// of assigning, so storing the composed opts would make a typed is:draft
 	// unclearable after a refusal — delete the token, the chip stays.
-	addRaw   string
-	addTitle string
-	addOpts  board.AddOptions
+	addRaw  string
+	addOpts board.AddOptions
 	// The same contract for the new-box modal: an epic add is store-first, so
 	// a refused one leaves no trace on the board at all — the reopened modal
 	// is the only thing that keeps the typed title alive.
@@ -343,12 +343,11 @@ func (m *Model) enqueueAdd(title, raw string, inherited, opts board.AddOptions) 
 	prov := m.prov
 	id := new(string)
 	return m.queueOp(persistOp{
-		label:    "add " + title,
-		noLocal:  true,
-		addedID:  id,
-		addRaw:   raw,
-		addTitle: title,
-		addOpts:  inherited,
+		label:   "add " + title,
+		noLocal: true,
+		addedID: id,
+		addRaw:  raw,
+		addOpts: inherited,
 		run: func() ([]string, error) {
 			got, err := prov.Add(title, opts)
 			*id = got

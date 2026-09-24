@@ -65,7 +65,9 @@ func New() *Store {
 }
 
 // NewWith serves an arbitrary in-memory board (tests). Reload keeps serving
-// the same board: there is no pristine source to rebuild from.
+// the same board: there is no pristine source to rebuild from. A test seam by
+// design: production reaches a fixture through New/NewGated, so zero
+// production callers here is the intended state, not dead code.
 func NewWith(b *board.Board) *Store {
 	return &Store{b: b, base: func() *board.Board { return b }}
 }
