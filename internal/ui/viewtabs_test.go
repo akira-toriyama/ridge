@@ -350,11 +350,11 @@ func TestSwitchViewCarriesTheRoadmapWalk(t *testing.T) {
 	if c := pressKey(m, '1'); c != nil {
 		c()
 	}
-	if m.view != viewRoadmap || m.roadLay == nil || len(m.roadLay.Rows) < 2 {
-		t.Fatalf("setup: roadmap did not open with rows (lay=%v)", m.roadLay)
+	if m.view != viewRoadmap || m.road.lay == nil || len(m.road.lay.Rows) < 2 {
+		t.Fatalf("setup: roadmap did not open with rows (lay=%v)", m.road.lay)
 	}
-	m.roadMove(+1) // walk one row: roadSel now differs from the board cursor
-	walked := m.roadSel
+	m.roadMove(+1) // walk one row: road.sel now differs from the board cursor
+	walked := m.road.sel
 	if walked == "" {
 		t.Fatal("setup: the walk did not land on a row")
 	}
@@ -363,8 +363,8 @@ func TestSwitchViewCarriesTheRoadmapWalk(t *testing.T) {
 	if c := pressKey(m, '1'); c != nil {
 		c()
 	}
-	if m.roadSel != walked {
-		t.Errorf("re-pressing the roadmap tab snapped the walk back: got %s, want %s", m.roadSel, walked)
+	if m.road.sel != walked {
+		t.Errorf("re-pressing the roadmap tab snapped the walk back: got %s, want %s", m.road.sel, walked)
 	}
 
 	// roadmap → table: the cursor the user SEES is the walked row.
@@ -382,7 +382,7 @@ func TestSwitchViewCarriesTheRoadmapWalk(t *testing.T) {
 
 // TestSwitchViewCarriesTheFilterHiddenWalk is the second review's blocking
 // find: the roadmap MUTES filter-hidden rows rather than dropping them, so
-// roadSel is routinely a task the board cols do not contain — and the first
+// road.sel is routinely a task the board cols do not contain — and the first
 // fix round-tripped the seed through the board cursor, which loses exactly
 // those rows. The seed must travel explicitly.
 func TestSwitchViewCarriesTheFilterHiddenWalk(t *testing.T) {
@@ -393,15 +393,15 @@ func TestSwitchViewCarriesTheFilterHiddenWalk(t *testing.T) {
 	if c := pressKey(m, '1'); c != nil {
 		c()
 	}
-	if m.view != viewRoadmap || m.roadLay == nil || len(m.roadLay.Rows) < 2 {
+	if m.view != viewRoadmap || m.road.lay == nil || len(m.road.lay.Rows) < 2 {
 		t.Fatalf("setup: roadmap did not open with rows")
 	}
 	// Walk until the cursor stands on a row the filter hides (muted, still
 	// walkable) — the fixture's dated set guarantees one under label:bbq.
 	hidden := ""
-	for range m.roadLay.Rows {
-		if m.taskHidden(m.roadSel) {
-			hidden = m.roadSel
+	for range m.road.lay.Rows {
+		if m.taskHidden(m.road.sel) {
+			hidden = m.road.sel
 			break
 		}
 		m.roadMove(+1)
@@ -414,8 +414,8 @@ func TestSwitchViewCarriesTheFilterHiddenWalk(t *testing.T) {
 	if c := pressKey(m, '1'); c != nil {
 		c()
 	}
-	if m.roadSel != hidden {
-		t.Errorf("re-press snapped the filter-hidden walk back: got %s, want %s", m.roadSel, hidden)
+	if m.road.sel != hidden {
+		t.Errorf("re-press snapped the filter-hidden walk back: got %s, want %s", m.road.sel, hidden)
 	}
 
 	// roadmap → table under the same filter: prev cannot be shown, and the
@@ -432,7 +432,7 @@ func TestSwitchViewCarriesTheFilterHiddenWalk(t *testing.T) {
 
 // TestRoadmapTabSwitchKeepsTheWalkForEsc: a roadmap→roadmap switch carries
 // the walk, so esc afterwards must still pin-and-carry it — losing the
-// roadMoved flag made closeRoadmap skip that while its note claimed "the
+// road.moved flag made closeRoadmap skip that while its note claimed "the
 // cursor followed the roadmap" (third review pass, measured against esc's
 // own baseline).
 func TestRoadmapTabSwitchKeepsTheWalkForEsc(t *testing.T) {
@@ -447,21 +447,21 @@ func TestRoadmapTabSwitchKeepsTheWalkForEsc(t *testing.T) {
 	// open on a hidden row already (the board cursor is dated on this
 	// fixture), and esc's pin-and-carry only fires for a walk.
 	hidden := ""
-	for range m.roadLay.Rows {
-		if m.roadMoved && m.taskHidden(m.roadSel) {
-			hidden = m.roadSel
+	for range m.road.lay.Rows {
+		if m.road.moved && m.taskHidden(m.road.sel) {
+			hidden = m.road.sel
 			break
 		}
 		m.roadMove(+1)
 	}
-	if hidden == "" || !m.roadMoved {
-		t.Fatalf("setup: no walked filter-hidden row (hidden=%q moved=%v)", hidden, m.roadMoved)
+	if hidden == "" || !m.road.moved {
+		t.Fatalf("setup: no walked filter-hidden row (hidden=%q moved=%v)", hidden, m.road.moved)
 	}
 	if c := pressKey(m, '2'); c != nil {
 		c()
 	}
-	if m.roadSel != hidden || !m.roadMoved {
-		t.Fatalf("tab switch dropped the walk (sel=%s moved=%v), want %s carried", m.roadSel, m.roadMoved, hidden)
+	if m.road.sel != hidden || !m.road.moved {
+		t.Fatalf("tab switch dropped the walk (sel=%s moved=%v), want %s carried", m.road.sel, m.road.moved, hidden)
 	}
 	m.onRoadKey(tea.KeyPressMsg{Code: tea.KeyEscape})
 	if got := m.curTask(); got == nil || got.ID != hidden {

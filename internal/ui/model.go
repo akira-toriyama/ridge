@@ -274,22 +274,7 @@ type Model struct {
 	mapScroll int
 	mapLay    *mapLayout
 
-	// The roadmap view (roadmap.go). roadSel is the row the cursor is on;
-	// roadZoom is the axis unit; roadXOff is the window's pan over the axis,
-	// in cells; roadMoved carries the walk back to the board on close, the
-	// way mapMoved does and for the same reason. roadAnchored reports that
-	// the opening window has been PLACED — render only places it on a frame
-	// whose size is real (m.sized), because the interactive program draws
-	// one frame before the terminal reports a size, and a window placed
-	// against the constructor's default width put today off screen on every
-	// other terminal.
-	roadZoom     roadZoom
-	roadSel      string
-	roadMoved    bool
-	roadAnchored bool
-	roadScroll   int
-	roadXOff     int
-	roadLay      *roadLayout
+	road roadState
 
 	swim swimState
 
