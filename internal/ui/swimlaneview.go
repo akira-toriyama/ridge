@@ -29,6 +29,43 @@ import (
 // stop before lane 0's count. On task rows the rail is the selection gutter
 // and the band's continuation rule, so it is never dead space.
 
+// swimState is the swimlane view's whole state, held by value like sweepState:
+// a view has no closed state for nil to mean. Unlike the sweep's, the zero
+// value is NOT the state before the first frame: newModel seeds axis, and
+// sliceField's zero is sliceRepo, so a dropped seed would regroup the opening
+// frame with nothing from the compiler. (open is seeded too, but the view's
+// own writers make the map on first use.) Like the graph's radius and the
+// roadmap's zoom, none of it survives the session.
+type swimState struct {
+	// axis is the grouping axis and is deliberately SEPARATE from
+	// Model.sliceField: that one carries the active filter, and re-grouping a
+	// read-only view must not rewrite the query.
+	axis sliceField
+	all  bool
+	// open is the unfolded set — the OPEN side is stored because bands are
+	// folded by default, so a 57-band board carries an empty map rather than
+	// 57 entries.
+	open map[string]bool
+	// sel is a swimKey (swimlane.go), a band header when its id half is "" —
+	// or the bare "" cycleSwimAxis leaves, which no row matches and
+	// clampSwimSel repairs on the next frame.
+	sel string
+	// lane is the cursor's desired COLUMN, carried alongside the key because
+	// a band header spans every column and so cannot say which one a vertical
+	// walk was descending.
+	lane int
+	// moved is set only by the user's own walk; closeSwim hands it to
+	// carryCursorBack, which says why an unmoved cursor is not carried.
+	moved  bool
+	scroll int
+	// lay is the pack the last frame drew. renderSwim repacks every frame
+	// regardless; nil means a key handler arriving before the next frame must
+	// repack for itself (onSwimKey does), which is what the fold, axis and
+	// scope handlers rely on. recompute (model.go) says why a board re-read
+	// must nil it.
+	lay *swimLayout
+}
+
 const (
 	swimSelGutter = 2 // the selected row's left bar, for the reason mapSelGutter gives
 	swimBarH      = 2 // the lane bar and its rule: sticky, never scrolled
@@ -85,7 +122,7 @@ func swimNoTerm(axis sliceField) string {
 // dimension. The sentinel is appended AFTER, never sorted in: its key is "".
 func (m *Model) swimVocab() []swimValue {
 	var out []swimValue
-	switch m.swimAxis {
+	switch m.swim.axis {
 	case sliceRepo:
 		for _, r := range m.repoVocab() {
 			out = append(out, swimValue{Key: r, Label: board.ShortRepoName(r)})
@@ -133,7 +170,7 @@ func (m *Model) swimVocab() []swimValue {
 			out = append(out, swimValue{Key: id, Label: id})
 		}
 	}
-	return append(out, swimValue{Key: "", Label: swimSentinel(m.swimAxis)})
+	return append(out, swimValue{Key: "", Label: swimSentinel(m.swim.axis)})
 }
 
 // swimPopulation is what the view groups: every task on the board, minus the
@@ -145,7 +182,7 @@ func (m *Model) swimPopulation() map[string][]*board.Task {
 	out := map[string][]*board.Task{}
 	for _, l := range m.b.Lanes() {
 		ts := m.b.LaneTasks(l.Name)
-		if m.swimAll {
+		if m.swim.all {
 			out[l.Name] = ts
 			continue
 		}
@@ -162,8 +199,8 @@ func (m *Model) swimPopulation() map[string][]*board.Task {
 
 func (m *Model) buildSwim() *swimLayout {
 	return packSwim(swimSpec{
-		Axis: m.swimAxis, All: m.swimAll, Vocab: m.swimVocab(),
-		Lanes: m.b.Lanes(), Cols: m.swimPopulation(), Open: m.swimOpen, W: m.w,
+		Axis: m.swim.axis, All: m.swim.all, Vocab: m.swimVocab(),
+		Lanes: m.b.Lanes(), Cols: m.swimPopulation(), Open: m.swim.open, W: m.w,
 	})
 }
 
@@ -172,13 +209,13 @@ func (m *Model) swimCanvasH() int { return m.fullCanvasH(swimBarH) }
 
 func (m *Model) renderSwim() string {
 	l := m.buildSwim()
-	m.swimLay = l
+	m.swim.lay = l
 	m.clampSwimSel(l)
 
 	canvasH := m.swimCanvasH()
 	total := l.Height()
-	m.swimScroll = clamp(m.swimScroll, 0, maxInt(0, total-canvasH))
-	m.swimScroll = m.scrollSwimToSel(l, total, canvasH)
+	m.swim.scroll = clamp(m.swim.scroll, 0, maxInt(0, total-canvasH))
+	m.swim.scroll = m.scrollSwimToSel(l, total, canvasH)
 
 	canvas := make([]string, 0, swimBarH+canvasH)
 	canvas = append(canvas, m.swimBarRows(l)...)
@@ -192,13 +229,13 @@ func (m *Model) renderSwim() string {
 		// which is the class CLAUDE.md's 36ms/frame measurement records. The
 		// geometry is pure and index-addressable, so the window is an exact
 		// range rather than a render-then-cut.
-		for i := m.swimScroll; i < minInt(total, m.swimScroll+canvasH); i++ {
+		for i := m.swim.scroll; i < minInt(total, m.swim.scroll+canvasH); i++ {
 			canvas = append(canvas, m.swimLineText(l, l.Lines[i]))
 		}
 	}
 	return m.composeFullScreen(m.swimTitleBar(l), m.swimHeader(l, total > canvasH),
 		m.fillCanvas(canvas, swimBarH+canvasH), func(h int) string {
-			id := l.IDOf(m.swimSel)
+			id := l.IDOf(m.swim.sel)
 			return m.taskStrip(m.b.Task(id), m.taskHidden(id), h)
 		})
 }
@@ -206,7 +243,7 @@ func (m *Model) renderSwim() string {
 func (m *Model) swimEmptyLine() string {
 	// The all-done sentence is only true of a board that HAS tasks: said over
 	// an empty store it asserted a fact about a population that does not exist.
-	if !m.swimAll && len(m.b.Tasks()) > 0 {
+	if !m.swim.all && len(m.b.Tasks()) > 0 {
 		return "— every task on this board is done: nothing open to group (z includes done) —"
 	}
 	return "— this board holds no tasks at all —"
@@ -246,7 +283,7 @@ func (m *Model) swimHeader(l *swimLayout, clipped bool) string {
 }
 
 func (m *Model) swimScopeName() string {
-	if m.swimAll {
+	if m.swim.all {
 		return "all"
 	}
 	return "open"
@@ -294,7 +331,7 @@ func (m *Model) swimBarRows(l *swimLayout) []string {
 	for i, lane := range l.Lanes {
 		n := l.LaneCount[i]
 		hdr := th.colHdr
-		if i == m.swimLane {
+		if i == m.swim.lane {
 			hdr = th.colHdrOn
 		}
 		name := th.laneDot(lane).Render(glyphLaneDot) + " " + hdr.Render(lane.DisplayName())
@@ -323,7 +360,7 @@ func (m *Model) swimLineText(l *swimLayout, ln swimLine) string {
 func (m *Model) swimHeaderLine(l *swimLayout, bi int) string {
 	th := m.th
 	b := l.Bands[bi]
-	sel := m.swimSel == swimKey(b.Key, "")
+	sel := m.swim.sel == swimKey(b.Key, "")
 
 	fold := swimFoldShut
 	if b.Open {
@@ -359,7 +396,7 @@ func (m *Model) swimHeaderLine(l *swimLayout, bi int) string {
 		txt := th.dim.Render("·")
 		if n > 0 {
 			style := th.colCount
-			if i == m.swimLane {
+			if i == m.swim.lane {
 				style = th.accent
 			}
 			txt = style.Render(fmt.Sprintf("%d", n))
@@ -399,7 +436,7 @@ func (m *Model) swimCellsLine(l *swimLayout, bi, row int) string {
 func (m *Model) swimCell(t *board.Task, key string, w int) string {
 	th := m.th
 	gutter := strings.Repeat(" ", swimSelGutter)
-	if key == m.swimSel {
+	if key == m.swim.sel {
 		gutter = th.accent.Render("▌") + " "
 	}
 	glyph, styleFor := cardMarker(t, m.g)
@@ -430,20 +467,20 @@ func (m *Model) swimCell(t *board.Task, key string, w int) string {
 // clampSwimSel keeps the cursor on a row that still exists — a scope change, a
 // fold or a re-read can take the row away.
 func (m *Model) clampSwimSel(l *swimLayout) {
-	m.swimLane = clamp(m.swimLane, 0, maxInt(0, len(l.Lanes)-1))
-	if _, ok := l.Pos(m.swimSel); ok {
+	m.swim.lane = clamp(m.swim.lane, 0, maxInt(0, len(l.Lanes)-1))
+	if _, ok := l.Pos(m.swim.sel); ok {
 		return
 	}
-	m.swimSel = l.First()
+	m.swim.sel = l.First()
 }
 
 func (m *Model) scrollSwimToSel(l *swimLayout, total, canvasH int) int {
-	return scrollToSel(m.swimScroll, total, canvasH, func() (int, int, bool) {
-		p, ok := l.Pos(m.swimSel)
+	return scrollToSel(m.swim.scroll, total, canvasH, func() (int, int, bool) {
+		p, ok := l.Pos(m.swim.sel)
 		if !ok {
 			return 0, 0, false
 		}
-		line, _ := l.LineOf(m.swimSel)
+		line, _ := l.LineOf(m.swim.sel)
 		// The band is read from the position the lookup already resolved — a
 		// second BandOf call would be a second chance to index a band that is
 		// not there.
@@ -456,15 +493,15 @@ func (m *Model) scrollSwimToSel(l *swimLayout, total, canvasH int) int {
 }
 
 func (m *Model) swimMove(dx, dy int) {
-	l := m.swimLay
+	l := m.swim.lay
 	if l == nil {
 		return
 	}
-	next, lane := l.step(m.swimSel, m.swimLane, dx, dy)
-	if next != m.swimSel || lane != m.swimLane {
-		m.swimMoved = true
+	next, lane := l.step(m.swim.sel, m.swim.lane, dx, dy)
+	if next != m.swim.sel || lane != m.swim.lane {
+		m.swim.moved = true
 	}
-	m.swimSel, m.swimLane = next, lane
+	m.swim.sel, m.swim.lane = next, lane
 }
 
 // openSwim switches to the view, seeded on the board's cursor: its band is
@@ -473,21 +510,21 @@ func (m *Model) swimMove(dx, dy int) {
 // frame opens fully folded, which is the histogram this view exists to give.
 func (m *Model) openSwim() {
 	m.cancelDrag()
-	m.swimScroll = 0
-	m.swimMoved = false
+	m.swim.scroll = 0
+	m.swim.moved = false
 	m.view = viewSwim
-	if m.swimOpen == nil {
-		m.swimOpen = map[string]bool{}
+	if m.swim.open == nil {
+		m.swim.open = map[string]bool{}
 	}
 	band, wasOpen := "", false
 	if t := m.curTask(); t != nil {
 		if i := m.b.LaneIndex(t.Status); i >= 0 {
-			m.swimLane = i
+			m.swim.lane = i
 		}
-		band = swimKeys(t, m.swimAxis)[0]
-		wasOpen = m.swimOpen[band]
-		m.swimOpen[band] = true
-		m.swimSel = swimKey(band, t.ID)
+		band = swimKeys(t, m.swim.axis)[0]
+		wasOpen = m.swim.open[band]
+		m.swim.open[band] = true
+		m.swim.sel = swimKey(band, t.ID)
 	}
 	l := m.buildSwim()
 	// Seeding is all-or-nothing. A cursor this pack cannot hold — a done card
@@ -497,22 +534,22 @@ func (m *Model) openSwim() {
 	// is not in. Fall back to the band HEADER, which still says where the card
 	// is filed and keeps the opening frame the histogram it claims to be.
 	if band != "" {
-		if _, ok := l.Pos(m.swimSel); !ok {
+		if _, ok := l.Pos(m.swim.sel); !ok {
 			if !wasOpen {
-				delete(m.swimOpen, band)
+				delete(m.swim.open, band)
 			}
-			m.swimSel = swimKey(band, "")
+			m.swim.sel = swimKey(band, "")
 			l = m.buildSwim()
 		}
 	}
-	m.swimLay = l
+	m.swim.lay = l
 	m.clampSwimSel(l)
 	m.noteSwim()
 }
 
 func (m *Model) noteSwim() {
 	m.note("swimlane — %s down, lanes across · space folds a band · ⏎ slices to it · tab switches the axis · z scope · esc returns",
-		m.swimAxis.String())
+		m.swim.axis.String())
 }
 
 // closeSwim returns to the board, landing the board cursor on the task the
@@ -520,8 +557,8 @@ func (m *Model) noteSwim() {
 func (m *Model) closeSwim() {
 	m.view = viewBoard
 	// A band header names no row the board could select: IDOf is "" there.
-	if m.swimLay != nil {
-		m.carryCursorBack(m.swimMoved, m.swimLay.IDOf(m.swimSel))
+	if m.swim.lay != nil {
+		m.carryCursorBack(m.swim.moved, m.swim.lay.IDOf(m.swim.sel))
 	}
 	m.note("board view — the cursor followed the swimlane")
 }
@@ -531,22 +568,22 @@ func (m *Model) closeSwim() {
 // cursor left on one would be clamped to the first band on the next frame,
 // which reads as the view scrolling away on its own.
 func (m *Model) toggleSwimFold(l *swimLayout) {
-	bi := l.BandOf(m.swimSel)
+	bi := l.BandOf(m.swim.sel)
 	if bi < 0 {
 		return
 	}
 	b := l.Bands[bi]
-	if m.swimOpen == nil {
-		m.swimOpen = map[string]bool{}
+	if m.swim.open == nil {
+		m.swim.open = map[string]bool{}
 	}
 	if b.Open {
-		delete(m.swimOpen, b.Key)
-		m.swimSel = swimKey(b.Key, "")
+		delete(m.swim.open, b.Key)
+		m.swim.sel = swimKey(b.Key, "")
 		m.note("folded %s — %d tasks", b.Label, b.Total)
 		return
 	}
-	m.swimOpen[b.Key] = true
-	m.swimSel = swimKey(b.Key, "")
+	m.swim.open[b.Key] = true
+	m.swim.sel = swimKey(b.Key, "")
 	m.note("unfolded %s — %d tasks", b.Label, b.Total)
 }
 
@@ -554,7 +591,7 @@ func (m *Model) toggleSwimFold(l *swimLayout) {
 // drill-down, verbatim, because a band and a slice mean the same thing and a
 // second filtering mechanism would be the one this repo keeps refusing to own.
 func (m *Model) sliceToSwimBand(l *swimLayout) tea.Cmd {
-	bi := l.BandOf(m.swimSel)
+	bi := l.BandOf(m.swim.sel)
 	if bi < 0 {
 		m.note("no band under the cursor")
 		return nil
@@ -588,22 +625,22 @@ func (m *Model) sliceToSwimBand(l *swimLayout) tea.Cmd {
 // one carries the active filter, and changing a read-only view's grouping must
 // not rewrite the query underneath the board.
 func (m *Model) cycleSwimAxis(d int) {
-	m.swimAxis = sliceField((int(m.swimAxis) + d + int(sliceFieldCount)) % int(sliceFieldCount))
-	m.swimLay = nil
-	m.swimScroll = 0
+	m.swim.axis = sliceField((int(m.swim.axis) + d + int(sliceFieldCount)) % int(sliceFieldCount))
+	m.swim.lay = nil
+	m.swim.scroll = 0
 	// The fold set is per-axis by construction (its keys are values of the old
 	// axis), so it is dropped rather than left to collide: an epic id and a
 	// label are both just strings.
-	m.swimOpen = map[string]bool{}
-	m.swimSel = ""
+	m.swim.open = map[string]bool{}
+	m.swim.sel = ""
 	m.noteSwim()
 }
 
 func (m *Model) onSwimKey(msg tea.KeyPressMsg) tea.Cmd {
-	l := m.swimLay
+	l := m.swim.lay
 	if l == nil {
 		l = m.buildSwim()
-		m.swimLay = l
+		m.swim.lay = l
 		m.clampSwimSel(l)
 	}
 	switch {
@@ -618,7 +655,7 @@ func (m *Model) onSwimKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	case key.Matches(msg, m.keys.SwimFold):
 		m.toggleSwimFold(l)
-		m.swimLay = nil
+		m.swim.lay = nil
 
 	case key.Matches(msg, m.keys.SwimAxis):
 		d := 1
@@ -630,8 +667,8 @@ func (m *Model) onSwimKey(msg tea.KeyPressMsg) tea.Cmd {
 	case key.Matches(msg, m.keys.MapScope):
 		// Only the scope changes; the next frame rebuilds the pack and
 		// clampSwimSel moves the cursor if its row went away.
-		m.swimAll = !m.swimAll
-		m.swimLay = nil
+		m.swim.all = !m.swim.all
+		m.swim.lay = nil
 		m.note("swimlane scope %s", m.swimScopeName())
 
 	case key.Matches(msg, m.keys.Up):
@@ -644,18 +681,18 @@ func (m *Model) onSwimKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.swimMove(+1, 0)
 
 	case key.Matches(msg, m.keys.Top):
-		m.swimSel, m.swimMoved = l.First(), true
+		m.swim.sel, m.swim.moved = l.First(), true
 	case key.Matches(msg, m.keys.Bottom):
 		if len(l.Bands) > 0 {
-			m.swimSel, m.swimLane = l.Last(m.swimLane)
-			m.swimMoved = true
+			m.swim.sel, m.swim.lane = l.Last(m.swim.lane)
+			m.swim.moved = true
 		}
 
 	case key.Matches(msg, m.keys.PeekScroll):
 		m.halfPage(msg, m.swimCanvasH(), func(dir int) bool {
-			at := m.swimSel
+			at := m.swim.sel
 			m.swimMove(0, dir)
-			return m.swimSel != at
+			return m.swim.sel != at
 		}, "the swimlane")
 
 	default:

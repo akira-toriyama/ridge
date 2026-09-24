@@ -104,9 +104,9 @@ func BenchmarkSwimAtBoardSize(b *testing.B) {
 				m.openSwim()
 				if open {
 					for _, band := range m.buildSwim().Bands {
-						m.swimOpen[band.Key] = true
+						m.swim.open[band.Key] = true
 					}
-					m.swimLay = nil
+					m.swim.lay = nil
 				}
 				b.ReportAllocs()
 				for b.Loop() {
