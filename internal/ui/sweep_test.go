@@ -53,8 +53,8 @@ func TestSweepOpensWithTheFixturePreviews(t *testing.T) {
 	if m.view != viewSweep {
 		t.Fatal("X did not open the sweep")
 	}
-	if m.sweep == nil || len(m.sweep.Archivable) == 0 || len(m.sweep.DoneDeps) == 0 {
-		t.Fatalf("fixture previews missing: %+v", m.sweep)
+	if m.sweep.preview == nil || len(m.sweep.preview.Archivable) == 0 || len(m.sweep.preview.DoneDeps) == 0 {
+		t.Fatalf("fixture previews missing: %+v", m.sweep.preview)
 	}
 	out := frame(m)
 	for _, want := range []string{"⟨SWEEP⟩", "archivable (closed >30d)", "with satisfied deps", "no unknown keys parked", "the archive is empty", "t-t38k"} {
@@ -74,34 +74,34 @@ func TestSweepOpensWithTheFixturePreviews(t *testing.T) {
 func TestSweepArchiveGateSkipCancelAndApply(t *testing.T) {
 	m := boardModel(t, 240, 40)
 	press(m, "X")
-	first := m.sweepSel
-	all := sweepArchiveSet(m.sweep, nil)
+	first := m.sweep.sel
+	all := sweepArchiveSet(m.sweep.preview, nil)
 	skipped := strings.TrimPrefix(first, sweepKey(sweepArchive, ""))
 
 	press(m, "x")
-	if !m.sweepSkip[skipped] {
+	if !m.sweep.skip[skipped] {
 		t.Fatalf("x did not skip %s", skipped)
 	}
-	if got := sweepArchiveSet(m.sweep, m.sweepSkip); len(got) != len(all)-1 {
+	if got := sweepArchiveSet(m.sweep.preview, m.sweep.skip); len(got) != len(all)-1 {
 		t.Fatalf("archive set after skip = %d, want %d", len(got), len(all)-1)
 	}
 	press(m, "enter")
-	if m.sweepGate == nil {
+	if m.sweep.gate == nil {
 		t.Fatal("⏎ did not arm the gate")
 	}
 	if !strings.Contains(frame(m), "⏎ confirms: furrow archive") {
 		t.Error("the header does not carry the gate line")
 	}
 	press(m, "down")
-	if m.sweepGate != nil {
+	if m.sweep.gate != nil {
 		t.Fatal("a stray key must cancel the gate")
 	}
-	if m.sweepSel != first {
+	if m.sweep.sel != first {
 		t.Error("the cancelling key must not also move the cursor")
 	}
 
 	press(m, "enter", "enter")
-	if m.sweepGate != nil {
+	if m.sweep.gate != nil {
 		t.Fatal("the second ⏎ must consume the gate")
 	}
 	drainPersists(m, t)
@@ -116,17 +116,17 @@ func TestSweepArchiveGateSkipCancelAndApply(t *testing.T) {
 			t.Errorf("%s was archived but is still on the board", id)
 		}
 	}
-	if m.sweep == nil || len(m.sweep.Archived) != len(all)-1 {
-		t.Fatalf("the preview did not re-read after the write: %+v", m.sweep)
+	if m.sweep.preview == nil || len(m.sweep.preview.Archived) != len(all)-1 {
+		t.Fatalf("the preview did not re-read after the write: %+v", m.sweep.preview)
 	}
 	if !strings.Contains(frame(m), "archived — the archive store") || strings.Contains(frame(m), "the archive is empty") {
 		t.Error("the archive section must list the retired tasks now")
 	}
 	// x is an ARCHIVE-row key: on any other section it explains and changes nothing.
-	m.sweepSel = sweepKey(sweepArchived, all[1])
-	marks := len(m.sweepSkip)
+	m.sweep.sel = sweepKey(sweepArchived, all[1])
+	marks := len(m.sweep.skip)
 	press(m, "x")
-	if len(m.sweepSkip) != marks {
+	if len(m.sweep.skip) != marks {
 		t.Error("x on an archived row must not mark a skip")
 	}
 	// Restore one: ⏎ ⏎ on the archived row brings it back to the done lane.
@@ -142,14 +142,14 @@ func TestSweepArchiveGateSkipCancelAndApply(t *testing.T) {
 func TestSweepTidyDoneDepsPrunesTheClass(t *testing.T) {
 	m := boardModel(t, 240, 40)
 	press(m, "X")
-	if len(m.sweep.DoneDeps) == 0 {
+	if len(m.sweep.preview.DoneDeps) == 0 {
 		t.Fatal("fixture has no satisfied dep edges to tidy")
 	}
-	victim := m.sweep.DoneDeps[0]
-	m.sweepSel = sweepKey(sweepDoneDeps, victim.ID)
+	victim := m.sweep.preview.DoneDeps[0]
+	m.sweep.sel = sweepKey(sweepDoneDeps, victim.ID)
 	press(m, "enter")
-	if m.sweepGate == nil || !strings.Contains(m.sweepGate.what, "--done-deps") {
-		t.Fatalf("gate = %+v", m.sweepGate)
+	if m.sweep.gate == nil || !strings.Contains(m.sweep.gate.what, "--done-deps") {
+		t.Fatalf("gate = %+v", m.sweep.gate)
 	}
 	press(m, "enter")
 	drainPersists(m, t)
@@ -161,8 +161,8 @@ func TestSweepTidyDoneDepsPrunesTheClass(t *testing.T) {
 			}
 		}
 	}
-	if len(m.sweep.DoneDeps) != 0 {
-		t.Errorf("preview still lists %d tasks with satisfied deps", len(m.sweep.DoneDeps))
+	if len(m.sweep.preview.DoneDeps) != 0 {
+		t.Errorf("preview still lists %d tasks with satisfied deps", len(m.sweep.preview.DoneDeps))
 	}
 }
 
@@ -171,14 +171,14 @@ func TestSweepTidyDoneDepsPrunesTheClass(t *testing.T) {
 func TestSweepRefusesAnEmptyArchiveSet(t *testing.T) {
 	m := boardModel(t, 240, 40)
 	press(m, "X")
-	for _, tk := range m.sweep.Archivable {
-		if m.sweepSkip == nil {
-			m.sweepSkip = map[string]bool{}
+	for _, tk := range m.sweep.preview.Archivable {
+		if m.sweep.skip == nil {
+			m.sweep.skip = map[string]bool{}
 		}
-		m.sweepSkip[tk.ID] = true
+		m.sweep.skip[tk.ID] = true
 	}
 	press(m, "enter")
-	if m.sweepGate != nil {
+	if m.sweep.gate != nil {
 		t.Fatal("an all-skipped archive set must not arm a gate")
 	}
 	if !strings.Contains(m.status, "every archive row is skipped") {
@@ -192,8 +192,8 @@ func TestSweepWriteRefusalIsStoreFirst(t *testing.T) {
 	m, p := scriptedModel(t)
 	p.epicErr, p.epicFailAt = errors.New("scripted refusal"), 1
 	m.view = viewSweep
-	m.sweep = &board.Sweep{Archivable: []board.SweepTask{{ID: "a"}}}
-	m.sweepSel = sweepKey(sweepArchive, "a")
+	m.sweep.preview = &board.Sweep{Archivable: []board.SweepTask{{ID: "a"}}}
+	m.sweep.sel = sweepKey(sweepArchive, "a")
 	press(m, "enter", "enter")
 	if !m.inflight {
 		t.Fatal("the write did not queue")
@@ -225,7 +225,7 @@ func TestSweepWriteKeepsTheSessionsOtherEditsOnTheFixture(t *testing.T) {
 	if tk := m.b.Task("t-ehk7"); tk == nil || tk.Status != "ready" {
 		t.Errorf("the archive write reverted the session's move: %+v", tk)
 	}
-	if len(m.sweep.Archived) == 0 {
+	if len(m.sweep.preview.Archived) == 0 {
 		t.Error("the archive write did not land")
 	}
 }
@@ -235,7 +235,7 @@ func TestSweepWriteKeepsTheSessionsOtherEditsOnTheFixture(t *testing.T) {
 func TestSweepGateLetsCtrlCThrough(t *testing.T) {
 	m := boardModel(t, 240, 40)
 	press(m, "X", "enter")
-	if m.sweepGate == nil {
+	if m.sweep.gate == nil {
 		t.Fatal("no gate")
 	}
 	c := m.onSweepKey(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
@@ -257,8 +257,8 @@ func TestSweepDeferredReadArrivesWhenTheDrainEnds(t *testing.T) {
 		t.Fatal("the epic write did not queue")
 	}
 	press(m, "X")
-	if m.view != viewSweep || m.sweep != nil || !m.sweepLoading {
-		t.Fatalf("X under a queued write: view=%v sweep=%v loading=%v", m.view, m.sweep != nil, m.sweepLoading)
+	if m.view != viewSweep || m.sweep.preview != nil || !m.sweep.loading {
+		t.Fatalf("X under a queued write: view=%v sweep=%v loading=%v", m.view, m.sweep.preview != nil, m.sweep.loading)
 	}
 	if out := frame(m); !strings.Contains(out, "reading the previews") || strings.Contains(out, "nothing old enough") || !strings.Contains(out, "not read yet") {
 		t.Errorf("the deferred frame must say it is reading, not that there is nothing to sweep")
@@ -270,8 +270,8 @@ func TestSweepDeferredReadArrivesWhenTheDrainEnds(t *testing.T) {
 	if m.inflight || len(m.pending) > 0 {
 		t.Fatal("the queue did not drain")
 	}
-	if m.sweep == nil || m.sweepLoading {
-		t.Errorf("the drain (a refused write, nothing unread) did not deliver the read: sweep=%v loading=%v", m.sweep != nil, m.sweepLoading)
+	if m.sweep.preview == nil || m.sweep.loading {
+		t.Errorf("the drain (a refused write, nothing unread) did not deliver the read: sweep=%v loading=%v", m.sweep.preview != nil, m.sweep.loading)
 	}
 }
 
@@ -301,10 +301,10 @@ func pump(m *Model, cmd tea.Cmd) {
 func TestSweepStalledReadNamesTheWayOut(t *testing.T) {
 	m, _ := scriptedModel(t)
 	m.view = viewSweep
-	m.sweepLoading = true
-	m.sweep = nil
+	m.sweep.loading = true
+	m.sweep.preview = nil
 	m.Update(reloadDoneMsg{label: "reload", err: errors.New("furrow ls timed out")})
-	if m.sweepLoading {
+	if m.sweep.loading {
 		t.Error("the failed re-read left the loading claim up")
 	}
 	if out := frame(m); !strings.Contains(out, "previews not read — r reads them") || strings.Contains(out, "reading the previews") {
