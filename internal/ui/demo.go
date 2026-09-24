@@ -600,7 +600,7 @@ func (m *Model) demoState(kind string) error {
 			_ = c
 		}
 		l := m.buildBoxes()
-		m.boxesLay = l
+		m.boxes.lay = l
 		// The row's group is its first repo, or the no-repo group packBoxes
 		// files a repo-less box under.
 		repo := boxNoRepo
@@ -611,7 +611,7 @@ func (m *Model) demoState(kind string) error {
 		if l.Row(key) == nil {
 			return fmt.Errorf("demo boxesall: z did not widen the population")
 		}
-		m.boxesSel = key
+		m.boxes.sel = key
 
 	case "swim":
 		// The swimlane as `W` opens it: every band folded to its per-lane
