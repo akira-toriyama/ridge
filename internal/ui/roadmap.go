@@ -48,10 +48,9 @@ func (z roadZoom) String() string {
 
 // roadRow is one dated task's placed line — the unit the cursor moves over.
 type roadRow struct {
-	ID  string
-	Y   int // row index, top to bottom in due order
-	X   int // cell of the due on the full (unwindowed) axis
-	Due time.Time
+	ID string
+	Y  int // row index, top to bottom in due order
+	X  int // cell of the due on the full (unwindowed) axis
 }
 
 // roadLayout is one frame's worth of roadmap geometry. There is no W: the
@@ -153,7 +152,7 @@ func packRoad(tasks []*board.Task, z roadZoom, now time.Time) *roadLayout {
 
 	for i, t := range rows {
 		l.rowAt[t.ID] = i
-		l.Rows = append(l.Rows, roadRow{ID: t.ID, Y: i, X: unitOf(z, t.Due) - l.start, Due: t.Due})
+		l.Rows = append(l.Rows, roadRow{ID: t.ID, Y: i, X: unitOf(z, t.Due) - l.start})
 	}
 	return l
 }

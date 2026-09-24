@@ -63,7 +63,6 @@ const boxNoRepoLabel = "(no repo)"
 type boxRow struct {
 	Key   string
 	ID    string
-	Repo  string
 	Group int
 	Col   int
 	Y     int // absolute row inside the packed canvas
@@ -94,7 +93,7 @@ type boxLayout struct {
 
 	Cols int
 	ColW int
-	W, H int
+	H    int
 }
 
 // Row is the placed row for a cursor key, or nil when it is not in this pack.
@@ -174,7 +173,7 @@ func packBoxes(boxes []board.EpicInfo, all bool, avail int) *boxLayout {
 		Sep: boxPanelSep, Gap: boxPanelGap, MinW: boxPanelMinW, MaxCols: boxMaxCols, Avail: avail,
 	})
 
-	l := &boxLayout{All: all, Cols: cols, ColW: colW, W: avail, rowAt: map[string]int{}}
+	l := &boxLayout{All: all, Cols: cols, ColW: colW, rowAt: map[string]int{}}
 	colH := make([]int, cols)
 	for i := range groups {
 		col := placed[i]
@@ -186,7 +185,7 @@ func packBoxes(boxes []board.EpicInfo, all bool, avail int) *boxLayout {
 			key := boxKey(groups[i].Repo, e.ID)
 			l.rowAt[key] = len(l.Rows)
 			l.Rows = append(l.Rows, boxRow{
-				Key: key, ID: e.ID, Repo: groups[i].Repo,
+				Key: key, ID: e.ID,
 				Group: i, Col: col, Y: y + boxPanelHdr + j,
 			})
 		}

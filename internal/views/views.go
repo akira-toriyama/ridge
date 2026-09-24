@@ -49,7 +49,10 @@ type View struct {
 }
 
 // The vocabularies. These are the on-disk contract; the ui package's enums
-// mirror them and a test walks both directions.
+// mirror them and TestViewVocabulariesStayMapped walks both directions. That
+// test is their only reader outside this package; in here, clamp gates Layouts
+// and SliceFields and SplitSort gates the sort key. No production caller
+// outside views is the intended state, not dead code.
 var (
 	Layouts     = []string{"board", "table", "roadmap"}
 	SortKeys    = []string{"updated", "created", "value", "effort", "due"}

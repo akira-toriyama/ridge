@@ -511,7 +511,7 @@ func TestAFullScreenViewRefusesToReopenAnInvisibleModal(t *testing.T) {
 			if !m.fullScreen() {
 				t.Fatalf("%s does not report itself full-screen", tc.name)
 			}
-			if c := m.reopenRefusedAdd(persistOp{addTitle: "held"}); c != nil || m.mode == modeAdd {
+			if c := m.reopenRefusedAdd(persistOp{addRaw: "held"}); c != nil || m.mode == modeAdd {
 				t.Errorf("a refused add reopened its modal over the %s, which draws no modal layer", tc.name)
 			}
 		})

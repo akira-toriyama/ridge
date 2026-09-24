@@ -199,9 +199,9 @@ func TestHorizontalLaneScrolling(t *testing.T) {
 	lanes := memstore.New().Board().Lanes()
 	w := colMinW*(len(lanes)-1) + colGap*(len(lanes)-2)
 	m := boardModel(t, w, 40)
-	if m.lay.Visible >= len(m.b.Lanes()) {
+	if len(m.lay.Cols) >= len(m.b.Lanes()) {
 		t.Fatalf("%d columns should not fit all %d lanes (visible=%d)",
-			w, len(m.b.Lanes()), m.lay.Visible)
+			w, len(m.b.Lanes()), len(m.lay.Cols))
 	}
 	// The LAST lane is the one off-screen at offset 0 — naming a specific lane
 	// here is what rotted this test once already.
@@ -269,11 +269,12 @@ func TestAdvCJKColumnsAlignAtManyWidths(t *testing.T) {
 		// same x on every card row.
 		for _, c := range m.lay.Cols {
 			for _, box := range c.Cards {
-				card := renderCard(c.Tasks[box.Idx], m.g, m.th, c.W, cardNormal)
+				tk := c.Tasks[box.Idx]
+				card := renderCard(tk, m.g, m.th, c.W, cardNormal)
 				for j, l := range strings.Split(card, "\n") {
 					if cw := lg.Width(l); cw != c.W {
 						t.Errorf("w=%d lane=%s card %s line %d is %d wide, want %d",
-							w, c.Lane.Name, box.ID, j, cw, c.W)
+							w, c.Lane.Name, tk.ID, j, cw, c.W)
 					}
 				}
 			}

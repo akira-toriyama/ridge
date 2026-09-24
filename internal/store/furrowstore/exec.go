@@ -11,14 +11,17 @@ import (
 )
 
 // furrowError is furrow's machine-readable error envelope, decoded from
-// stderr. Callers branch on Kind (a closed kebab-case vocabulary — `furrow
-// vocab error-kinds`) and Retryable, never on the message prose.
+// stderr. No production caller branches on it: Error() folds Kind and Subject
+// into the one line the ui shows. Retryable is kept because
+// TestContractErrorsCarryTheEnvelope holds furrow to its promise that an
+// unknown id is not retryable; a caller that ever needs to branch branches on
+// Kind (a closed kebab-case vocabulary — `furrow vocab error-kinds`), never on
+// the message prose.
 type furrowError struct {
 	Kind      string `json:"kind"`
 	Subject   string `json:"subject"`
 	Message   string `json:"message"`
 	Retryable bool   `json:"retryable"`
-	Exit      int    `json:"exit"`
 }
 
 func (e *furrowError) Error() string {
