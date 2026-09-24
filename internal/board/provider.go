@@ -368,11 +368,12 @@ type FieldPatch struct {
 	RmRefs  []string
 }
 
-// The two pieces of -q knowledge ridge holds, kept beside the port that
+// The three pieces of -q knowledge ridge holds, kept beside the port that
 // passes -q through so "ridge holds no query grammar" (CLAUDE.md) stays true
-// to within this block. Both facts were measured against the real furrow
-// binary, and neither is derivable from anything furrow exports — a `furrow
-// q quote` would delete them (filed toward furrow, e-vakm).
+// to within this block. All three were measured against the real furrow
+// binary, and none is derivable from anything furrow exports — a `furrow
+// q quote` would delete the first two (filed toward furrow, e-vakm); the
+// third would need furrow to export its tokenizer.
 
 // QTerm spells one field:value term. The value is wrapped in double quotes
 // when it holds a character the lexer would reinterpret: ASCII whitespace
@@ -391,6 +392,18 @@ func QTerm(field, value string) string {
 // QSpellable reports whether a value has a -q spelling at all: the quoting
 // has no escape, so a value containing a double quote has none.
 func QSpellable(value string) bool { return !strings.Contains(value, `"`) }
+
+// QFields cuts a typed query on the lexer's separators — space, tab, CR and
+// LF, and nothing else: U+3000, NBSP and every other Unicode space are value
+// characters (measured against furrow, whose lexer names exactly these four;
+// strings.Fields would split a value holding one, t-j39t). Quoting is NOT
+// honoured: a quoted value with an ASCII space inside comes out as fragments,
+// and each caller handles those as it already did.
+func QFields(raw string) []string {
+	return strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ' ' || r == '\t' || r == '\r' || r == '\n'
+	})
+}
 
 // QAnd composes terms into one query: whitespace between terms is the
 // lexer's implicit AND, so the parts are joined by a single space, empty

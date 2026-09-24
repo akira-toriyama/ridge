@@ -52,3 +52,31 @@ func TestQAndJoinsWithTheImplicitAnd(t *testing.T) {
 		}
 	}
 }
+
+// QFields cuts on the lexer's four separators and nothing else, and does not
+// honour quotes (QFields' doc says which reader handles the fragments how).
+func TestQFieldsSplitsOnlyWhereTheLexerDoes(t *testing.T) {
+	for _, tc := range []struct {
+		raw  string
+		want []string
+	}{
+		{"", nil},
+		{"  ", nil},
+		{"label:ui", []string{"label:ui"}},
+		{"label:ui  is:blocked\tepic:e-1\n", []string{"label:ui", "is:blocked", "epic:e-1"}},
+		{"label:全角　空白 is:blocked", []string{"label:全角　空白", "is:blocked"}},
+		{"label:nb\u00a0sp is:blocked", []string{"label:nb\u00a0sp", "is:blocked"}},
+		{`label:"needs review"`, []string{`label:"needs`, `review"`}},
+	} {
+		got := QFields(tc.raw)
+		if len(got) != len(tc.want) {
+			t.Errorf("QFields(%q) = %q, want %q", tc.raw, got, tc.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != tc.want[i] {
+				t.Errorf("QFields(%q)[%d] = %q, want %q", tc.raw, i, got[i], tc.want[i])
+			}
+		}
+	}
+}

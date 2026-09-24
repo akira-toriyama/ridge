@@ -37,6 +37,10 @@ func TestInheritContextLiftsOnlySingleValuedTokens(t *testing.T) {
 		{q: "label:ui,dx"},
 		{q: "-label:ui"},
 		{q: "is:blocked 自由語 label:ui", label: "ui"},
+		// Cut where the lexer cuts (board.QFields): a value holding U+3000 or
+		// NBSP is lifted whole, not as its first fragment (t-j39t).
+		{q: "label:全角　空白", label: "全角　空白"},
+		{q: "label:nb\u00a0sp epic:e-1", label: "nb\u00a0sp", epic: "e-1"},
 		// is:draft is the one is: state an add can stamp — under a draft view
 		// a plain add would vanish from the very view it was added into.
 		// EqualFold on the value, because -q itself matches it that way
