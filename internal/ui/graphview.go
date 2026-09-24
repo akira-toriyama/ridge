@@ -45,6 +45,34 @@ const (
 	graphNoStructure = "— nothing depends on this, and it waits on nothing —"
 )
 
+// graphState is the dependency graph's whole state, held by value like
+// sweepState: a view has no closed state for nil to mean. Unlike the sweep's,
+// the zero value is NOT the state before the first open — newModel seeds
+// radius, and the compiler cannot tell a missing seed from a chosen one. None
+// of it survives the session: the one display state ridge persists is the
+// saved views.toml (viewtabs.go), and the graph is not part of a saved view.
+type graphState struct {
+	// focus is what the picture is rooted on and sel is the node the cursor
+	// is on; they start equal and diverge as you walk. stack retraces the
+	// re-roots.
+	focus  string
+	sel    string
+	radius int
+	orient graphOrient // which screen axis the layers run along
+	// scroll is a screen-LINE offset into the composed frame; cycleGraphOrient
+	// says why a flip drops it.
+	scroll int
+	stack  []string
+	// lay is the picture the last frame drew, written only by renderGraph and
+	// nil until then, so every reader guards (closeGraph records the headless
+	// case that found the one that did not).
+	lay *egoLayout
+	// from is the view `esc` returns to: the graph is reachable from the
+	// board AND from the dep map (closeGraph says why the map must get its
+	// reader back).
+	from viewKind
+}
+
 // graphRadii is the hop-radius cycle. The last entry is "all" — bounded by
 // graphAllRadius, which exceeds the real board's longest chain (5).
 var graphRadii = []int{1, 2, 3, graphAllRadius}
@@ -67,7 +95,7 @@ func (m *Model) graphWidth() int { return maxInt(1, m.w-2) }
 // drawing's width when the layers stack top-down, its height when they run
 // left-to-right.
 func (m *Model) graphAlong() int {
-	if m.graphOrient == orientLeftRight {
+	if m.graph.orient == orientLeftRight {
 		return m.graphCanvasH()
 	}
 	return m.graphWidth()
@@ -103,7 +131,7 @@ func (f graphFrame) nodeH() int { return f.titleLines + graphNodeChrome }
 // buildGraph lays out the ego graph for the current focus at the current
 // radius and orientation.
 //
-// The key handlers do NOT call it — they read the cached m.graphLay, which
+// The key handlers do NOT call it — they read the cached m.graph.lay, which
 // renderGraph rewrites on every frame. That holds only because bubbletea calls
 // View() after every Update, so a keystroke walks the geometry the previous
 // frame drew. A handler that both invalidates the layout AND then navigates
@@ -112,8 +140,8 @@ func (m *Model) buildGraph() *egoLayout {
 	// graphHardCols in BOTH orientations, never a screen-derived cap: see its
 	// doc comment. At the 240-column floor the width-derived formula this
 	// replaced already evaluated to exactly graphHardCols.
-	l := buildEgo(m.g, m.graphFocus, m.graphRadius, graphHardCols, m.taskHidden)
-	l.place(m.graphOrient, m.graphAlong())
+	l := buildEgo(m.g, m.graph.focus, m.graph.radius, graphHardCols, m.taskHidden)
+	l.place(m.graph.orient, m.graphAlong())
 	return l
 }
 
@@ -121,7 +149,7 @@ func (m *Model) buildGraph() *egoLayout {
 // did not spend. See rule 2 at the head of this file for why that differs by
 // orientation.
 func (m *Model) graphMeasure(l *egoLayout) graphFrame {
-	f := graphFrame{orient: m.graphOrient, first: 0, last: len(l.Layers) - 1}
+	f := graphFrame{orient: m.graph.orient, first: 0, last: len(l.Layers) - 1}
 	for r := 0; r+1 < len(l.Layers); r++ {
 		rt, d := routeChannel(l, l.rankEdges(r))
 		f.routes = append(f.routes, rt)
@@ -172,7 +200,7 @@ func (m *Model) graphMeasure(l *egoLayout) graphFrame {
 // walking past the drawn ranks would otherwise leave the reader moving an
 // invisible cursor and re-rooting on a node no box ever showed.
 func (m *Model) graphSelRank(l *egoLayout) int {
-	if n := l.Node(m.graphSel); n != nil {
+	if n := l.Node(m.graph.sel); n != nil {
 		return n.Rank
 	}
 	return l.FocusRank()
@@ -233,7 +261,7 @@ func graphRankWindow(l *egoLayout, channels []int, avail, at int) (first, last, 
 
 func (m *Model) renderGraph() string {
 	l := m.buildGraph()
-	m.graphLay = l
+	m.graph.lay = l
 	m.clampGraphSel(l)
 	f := m.graphMeasure(l)
 
@@ -248,7 +276,7 @@ func (m *Model) renderGraph() string {
 		bands = m.graphBandsTopDown(l, f)
 	}
 
-	shown := windowBands(&m.graphScroll, bands, canvasH, func() int {
+	shown := windowBands(&m.graph.scroll, bands, canvasH, func() int {
 		return m.scrollGraphToSel(l, f, len(bands), canvasH)
 	})
 	return m.composeFullScreen(m.graphTitleBar(l), m.graphHeader(l, f, len(bands) > canvasH),
@@ -545,7 +573,7 @@ func (m *Model) renderGraphNode(n *egoNode, w, titleLines int) string {
 	// already say it. The loop BREAKS rather than skipping, so a small badge
 	// cannot jump the queue past a big one that missed.
 	both := "↕ both directions"
-	if m.graphOrient == orientLeftRight {
+	if m.graph.orient == orientLeftRight {
 		both = "↔ both directions"
 	}
 	keep := map[string]bool{}
@@ -625,7 +653,7 @@ func (m *Model) renderGraphNode(n *egoNode, w, titleLines int) string {
 
 func (m *Model) graphNodeStyle(n *egoNode, t *board.Task) lg.Style {
 	th := m.th
-	sel := n.Key == m.graphSel
+	sel := n.Key == m.graph.sel
 	switch {
 	case n.Focus && sel:
 		return th.graphNodeFocusSel
@@ -642,7 +670,7 @@ func (m *Model) graphNodeStyle(n *egoNode, t *board.Task) lg.Style {
 // graphStrip resolves the graph's selection to a task and hands it to the
 // shared detail strip.
 func (m *Model) graphStrip(l *egoLayout, h int) string {
-	n := l.Node(m.graphSel)
+	n := l.Node(m.graph.sel)
 	if n == nil {
 		n = l.FocusNode()
 	}
@@ -655,10 +683,10 @@ func (m *Model) graphStrip(l *egoLayout, h int) string {
 // clampGraphSel keeps the selection on a node that still exists — a radius
 // change or a re-root can remove the node the cursor was on.
 func (m *Model) clampGraphSel(l *egoLayout) {
-	if n := l.Node(m.graphSel); n != nil && n.Kind == egoReal {
+	if n := l.Node(m.graph.sel); n != nil && n.Kind == egoReal {
 		return
 	}
-	m.graphSel = l.Focus
+	m.graph.sel = l.Focus
 }
 
 // graphMove walks the selection. The key pair aligned with the LAYER axis
@@ -667,23 +695,23 @@ func (m *Model) clampGraphSel(l *egoLayout) {
 // the orientation, so ↓ always means "further from the blockers". Dummies are
 // routing artefacts and are skipped.
 func (m *Model) graphMove(dx, dy int) {
-	l := m.graphLay
+	l := m.graph.lay
 	if l == nil {
 		return
 	}
-	cur := l.Node(m.graphSel)
+	cur := l.Node(m.graph.sel)
 	if cur == nil {
 		return
 	}
 	along, across := dx, dy
-	if m.graphOrient == orientLeftRight {
+	if m.graph.orient == orientLeftRight {
 		along, across = dy, dx
 	}
 	if along != 0 {
 		row := l.Layers[cur.Rank]
 		for i := cur.Slot + along; i >= 0 && i < len(row); i += along {
 			if row[i].Kind == egoReal {
-				m.graphSel = row[i].Key
+				m.graph.sel = row[i].Key
 				return
 			}
 		}
@@ -704,7 +732,7 @@ func (m *Model) graphMove(dx, dy int) {
 			}
 		}
 		if best != "" {
-			m.graphSel = best
+			m.graph.sel = best
 			return
 		}
 	}
@@ -717,9 +745,9 @@ func (m *Model) scrollGraphToSel(l *egoLayout, f graphFrame, total, canvasH int)
 	if total <= canvasH {
 		return 0
 	}
-	n := l.Node(m.graphSel)
+	n := l.Node(m.graph.sel)
 	if n == nil {
-		return clamp(m.graphScroll, 0, total-canvasH)
+		return clamp(m.graph.scroll, 0, total-canvasH)
 	}
 	var top, bot int
 	if f.orient == orientLeftRight {
@@ -736,7 +764,7 @@ func (m *Model) scrollGraphToSel(l *egoLayout, f graphFrame, total, canvasH int)
 		}
 		bot = top + nodeH
 	}
-	s := m.graphScroll
+	s := m.graph.scroll
 	if top < s {
 		s = top
 	}
@@ -754,10 +782,10 @@ func (m *Model) openGraph() {
 		return
 	}
 	m.cancelDrag()
-	m.graphFocus, m.graphSel = t.ID, t.ID
-	m.graphScroll = 0
-	m.graphStack = nil
-	m.graphFrom = viewBoard
+	m.graph.focus, m.graph.sel = t.ID, t.ID
+	m.graph.scroll = 0
+	m.graph.stack = nil
+	m.graph.from = viewBoard
 	m.view = viewGraph
 	m.note("graph rooted on %s — ⏎ re-roots on the selected node · z cycles radius · o flips the axis · esc returns", t.ID)
 }
@@ -765,15 +793,15 @@ func (m *Model) openGraph() {
 // rerootGraph is the thing a static picture cannot do: walk the graph. The
 // previous root is pushed so `<` retraces the walk.
 func (m *Model) rerootGraph() {
-	l := m.graphLay
+	l := m.graph.lay
 	if l == nil {
 		return
 	}
-	n := l.Node(m.graphSel)
+	n := l.Node(m.graph.sel)
 	if n == nil || n.Kind != egoReal {
 		return
 	}
-	if n.Key == m.graphFocus {
+	if n.Key == m.graph.focus {
 		m.note("%s is already the root — move the selection first", n.Key)
 		return
 	}
@@ -781,33 +809,33 @@ func (m *Model) rerootGraph() {
 		m.fail("%s is not on this board, so it has no structure to root on", n.ID)
 		return
 	}
-	m.graphStack = append(m.graphStack, m.graphFocus)
-	m.graphFocus, m.graphSel = n.Key, n.Key
-	m.graphScroll = 0
+	m.graph.stack = append(m.graph.stack, m.graph.focus)
+	m.graph.focus, m.graph.sel = n.Key, n.Key
+	m.graph.scroll = 0
 	m.note("→ re-rooted on %s  ·  < retraces", n.Key)
 }
 
 func (m *Model) graphBack() {
-	if len(m.graphStack) == 0 {
+	if len(m.graph.stack) == 0 {
 		m.note("graph walk is at its start")
 		return
 	}
-	id := m.graphStack[len(m.graphStack)-1]
-	m.graphStack = m.graphStack[:len(m.graphStack)-1]
-	m.graphFocus, m.graphSel = id, id
-	m.graphScroll = 0
-	m.note("← back to %s (%d left)", id, len(m.graphStack))
+	id := m.graph.stack[len(m.graph.stack)-1]
+	m.graph.stack = m.graph.stack[:len(m.graph.stack)-1]
+	m.graph.focus, m.graph.sel = id, id
+	m.graph.scroll = 0
+	m.note("← back to %s (%d left)", id, len(m.graph.stack))
 }
 
 func (m *Model) cycleGraphRadius() {
 	for i, r := range graphRadii {
-		if r == m.graphRadius {
+		if r == m.graph.radius {
 			// The graph header prints the radius every frame; see onGraphKey below.
-			m.graphRadius = graphRadii[(i+1)%len(graphRadii)]
+			m.graph.radius = graphRadii[(i+1)%len(graphRadii)]
 			return
 		}
 	}
-	m.graphRadius = graphRadii[0]
+	m.graph.radius = graphRadii[0]
 }
 
 // cycleGraphOrient flips which screen axis the layers run along. No note, for
@@ -818,12 +846,12 @@ func (m *Model) cycleGraphRadius() {
 // it counts lines of a frame laid out on the other axis, so carrying it over
 // would land the window somewhere nothing chose.
 func (m *Model) cycleGraphOrient() {
-	if m.graphOrient == orientLeftRight {
-		m.graphOrient = orientTopDown
+	if m.graph.orient == orientLeftRight {
+		m.graph.orient = orientTopDown
 	} else {
-		m.graphOrient = orientLeftRight
+		m.graph.orient = orientLeftRight
 	}
-	m.graphScroll = 0
+	m.graph.scroll = 0
 }
 
 // closeGraph returns to the board, landing the board cursor on whatever node
@@ -833,28 +861,28 @@ func (m *Model) closeGraph() {
 	// Back to whichever view opened it. From the dep map the walk was a detour
 	// INSIDE the overview, so landing on the board would throw away the thing
 	// the reader was actually reading.
-	if m.graphFrom == viewMap {
-		m.graphFrom = viewBoard
+	if m.graph.from == viewMap {
+		m.graph.from = viewBoard
 		m.view = viewMap
-		if l := m.graphLay; l != nil {
-			if n := l.Node(m.graphSel); n != nil && n.Kind == egoReal {
+		if l := m.graph.lay; l != nil {
+			if n := l.Node(m.graph.sel); n != nil && n.Kind == egoReal {
 				// Walking a graph and stopping on a node IS a choice, so the
 				// map cursor that comes back from it is one the board may
 				// follow — unlike the fallback row openMap had to invent.
-				m.mapSel, m.mapMoved = n.ID, true
+				m.depmap.sel, m.depmap.moved = n.ID, true
 			}
 		}
-		m.mapScroll = 0
+		m.depmap.scroll = 0
 		m.note("dep map — the cursor followed the graph walk")
 		return
 	}
 	m.view = viewBoard
-	// graphLay is written only by renderGraph, so a driver that calls Update
+	// graph.lay is written only by renderGraph, so a driver that calls Update
 	// without View — every headless harness in this package — reaches here with
 	// it still nil, and Node dereferences its receiver. The two other readers
 	// (graphMove, rerootGraph) already guard; this one did not.
-	if l := m.graphLay; l != nil {
-		if n := l.Node(m.graphSel); n != nil && n.Kind == egoReal {
+	if l := m.graph.lay; l != nil {
+		if n := l.Node(m.graph.sel); n != nil && n.Kind == egoReal {
 			// Same rule as jumpToBlocker/jumpBack: pin only what the filter
 			// would otherwise hide, so an unfiltered walk leaves no permanent
 			// exemption behind.
@@ -882,13 +910,13 @@ func (m *Model) onGraphKey(msg tea.KeyPressMsg) tea.Cmd {
 		switch msg.String() {
 		// No note: the graph header states the radius on every frame.
 		case "1", "2", "3":
-			m.graphRadius = int(msg.String()[0] - '0')
+			m.graph.radius = int(msg.String()[0] - '0')
 		case "0":
-			m.graphRadius = graphAllRadius
+			m.graph.radius = graphAllRadius
 		default:
 			m.cycleGraphRadius()
 		}
-		m.graphScroll = 0
+		m.graph.scroll = 0
 
 	case key.Matches(msg, m.keys.GraphOrient):
 		// No note, same as the radius: the header names the direction on every
@@ -904,15 +932,15 @@ func (m *Model) onGraphKey(msg tea.KeyPressMsg) tea.Cmd {
 		// Zoom out: the ego graph's neighbourhood seen inside every cluster.
 		// Seeded with the graph's own selection, not the board cursor, which
 		// has not moved since the graph opened.
-		m.openMap(m.graphSel)
+		m.openMap(m.graph.sel)
 
 	case key.Matches(msg, m.keys.PeekScroll):
 		if msg.String() == "ctrl+d" {
-			m.graphScroll += maxInt(1, m.graphCanvasH()/2)
+			m.graph.scroll += maxInt(1, m.graphCanvasH()/2)
 		} else {
-			m.graphScroll -= maxInt(1, m.graphCanvasH()/2)
+			m.graph.scroll -= maxInt(1, m.graphCanvasH()/2)
 		}
-		m.graphScroll = maxInt(0, m.graphScroll)
+		m.graph.scroll = maxInt(0, m.graph.scroll)
 
 	case key.Matches(msg, m.keys.Up):
 		m.graphMove(0, -1)

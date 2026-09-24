@@ -195,8 +195,8 @@ func (m *Model) demoState(kind string) error {
 		if err := m.demoState("graph"); err != nil {
 			return err
 		}
-		m.graphRadius = graphAllRadius
-		m.graphScroll = 0
+		m.graph.radius = graphAllRadius
+		m.graph.scroll = 0
 
 	case "map":
 		// The dependency map at its DEFAULT scope: done tasks dropped, so the
@@ -221,7 +221,7 @@ func (m *Model) demoState(kind string) error {
 		if err != nil {
 			return err
 		}
-		m.mapScope = board.ClusterAll
+		m.depmap.scope = board.ClusterAll
 		m.openMap(seed.ID)
 
 	case "mapfiltered":

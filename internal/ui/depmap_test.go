@@ -21,7 +21,7 @@ func mapModel(t *testing.T, w, h int) *Model {
 	if _, err := m.Dump(w, h, "", true); err != nil {
 		t.Fatal(err)
 	}
-	if m.mapLay == nil || len(m.mapLay.Rows) == 0 {
+	if m.depmap.lay == nil || len(m.depmap.lay.Rows) == 0 {
 		t.Fatal("setup: advMapBoard packed into no rows")
 	}
 	return m
@@ -36,7 +36,7 @@ func TestMapPanelLinesAreExactlyOneColumnWide(t *testing.T) {
 	for _, w := range []int{240, 241, 259, 320, 399, 400} {
 		for _, scope := range []board.ClusterScope{board.ClusterOpen, board.ClusterAll} {
 			m := boardModel(t, w, 50)
-			m.mapScope = scope
+			m.depmap.scope = scope
 			m.openMap("")
 			l := m.buildMap()
 			for _, p := range l.Panels {
@@ -56,7 +56,7 @@ func TestMapPanelLinesAreExactlyOneColumnWide(t *testing.T) {
 func TestMapPacksEveryClusterExactlyOnce(t *testing.T) {
 	m := boardModel(t, 400, 50)
 	for _, scope := range []board.ClusterScope{board.ClusterOpen, board.ClusterAll} {
-		m.mapScope = scope
+		m.depmap.scope = scope
 		clusters := m.g.Clusters(scope)
 		l := m.buildMap()
 		if len(l.Panels) != len(clusters) {
@@ -87,7 +87,7 @@ func TestMapPacksEveryClusterExactlyOnce(t *testing.T) {
 // third of the screen while two thirds stayed blank.
 func TestOneClusterGetsTheWholeWidth(t *testing.T) {
 	m := advModel(t, advDepBoard(), 240, 50)
-	m.mapScope = board.ClusterAll
+	m.depmap.scope = board.ClusterAll
 	l := m.buildMap()
 	if len(l.Panels) != 1 {
 		t.Fatalf("setup: advDepBoard is one cluster, the map packed %d", len(l.Panels))
@@ -105,38 +105,38 @@ func TestOneClusterGetsTheWholeWidth(t *testing.T) {
 // dropped arrow case cannot hide behind the dispatcher.
 func TestMapCursorWalksRowsAndColumns(t *testing.T) {
 	m := mapModel(t, 240, 50)
-	l := m.mapLay
+	l := m.depmap.lay
 
 	first := l.Rows[0].ID
-	m.mapSel = first
+	m.depmap.sel = first
 	m.mapMove(0, +1)
-	if m.mapSel == first {
+	if m.depmap.sel == first {
 		t.Fatal("down did not move the cursor off the first row")
 	}
 	m.mapMove(0, -1)
-	if m.mapSel != first {
-		t.Errorf("down then up landed on %s, want %s", m.mapSel, first)
+	if m.depmap.sel != first {
+		t.Errorf("down then up landed on %s, want %s", m.depmap.sel, first)
 	}
 
 	// Up from the top and down from the bottom stay put rather than wrapping:
 	// a cursor that teleports across the screen is a re-ordering of the reader.
-	m.mapSel = first
+	m.depmap.sel = first
 	m.mapMove(0, -1)
-	if m.mapSel != first {
-		t.Errorf("up from the top row moved to %s", m.mapSel)
+	if m.depmap.sel != first {
+		t.Errorf("up from the top row moved to %s", m.depmap.sel)
 	}
 
 	if l.Cols < 2 {
 		t.Fatalf("setup: advMapBoard's two open clusters packed into %d column(s) at 240", l.Cols)
 	}
-	m.mapSel = first
+	m.depmap.sel = first
 	m.mapMove(+1, 0)
-	if got := l.Row(m.mapSel); got == nil || got.Col != 1 {
-		t.Fatalf("right did not reach column 1, cursor is on %s", m.mapSel)
+	if got := l.Row(m.depmap.sel); got == nil || got.Col != 1 {
+		t.Fatalf("right did not reach column 1, cursor is on %s", m.depmap.sel)
 	}
 	m.mapMove(-1, 0)
-	if got := l.Row(m.mapSel); got == nil || got.Col != 0 {
-		t.Errorf("left did not come back to column 0, cursor is on %s", m.mapSel)
+	if got := l.Row(m.depmap.sel); got == nil || got.Col != 0 {
+		t.Errorf("left did not come back to column 0, cursor is on %s", m.depmap.sel)
 	}
 }
 
@@ -146,23 +146,23 @@ func TestMapCursorWalksRowsAndColumns(t *testing.T) {
 func TestScopeCycleKeepsTheCursorOnARowThatExists(t *testing.T) {
 	m := mapModel(t, 240, 50)
 	// m6 is done: present at scope=all, gone at scope=open.
-	m.mapScope = board.ClusterAll
-	m.mapSel = "m6"
+	m.depmap.scope = board.ClusterAll
+	m.depmap.sel = "m6"
 	if l := m.buildMap(); l.Row("m6") == nil {
 		t.Fatal("setup: m6 is not in an all-scope cluster")
 	}
 	m.cycleMapScope()
-	if m.mapScope != board.ClusterOpen {
-		t.Fatalf("scope cycled to %s, want open", m.mapScope)
+	if m.depmap.scope != board.ClusterOpen {
+		t.Fatalf("scope cycled to %s, want open", m.depmap.scope)
 	}
 	l := m.buildMap()
-	m.mapLay = l
+	m.depmap.lay = l
 	m.clampMapSel(l)
-	if l.Row(m.mapSel) == nil {
-		t.Errorf("the cursor stayed on %s, which scope=open does not draw", m.mapSel)
+	if l.Row(m.depmap.sel) == nil {
+		t.Errorf("the cursor stayed on %s, which scope=open does not draw", m.depmap.sel)
 	}
-	if m.mapScroll != 0 {
-		t.Errorf("a scope change rebuilt the grid but kept scroll %d", m.mapScroll)
+	if m.depmap.scroll != 0 {
+		t.Errorf("a scope change rebuilt the grid but kept scroll %d", m.depmap.scroll)
 	}
 }
 
@@ -206,26 +206,26 @@ func TestBlockerTagDropsWholeIDsAndSaysHowMany(t *testing.T) {
 // come back to it, carrying wherever the graph walk ended.
 func TestTheGraphOpenedFromTheMapReturnsToTheMap(t *testing.T) {
 	m := mapModel(t, 240, 50)
-	m.mapSel = "m1" // waits on m2, so the graph has a blocker to walk to
+	m.depmap.sel = "m1" // waits on m2, so the graph has a blocker to walk to
 	m.graphFromMap()
 	if m.view != viewGraph {
 		t.Fatalf("view is %s, want graph", m.view)
 	}
-	if m.graphFocus != "m1" {
-		t.Errorf("the graph rooted on %s, want m1", m.graphFocus)
+	if m.graph.focus != "m1" {
+		t.Errorf("the graph rooted on %s, want m1", m.graph.focus)
 	}
 
 	if _, err := m.Dump(240, 50, "", true); err != nil {
 		t.Fatal(err)
 	}
 	m.graphMove(0, -1) // walk to a blocker
-	ended := m.graphSel
+	ended := m.graph.sel
 	m.closeGraph()
 	if m.view != viewMap {
 		t.Fatalf("esc from a map-opened graph landed on %s, want the dep map", m.view)
 	}
-	if m.mapSel != ended {
-		t.Errorf("the map cursor is on %s, want the node the walk ended on (%s)", m.mapSel, ended)
+	if m.depmap.sel != ended {
+		t.Errorf("the map cursor is on %s, want the node the walk ended on (%s)", m.depmap.sel, ended)
 	}
 	// And the next graph opened from the BOARD must still return to the board.
 	m.closeMap()
@@ -242,8 +242,8 @@ func TestTheGraphOpenedFromTheMapReturnsToTheMap(t *testing.T) {
 func TestClosingTheMapCarriesAWALKEDCursorToTheBoard(t *testing.T) {
 	m := mapModel(t, 240, 50)
 	m.mapMove(0, +1)
-	walked := m.mapSel
-	if !m.mapMoved {
+	walked := m.depmap.sel
+	if !m.depmap.moved {
 		t.Fatal("setup: the cursor did not move")
 	}
 	m.closeMap()
@@ -275,7 +275,7 @@ func TestAReadOnlyTripThroughTheMapDoesNotMoveTheBoardCursor(t *testing.T) {
 	if _, err := m.Dump(240, 50, "", true); err != nil {
 		t.Fatal(err)
 	}
-	if m.mapSel == lone {
+	if m.depmap.sel == lone {
 		t.Fatalf("setup: %s turned out to be in a cluster", lone)
 	}
 	if !strings.Contains(ansiStrip(m.statusLine()), lone) {
@@ -346,8 +346,8 @@ func TestAnEmptyMapExplainsItself(t *testing.T) {
 	if !strings.Contains(out, "no open dependency clusters") {
 		t.Errorf("an edgeless board draws no explanation:\n%s", out)
 	}
-	if m.mapSel != "" {
-		t.Errorf("the cursor is on %q with nothing to select", m.mapSel)
+	if m.depmap.sel != "" {
+		t.Errorf("the cursor is on %q with nothing to select", m.depmap.sel)
 	}
 }
 
@@ -355,8 +355,8 @@ func TestAnEmptyMapExplainsItself(t *testing.T) {
 // exactly the model/frame disagreement frametruth_test.go exists for.
 func TestTheSelectedMapRowIsMarkedInTheFrame(t *testing.T) {
 	m := mapModel(t, 240, 50)
-	l := m.mapLay
-	m.mapSel = l.Rows[len(l.Rows)-1].ID
+	l := m.depmap.lay
+	m.depmap.sel = l.Rows[len(l.Rows)-1].ID
 
 	out, err := m.Dump(240, 50, "", true)
 	if err != nil {
@@ -366,9 +366,9 @@ func TestTheSelectedMapRowIsMarkedInTheFrame(t *testing.T) {
 	for _, line := range strings.Split(out, "\n") {
 		if strings.Contains(line, "▌") {
 			marked++
-			if !strings.Contains(line, m.mapSel) {
+			if !strings.Contains(line, m.depmap.sel) {
 				t.Errorf("the selection gutter is on a row that is not %s: %q",
-					m.mapSel, strings.TrimSpace(line))
+					m.depmap.sel, strings.TrimSpace(line))
 			}
 		}
 	}
@@ -376,7 +376,7 @@ func TestTheSelectedMapRowIsMarkedInTheFrame(t *testing.T) {
 		t.Errorf("%d rows carry the selection gutter, want exactly 1", marked)
 	}
 	// And the strip below describes that same task.
-	if !strings.Contains(out, m.b.Task(m.mapSel).Title) {
+	if !strings.Contains(out, m.b.Task(m.depmap.sel).Title) {
 		t.Errorf("the strip does not carry the selected task's title")
 	}
 }
@@ -407,15 +407,15 @@ func TestMapScrollFollowsTheCursor(t *testing.T) {
 		t.Fatalf("setup: a %d-row map fits a %d-row canvas at 240x24", l.H, m.mapCanvasH())
 	}
 	last := l.Rows[len(l.Rows)-1]
-	m.mapSel = last.ID
+	m.depmap.sel = last.ID
 	got := m.scrollMapToSel(l, l.H, m.mapCanvasH())
 	if last.Y < got || last.Y >= got+m.mapCanvasH() {
 		t.Errorf("row %s sits at Y=%d, outside the window [%d,%d)",
 			last.ID, last.Y, got, got+m.mapCanvasH())
 	}
 	first := l.Rows[0]
-	m.mapSel = first.ID
-	m.mapScroll = got
+	m.depmap.sel = first.ID
+	m.depmap.scroll = got
 	if s := m.scrollMapToSel(l, l.H, m.mapCanvasH()); first.Y < s {
 		t.Errorf("scrolling back to row %s left it above the window at %d", first.ID, s)
 	}
@@ -438,17 +438,17 @@ func TestTheMapKeysAreActuallyBound(t *testing.T) {
 	if _, err := m.Dump(240, 50, "", true); err != nil {
 		t.Fatal(err)
 	}
-	if len(m.mapLay.Rows) < 2 {
-		t.Fatalf("setup: advMapBoard packed into %d row(s); j needs a second", len(m.mapLay.Rows))
+	if len(m.depmap.lay.Rows) < 2 {
+		t.Fatalf("setup: advMapBoard packed into %d row(s); j needs a second", len(m.depmap.lay.Rows))
 	}
 
 	m.Update(keyMsg("z"))
-	if m.mapScope != board.ClusterAll {
-		t.Errorf("z did not cycle the scope, it is %s", m.mapScope)
+	if m.depmap.scope != board.ClusterAll {
+		t.Errorf("z did not cycle the scope, it is %s", m.depmap.scope)
 	}
 	m.Update(keyMsg("z"))
-	if m.mapScope != board.ClusterOpen {
-		t.Errorf("z did not cycle back, the scope is %s", m.mapScope)
+	if m.depmap.scope != board.ClusterOpen {
+		t.Errorf("z did not cycle back, the scope is %s", m.depmap.scope)
 	}
 
 	// The arrows are the map's, not the board's: the route in onKey must send
@@ -457,10 +457,10 @@ func TestTheMapKeysAreActuallyBound(t *testing.T) {
 	if _, err := m.Dump(240, 50, "", true); err != nil {
 		t.Fatal(err)
 	}
-	before := m.mapSel
+	before := m.depmap.sel
 	beforeLane, beforeIdx := m.curLane, m.curIdx[m.curLaneName()]
 	m.Update(keyMsg("j"))
-	if m.mapSel == before {
+	if m.depmap.sel == before {
 		t.Error("j did not move the map cursor — is the viewMap route in onKey there?")
 	}
 	if m.curLane != beforeLane || m.curIdx[m.curLaneName()] != beforeIdx {
@@ -526,7 +526,7 @@ func TestAFullScreenViewRefusesToReopenAnInvisibleModal(t *testing.T) {
 func TestTheHeadlineNumbersMatchTheRowsTheySitUnder(t *testing.T) {
 	for _, scope := range []board.ClusterScope{board.ClusterOpen, board.ClusterAll} {
 		m := boardModel(t, 240, 60)
-		m.mapScope = scope
+		m.depmap.scope = scope
 		m.openMap("")
 		l := m.buildMap()
 		if len(l.Panels) == 0 {
@@ -584,10 +584,10 @@ func TestOpenMapLandsOnItsSeed(t *testing.T) {
 	if m.buildMap().Row("d1") == nil {
 		t.Fatal("setup: d1 is in no open cluster")
 	}
-	if m.mapSel != "d1" {
-		t.Errorf("openMap seeded with d1 landed on %q", m.mapSel)
+	if m.depmap.sel != "d1" {
+		t.Errorf("openMap seeded with d1 landed on %q", m.depmap.sel)
 	}
-	if m.mapMoved {
+	if m.depmap.moved {
 		t.Error("opening the map counts as a cursor move the board should follow")
 	}
 }
@@ -601,24 +601,24 @@ func TestPagingTheMapActuallyMovesTheView(t *testing.T) {
 	if _, err := m.Dump(240, 22, "", true); err != nil {
 		t.Fatal(err)
 	}
-	if m.mapLay.H <= m.mapCanvasH() {
-		t.Fatalf("setup: a %d-row map fits a %d-row canvas at 240x22", m.mapLay.H, m.mapCanvasH())
+	if m.depmap.lay.H <= m.mapCanvasH() {
+		t.Fatalf("setup: a %d-row map fits a %d-row canvas at 240x22", m.depmap.lay.H, m.mapCanvasH())
 	}
 	// The first press need not scroll — half a page of cursor can still land
 	// inside the window. What must not happen is the window never moving at
 	// all, which is what re-pinning the offset every frame produced.
-	first, firstScroll := m.mapSel, m.mapScroll
+	first, firstScroll := m.depmap.sel, m.depmap.scroll
 	for i := 0; i < 3; i++ {
 		m.Update(keyMsg("ctrl+d"))
 		if _, err := m.Dump(240, 22, "", true); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if m.mapScroll == firstScroll {
+	if m.depmap.scroll == firstScroll {
 		t.Errorf("three ^d left the window at row %d of %d — the advertised key does nothing",
-			m.mapScroll, m.mapLay.H)
+			m.depmap.scroll, m.depmap.lay.H)
 	}
-	if m.mapSel == first {
+	if m.depmap.sel == first {
 		t.Error("^d did not move the cursor")
 	}
 	for i := 0; i < 3; i++ {
@@ -627,11 +627,11 @@ func TestPagingTheMapActuallyMovesTheView(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if m.mapScroll != firstScroll {
-		t.Errorf("^u did not come back to row %d, it is at %d", firstScroll, m.mapScroll)
+	if m.depmap.scroll != firstScroll {
+		t.Errorf("^u did not come back to row %d, it is at %d", firstScroll, m.depmap.scroll)
 	}
-	if m.mapSel != first {
-		t.Errorf("^u did not come back to %s, the cursor is on %s", first, m.mapSel)
+	if m.depmap.sel != first {
+		t.Errorf("^u did not come back to %s, the cursor is on %s", first, m.depmap.sel)
 	}
 }
 
@@ -667,7 +667,7 @@ func TestADoneMemberWithAnOpenDepIsCountedAndDrawnAsDone(t *testing.T) {
 	m := New(memstore.NewWith(b), Options{})
 	m.w, m.h = 240, 60
 	m.recompute()
-	m.mapScope = board.ClusterAll
+	m.depmap.scope = board.ClusterAll
 	m.openMap("")
 	l := m.buildMap()
 	if len(l.Panels) != 1 {

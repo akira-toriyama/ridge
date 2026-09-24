@@ -91,7 +91,7 @@ func New(p board.Provider, o Options) *Model {
 		m.startRoadmap()
 	}
 	if o.GraphLR {
-		m.graphOrient = orientLeftRight
+		m.graph.orient = orientLeftRight
 	}
 	if o.Revisit {
 		// setRevisit, NOT toggleRevisit: the note-free half, so the read-only

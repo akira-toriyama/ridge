@@ -239,40 +239,9 @@ type Model struct {
 	// applied when the window closes (t-74y3).
 	heldBody *editorDoneMsg
 
-	// The dependency graph view. graphFocus is what the picture is rooted on,
-	// graphSel is the node the cursor is on (they start equal and diverge as
-	// you walk), and graphStack retraces the re-roots.
-	graphFocus  string
-	graphSel    string
-	graphRadius int
-	// graphOrient is which screen axis the layers run along. It is view state
-	// with no counterpart on the board, and like graphRadius it is re-made
-	// every session — the one display state ridge persists at all is the
-	// explicitly saved views.toml (viewtabs.go), and the graph is not part
-	// of a saved view.
-	graphOrient graphOrient
-	// graphScroll is a screen-LINE offset into the composed frame, in both
-	// orientations. Which axis those lines run down changes; the unit does not.
-	graphScroll int
-	graphStack  []string
-	graphLay    *egoLayout
-	// graphFrom is the view `esc` returns to. The graph is reachable from the
-	// board AND from the dep map, and dumping a reader who came from the map
-	// back onto the board loses the overview they were reading.
-	graphFrom viewKind
+	graph graphState
 
-	// The dependency map view (depmap.go). mapSel is the row the cursor is on;
-	// mapScope decides whether done tasks take part.
-	mapScope board.ClusterScope
-	mapSel   string
-	// mapMoved reports that the USER walked the cursor while in the map.
-	// Closing the map carries the cursor back to the board, and without this
-	// the fallback row that clampMapSel picked — for any task in no cluster,
-	// which is most of the board — was carried back as if it were a choice,
-	// silently relocating the board cursor on a read-only round trip.
-	mapMoved  bool
-	mapScroll int
-	mapLay    *mapLayout
+	depmap depmapState
 
 	road roadState
 
@@ -322,12 +291,12 @@ func newModel(p board.Provider, dbg *DebugLog) *Model {
 		// The swimlane opens grouped by BOX, not by sliceField's zero value:
 		// the parity audit filed this view as `furrow ls --tree`'s analogue,
 		// and that command groups by epic. tab reaches the other two.
-		swim:        swimState{axis: sliceEpic, open: map[string]bool{}},
-		viewIdx:     -1, // no saved view is active until one is chosen
-		pinned:      map[string]bool{},
-		curIdx:      map[string]int{},
-		scroll:      map[string]int{},
-		graphRadius: 2,
+		swim:    swimState{axis: sliceEpic, open: map[string]bool{}},
+		viewIdx: -1, // no saved view is active until one is chosen
+		pinned:  map[string]bool{},
+		curIdx:  map[string]int{},
+		scroll:  map[string]int{},
+		graph:   graphState{radius: 2},
 	}
 	m.reload()
 	// Start on the first lane that actually has work.
