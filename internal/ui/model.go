@@ -291,23 +291,7 @@ type Model struct {
 	roadXOff     int
 	roadLay      *roadLayout
 
-	// The swimlane view (swimlane.go). swimAxis is the grouping axis and is
-	// deliberately SEPARATE from sliceField: that one carries the active
-	// filter, and re-grouping a read-only view must not rewrite the query.
-	// swimOpen is the unfolded set — the OPEN side is stored because bands
-	// are folded by default, so a 57-band board carries an empty map rather
-	// than 57 entries. swimLane is the cursor's desired COLUMN, carried
-	// alongside the key because a band header spans every column and so
-	// cannot say which one a vertical walk was descending. Like the graph's
-	// radius and the roadmap's zoom, none of it survives the session.
-	swimAxis   sliceField
-	swimAll    bool
-	swimOpen   map[string]bool
-	swimSel    string
-	swimLane   int
-	swimMoved  bool
-	swimScroll int
-	swimLay    *swimLayout
+	swim swimState
 
 	sweep sweepState
 
@@ -353,8 +337,7 @@ func newModel(p board.Provider, dbg *DebugLog) *Model {
 		// The swimlane opens grouped by BOX, not by sliceField's zero value:
 		// the parity audit filed this view as `furrow ls --tree`'s analogue,
 		// and that command groups by epic. tab reaches the other two.
-		swimAxis:    sliceEpic,
-		swimOpen:    map[string]bool{},
+		swim:        swimState{axis: sliceEpic, open: map[string]bool{}},
 		viewIdx:     -1, // no saved view is active until one is chosen
 		pinned:      map[string]bool{},
 		curIdx:      map[string]int{},
@@ -447,11 +430,11 @@ func (m *Model) recompute() {
 		}
 	}
 	// The swimlane's pack is rebuilt from the board, so a re-read invalidates
-	// it. Dropped here rather than clamped: the key handlers walk m.swimLay
+	// it. Dropped here rather than clamped: the key handlers walk m.swim.lay
 	// when it is non-nil, and a pack built over the PREVIOUS board would hand
 	// them rows the store no longer has. clampSwimSel then moves the cursor on
 	// the next frame if its row went away.
-	m.swimLay = nil
+	m.swim.lay = nil
 	m.dropDragIfCardLeftLane()
 	m.ensureVisible()
 	m.syncPeek()

@@ -61,7 +61,7 @@ func TestSwimBandsComeFromPresenceAndTheSentinelIsLast(t *testing.T) {
 // bar is the bug this pins: the fixture's 17-task backlog read as 18.
 func TestSwimCountsATwoValuedTaskOncePerLaneAndTwiceAcrossBands(t *testing.T) {
 	m := swimModel(t, 240, 50)
-	m.swimAxis = sliceRepo
+	m.swim.axis = sliceRepo
 	l := m.buildSwim()
 
 	if l.Placed <= l.Tasks {
@@ -112,16 +112,16 @@ func TestSwimCountsATwoValuedTaskOncePerLaneAndTwiceAcrossBands(t *testing.T) {
 // disclosure marker.
 func TestSwimFoldingChangesOnlyTheDisclosureMarker(t *testing.T) {
 	m := swimModel(t, 240, 50)
-	m.swimOpen = map[string]bool{}
-	m.swimSel = ""
+	m.swim.open = map[string]bool{}
+	m.swim.sel = ""
 	l := m.buildSwim()
-	m.swimLay = l
+	m.swim.lay = l
 	m.clampSwimSel(l)
 
 	bi := 0
 	shut := ansiStrip(m.swimHeaderLine(l, bi))
 
-	m.swimOpen[l.Bands[bi].Key] = true
+	m.swim.open[l.Bands[bi].Key] = true
 	l2 := m.buildSwim()
 	open := ansiStrip(m.swimHeaderLine(l2, bi))
 
@@ -157,11 +157,11 @@ func TestSwimColumnsAlignAcrossEveryLineKind(t *testing.T) {
 	for _, w := range []int{200, 240, 245, 280, 320, 400} {
 		m := swimModel(t, w, 50)
 		l := m.buildSwim()
-		m.swimLay = l
+		m.swim.lay = l
 		// Unfold everything, so the sweep sees header lines, cell lines and
 		// the blank separators in one frame.
 		for _, b := range l.Bands {
-			m.swimOpen[b.Key] = true
+			m.swim.open[b.Key] = true
 		}
 		l = m.buildSwim()
 
@@ -192,7 +192,7 @@ func TestSwimHistogramSharesTheLaneBarsRightAnchor(t *testing.T) {
 	for _, w := range []int{240, 245, 320} {
 		m := swimModel(t, w, 50)
 		l := m.buildSwim()
-		m.swimLay = l
+		m.swim.lay = l
 		bar := ansiStrip(m.swimBarRows(l)[0])
 		hdr := ansiStrip(m.swimHeaderLine(l, 0))
 		for i := range l.Lanes {
@@ -226,19 +226,19 @@ func TestSwimBottomReachesTheLastRowNotTheLastHeader(t *testing.T) {
 	m := swimModel(t, 240, 30)
 	l := m.buildSwim()
 	for _, b := range l.Bands {
-		m.swimOpen[b.Key] = true
+		m.swim.open[b.Key] = true
 	}
 	l = m.buildSwim()
-	m.swimLay = l
+	m.swim.lay = l
 	if l.Lines[len(l.Lines)-1].Kind == swimLineHeader {
 		t.Fatal("setup: every lane is drawn at 240, so an unfolded band cannot end on its header")
 	}
 	m.onSwimKey(keyMsg("G"))
 	// Holding Down from here must not move: G already landed where the walk ends.
-	before := m.swimSel
+	before := m.swim.sel
 	m.swimMove(0, +1)
-	if m.swimSel != before {
-		t.Errorf("G landed on %q but a further Down reached %q", before, m.swimSel)
+	if m.swim.sel != before {
+		t.Errorf("G landed on %q but a further Down reached %q", before, m.swim.sel)
 	}
 	if l.IDOf(before) == "" {
 		t.Errorf("G landed on a band header (%q) while task rows sit below it", before)
@@ -251,7 +251,7 @@ func TestSwimBottomReachesTheLastRowNotTheLastHeader(t *testing.T) {
 func TestSwimSliceReportsAClearRatherThanAnEmptyTerm(t *testing.T) {
 	m := swimModel(t, 240, 50)
 	l := m.buildSwim()
-	m.swimLay = l
+	m.swim.lay = l
 	bi := -1
 	for i, b := range l.Bands {
 		if b.Key != "" {
@@ -262,7 +262,7 @@ func TestSwimSliceReportsAClearRatherThanAnEmptyTerm(t *testing.T) {
 	if bi < 0 {
 		t.Fatal("no non-sentinel band")
 	}
-	m.swimSel = swimKey(l.Bands[bi].Key, "")
+	m.swim.sel = swimKey(l.Bands[bi].Key, "")
 	m.sliceToSwimBand(l)
 	if m.sliceVal == "" {
 		t.Fatal("the first press did not slice")
@@ -270,8 +270,8 @@ func TestSwimSliceReportsAClearRatherThanAnEmptyTerm(t *testing.T) {
 
 	m.openSwim()
 	l = m.buildSwim()
-	m.swimLay = l
-	m.swimSel = swimKey(l.Bands[bi].Key, "")
+	m.swim.lay = l
+	m.swim.sel = swimKey(l.Bands[bi].Key, "")
 	m.sliceToSwimBand(l)
 	if m.sliceVal != "" {
 		t.Fatal("the second press did not clear the slice")
@@ -296,8 +296,8 @@ func TestSwimSeedingADoneCardLeavesTheFrameFolded(t *testing.T) {
 			t.Errorf("band %q opened for a task the scope drops", b.Label)
 		}
 	}
-	if want := swimKey(done.Epic, ""); m.swimSel != want {
-		t.Errorf("the cursor landed on %q, want the band header %q", m.swimSel, want)
+	if want := swimKey(done.Epic, ""); m.swim.sel != want {
+		t.Errorf("the cursor landed on %q, want the band header %q", m.swim.sel, want)
 	}
 }
 
@@ -374,7 +374,7 @@ func TestSwimDropsLanesItCannotDrawAndSaysSo(t *testing.T) {
 func TestSwimCursorKeepsItsColumnAcrossABandHeader(t *testing.T) {
 	m := advSwimModel(t, 240, 50)
 	l := m.buildSwim()
-	m.swimLay = l
+	m.swim.lay = l
 
 	// A lane with tasks in two different bands, so a walk crosses a header.
 	var lane, first, second = -1, -1, -1
@@ -394,29 +394,29 @@ func TestSwimCursorKeepsItsColumnAcrossABandHeader(t *testing.T) {
 		t.Fatal("setup: advSwimBoard's backlog holds a task of each box")
 	}
 	for _, b := range l.Bands {
-		m.swimOpen[b.Key] = true
+		m.swim.open[b.Key] = true
 	}
 	l = m.buildSwim()
-	m.swimLay = l
-	m.swimSel = l.KeyAt(first, lane, 0)
-	m.swimLane = lane
-	if m.swimSel == "" {
+	m.swim.lay = l
+	m.swim.sel = l.KeyAt(first, lane, 0)
+	m.swim.lane = lane
+	if m.swim.sel == "" {
 		t.Fatal("no cell to start the walk from")
 	}
 
 	// Down until the next band's first cell in the SAME column is reached.
 	for i := 0; i < 200; i++ {
-		if m.swimSel == l.KeyAt(second, lane, 0) {
+		if m.swim.sel == l.KeyAt(second, lane, 0) {
 			return
 		}
-		before := m.swimSel
+		before := m.swim.sel
 		m.swimMove(0, +1)
-		if m.swimSel == before {
+		if m.swim.sel == before {
 			break
 		}
 	}
 	t.Errorf("walking down never reached band %d's column %d; ended on %q",
-		second, lane, m.swimSel)
+		second, lane, m.swim.sel)
 }
 
 // Folding parks the cursor on the band's own header. Its cells are about to
@@ -425,7 +425,7 @@ func TestSwimCursorKeepsItsColumnAcrossABandHeader(t *testing.T) {
 func TestSwimFoldParksTheCursorOnTheBandHeader(t *testing.T) {
 	m := swimModel(t, 240, 50)
 	l := m.buildSwim()
-	m.swimLay = l
+	m.swim.lay = l
 	bi := -1
 	for i, b := range l.Bands {
 		if b.Open && b.Rows > 0 {
@@ -438,15 +438,15 @@ func TestSwimFoldParksTheCursorOnTheBandHeader(t *testing.T) {
 	// Stand on a cell of that band.
 	for li := range l.Lanes {
 		if k := l.KeyAt(bi, li, 0); k != "" {
-			m.swimSel, m.swimLane = k, li
+			m.swim.sel, m.swim.lane = k, li
 			break
 		}
 	}
 	m.toggleSwimFold(l)
-	if want := swimKey(l.Bands[bi].Key, ""); m.swimSel != want {
-		t.Errorf("after folding the cursor is on %q, want the band header %q", m.swimSel, want)
+	if want := swimKey(l.Bands[bi].Key, ""); m.swim.sel != want {
+		t.Errorf("after folding the cursor is on %q, want the band header %q", m.swim.sel, want)
 	}
-	if m.swimOpen[l.Bands[bi].Key] {
+	if m.swim.open[l.Bands[bi].Key] {
 		t.Error("the band is still unfolded")
 	}
 }
@@ -458,7 +458,7 @@ func TestSwimFoldParksTheCursorOnTheBandHeader(t *testing.T) {
 func TestSwimSliceEmitsTheAxisTermAndRefusesTheSentinel(t *testing.T) {
 	m := swimModel(t, 240, 50)
 	l := m.buildSwim()
-	m.swimLay = l
+	m.swim.lay = l
 
 	bi := -1
 	for i, b := range l.Bands {
@@ -470,7 +470,7 @@ func TestSwimSliceEmitsTheAxisTermAndRefusesTheSentinel(t *testing.T) {
 	if bi < 0 {
 		t.Fatal("no non-sentinel band")
 	}
-	m.swimSel = swimKey(l.Bands[bi].Key, "")
+	m.swim.sel = swimKey(l.Bands[bi].Key, "")
 	m.sliceToSwimBand(l)
 	if m.view != viewBoard {
 		t.Error("slicing left the swimlane up")
@@ -481,8 +481,8 @@ func TestSwimSliceEmitsTheAxisTermAndRefusesTheSentinel(t *testing.T) {
 
 	m2 := swimModel(t, 240, 50)
 	l2 := m2.buildSwim()
-	m2.swimLay = l2
-	m2.swimSel = swimKey("", "")
+	m2.swim.lay = l2
+	m2.swim.sel = swimKey("", "")
 	m2.sliceToSwimBand(l2)
 	if !m2.statusErr {
 		t.Error("the sentinel band was sliced instead of refused")
@@ -538,10 +538,10 @@ func TestSwimCarriesOnlyAMovedCursorBackToTheBoard(t *testing.T) {
 
 	m = advSwimModel(t, 240, 50)
 	l := m.buildSwim()
-	m.swimLay = l
+	m.swim.lay = l
 	for i := 0; i < 40; i++ {
 		m.swimMove(0, +1)
-		if id := l.IDOf(m.swimSel); id != "" && id != was {
+		if id := l.IDOf(m.swim.sel); id != "" && id != was {
 			m.closeSwim()
 			if m.curTask() == nil || m.curTask().ID != id {
 				t.Errorf("the board cursor did not follow the walk to %s", id)
@@ -552,7 +552,7 @@ func TestSwimCarriesOnlyAMovedCursorBackToTheBoard(t *testing.T) {
 	t.Fatal("the walk never left the seeded task on a five-task board")
 }
 
-// Re-grouping is not filtering. swimAxis is separate from sliceField on
+// Re-grouping is not filtering. swim.axis is separate from sliceField on
 // purpose: cycling the grouping of a read-only view must not rewrite the
 // query the board is under.
 func TestSwimAxisCycleLeavesTheActiveSliceAlone(t *testing.T) {
@@ -567,7 +567,7 @@ func TestSwimAxisCycleLeavesTheActiveSliceAlone(t *testing.T) {
 		t.Errorf("cycling the group axis moved the slice from %s:%s to %s:%s",
 			field, val, m.sliceField, m.sliceVal)
 	}
-	if m.swimAxis == field && m.swimAxis == sliceEpic {
+	if m.swim.axis == field && m.swim.axis == sliceEpic {
 		t.Error("the group axis did not move")
 	}
 }

@@ -634,7 +634,7 @@ func (m *Model) demoState(kind string) error {
 			return err
 		}
 		l := m.buildSwim()
-		m.swimLay = l
+		m.swim.lay = l
 		if len(l.Bands) == 0 {
 			return fmt.Errorf("demo swimopen: the fixture grouped into no bands")
 		}
@@ -646,9 +646,9 @@ func (m *Model) demoState(kind string) error {
 				best = i
 			}
 		}
-		m.swimOpen = map[string]bool{l.Bands[best].Key: true}
-		m.swimSel = swimKey(l.Bands[best].Key, "")
-		m.swimLay = nil
+		m.swim.open = map[string]bool{l.Bands[best].Key: true}
+		m.swim.sel = swimKey(l.Bands[best].Key, "")
+		m.swim.lay = nil
 
 	case "swimrepo":
 		// The repo axis. Its bands are the axis with the most lanes actually
@@ -660,8 +660,8 @@ func (m *Model) demoState(kind string) error {
 		if c := m.onSwimKey(tea.KeyPressMsg{Code: tea.KeyTab}); c != nil {
 			_ = c
 		}
-		if m.swimAxis != sliceRepo {
-			return fmt.Errorf("demo swimrepo: tab did not reach the repo axis, got %s", m.swimAxis)
+		if m.swim.axis != sliceRepo {
+			return fmt.Errorf("demo swimrepo: tab did not reach the repo axis, got %s", m.swim.axis)
 		}
 
 	case "swimall":
@@ -673,7 +673,7 @@ func (m *Model) demoState(kind string) error {
 		if c := m.onSwimKey(tea.KeyPressMsg{Code: 'z', Text: "z"}); c != nil {
 			_ = c
 		}
-		if !m.swimAll {
+		if !m.swim.all {
 			return fmt.Errorf("demo swimall: z did not widen the scope")
 		}
 
