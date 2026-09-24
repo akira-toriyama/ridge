@@ -23,7 +23,7 @@ func TestBoxGroupLinesAreExactlyOneColumnWide(t *testing.T) {
 	for _, w := range []int{240, 320, 400} {
 		for _, all := range []bool{false, true} {
 			m := boardModel(t, w, 50)
-			m.boxesAll = all
+			m.boxes.all = all
 			l := m.buildBoxes()
 			for _, g := range l.Groups {
 				for j, line := range m.renderBoxGroup(g, l.ColW) {
@@ -110,19 +110,19 @@ func TestTheScopeToggleAddsTheClosedBoxesAndTheCursorSurvivesIt(t *testing.T) {
 	}
 	press(m, "z")
 	all := m.buildBoxes()
-	m.boxesLay = all
+	m.boxes.lay = all
 	if all.Row(boxKey("tomo/kyushu-trip", "e-2b7h")) == nil {
 		t.Fatal("z must widen the population to the closed boxes")
 	}
 
 	// Narrowing again with the cursor ON a closed row must move the cursor,
 	// not leave it pointing at a row that is no longer packed.
-	m.boxesSel = boxKey("tomo/kyushu-trip", "e-2b7h")
+	m.boxes.sel = boxKey("tomo/kyushu-trip", "e-2b7h")
 	press(m, "z")
 	l := m.buildBoxes()
 	m.clampBoxesSel(l)
-	if l.Row(m.boxesSel) == nil {
-		t.Errorf("the cursor survived as %q, which the narrowed pack does not hold", m.boxesSel)
+	if l.Row(m.boxes.sel) == nil {
+		t.Errorf("the cursor survived as %q, which the narrowed pack does not hold", m.boxes.sel)
 	}
 }
 
@@ -143,9 +143,9 @@ func TestTheBoxOverviewKeysAreActuallyBound(t *testing.T) {
 	// assertion misses.
 	press(m, "E")
 	m.renderBoxes() // the handlers walk the pack the last frame built
-	before := m.boxesSel
+	before := m.boxes.sel
 	press(m, "down")
-	if m.boxesSel == before {
+	if m.boxes.sel == before {
 		t.Error("↓ did not move the cursor inside the overview")
 	}
 }
@@ -160,10 +160,10 @@ func TestDrillDownEmitsTheEpicSliceTermForOpenAndClosedBoxes(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := boardModel(t, 240, 50)
-			m.boxesAll = true
+			m.boxes.all = true
 			m.openBoxes()
 			m.renderBoxes()
-			m.boxesSel = boxKey(tc.repo, tc.id)
+			m.boxes.sel = boxKey(tc.repo, tc.id)
 			press(m, "enter")
 
 			if m.view != viewBoard {
@@ -183,10 +183,10 @@ func TestDrillDownEmitsTheEpicSliceTermForOpenAndClosedBoxes(t *testing.T) {
 // `reopen` reachable from here.
 func TestManageOpensTheOverlayOnTheSelectedBox(t *testing.T) {
 	m := boardModel(t, 240, 50)
-	m.boxesAll = true
+	m.boxes.all = true
 	m.openBoxes()
 	m.renderBoxes()
-	m.boxesSel = boxKey("tomo/kyushu-trip", "e-2b7h")
+	m.boxes.sel = boxKey("tomo/kyushu-trip", "e-2b7h")
 	press(m, "m")
 	if m.mode != modeEpic || m.epic == nil || m.epic.id != "e-2b7h" {
 		t.Fatalf("m must open the overlay on the selected box, mode=%v epic=%+v", m.mode, m.epic)
@@ -322,7 +322,7 @@ func TestEveryViewThatOpensAModalAlsoDrawsIt(t *testing.T) {
 		{"boxes", func(m *Model) {
 			m.openBoxes()
 			m.renderBoxes()
-			m.boxesSel = boxKey("tomo/kyushu-trip", "e-c4mt")
+			m.boxes.sel = boxKey("tomo/kyushu-trip", "e-c4mt")
 		}},
 	} {
 		t.Run(tc.view, func(t *testing.T) {
@@ -351,7 +351,7 @@ func TestLeavingTheOverlayInTheOverviewDoesNotWakeTheHiddenPanel(t *testing.T) {
 	press(m, "esc")
 	press(m, "E")
 	m.renderBoxes()
-	m.boxesSel = boxKey("tomo/kyushu-trip", "e-c4mt")
+	m.boxes.sel = boxKey("tomo/kyushu-trip", "e-c4mt")
 	press(m, "m")
 	press(m, "esc")
 	if m.mode == modeSlice {
@@ -359,9 +359,9 @@ func TestLeavingTheOverlayInTheOverviewDoesNotWakeTheHiddenPanel(t *testing.T) {
 	}
 	// Upwards: e-c4mt is the last row of its group, so ↓ would be a legitimate
 	// no-op and would prove nothing.
-	sel := m.boxesSel
+	sel := m.boxes.sel
 	press(m, "up")
-	if m.boxesSel == sel {
+	if m.boxes.sel == sel {
 		t.Error("the overview did not get the keyboard back")
 	}
 }
@@ -392,43 +392,43 @@ func TestHeaderCountsABoxOnceHoweverManyReposItNames(t *testing.T) {
 func TestEveryAdvertisedOverviewKeyActsOnSomething(t *testing.T) {
 	setup := func() *Model {
 		m := boardModel(t, 240, 20) // short enough that the pack scrolls
-		m.boxesAll = true
+		m.boxes.all = true
 		m.openBoxes()
 		m.renderBoxes()
-		m.boxesSel = m.boxesLay.Rows[0].Key
+		m.boxes.sel = m.boxes.lay.Rows[0].Key
 		return m
 	}
 	// ← / → cross columns, and the fixture has two repos, so both directions
 	// have somewhere to go.
 	m := setup()
-	if press(m, "right"); m.boxesSel == m.boxesLay.Rows[0].Key {
+	if press(m, "right"); m.boxes.sel == m.boxes.lay.Rows[0].Key {
 		t.Error("→ did not cross to the other column")
 	}
-	if press(m, "left"); m.boxesSel != m.boxesLay.Rows[0].Key {
+	if press(m, "left"); m.boxes.sel != m.boxes.lay.Rows[0].Key {
 		t.Error("← did not come back")
 	}
 	// G lands on the LAST row, not the first.
 	m = setup()
 	press(m, "G")
-	if last := m.boxesLay.Rows[len(m.boxesLay.Rows)-1].Key; m.boxesSel != last {
-		t.Errorf("G landed on %q, want the last row %q", m.boxesSel, last)
+	if last := m.boxes.lay.Rows[len(m.boxes.lay.Rows)-1].Key; m.boxes.sel != last {
+		t.Errorf("G landed on %q, want the last row %q", m.boxes.sel, last)
 	}
 	press(m, "g")
-	if m.boxesSel != m.boxesLay.Rows[0].Key {
+	if m.boxes.sel != m.boxes.lay.Rows[0].Key {
 		t.Error("g did not return to the first row")
 	}
 	// ^d pages by rows; on a column with more rows than half a canvas it must
 	// move, and it must stop rather than wrap at the end.
 	m = setup()
-	m.boxesSel = boxKey("tomo/kyushu-trip", "e-fw2m")
-	before := m.boxesSel
+	m.boxes.sel = boxKey("tomo/kyushu-trip", "e-fw2m")
+	before := m.boxes.sel
 	press(m, "ctrl+d")
-	if m.boxesSel == before {
+	if m.boxes.sel == before {
 		t.Error("^d did not page down")
 	}
 	press(m, "ctrl+u")
-	if m.boxesSel != before {
-		t.Errorf("^u did not page back to %q, landed on %q", before, m.boxesSel)
+	if m.boxes.sel != before {
+		t.Errorf("^u did not page back to %q, landed on %q", before, m.boxes.sel)
 	}
 }
 

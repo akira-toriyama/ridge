@@ -86,11 +86,11 @@ func TestTheThreeEpicDepLaddersAgreeWhereTheyMustAndDifferWhereTheyShould(t *tes
 			// satisfied dep as the bare id.
 			surface: "box overview strip",
 			open: func(m *Model) {
-				m.boxesAll = true
+				m.boxes.all = true
 				m.openBoxes()
 				for _, r := range m.buildBoxes().Rows {
 					if r.ID == "e-wait" {
-						m.boxesSel = r.Key
+						m.boxes.sel = r.Key
 					}
 				}
 			},
@@ -173,11 +173,11 @@ func TestTheThreeEpicDepLaddersAgreeWhereTheyMustAndDifferWhereTheyShould(t *tes
 func TestTheTwoBoxFactSurfacesStateTheSameChipsInTheSameOrder(t *testing.T) {
 	t.Run("the box overview's strip carries the box's whole record", func(t *testing.T) {
 		m := allDepStatesBoard(t, 400)
-		m.boxesAll = true
+		m.boxes.all = true
 		m.openBoxes()
 		for _, r := range m.buildBoxes().Rows {
 			if r.ID == "e-wait" {
-				m.boxesSel = r.Key
+				m.boxes.sel = r.Key
 			}
 		}
 		const want = "2/9 done · active · standing · pinned · STUCK · " +
@@ -249,11 +249,11 @@ func TestTheDepLineGatesDifferOnASettledBox(t *testing.T) {
 	t.Run("the box overview still lists them, settled", func(t *testing.T) {
 		m := New(memstore.NewWith(settled(t)), Options{})
 		m.Update(tea.WindowSizeMsg{Width: 400, Height: 50})
-		m.boxesAll = true
+		m.boxes.all = true
 		m.openBoxes()
 		for _, r := range m.buildBoxes().Rows {
 			if r.ID == "e-done" {
-				m.boxesSel = r.Key
+				m.boxes.sel = r.Key
 			}
 		}
 		out := frame(m)

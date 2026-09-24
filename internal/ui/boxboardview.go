@@ -25,6 +25,22 @@ import (
 // ones that must survive a Japanese title's ellipsis — the exact failure
 // slicemode.go records having shipped once.
 
+// boxesState is the box overview's whole state, held by value like sweepState:
+// a view has no closed state for nil to mean, and the zero value is the state
+// before the first pack.
+type boxesState struct {
+	all bool
+	// sel is a boxKey (boxboard.go), not an epic id: a box naming two repos is
+	// placed under both, so an id alone cannot say which row the cursor is on.
+	sel    string
+	scroll int
+	// lay is the pack the last frame drew — the key handlers walk it rather
+	// than repacking, exactly as the dep map does. The scope toggle nils it to
+	// force one, which is the swimlane's shape and not the dep map's: that one
+	// never nils, on purpose (buildMap says why).
+	lay *boxLayout
+}
+
 // boxDepBudget is the share of a row a "←e-a,e-b" tag may take, mirroring the
 // dep map's. On the real board four boxes carry such a tag at all, so this
 // almost never bites; it exists so the two boxes that do carry one cannot eat
@@ -35,7 +51,7 @@ func (m *Model) boxCanvasH() int { return m.fullCanvasH(0) }
 
 // boxPopulation is what the overview shows: the open boxes, or everything.
 func (m *Model) boxPopulation() []board.EpicInfo {
-	if m.boxesAll {
+	if m.boxes.all {
 		return m.b.EpicsAll()
 	}
 	return m.b.Epics()
@@ -44,21 +60,21 @@ func (m *Model) boxPopulation() []board.EpicInfo {
 // buildBoxes packs the population for the current width.
 //
 // Like the dep map's, the key handlers do NOT call this: they read the cached
-// m.boxesLay that renderBoxes rewrote on the previous frame. Sound because
+// m.boxes.lay that renderBoxes rewrote on the previous frame. Sound because
 // bubbletea calls View() after every Update — and the scope toggle therefore
 // changes nothing but the scope, letting the next frame rebuild.
 func (m *Model) buildBoxes() *boxLayout {
-	return packBoxes(m.boxPopulation(), m.boxesAll, maxInt(1, m.w-2))
+	return packBoxes(m.boxPopulation(), m.boxes.all, maxInt(1, m.w-2))
 }
 
 func (m *Model) renderBoxes() string {
 	l := m.buildBoxes()
-	m.boxesLay = l
+	m.boxes.lay = l
 	m.clampBoxesSel(l)
 
 	bands := m.boxBands(l)
 	canvasH := m.boxCanvasH()
-	shown := windowBands(&m.boxesScroll, bands, canvasH, func() int {
+	shown := windowBands(&m.boxes.scroll, bands, canvasH, func() int {
 		return m.scrollBoxesToSel(l, len(bands), canvasH)
 	})
 	return m.composeFullScreen(m.boxTitleBar(l), m.boxHeader(l, len(bands) > canvasH),
@@ -67,7 +83,7 @@ func (m *Model) renderBoxes() string {
 
 // selectedBox resolves the cursor to its box, nil when the pack is empty.
 func (m *Model) selectedBox(l *boxLayout) *board.EpicInfo {
-	r := l.Row(m.boxesSel)
+	r := l.Row(m.boxes.sel)
 	if r == nil {
 		return nil
 	}
@@ -182,7 +198,7 @@ func (m *Model) renderBoxGroup(g boxGroup, w int) []string {
 // the digits and showed a number that was not the box's progress.
 func (m *Model) boxRowLine(repo string, e board.EpicInfo, w int) string {
 	th := m.th
-	sel := boxKey(repo, e.ID) == m.boxesSel
+	sel := boxKey(repo, e.ID) == m.boxes.sel
 
 	gutter := strings.Repeat(" ", boxSelGutter)
 	if sel {
@@ -319,15 +335,15 @@ func (m *Model) boxStrip(e *board.EpicInfo, h int) string {
 }
 
 func (m *Model) clampBoxesSel(l *boxLayout) {
-	if l.Row(m.boxesSel) != nil {
+	if l.Row(m.boxes.sel) != nil {
 		return
 	}
-	m.boxesSel = l.First()
+	m.boxes.sel = l.First()
 }
 
 func (m *Model) scrollBoxesToSel(l *boxLayout, total, canvasH int) int {
-	return scrollToSel(m.boxesScroll, total, canvasH, func() (int, int, bool) {
-		r := l.Row(m.boxesSel)
+	return scrollToSel(m.boxes.scroll, total, canvasH, func() (int, int, bool) {
+		r := l.Row(m.boxes.sel)
 		if r == nil {
 			return 0, 0, false
 		}
@@ -345,15 +361,15 @@ func (m *Model) scrollBoxesToSel(l *boxLayout, total, canvasH int) int {
 // picking "the right one" would need a scope this view does not have.
 func (m *Model) openBoxes() {
 	m.cancelDrag()
-	m.boxesScroll = 0
+	m.boxes.scroll = 0
 	m.view = viewBoxes
 	l := m.buildBoxes()
-	m.boxesLay = l
-	if l.Row(m.boxesSel) == nil {
-		m.boxesSel = l.First()
+	m.boxes.lay = l
+	if l.Row(m.boxes.sel) == nil {
+		m.boxes.sel = l.First()
 		for _, r := range l.Rows {
 			if e := m.b.Epic(r.ID); e != nil && e.Active {
-				m.boxesSel = r.Key
+				m.boxes.sel = r.Key
 				break
 			}
 		}
@@ -376,7 +392,7 @@ func (m *Model) closeBoxes() {
 // owning a query. It works on a CLOSED box too, which is one of the reasons
 // the closed population earns its place.
 func (m *Model) drillIntoBox(l *boxLayout) tea.Cmd {
-	r := l.Row(m.boxesSel)
+	r := l.Row(m.boxes.sel)
 	if r == nil {
 		m.note("no box under the cursor")
 		return nil
@@ -388,10 +404,10 @@ func (m *Model) drillIntoBox(l *boxLayout) tea.Cmd {
 }
 
 func (m *Model) onBoxesKey(msg tea.KeyPressMsg) tea.Cmd {
-	l := m.boxesLay
+	l := m.boxes.lay
 	if l == nil {
 		l = m.buildBoxes()
-		m.boxesLay = l
+		m.boxes.lay = l
 	}
 	switch {
 	// BoxSlice and EpicEdit come FIRST because keys.Move spells both `enter`
@@ -404,7 +420,7 @@ func (m *Model) onBoxesKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.drillIntoBox(l)
 
 	case key.Matches(msg, m.keys.EpicEdit):
-		r := l.Row(m.boxesSel)
+		r := l.Row(m.boxes.sel)
 		if r == nil {
 			m.note("no box under the cursor")
 			return nil
@@ -414,30 +430,30 @@ func (m *Model) onBoxesKey(msg tea.KeyPressMsg) tea.Cmd {
 	case key.Matches(msg, m.keys.MapScope):
 		// Only the scope changes; the next frame rebuilds the pack, and
 		// clampBoxesSel moves the cursor if its row went away.
-		m.boxesAll = !m.boxesAll
-		m.boxesLay = nil
+		m.boxes.all = !m.boxes.all
+		m.boxes.lay = nil
 
 	case key.Matches(msg, m.keys.Up):
-		m.boxesSel = l.step(m.boxesSel, 0, -1)
+		m.boxes.sel = l.step(m.boxes.sel, 0, -1)
 	case key.Matches(msg, m.keys.Down):
-		m.boxesSel = l.step(m.boxesSel, 0, +1)
+		m.boxes.sel = l.step(m.boxes.sel, 0, +1)
 	case key.Matches(msg, m.keys.Left):
-		m.boxesSel = l.step(m.boxesSel, -1, 0)
+		m.boxes.sel = l.step(m.boxes.sel, -1, 0)
 	case key.Matches(msg, m.keys.Right):
-		m.boxesSel = l.step(m.boxesSel, +1, 0)
+		m.boxes.sel = l.step(m.boxes.sel, +1, 0)
 
 	case key.Matches(msg, m.keys.Top):
-		m.boxesSel = l.First()
+		m.boxes.sel = l.First()
 	case key.Matches(msg, m.keys.Bottom):
 		if n := len(l.Rows); n > 0 {
-			m.boxesSel = l.Rows[n-1].Key
+			m.boxes.sel = l.Rows[n-1].Key
 		}
 
 	case key.Matches(msg, m.keys.PeekScroll):
 		m.halfPage(msg, m.boxCanvasH(), func(dir int) bool {
-			at := m.boxesSel
-			m.boxesSel = l.step(m.boxesSel, 0, dir)
-			return m.boxesSel != at
+			at := m.boxes.sel
+			m.boxes.sel = l.step(m.boxes.sel, 0, dir)
+			return m.boxes.sel != at
 		}, "this column")
 
 	default:

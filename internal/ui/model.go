@@ -164,15 +164,7 @@ type Model struct {
 	// not a slice term — the `-q epic:` the panel emits is unaffected.
 	sliceEpicAll bool
 
-	// The box overview's state (boxboard.go). boxesSel is a boxKey rather than
-	// an epic id because a box naming two repos is placed under both, and an
-	// id alone cannot say which of the two rows the cursor is on. boxesLay is
-	// the pack the last frame drew — the key handlers walk it rather than
-	// repacking, exactly as the dep map does.
-	boxesAll    bool
-	boxesSel    string
-	boxesScroll int
-	boxesLay    *boxLayout
+	boxes boxesState
 
 	pinned map[string]bool // ids forced visible despite the filter (jump targets)
 	cols   map[string][]*board.Task
