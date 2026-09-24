@@ -317,18 +317,7 @@ type Model struct {
 	swimScroll int
 	swimLay    *swimLayout
 
-	// The sweep view (sweep.go / sweepview.go). sweep is the last preview
-	// read (nil before the first); sweepSel is the cursor's row KEY; sweepSkip
-	// is the archive candidates the user excluded; sweepGate is the write
-	// waiting for its second ⏎. sweepSeq fences stale reads like qSeq.
-	sweep        *board.Sweep
-	sweepErr     string
-	sweepSel     string
-	sweepSkip    map[string]bool
-	sweepGate    *sweepGate
-	sweepSeq     int
-	sweepLoading bool
-	sweepScroll  int
+	sweep sweepState
 
 	// sized reports that the terminal has told us who it is: a WindowSizeMsg
 	// landed, or -dump set the size by hand. Until then w/h are newModel's

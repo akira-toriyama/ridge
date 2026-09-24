@@ -794,15 +794,15 @@ func (m *Model) demoState(kind string) error {
 		if c := m.openSweep(); c != nil {
 			_ = c
 		}
-		rows := sweepRows(m.sweep)
+		rows := sweepRows(m.sweep.preview)
 		if c := m.onSweepKey(tea.KeyPressMsg{Code: 'x', Text: "x"}); c != nil {
 			_ = c
 		}
-		m.sweepSel = sweepStep(rows, m.sweepSel, +1)
+		m.sweep.sel = sweepStep(rows, m.sweep.sel, +1)
 		if c := m.onSweepKey(tea.KeyPressMsg{Code: tea.KeyEnter}); c != nil {
 			_ = c
 		}
-		if m.sweepGate == nil {
+		if m.sweep.gate == nil {
 			return fmt.Errorf("demo sweepconfirm: ⏎ did not arm the archive gate")
 		}
 
@@ -813,7 +813,7 @@ func (m *Model) demoState(kind string) error {
 		if c := m.openSweep(); c != nil {
 			_ = c
 		}
-		ids := sweepArchiveSet(m.sweep, nil)
+		ids := sweepArchiveSet(m.sweep.preview, nil)
 		if len(ids) < 2 {
 			return fmt.Errorf("demo sweeprestore: the fixture has %d archivable tasks, want 2+", len(ids))
 		}
@@ -824,11 +824,11 @@ func (m *Model) demoState(kind string) error {
 		if c := m.loadSweep(); c != nil {
 			_ = c
 		}
-		m.sweepSel = sweepKey(sweepArchived, ids[0])
+		m.sweep.sel = sweepKey(sweepArchived, ids[0])
 		if c := m.onSweepKey(tea.KeyPressMsg{Code: tea.KeyEnter}); c != nil {
 			_ = c
 		}
-		if m.sweepGate == nil {
+		if m.sweep.gate == nil {
 			return fmt.Errorf("demo sweeprestore: ⏎ did not arm the restore gate")
 		}
 
@@ -846,8 +846,8 @@ func (m *Model) demoState(kind string) error {
 		if c := m.openSweep(); c != nil {
 			_ = c
 		}
-		if m.sweep != nil || !m.sweepLoading {
-			return fmt.Errorf("demo sweepwait: the read was not deferred (sweep=%v loading=%v)", m.sweep != nil, m.sweepLoading)
+		if m.sweep.preview != nil || !m.sweep.loading {
+			return fmt.Errorf("demo sweepwait: the read was not deferred (sweep=%v loading=%v)", m.sweep.preview != nil, m.sweep.loading)
 		}
 
 	case "unlaned":
