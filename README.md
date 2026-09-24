@@ -34,7 +34,7 @@ glossary. This section is only what each view answers, and how to drive it.
 
 Lanes are columns. The header carries counts, WIP and the value/effort sums.
 Cards wrap their Japanese titles and carry `▸` actionable / `▤` epic chip /
-`x1` blocked / `[0/7]` checklist / label chips / repo.
+`x1` blocked / `[0/7]` checklist / `⟳` repeats / label chips / repo.
 
 **Move mode** is the central gesture. It follows GitHub Projects (`Enter`
 lifts → arrows move → `Enter` commits / `Esc` cancels) and maps 1:1 onto
@@ -118,10 +118,12 @@ columns; this is narrowed to two):
 ### Peek — the detail pane
 
 `Space` opens it. Resolved two-way dependency lists (`blocked by` / `blocks`
-resolved to id, title and lane), the checklist, the body. `t` shows the
-transitive tree. `Enter` opens the **field edit menu** (glossary: "edit
-menu"): title / value / effort / labels / epic / due / deps / repos / refs /
-checklist.
+resolved to id, title and lane), the checklist, the body; a recurring task's
+rule and series start (`⟳ repeats FREQ=… (since <day>)`, as `furrow show`
+prints them). `t` shows the transitive tree. `Enter` opens the **field edit
+menu** (glossary: "edit menu"): title / value / effort / labels / epic / due /
+deps / repos / refs / checklist — the repeat rule is not among them
+(`furrow set --repeat` is the CLI's).
 
 ### Boxes — the box overview
 
@@ -263,6 +265,7 @@ go run ./cmd/ridge -dump -demo unlaned       # a task whose status names no lane
 go run ./cmd/ridge -graphlr -dump -demo graphall  # the dependency graph left-right (the same state as `o`)
 go run ./cmd/ridge -dump -roadmap            # the due timeline (week/month axes: -demo roadmapweek / roadmapmonth)
 go run ./cmd/ridge -dump -demo sweepconfirm  # the sweep with the archive gate open (sweep / sweeprestore / sweepwait are the others)
+go run ./cmd/ridge -dump -demo repeatdone    # a recurring task just closed: its successor's card and the "repeat: next due <day> (<id>)" line (-demo repeat: the rule in the peek)
 ```
 
 What `-dump` / `-demo` / `-graphlr` / `-readonly` mean, and why the latter two

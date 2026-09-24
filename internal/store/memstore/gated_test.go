@@ -42,7 +42,7 @@ func TestPlainFixtureIsWritable(t *testing.T) {
 	if !p.Board().Writable() {
 		t.Error("the plain fixture must stay writable")
 	}
-	if err := p.PersistDone(p.Board().Tasks()[0].ID); err != nil {
+	if _, err := p.PersistDone(p.Board().Tasks()[0].ID); err != nil {
 		t.Errorf("the plain fixture refused a write: %v", err)
 	}
 }
@@ -58,7 +58,7 @@ func TestGatedFixtureRefusesEveryWrite(t *testing.T) {
 	if _, err := p.PersistMove(id, lane, "", ""); err == nil {
 		t.Error("PersistMove was accepted on a read-only board")
 	}
-	if err := p.PersistDone(id); err == nil {
+	if _, err := p.PersistDone(id); err == nil {
 		t.Error("PersistDone was accepted on a read-only board")
 	}
 	if err := p.PersistFields(id, board.FieldPatch{}); err == nil {

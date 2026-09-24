@@ -203,7 +203,7 @@ func (m *Model) tableGeom() []tableCol {
 		tcRepo:    {name: "repo", w: 10, sort: sortNone},
 		tcEpic:    {name: "epic", w: 14, sort: sortNone},
 		tcLabels:  {name: "labels", w: 12, sort: sortNone},
-		tcDue:     {name: "due", w: 10, sort: sortDue},
+		tcDue:     {name: "due", w: 12, sort: sortDue}, // 12: the day plus " ⟳" on a recurring row
 		tcUpdated: {name: "updated", w: 10, sort: sortUpdated},
 		tcDeps:    {name: "deps", w: 5, sort: sortNone},
 	}
@@ -300,6 +300,11 @@ func (m *Model) renderTable() string {
 			// day early (the peek learnt this the hard way — t-qve3 rides it).
 			due = t.Due.In(board.Zone()).Format("2006-01-02")
 			overdue = isOverdue(t)
+		}
+		if t.Repeat != "" {
+			// Beside the due, where `furrow ls` puts its `repeats` tag: a rule
+			// is a property of the promise, not a column of its own.
+			due += " " + glyphRepeat
 		}
 		cur := " "
 		if i == m.tableIdx {

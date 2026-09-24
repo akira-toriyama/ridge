@@ -129,6 +129,8 @@ func TestDemoRefusalNamesTheMissingShape(t *testing.T) {
 		{"boxesall", "is closed"},
 		{"slice", "carries a label"},
 		{"epicnew", "carries a repo"},
+		{"repeat", "repeat rule"},
+		{"repeatdone", "repeat rule"},
 	} {
 		_, err := m.Dump(240, 50, tc.demo, true)
 		if err == nil || !strings.Contains(err.Error(), tc.want) {

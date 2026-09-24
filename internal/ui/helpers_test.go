@@ -54,10 +54,10 @@ func (p *emptyProvider) Reload() error                  { p.b = board.NewBoard(n
 func (p *emptyProvider) Sync() error                    { return fmt.Errorf("no store") }
 func (p *emptyProvider) Query(string) ([]string, error) { return nil, nil }
 func (p *emptyProvider) Live() bool                     { return false }
-func (p *emptyProvider) PersistMove(_, _, _, _ string) ([]string, error) {
-	return nil, nil
+func (p *emptyProvider) PersistMove(_, _, _, _ string) (board.MoveReport, error) {
+	return board.MoveReport{}, nil
 }
-func (p *emptyProvider) PersistDone(_ string) error                         { return nil }
+func (p *emptyProvider) PersistDone(_ string) (*board.RepeatReport, error)  { return nil, nil }
 func (p *emptyProvider) PersistCheck(_ string, _ int, _ bool) error         { return nil }
 func (p *emptyProvider) PersistBody(_, _ string) error                      { return nil }
 func (p *emptyProvider) PersistNote(_, _ string) error                      { return nil }

@@ -435,6 +435,7 @@ func TestQueryPresenceVocabularyIsFurrows(t *testing.T) {
 		{"deps", 12, 22},
 		{"refs", 1, all - 1}, // t-9sa6 carries the two documented ref forms
 		{"due", 4, all - 4},
+		{"repeat", 2, all - 2}, // t-9sa6 weekly, t-ehk7 monthly — the fixture's two rules
 		{"closed", 9, all - 9},
 		{"reviewed", 1, all - 1}, // t-jv3j, the fixture's one review stamp
 		{"label", 18, 16},

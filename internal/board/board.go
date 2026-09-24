@@ -83,7 +83,14 @@ type Task struct {
 	Closed    time.Time
 	Reviewed  time.Time
 	Due       time.Time // zero = no promise
-	Body      string
+	// Repeat is the recurrence rule the task runs on — furrow's compiled RRULE
+	// line, held by exactly one task of a series at a time (a close hands it
+	// to the successor). "" = not repeating. RepeatAnchor is the series start,
+	// present iff Repeat is. ridge shows both and expands neither: the next
+	// occurrence is furrow's to compute, and it arrives with the re-read.
+	Repeat       string
+	RepeatAnchor time.Time
+	Body         string
 }
 
 // shortRepo renders "akira-toriyama/vista" as "vista" for a narrow surface,
@@ -503,6 +510,10 @@ func (b *Board) MoveTo(id, lane string, idx int) (renumbered []string, err error
 	switch {
 	case dst.Done && !wasDone:
 		t.Closed = t.Updated
+		// furrow CONSUMES the rule on a close — the successor carries it, and a
+		// reopen does not hand it back — so the optimistic card must stop
+		// saying "repeats" now rather than at the re-read.
+		t.Repeat, t.RepeatAnchor = "", time.Time{}
 	case !dst.Done && wasDone:
 		t.Closed = time.Time{}
 	}

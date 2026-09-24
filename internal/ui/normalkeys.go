@@ -276,8 +276,16 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 			} else {
 				m.note("closed %s", id)
 			}
-			return m.enqueuePersist("done "+id, func() ([]string, error) {
-				return nil, m.prov.PersistDone(id)
+			// The series report rides persistOp.note: a recurring task's
+			// close writes its successor in the same furrow write, and the
+			// reply is the only place the new id exists until the re-read.
+			note := new(string)
+			return m.enqueuePersistNoting("done "+id, note, func() ([]string, error) {
+				rep, err := m.prov.PersistDone(id)
+				if rep != nil {
+					*note = repeatLine(rep)
+				}
+				return nil, err
 			})
 		}
 

@@ -22,16 +22,20 @@ const (
 	glyphEpic       = "▤" // a container: a box, not work
 	glyphDone       = "v"
 	glyphRevisit    = "↻" // furrow revisit flagged this task: worth a fresh look
-	glyphOpen       = "o"
-	glyphUnknown    = "?" // a dep pointing at an id not on the board
-	glyphWIPOver    = "!" // over the (unenforced) WIP limit
-	glyphDrop       = "╌" // dashed, so it cannot be read as the header rule
-	glyphDropL      = "▸" // the caret brackets make it an insertion POINT
-	glyphDropR      = "◂"
-	glyphLift       = "↕"
-	glyphLaneDot    = "●"
-	glyphSortAsc    = "▲" // the table's active sort direction, in its header
-	glyphSortDesc   = "▼"
+	// glyphRepeat marks a task whose close mints the next occurrence — furrow's
+	// `repeats` row tag, as one cell. Not ↻: that is the revisit lens, and the
+	// peek can show both on one panel. U+27F3 is East-Asian Neutral.
+	glyphRepeat   = "⟳"
+	glyphOpen     = "o"
+	glyphUnknown  = "?" // a dep pointing at an id not on the board
+	glyphWIPOver  = "!" // over the (unenforced) WIP limit
+	glyphDrop     = "╌" // dashed, so it cannot be read as the header rule
+	glyphDropL    = "▸" // the caret brackets make it an insertion POINT
+	glyphDropR    = "◂"
+	glyphLift     = "↕"
+	glyphLaneDot  = "●"
+	glyphSortAsc  = "▲" // the table's active sort direction, in its header
+	glyphSortDesc = "▼"
 	// glyphEpicActive is `furrow brief`'s own marker for the box a repo is
 	// currently working out of — the same character, so the two surfaces read as
 	// one vocabulary. glyphEpicPinned likewise for the PERMANENT channel.

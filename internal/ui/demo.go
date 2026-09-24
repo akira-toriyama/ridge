@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -861,6 +862,56 @@ func (m *Model) demoState(kind string) error {
 		m.recompute()
 		m.noteLoad(false, 0)
 
+	case "repeat":
+		// A recurring task under the cursor with the peek open: the card's
+		// ⟳ on the meta line and the peek's rule line (rule + series start,
+		// `furrow show`'s two facts) in one frame.
+		subj, err := m.demoRepeatTask("repeat")
+		if err != nil {
+			return err
+		}
+		m.selectID(subj.ID, true)
+		m.peekOpen = true
+		m.syncPeek()
+
+	case "repeatdone":
+		// The frame right after a recurring task's close LANDED and the
+		// reconcile delivered its successor: the closed card in the done
+		// lane (rule consumed — no ⟳), the successor in the default lane
+		// carrying the rule, and the status line naming it. The successor is
+		// built onto the fixture here — memstore mints none (expanding a rule
+		// is furrow's) — as the weekly rule's true next occurrence, and the
+		// line is rendered by the same repeatLine the live close uses, so the
+		// wording cannot drift from the real path.
+		subj, err := m.demoRepeatTask("repeatdone")
+		if err != nil {
+			return err
+		}
+		if !strings.HasPrefix(subj.Repeat, "FREQ=WEEKLY") {
+			return fmt.Errorf("demo repeatdone: needs a weekly rule to place the successor's due, %s carries %q", subj.ID, subj.Repeat)
+		}
+		next := *subj
+		next.ID = "t-next1"
+		next.Status = m.b.Lanes()[0].Name
+		next.Due = subj.Due.AddDate(0, 0, 7)
+		next.Closed, next.Reviewed = time.Time{}, time.Time{}
+		next.Deps = nil
+		if last := m.b.LaneTasks(next.Status); len(last) > 0 {
+			next.Priority = last[len(last)-1].Priority + 10
+		} else {
+			next.Priority = 10
+		}
+		tasks := append(append([]*board.Task(nil), m.b.Tasks()...), &next)
+		m.b = board.NewStoreBoard(m.b.Lanes(), tasks, m.b.EpicsAll(), m.b.Writable(), m.b.SchemaState())
+		m.recompute()
+		m.selectID(subj.ID, true)
+		if err := m.b.Close(subj.ID); err != nil {
+			return err
+		}
+		m.recompute()
+		m.lastPersist = "done " + subj.ID + " 104ms"
+		m.note("done %s · %s", subj.ID, repeatLine(&board.RepeatReport{Created: next.ID, Due: next.Due}))
+
 	case "fail":
 		// A refused write. The ⚠ styling has its own colour and its own row,
 		// and nothing else in the demo set renders an error at all.
@@ -951,6 +1002,13 @@ func (m *Model) demoBox(demo, need string, pred func(board.EpicInfo) bool) (boar
 
 // demoAnyTask is the board's first task, for the demos that only need an id
 // to print (a queued op's label, a refused write's message, a typed dep:).
+// demoRepeatTask is a task carrying a repeat rule — the two repeat demos'
+// subject. The fixture holds two (t-9sa6 weekly, t-ehk7 monthly); first in
+// board order wins, and a board with none refuses by shape.
+func (m *Model) demoRepeatTask(demo string) (*board.Task, error) {
+	return m.demoTask(demo, "a task carrying a repeat rule", func(t *board.Task) bool { return t.Repeat != "" })
+}
+
 func (m *Model) demoAnyTask(demo string) (*board.Task, error) {
 	if ts := m.b.Tasks(); len(ts) > 0 {
 		return ts[0], nil

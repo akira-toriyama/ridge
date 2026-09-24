@@ -3,6 +3,7 @@ package board
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 // Provider is the seam between the UI and the task store — the port; the
@@ -45,12 +46,16 @@ type Provider interface {
 
 	// PersistMove records id's already-applied placement: the lane plus at
 	// most one anchor. beforeID wins when both are set; both empty means the
-	// task is the lane's only card. renumbered reports the neighbours the
-	// store renumbered when the sparse-priority gap was exhausted.
-	PersistMove(id, lane, beforeID, afterID string) (renumbered []string, err error)
+	// task is the lane's only card. The report carries what the store did
+	// beyond the placement: the neighbours it renumbered, and — when the lane
+	// is the done lane and the task carried a rule — the series it advanced.
+	PersistMove(id, lane, beforeID, afterID string) (MoveReport, error)
 
-	// PersistDone records id's already-applied close.
-	PersistDone(id string) error
+	// PersistDone records id's already-applied close. The report is non-nil
+	// only when the task carried a repeat rule: furrow then wrote the next
+	// occurrence in the same write, and the report is the only place its id
+	// exists until the re-read (the card itself lands with the reconcile).
+	PersistDone(id string) (*RepeatReport, error)
 
 	// PersistCheck records checklist item i's already-applied state. done is
 	// the state AFTER the local toggle, so the write is idempotent.
@@ -205,6 +210,31 @@ type Provider interface {
 	// whole class goes — furrow has no per-edge form — so the caller owes the
 	// user the count before the keystroke.
 	Tidy(class TidyClass) error
+}
+
+// RepeatReport is furrow's series report on a close — the `repeat` key of a
+// `done`/`set -s <done> --json` envelope. Created and Due name the successor;
+// both are empty when Completed (the rule's COUNT/UNTIL was spent). Skipped
+// counts the occurrences that lapsed between the settled one and the close.
+// The words that render it are the ui's (repeatLine); the port only carries
+// the facts, exactly as it carries Revisit's reasons.
+type RepeatReport struct {
+	Created   string
+	Due       time.Time
+	Skipped   int
+	Completed bool
+}
+
+// MoveReport is what PersistMove hands back besides its error.
+type MoveReport struct {
+	// Renumbered is the neighbours the store renumbered when the
+	// sparse-priority gap was exhausted (ids). The model already respaced the
+	// same lane locally, so today nothing reads it beyond tests.
+	Renumbered []string
+	// Repeat is non-nil when the placement CLOSED a recurring task — a move
+	// into the done lane is `furrow set -s done`, which advances the series
+	// exactly as `done` does.
+	Repeat *RepeatReport
 }
 
 // Revisit is one `furrow revisit --json` row: a task and why it surfaced.

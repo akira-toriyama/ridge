@@ -56,9 +56,10 @@ type persistOp struct {
 	epicAddRepo  string
 	// note carries prose the WRITE computed — `epic deactivate`'s
 	// previous-active suggestion, which furrow derives from its activation log
-	// and ridge cannot. run fills it on the queue's goroutine and the UI thread
-	// reads it only after persistDoneMsg has crossed the channel back, the same
-	// handoff addedID uses.
+	// and ridge cannot, and a close's series report (repeatLine), whose
+	// successor id exists nowhere else until the re-read. run fills it on the
+	// queue's goroutine and the UI thread reads it only after persistDoneMsg
+	// has crossed the channel back, the same handoff addedID uses.
 	note *string
 	// reloadOnFail marks a store-first write whose REFUSAL may still have
 	// moved the store (a batch the adapter judged short). The failure path
@@ -149,12 +150,18 @@ func (m *Model) queueOp(op persistOp) tea.Cmd {
 
 // enqueuePersist queues one store write whose effect is already on the board.
 func (m *Model) enqueuePersist(label string, run func() ([]string, error)) tea.Cmd {
+	return m.enqueuePersistNoting(label, nil, run)
+}
+
+// enqueuePersistNoting is enqueuePersist with a place for prose the write
+// itself computes (persistOp.note) — the two closes' series report.
+func (m *Model) enqueuePersistNoting(label string, note *string, run func() ([]string, error)) tea.Cmd {
 	// This write's indices and anchors were computed against the state the
 	// store refused; the rollback re-read about to land reverts its local half.
 	if m.refuseWhileRollingBack(label) {
 		return nil
 	}
-	return m.queueOp(persistOp{label: label, run: run})
+	return m.queueOp(persistOp{label: label, note: note, run: run})
 }
 
 func (m *Model) firePersist() tea.Cmd {
@@ -282,6 +289,12 @@ func (m *Model) onPersistDone(msg persistDoneMsg) tea.Cmd {
 		} else if op.addedID == nil {
 			m.note("%s", op.label)
 		}
+	} else if op.note != nil && *op.note != "" {
+		// An optimistic write that computed prose: a close that advanced a
+		// series. The gesture's own "closed t-x" is replaced — the successor's
+		// id is the news, and the reconcile below (silent) is what puts its
+		// card on the board.
+		m.note("%s · %s", op.label, *op.note)
 	}
 	if op.addedID != nil && *op.addedID != "" {
 		id := *op.addedID
@@ -450,9 +463,33 @@ func (m *Model) storeFirstInflight() bool {
 // background write never has to read a board that is still being edited.
 func (m *Model) persistPlacement(id, lane string) tea.Cmd {
 	before, after := m.b.Neighbors(id)
-	return m.enqueuePersist("move "+id, func() ([]string, error) {
-		return m.prov.PersistMove(id, lane, before, after)
+	// A placement into the done lane is a close, and `furrow set -s done`
+	// advances a series exactly as `done` does — so the drag and the keyboard
+	// move announce the successor the way `d` does.
+	note := new(string)
+	return m.enqueuePersistNoting("move "+id, note, func() ([]string, error) {
+		rep, err := m.prov.PersistMove(id, lane, before, after)
+		if rep.Repeat != nil {
+			*note = repeatLine(rep.Repeat)
+		}
+		return rep.Renumbered, err
 	})
+}
+
+// repeatLine is the one line a close's series report renders: `furrow
+// done`'s own words (seriesLine in furrow's cli), the due as the local day
+// every ridge surface spells dates in. The successor's card arrives with the
+// re-read; this line is what names it, and until the re-read the only place
+// the id exists on screen.
+func repeatLine(r *board.RepeatReport) string {
+	line := "repeat: series complete — no further occurrences"
+	if !r.Completed {
+		line = fmt.Sprintf("repeat: next due %s (%s)", r.Due.In(board.Zone()).Format("2006-01-02"), r.Created)
+	}
+	if r.Skipped > 0 {
+		line += fmt.Sprintf(" — %d occurrence(s) skipped", r.Skipped)
+	}
+	return line
 }
 
 func (m *Model) reloadCmd(label string) tea.Cmd {

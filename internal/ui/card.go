@@ -294,6 +294,11 @@ func cardLines(t *board.Task, g *board.Graph, th *theme, w int) []string {
 	if n, tot := t.CheckProgress(); tot > 0 {
 		bits = append(bits, th.muted.Render(fmt.Sprintf("[%d/%d]", n, tot)))
 	}
+	if t.Repeat != "" {
+		// The mark only — the rule is the peek's, as `furrow ls` leaves it to
+		// `show` (a row prints the word `repeats`, never FREQ=…).
+		bits = append(bits, th.muted.Render(glyphRepeat))
+	}
 	right := strings.Join(bits, " ")
 	out = append(out, joinEnds(left, right, w))
 	return out

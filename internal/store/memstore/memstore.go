@@ -217,29 +217,32 @@ func (p *Store) Sync() error { return fmt.Errorf("the fixture has no store to sy
 // Live is false: the board the model mutates IS the store (board.Provider).
 func (p *Store) Live() bool { return false }
 
-// PersistMove validates the ids and records nothing (board.Provider).
-func (p *Store) PersistMove(id, lane, _, _ string) ([]string, error) {
+// PersistMove validates the ids and records nothing (board.Provider). No
+// series report either way: expanding a rule is furrow's (internal/recur),
+// and a successor the fixture minted would have to invent a due.
+func (p *Store) PersistMove(id, lane, _, _ string) (board.MoveReport, error) {
+	if err := p.gate(); err != nil {
+		return board.MoveReport{}, err
+	}
+	if p.snapshot().Task(id) == nil {
+		return board.MoveReport{}, fmt.Errorf("unknown task %q", id)
+	}
+	if p.snapshot().Lane(lane) == nil {
+		return board.MoveReport{}, fmt.Errorf("unknown lane %q", lane)
+	}
+	return board.MoveReport{}, nil
+}
+
+// PersistDone validates the id and records nothing (board.Provider). The
+// series report stays nil for the reason PersistMove's does.
+func (p *Store) PersistDone(id string) (*board.RepeatReport, error) {
 	if err := p.gate(); err != nil {
 		return nil, err
 	}
 	if p.snapshot().Task(id) == nil {
 		return nil, fmt.Errorf("unknown task %q", id)
 	}
-	if p.snapshot().Lane(lane) == nil {
-		return nil, fmt.Errorf("unknown lane %q", lane)
-	}
 	return nil, nil
-}
-
-// PersistDone validates the id and records nothing (board.Provider).
-func (p *Store) PersistDone(id string) error {
-	if err := p.gate(); err != nil {
-		return err
-	}
-	if p.snapshot().Task(id) == nil {
-		return fmt.Errorf("unknown task %q", id)
-	}
-	return nil
 }
 
 // PersistCheck validates the item and records nothing (board.Provider).
