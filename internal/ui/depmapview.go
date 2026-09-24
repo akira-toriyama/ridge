@@ -25,6 +25,27 @@ import (
 // each column can afford. That is why the map is worth having at 400 columns
 // and would not be at 120.
 
+// depmapState is the dependency map's whole state, held by value like
+// sweepState: a view has no closed state for nil to mean, and the zero value
+// is the state before the first open (board.ClusterOpen is the zero scope), so
+// newModel seeds nothing. Model holds it as `depmap`: `map` is a keyword.
+type depmapState struct {
+	scope board.ClusterScope // whether done tasks take part
+	sel   string             // the row the cursor is on
+	// moved reports that the user walked the cursor since the map opened or
+	// the scope last changed; closeGraph sets it too, when a graph walk that
+	// began here ends on a node. closeMap hands it to carryCursorBack, which
+	// says why an unmoved cursor is not carried — here that is most of the
+	// board, since most tasks are in no cluster and open on the fallback row
+	// clampMapSel picks.
+	moved  bool
+	scroll int
+	// lay is the pack the last frame drew — the key handlers walk it rather
+	// than repacking, and nothing nils it (buildMap says why a handler must
+	// not invalidate and then navigate).
+	lay *mapLayout
+}
+
 // mapBlockerBudget is the share of a row a "←t-a,t-b" tag may take. The tag is
 // the map's whole disambiguation mechanism, so it outranks the title — but a
 // node with six blockers must not leave the row with no title at all.
@@ -35,29 +56,29 @@ func (m *Model) mapCanvasH() int { return m.fullCanvasH(0) }
 
 // buildMap groups the board and packs it for the current width.
 //
-// The key handlers do NOT call it — they read the cached m.mapLay, which
+// The key handlers do NOT call it — they read the cached m.depmap.lay, which
 // renderMap rewrites on every frame. That is sound only because bubbletea
 // calls View() after every Update, so the geometry a keystroke walks is the
 // one the previous frame drew; it is not sound for a handler that both
 // invalidates the layout and then navigates, which is why cycleMapScope
 // changes nothing but the scope and lets the next frame rebuild.
 func (m *Model) buildMap() *mapLayout {
-	return packMap(m.mapScope, m.g.Clusters(m.mapScope), maxInt(1, m.w-2))
+	return packMap(m.depmap.scope, m.g.Clusters(m.depmap.scope), maxInt(1, m.w-2))
 }
 
 func (m *Model) renderMap() string {
 	l := m.buildMap()
-	m.mapLay = l
+	m.depmap.lay = l
 	m.clampMapSel(l)
 
 	bands := m.mapBands(l)
 	canvasH := m.mapCanvasH()
-	shown := windowBands(&m.mapScroll, bands, canvasH, func() int {
+	shown := windowBands(&m.depmap.scroll, bands, canvasH, func() int {
 		return m.scrollMapToSel(l, len(bands), canvasH)
 	})
 	return m.composeFullScreen(m.mapTitleBar(l), m.mapHeader(l, len(bands) > canvasH),
 		m.fillCanvas(shown, canvasH), func(h int) string {
-			return m.taskStrip(m.b.Task(m.mapSel), m.taskHidden(m.mapSel), h)
+			return m.taskStrip(m.b.Task(m.depmap.sel), m.taskHidden(m.depmap.sel), h)
 		})
 }
 
@@ -130,7 +151,7 @@ func (m *Model) renderMapPanel(p mapPanel, w int) []string {
 func (m *Model) mapNodeRow(n board.ClusterNode, w int) string {
 	th := m.th
 	t := m.b.Task(n.ID)
-	sel := n.ID == m.mapSel
+	sel := n.ID == m.depmap.sel
 
 	gutter := strings.Repeat(" ", mapSelGutter)
 	if sel {
@@ -300,28 +321,28 @@ func (m *Model) mapHiddenCount(l *mapLayout) int {
 // clampMapSel keeps the cursor on a row that still exists — a scope change
 // removes whole clusters.
 func (m *Model) clampMapSel(l *mapLayout) {
-	if l.Row(m.mapSel) != nil {
+	if l.Row(m.depmap.sel) != nil {
 		return
 	}
 	if len(l.Rows) == 0 {
-		m.mapSel = ""
+		m.depmap.sel = ""
 		return
 	}
-	m.mapSel = l.Rows[0].ID
+	m.depmap.sel = l.Rows[0].ID
 }
 
 func (m *Model) mapMove(dx, dy int) {
-	if m.mapLay == nil {
+	if m.depmap.lay == nil {
 		return
 	}
-	if next := m.mapLay.step(m.mapSel, dx, dy); next != m.mapSel {
-		m.mapSel, m.mapMoved = next, true
+	if next := m.depmap.lay.step(m.depmap.sel, dx, dy); next != m.depmap.sel {
+		m.depmap.sel, m.depmap.moved = next, true
 	}
 }
 
 func (m *Model) scrollMapToSel(l *mapLayout, total, canvasH int) int {
-	return scrollToSel(m.mapScroll, total, canvasH, func() (int, int, bool) {
-		r := l.Row(m.mapSel)
+	return scrollToSel(m.depmap.scroll, total, canvasH, func() (int, int, bool) {
+		r := l.Row(m.depmap.sel)
 		if r == nil {
 			return 0, 0, false
 		}
@@ -340,16 +361,16 @@ func (m *Model) scrollMapToSel(l *mapLayout, total, canvasH int) int {
 // graph's own selection.
 func (m *Model) openMap(seed string) {
 	m.cancelDrag()
-	m.mapScroll = 0
-	m.mapMoved = false
-	m.mapSel = seed
+	m.depmap.scroll = 0
+	m.depmap.moved = false
+	m.depmap.sel = seed
 	m.view = viewMap
 	l := m.buildMap()
-	m.mapLay = l
-	if l.Row(m.mapSel) == nil {
-		was := m.b.Task(m.mapSel)
+	m.depmap.lay = l
+	if l.Row(m.depmap.sel) == nil {
+		was := m.b.Task(m.depmap.sel)
 		m.clampMapSel(l)
-		if was != nil && m.mapSel != "" {
+		if was != nil && m.depmap.sel != "" {
 			// WHY the seed is not here decides the sentence. A task with dep
 			// edges that the SCOPE dropped is not a task without dependencies,
 			// and saying so was a flat falsehood for every done task with deps
@@ -369,7 +390,7 @@ func (m *Model) openMap(seed string) {
 // walk ended on — the same contract as closing the graph.
 func (m *Model) closeMap() {
 	m.view = viewBoard
-	m.carryCursorBack(m.mapMoved, m.mapSel)
+	m.carryCursorBack(m.depmap.moved, m.depmap.sel)
 	m.note("board view — the cursor followed the dep map")
 }
 
@@ -378,13 +399,13 @@ func (m *Model) cycleMapScope() {
 	// The cursor may not survive the rebuild (clampMapSel), and a row the
 	// clamp picked was not chosen by the user any more than the opening
 	// fallback was.
-	m.mapMoved = false
-	if m.mapScope == board.ClusterOpen {
-		m.mapScope = board.ClusterAll
+	m.depmap.moved = false
+	if m.depmap.scope == board.ClusterOpen {
+		m.depmap.scope = board.ClusterAll
 	} else {
-		m.mapScope = board.ClusterOpen
+		m.depmap.scope = board.ClusterOpen
 	}
-	m.mapScroll = 0
+	m.depmap.scroll = 0
 	// No note: the header states the scope on every frame.
 }
 
@@ -393,16 +414,16 @@ func (m *Model) cycleMapScope() {
 // return path is recorded so esc lands back on the overview rather than
 // dumping the reader onto the board.
 func (m *Model) graphFromMap() {
-	if m.mapSel == "" || m.b.Task(m.mapSel) == nil {
+	if m.depmap.sel == "" || m.b.Task(m.depmap.sel) == nil {
 		m.note("no row selected — the graph is rooted on a task")
 		return
 	}
-	m.graphFrom = viewMap
-	m.graphFocus, m.graphSel = m.mapSel, m.mapSel
-	m.graphScroll = 0
-	m.graphStack = nil
+	m.graph.from = viewMap
+	m.graph.focus, m.graph.sel = m.depmap.sel, m.depmap.sel
+	m.graph.scroll = 0
+	m.graph.stack = nil
 	m.view = viewGraph
-	m.note("graph rooted on %s — ⏎ re-roots · z cycles radius · o flips the axis · esc returns to the dep map", m.mapSel)
+	m.note("graph rooted on %s — ⏎ re-roots · z cycles radius · o flips the axis · esc returns to the dep map", m.depmap.sel)
 }
 
 // onMapKey is the map's whole keyboard surface. Like the graph it is a reading
@@ -417,9 +438,9 @@ func (m *Model) onMapKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	case key.Matches(msg, m.keys.PeekScroll):
 		m.halfPage(msg, m.mapCanvasH(), func(dir int) bool {
-			at := m.mapSel
+			at := m.depmap.sel
 			m.mapMove(0, dir)
-			return m.mapSel != at
+			return m.depmap.sel != at
 		}, "this column")
 
 	case key.Matches(msg, m.keys.Up):

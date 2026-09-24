@@ -602,14 +602,14 @@ func TestGraphRootAndSelectionKeepDistinctBorderShapes(t *testing.T) {
 	if strings.Contains(frame(m), "╔") {
 		t.Error("at open the root IS the selection — the thick ring must win, not the double")
 	}
-	l := m.graphLay // cached by the render above; the key handlers read the same
+	l := m.graph.lay // cached by the render above; the key handlers read the same
 	if l == nil {
 		t.Fatal("no graph layout after a render")
 	}
 	moved := false
 	for _, n := range l.Real() {
 		if n.Key != l.Focus {
-			m.graphSel = n.Key
+			m.graph.sel = n.Key
 			moved = true
 			break
 		}

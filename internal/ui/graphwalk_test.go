@@ -16,19 +16,19 @@ import (
 // one still, and re-root/retrace/radius are transitions between stills.
 //
 // Most of these call the handlers directly rather than through Update(), and
-// graphModel renders once first so graphLay exists. The exception is
+// graphModel renders once first so graph.lay exists. The exception is
 // TestClosingTheGraphBeforeItRendersDoesNotPanic, which deliberately skips that
 // render — the state every headless driver in this package can reach and the
 // one the nil guard exists for.
 //
 // Only three of these fail against the pre-fix source (the two panics and the
 // epic-id leak). The rest are new coverage for handlers that were correct but
-// untested; they are verified by mutation instead — dropping the graphStack
+// untested; they are verified by mutation instead — dropping the graph.stack
 // push, freezing cycleGraphRadius, or removing closeGraph's cursor carry each
 // turns one of them red.
 
 // graphModel opens the graph rooted on g2 of advGraphBoard — the node with a
-// blocker above it and a dependant below — and renders once so graphLay
+// blocker above it and a dependant below — and renders once so graph.lay
 // exists.
 func graphModel(t *testing.T, w, h int) *Model {
 	t.Helper()
@@ -49,11 +49,11 @@ func graphModel(t *testing.T, w, h int) *Model {
 // the root has one in each vertical direction.
 func graphMoveOffRoot(t *testing.T, m *Model) string {
 	t.Helper()
-	start := m.graphSel
+	start := m.graph.sel
 	for _, dir := range [][2]int{{0, -1}, {0, +1}, {+1, 0}, {-1, 0}} {
 		m.graphMove(dir[0], dir[1])
-		if m.graphSel != start {
-			return m.graphSel
+		if m.graph.sel != start {
+			return m.graph.sel
 		}
 	}
 	t.Fatalf("setup: no neighbour of %s is reachable from the root", start)
@@ -69,7 +69,7 @@ func TestClosingTheGraphBeforeItRendersDoesNotPanic(t *testing.T) {
 	if m.view != viewGraph {
 		t.Fatal("S did not open the graph")
 	}
-	if m.graphLay != nil {
+	if m.graph.lay != nil {
 		t.Fatal("this test is only meaningful before the first render")
 	}
 	m.closeGraph() // panicked here: Node() dereferences a nil *egoLayout
@@ -82,23 +82,23 @@ func TestClosingTheGraphBeforeItRendersDoesNotPanic(t *testing.T) {
 // or swapping the two handlers left the whole suite green.
 func TestGraphWalkRerootsAndRetraces(t *testing.T) {
 	m := graphModel(t, 240, 60)
-	start := m.graphFocus
+	start := m.graph.focus
 	target := graphMoveOffRoot(t, m)
 
 	m.rerootGraph()
-	if m.graphFocus != target {
-		t.Fatalf("re-root left the focus on %s, want %s", m.graphFocus, target)
+	if m.graph.focus != target {
+		t.Fatalf("re-root left the focus on %s, want %s", m.graph.focus, target)
 	}
-	if len(m.graphStack) != 1 || m.graphStack[0] != start {
-		t.Fatalf("re-root did not push %s onto the walk stack: %v", start, m.graphStack)
+	if len(m.graph.stack) != 1 || m.graph.stack[0] != start {
+		t.Fatalf("re-root did not push %s onto the walk stack: %v", start, m.graph.stack)
 	}
 
 	m.graphBack()
-	if m.graphFocus != start {
-		t.Errorf("`<` retraced to %s, want %s", m.graphFocus, start)
+	if m.graph.focus != start {
+		t.Errorf("`<` retraced to %s, want %s", m.graph.focus, start)
 	}
-	if len(m.graphStack) != 0 {
-		t.Errorf("`<` left %d entries on the walk stack", len(m.graphStack))
+	if len(m.graph.stack) != 0 {
+		t.Errorf("`<` left %d entries on the walk stack", len(m.graph.stack))
 	}
 }
 
@@ -106,16 +106,16 @@ func TestGraphWalkRerootsAndRetraces(t *testing.T) {
 // grow the stack — otherwise `<` burns a press going nowhere.
 func TestRerootOnTheCurrentRootIsANoOp(t *testing.T) {
 	m := graphModel(t, 240, 60)
-	focus := m.graphFocus
-	m.graphSel = focus
+	focus := m.graph.focus
+	m.graph.sel = focus
 
 	m.rerootGraph()
 
-	if m.graphFocus != focus {
-		t.Errorf("focus moved to %s", m.graphFocus)
+	if m.graph.focus != focus {
+		t.Errorf("focus moved to %s", m.graph.focus)
 	}
-	if len(m.graphStack) != 0 {
-		t.Errorf("re-rooting on the current root pushed %v onto the walk stack", m.graphStack)
+	if len(m.graph.stack) != 0 {
+		t.Errorf("re-rooting on the current root pushed %v onto the walk stack", m.graph.stack)
 	}
 }
 
@@ -138,7 +138,7 @@ func TestGraphRadiusCyclesAndWraps(t *testing.T) {
 	seen := make([]int, 0, len(graphRadii))
 	for range graphRadii {
 		m.cycleGraphRadius()
-		seen = append(seen, m.graphRadius)
+		seen = append(seen, m.graph.radius)
 	}
 	for _, r := range graphRadii {
 		found := false
@@ -151,12 +151,12 @@ func TestGraphRadiusCyclesAndWraps(t *testing.T) {
 			t.Errorf("cycling never reached radius %d (saw %v)", r, seen)
 		}
 	}
-	first := m.graphRadius
+	first := m.graph.radius
 	for range graphRadii {
 		m.cycleGraphRadius()
 	}
-	if m.graphRadius != first {
-		t.Errorf("a full cycle did not wrap: %d -> %d", first, m.graphRadius)
+	if m.graph.radius != first {
+		t.Errorf("a full cycle did not wrap: %d -> %d", first, m.graph.radius)
 	}
 }
 
@@ -165,9 +165,9 @@ func TestGraphRadiusCyclesAndWraps(t *testing.T) {
 func TestClosingTheGraphCarriesTheCursorToWhereTheWalkEnded(t *testing.T) {
 	m := graphModel(t, 240, 60)
 	graphMoveOffRoot(t, m)
-	n := m.graphLay.Node(m.graphSel)
+	n := m.graph.lay.Node(m.graph.sel)
 	if n == nil || n.Kind != egoReal {
-		t.Fatalf("setup: the walk landed on %q, which is not a real node", m.graphSel)
+		t.Fatalf("setup: the walk landed on %q, which is not a real node", m.graph.sel)
 	}
 	want := n.ID
 
@@ -203,7 +203,7 @@ func TestGraphRendersATaskWhoseLaneIsNotInTheVocabulary(t *testing.T) {
 	m.recompute()
 	m.relayout()
 
-	m.graphFocus, m.graphSel = "t-alien", "t-alien"
+	m.graph.focus, m.graph.sel = "t-alien", "t-alien"
 	m.view = viewGraph
 
 	// Panicked here before the fix.
@@ -262,23 +262,23 @@ var _ = tea.KeyPressMsg{}
 // `<` to rerootGraph — a swap that survived the entire suite.
 func TestGraphKeysAreRoutedToTheRightHandlers(t *testing.T) {
 	m := graphModel(t, 240, 60)
-	start := m.graphFocus
+	start := m.graph.focus
 	target := graphMoveOffRoot(t, m)
 
 	press(m, "enter") // must RE-ROOT, not retrace
-	if m.graphFocus != target {
-		t.Errorf("⏎ in the graph left the focus on %s, want %s — is it wired to graphBack?", m.graphFocus, target)
+	if m.graph.focus != target {
+		t.Errorf("⏎ in the graph left the focus on %s, want %s — is it wired to graphBack?", m.graph.focus, target)
 	}
-	if len(m.graphStack) != 1 {
-		t.Fatalf("⏎ did not push onto the walk stack: %v", m.graphStack)
+	if len(m.graph.stack) != 1 {
+		t.Fatalf("⏎ did not push onto the walk stack: %v", m.graph.stack)
 	}
 
 	press(m, "<") // must RETRACE, not re-root
-	if m.graphFocus != start {
-		t.Errorf("`<` retraced to %s, want %s — is it wired to rerootGraph?", m.graphFocus, start)
+	if m.graph.focus != start {
+		t.Errorf("`<` retraced to %s, want %s — is it wired to rerootGraph?", m.graph.focus, start)
 	}
-	if len(m.graphStack) != 0 {
-		t.Errorf("`<` left %d entries on the walk stack", len(m.graphStack))
+	if len(m.graph.stack) != 0 {
+		t.Errorf("`<` left %d entries on the walk stack", len(m.graph.stack))
 	}
 
 	// esc leaves the graph rather than doing anything inside it.

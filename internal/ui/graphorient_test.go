@@ -137,7 +137,7 @@ func TestSpanningEdgeDrawsAPassThroughInBothOrientations(t *testing.T) {
 		m := New(memstore.NewWith(spanningBoard()), Options{GraphLR: tc.orient == orientLeftRight})
 		m.selectID("t-c", false)
 		m.openGraph()
-		m.graphRadius = graphAllRadius
+		m.graph.radius = graphAllRadius
 		out, err := m.Dump(240, 50, "", true)
 		if err != nil {
 			t.Fatalf("%s: %v", tc.orient, err)
@@ -165,13 +165,13 @@ func TestSpanningEdgeDrawsAPassThroughInBothOrientations(t *testing.T) {
 func TestOrientationDoesNotChangeWhatTheGraphContains(t *testing.T) {
 	for _, wh := range [][2]int{{240, 50}, {240, 30}, {320, 70}, {400, 90}} {
 		m := graphModel(t, wh[0], wh[1])
-		m.graphRadius = graphAllRadius
+		m.graph.radius = graphAllRadius
 		m.View()
-		td := m.graphLay
+		td := m.graph.lay
 
 		m.cycleGraphOrient()
 		m.View()
-		lr := m.graphLay
+		lr := m.graph.lay
 
 		if a, b := len(td.Real()), len(lr.Real()); a != b {
 			t.Errorf("%dx%d: %d nodes top-down, %d left-right", wh[0], wh[1], a, b)
@@ -197,13 +197,13 @@ func TestEveryLeftRightNodeBoxPrintsItsID(t *testing.T) {
 			t.Fatalf("%dx%d: %v", wh[0], wh[1], err)
 		}
 		canvas := canvasOf(m, out)
-		for _, n := range m.graphLay.Real() {
+		for _, n := range m.graph.lay.Real() {
 			if !strings.Contains(canvas, n.ID) {
 				t.Errorf("%dx%d: node %s is drawn but its id is not in the drawing", wh[0], wh[1], n.ID)
 			}
 		}
-		fitsTheWidth(t, m, m.graphMeasure(m.graphLay))
-		if m.graphLay.Span-graphNodeChrome < graphMinNodeLines {
+		fitsTheWidth(t, m, m.graphMeasure(m.graph.lay))
+		if m.graph.lay.Span-graphNodeChrome < graphMinNodeLines {
 			t.Errorf("%dx%d: the node span left no title line at all", wh[0], wh[1])
 		}
 	}
@@ -218,13 +218,13 @@ func TestAShortTerminalScrollsTheLeftRightFrameRatherThanDroppingNodes(t *testin
 	if _, err := tall.Dump(240, 90, "graphall", true); err != nil {
 		t.Fatal(err)
 	}
-	want := len(tall.graphLay.Real())
+	want := len(tall.graph.lay.Real())
 
 	short := New(memstore.New(), Options{GraphLR: true})
 	if _, err := short.Dump(240, 24, "graphall", true); err != nil {
 		t.Fatal(err)
 	}
-	if got := len(short.graphLay.Real()); got != want {
+	if got := len(short.graph.lay.Real()); got != want {
 		t.Errorf("a 24-row terminal drew %d nodes, a 90-row one %d — the short frame dropped work", got, want)
 	}
 	// Not a second Dump: Dump re-applies the demo, and the demo re-roots the
@@ -241,20 +241,20 @@ func TestAShortTerminalScrollsTheLeftRightFrameRatherThanDroppingNodes(t *testin
 // somewhere nothing chose.
 func TestOrientationKeyFlipsTheAxisAndDropsTheScroll(t *testing.T) {
 	m := graphModel(t, 240, 40)
-	if m.graphOrient != orientTopDown {
-		t.Fatalf("the graph opened %s; top-down is the default the docs describe", m.graphOrient)
+	if m.graph.orient != orientTopDown {
+		t.Fatalf("the graph opened %s; top-down is the default the docs describe", m.graph.orient)
 	}
-	m.graphScroll = 7
+	m.graph.scroll = 7
 	press(m, "o")
-	if m.graphOrient != orientLeftRight {
-		t.Errorf("`o` left the graph %s", m.graphOrient)
+	if m.graph.orient != orientLeftRight {
+		t.Errorf("`o` left the graph %s", m.graph.orient)
 	}
-	if m.graphScroll != 0 {
-		t.Errorf("`o` carried a scroll offset of %d across the flip", m.graphScroll)
+	if m.graph.scroll != 0 {
+		t.Errorf("`o` carried a scroll offset of %d across the flip", m.graph.scroll)
 	}
 	press(m, "o")
-	if m.graphOrient != orientTopDown {
-		t.Errorf("`o` did not flip back: %s", m.graphOrient)
+	if m.graph.orient != orientTopDown {
+		t.Errorf("`o` did not flip back: %s", m.graph.orient)
 	}
 }
 
@@ -293,14 +293,14 @@ func TestGraphMoveCrossesLayersOnTheAxisTheyRunAlong(t *testing.T) {
 		{orientLeftRight, 0, 1, false},
 	} {
 		m := graphModel(t, 240, 50)
-		m.graphOrient = tc.orient
+		m.graph.orient = tc.orient
 		m.View()
-		start := m.graphLay.Node(m.graphSel)
+		start := m.graph.lay.Node(m.graph.sel)
 		if start == nil {
 			t.Fatal("no selection to walk from")
 		}
 		m.graphMove(tc.dx, tc.dy)
-		got := m.graphLay.Node(m.graphSel)
+		got := m.graph.lay.Node(m.graph.sel)
 		if got == nil {
 			t.Fatalf("%s: the walk left the selection off the layout", tc.orient)
 		}
@@ -387,7 +387,7 @@ func chainGraph(t *testing.T, n, w, h int) (*Model, string) {
 	m := New(memstore.NewWith(chainBoard(n)), Options{GraphLR: true})
 	m.selectID(fmt.Sprintf("t-c%02d", n/2), false)
 	m.openGraph()
-	m.graphRadius = graphAllRadius
+	m.graph.radius = graphAllRadius
 	out, err := m.Dump(w, h, "", true)
 	if err != nil {
 		t.Fatalf("%d-deep chain at %dx%d: %v", n, w, h, err)
@@ -401,7 +401,7 @@ func chainGraph(t *testing.T, n, w, h int) (*Model, string) {
 // fit are dropped and REPORTED rather than truncated off the right edge.
 func TestADeepChainKeepsItsBoxesReadableAndSaysWhatItDropped(t *testing.T) {
 	m, out := chainGraph(t, 12, 240, 50)
-	l, f := m.graphLay, m.graphMeasure(m.graphLay)
+	l, f := m.graph.lay, m.graphMeasure(m.graph.lay)
 
 	// The consequence the floor exists for, not the floor itself: a box that
 	// cannot hold the median Japanese title (82 cells, CLAUDE.md) is not worth
@@ -568,11 +568,11 @@ func TestAPassThroughIsDrawnAsOneFullWidthRule(t *testing.T) {
 	m := New(memstore.NewWith(spanningBoard()), Options{GraphLR: true})
 	m.selectID("t-c", false)
 	m.openGraph()
-	m.graphRadius = graphAllRadius
+	m.graph.radius = graphAllRadius
 	if _, err := m.Dump(240, 50, "", true); err != nil {
 		t.Fatal(err)
 	}
-	l := m.graphLay
+	l := m.graph.lay
 	f := m.graphMeasure(l)
 
 	var dummies int
@@ -610,7 +610,7 @@ func TestAPassThroughIsDrawnAsOneFullWidthRule(t *testing.T) {
 // it while the box that actually shed something went unexamined.
 func TestTheIDLineShedsItsExtrasInTheDocumentedOrder(t *testing.T) {
 	m, _ := chainGraph(t, 12, 240, 50)
-	l := m.graphLay
+	l := m.graph.lay
 	f := m.graphMeasure(l)
 	focus := l.FocusNode()
 	if focus == nil {
@@ -667,7 +667,7 @@ func TestTheIsolatedFocusNotesSitBesideTheBox(t *testing.T) {
 		if !strings.Contains(canvas[row], graphNoStructure) {
 			t.Errorf("w=%d: the second note is not on the same row as the first: %q", w, canvas[row])
 		}
-		n := m.graphLay.FocusNode()
+		n := m.graph.lay.FocusNode()
 		if n == nil {
 			t.Fatalf("w=%d: no focus node", w)
 		}
@@ -693,11 +693,11 @@ func TestTheLeftRightWindowFollowsTheSelection(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		n := m.graphLay.Node(m.graphSel)
+		n := m.graph.lay.Node(m.graph.sel)
 		if n == nil {
 			t.Fatalf("step %d: the selection left the layout", i)
 		}
-		f := m.graphMeasure(m.graphLay)
+		f := m.graphMeasure(m.graph.lay)
 		if n.Rank < f.first || n.Rank > f.last {
 			t.Fatalf("step %d: selection %s is on rank %d, outside the drawn window %d..%d",
 				i, n.ID, n.Rank, f.first, f.last)
@@ -743,7 +743,7 @@ func TestALayerWiderThanTheCapIsReportedInBothOrientations(t *testing.T) {
 		if err != nil {
 			t.Fatalf("lr=%v: %v", lr, err)
 		}
-		if len(m.graphLay.Overflow) == 0 {
+		if len(m.graph.lay.Overflow) == 0 {
 			t.Fatalf("lr=%v: an 8-wide layer did not overflow a cap of %d", lr, graphHardCols)
 		}
 		if !strings.Contains(out, "over the layer cap") {
@@ -787,11 +787,11 @@ func TestTheRankWindowFitsTheDrawingAtEveryWidth(t *testing.T) {
 		m := New(memstore.NewWith(chainBoard(12)), Options{GraphLR: true})
 		m.selectID("t-c06", false)
 		m.openGraph()
-		m.graphRadius = graphAllRadius
+		m.graph.radius = graphAllRadius
 		if _, err := m.Dump(w, 50, "", true); err != nil {
 			t.Fatalf("w=%d: %v", w, err)
 		}
-		f := m.graphMeasure(m.graphLay)
+		f := m.graphMeasure(m.graph.lay)
 		total := (f.last - f.first + 1) * f.nodeW
 		for r := f.first; r < f.last; r++ {
 			total += f.channels[r]
@@ -810,8 +810,8 @@ func TestAShortCanvasNeverPlacesABoxSmallerThanItDraws(t *testing.T) {
 		if _, err := m.Dump(240, h, "graphall", true); err != nil {
 			t.Fatalf("rows=%d: %v", h, err)
 		}
-		f := m.graphMeasure(m.graphLay)
-		if got, want := f.nodeH(), m.graphLay.Span; got != want {
+		f := m.graphMeasure(m.graph.lay)
+		if got, want := f.nodeH(), m.graph.lay.Span; got != want {
 			t.Errorf("rows=%d: boxes are drawn %d rows tall in a %d-row slot", h, got, want)
 		}
 	}

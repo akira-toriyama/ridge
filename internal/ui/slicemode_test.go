@@ -320,11 +320,11 @@ func TestGraphDimsNodesOutsideTheSlice(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.sliceField, m.sliceVal = sliceLabel, "bbq"
-	m.qMatched = map[string]bool{m.graphFocus: true}
+	m.qMatched = map[string]bool{m.graph.focus: true}
 	lay := m.buildGraph()
 	dimmed := 0
 	for _, n := range lay.Nodes {
-		if n.ID != "" && n.ID != m.graphFocus && n.Hidden {
+		if n.ID != "" && n.ID != m.graph.focus && n.Hidden {
 			dimmed++
 		}
 	}
