@@ -175,11 +175,11 @@ func (m *Model) switchView(i int) tea.Cmd {
 	prev := m.curTask()
 	if m.view == viewRoadmap {
 		// curTask knows only the board and the table; inside the roadmap the
-		// selection the user can SEE is roadSel — the trap keys.View's own
+		// selection the user can SEE is road.sel — the trap keys.View's own
 		// comment records ("curTask() reads whichever view is current").
 		// Both exits from the view must agree about what the cursor is, and
 		// esc (closeRoadmap) carries the walk.
-		if t := m.b.Task(m.roadSel); t != nil {
+		if t := m.b.Task(m.road.sel); t != nil {
 			prev = t
 		}
 	}
@@ -217,7 +217,7 @@ func (m *Model) switchView(i int) tea.Cmd {
 		// The seed is passed EXPLICITLY: prev may be a task the filter hides
 		// from the board cols (the roadmap mutes such rows, it does not drop
 		// them), so a round trip through the board cursor loses it.
-		walked := m.view == viewRoadmap && m.roadMoved
+		walked := m.view == viewRoadmap && m.road.moved
 		seed := ""
 		if prev != nil {
 			seed = prev.ID
@@ -226,14 +226,14 @@ func (m *Model) switchView(i int) tea.Cmd {
 			// The seed-fallback sentence (why the cursor moved) still applies.
 			m.note("%s", s)
 		}
-		if walked && m.roadSel == seed {
+		if walked && m.road.sel == seed {
 			// A roadmap→roadmap switch CARRIES the user's walk (the seed),
 			// so the walked-ness must ride along too: startRoadmapFrom
 			// resets it for fresh entries, and losing it here made the next
 			// esc skip its pin-and-carry while still claiming "the cursor
 			// followed the roadmap". Gated on the seed surviving — a walk
 			// the new axis could not place is not a walk any more.
-			m.roadMoved = true
+			m.road.moved = true
 		}
 	case m.view != target:
 		// Landing on a board/table tab deliberately does NOT pin prev past

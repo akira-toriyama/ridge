@@ -54,7 +54,7 @@ type roadRow struct {
 }
 
 // roadLayout is one frame's worth of roadmap geometry. There is no W: the
-// axis is WINDOWED by the view (roadXOff), never packed to a width — a due
+// axis is WINDOWED by the view (road.xOff), never packed to a width — a due
 // five months out sits at its true X whether or not it is on screen.
 type roadLayout struct {
 	Zoom   roadZoom

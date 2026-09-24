@@ -22,6 +22,36 @@ import (
 // window rather than sliced out of a styled string — windowing by ANSI
 // surgery is how a CJK epic chip would shear the frame.
 
+// roadState is the roadmap view's whole state, held by value like sweepState:
+// a view has no closed state for nil to mean, and the zero value is the state
+// before the first open (zoomDay is the zero zoom), so newModel seeds nothing.
+// Like the graph's radius, none of it survives the session.
+type roadState struct {
+	zoom roadZoom // the axis unit (roadmap.go)
+	// sel is the row the cursor is on — routinely one the board cols do not
+	// contain (startRoadmapFrom says why, and what a round trip costs).
+	sel string
+	// moved is set by the user's own walk, and by viewtabs.go when a
+	// roadmap→roadmap tab switch carries that walk across. closeRoadmap
+	// hands it to carryCursorBack, which says why an unmoved cursor is not
+	// carried.
+	moved bool
+	// anchored reports that the opening window has been PLACED. Only
+	// renderRoadmap on a real size (Model.sized) and cycleRoadZoom place it;
+	// renderRoadmap says what placing it against an unreal size did.
+	anchored bool
+	scroll   int
+	xOff     int // the window's pan over the axis, in cells
+	// lay is the pack the last frame drew. The cursor and pan handlers walk
+	// it and do nothing while it is nil, which is only before the first
+	// open: nothing nils it, and both rebuilds outside render
+	// (startRoadmapFrom, cycleRoadZoom) are eager. recompute leaves it alone,
+	// unlike the swimlane's — a reload landing before the next frame lets a
+	// walk step the previous board's pack, and clampRoadSel snaps the cursor
+	// on that frame.
+	lay *roadLayout
+}
+
 const (
 	// roadPaneMaxW is the identity pane: gutter, marker, id, a recognisable
 	// slice of the title, the date. The FULL title belongs to the strip — the
@@ -62,7 +92,7 @@ func (m *Model) roadPopulation() []*board.Task {
 }
 
 func (m *Model) buildRoad() *roadLayout {
-	return packRoad(m.roadPopulation(), m.roadZoom, board.Now())
+	return packRoad(m.roadPopulation(), m.road.zoom, board.Now())
 }
 
 // roadPaneW is the identity pane's width this frame — the preferred constant,
@@ -81,7 +111,7 @@ func (m *Model) roadRowsH() int { return m.fullCanvasH(roadAxisH) }
 
 func (m *Model) renderRoadmap() string {
 	l := m.buildRoad()
-	m.roadLay = l
+	m.road.lay = l
 	m.clampRoadSel(l)
 
 	rowsH := m.roadRowsH()
@@ -89,27 +119,28 @@ func (m *Model) renderRoadmap() string {
 	// window and never materialises a band per row (swimlaneview.go says why
 	// render-then-cut is refused). The pre-clamp is redundant — scrollRoadToSel
 	// re-clamps — and is kept only because this pairing is spelled here.
-	m.roadScroll = clamp(m.roadScroll, 0, maxInt(0, len(l.Rows)-rowsH))
-	m.roadScroll = m.scrollRoadToSel(l, len(l.Rows), rowsH)
+	m.road.scroll = clamp(m.road.scroll, 0, maxInt(0, len(l.Rows)-rowsH))
+	m.road.scroll = m.scrollRoadToSel(l, len(l.Rows), rowsH)
 	tlW := m.roadTLW()
-	if !m.roadAnchored && m.sized {
+	if !m.road.anchored && m.sized {
 		// The opening window, placed on the first frame whose size is REAL —
 		// not in startRoadmap (the -roadmap flag runs it inside New(), before
 		// any size exists) and not on the interactive program's very first
 		// frame either, which bubbletea draws before the WindowSizeMsg
 		// arrives (either path anchors against the constructor's 240×60
-		// otherwise). Today lands a third of the way in — the promises just
+		// otherwise, which put today off screen on every other terminal).
+		// Today lands a third of the way in — the promises just
 		// behind and just ahead of it are the ones that need attention, and
 		// GH's roadmap opens the same way. The seed may sit outside this
 		// window: its row is still the selection (the strip shows it, its ◆
 		// leaves an edge arrow), and the first cursor move pans to it.
-		m.roadAnchored = true
-		m.roadXOff = 0
+		m.road.anchored = true
+		m.road.xOff = 0
 		if l.Cells > tlW {
-			m.roadXOff = clamp(l.TodayX-tlW/3, 0, l.Cells-tlW)
+			m.road.xOff = clamp(l.TodayX-tlW/3, 0, l.Cells-tlW)
 		}
 	}
-	m.roadXOff = clamp(m.roadXOff, 0, maxInt(0, l.Cells-tlW))
+	m.road.xOff = clamp(m.road.xOff, 0, maxInt(0, l.Cells-tlW))
 
 	canvas := make([]string, 0, roadAxisH+rowsH)
 	canvas = append(canvas, m.roadAxisRows(l, tlW)...)
@@ -117,13 +148,13 @@ func (m *Model) renderRoadmap() string {
 		canvas = append(canvas, "", m.th.dim.Render(
 			"— no open task carries a due: nothing here has a date · quick add's due: token or the edit overlay's due row puts one on —"))
 	} else {
-		for y := m.roadScroll; y < minInt(len(l.Rows), m.roadScroll+rowsH); y++ {
+		for y := m.road.scroll; y < minInt(len(l.Rows), m.road.scroll+rowsH); y++ {
 			canvas = append(canvas, m.roadRowLine(l, &l.Rows[y], tlW))
 		}
 	}
 	return m.composeFullScreen(m.roadTitleBar(l), m.roadHeader(l, len(l.Rows) > rowsH, l.Cells > tlW),
 		m.fillCanvas(canvas, roadAxisH+rowsH), func(h int) string {
-			return m.taskStrip(m.b.Task(m.roadSel), m.taskHidden(m.roadSel), h)
+			return m.taskStrip(m.b.Task(m.road.sel), m.taskHidden(m.road.sel), h)
 		})
 }
 
@@ -136,8 +167,8 @@ func (m *Model) roadAxisRows(l *roadLayout, tlW int) []string {
 	// Labels stop at the AXIS end, not the window's: on a wide terminal the
 	// window is usually longer than the axis, and a year of labelled cells
 	// carrying no ◆ at all reads as content where there is none.
-	coarse, fine := roadTicks(l.Zoom, l.start, m.roadXOff,
-		minInt(tlW, maxInt(0, l.Cells-m.roadXOff)))
+	coarse, fine := roadTicks(l.Zoom, l.start, m.road.xOff,
+		minInt(tlW, maxInt(0, l.Cells-m.road.xOff)))
 	pane := strings.Repeat(" ", m.roadPaneW())
 	rows := make([]string, 0, roadAxisH)
 	for _, ticks := range [][]roadTick{coarse, fine} {
@@ -158,7 +189,7 @@ func (m *Model) roadRowLine(l *roadLayout, r *roadRow, tlW int) string {
 	th := m.th
 	t := m.b.Task(r.ID)
 	gutter := strings.Repeat(" ", mapSelGutter)
-	if r.ID == m.roadSel {
+	if r.ID == m.road.sel {
 		gutter = th.accent.Render("▌") + " "
 	}
 	paneW := m.roadPaneW()
@@ -198,8 +229,8 @@ func (m *Model) roadRowLine(l *roadLayout, r *roadRow, tlW int) string {
 // off screen must not read as dateless.
 func (m *Model) roadCells(l *roadLayout, t *board.Task, r *roadRow, tlW int) string {
 	th := m.th
-	x := r.X - m.roadXOff
-	tx := l.TodayX - m.roadXOff
+	x := r.X - m.road.xOff
+	tx := l.TodayX - m.road.xOff
 
 	// seg is [from, to) cells of empty timeline, with today's gridline drawn
 	// where it crosses.
@@ -326,29 +357,29 @@ func (m *Model) roadHiddenCount(l *roadLayout) int {
 // clampRoadSel keeps the cursor on a row that still exists — a reload can
 // close or re-date the task it was on.
 func (m *Model) clampRoadSel(l *roadLayout) {
-	if l.Row(m.roadSel) != nil {
+	if l.Row(m.road.sel) != nil {
 		return
 	}
 	if len(l.Rows) == 0 {
-		m.roadSel = ""
+		m.road.sel = ""
 		return
 	}
-	m.roadSel = l.Rows[0].ID
+	m.road.sel = l.Rows[0].ID
 }
 
 func (m *Model) roadMove(dy int) {
-	if m.roadLay == nil {
+	if m.road.lay == nil {
 		return
 	}
-	if next := m.roadLay.step(m.roadSel, dy); next != m.roadSel {
-		m.roadSel, m.roadMoved = next, true
+	if next := m.road.lay.step(m.road.sel, dy); next != m.road.sel {
+		m.road.sel, m.road.moved = next, true
 		m.roadEnsureX()
 	}
 }
 
 // roadJump is g/G: the earliest and the latest promise.
 func (m *Model) roadJump(last bool) {
-	l := m.roadLay
+	l := m.road.lay
 	if l == nil || len(l.Rows) == 0 {
 		return
 	}
@@ -356,8 +387,8 @@ func (m *Model) roadJump(last bool) {
 	if last {
 		id = l.Rows[len(l.Rows)-1].ID
 	}
-	if id != m.roadSel {
-		m.roadSel, m.roadMoved = id, true
+	if id != m.road.sel {
+		m.road.sel, m.road.moved = id, true
 		m.roadEnsureX()
 	}
 }
@@ -368,13 +399,13 @@ func (m *Model) roadJump(last bool) {
 // state, exactly as a column scrolled away from its cursor is
 // (ensureVisible's rule).
 func (m *Model) roadEnsureX() {
-	l := m.roadLay
+	l := m.road.lay
 	// An unanchored window does not exist yet — render owns the placement,
 	// and nudging the offset before it would pan nothing.
-	if l == nil || !m.roadAnchored {
+	if l == nil || !m.road.anchored {
 		return
 	}
-	r := l.Row(m.roadSel)
+	r := l.Row(m.road.sel)
 	if r == nil {
 		return
 	}
@@ -385,16 +416,16 @@ func (m *Model) roadEnsureX() {
 	pad := minInt(1, tlW-1)
 	// else-if, deliberately: the second test must read the offset the FIRST
 	// one was judged against.
-	if r.X < m.roadXOff {
-		m.roadXOff = maxInt(0, r.X-pad)
-	} else if r.X >= m.roadXOff+tlW {
-		m.roadXOff = minInt(r.X-tlW+1+pad, maxInt(0, l.Cells-tlW))
+	if r.X < m.road.xOff {
+		m.road.xOff = maxInt(0, r.X-pad)
+	} else if r.X >= m.road.xOff+tlW {
+		m.road.xOff = minInt(r.X-tlW+1+pad, maxInt(0, l.Cells-tlW))
 	}
 }
 
 func (m *Model) scrollRoadToSel(l *roadLayout, total, rowsH int) int {
-	return scrollToSel(m.roadScroll, total, rowsH, func() (int, int, bool) {
-		r := l.Row(m.roadSel)
+	return scrollToSel(m.road.scroll, total, rowsH, func() (int, int, bool) {
+		r := l.Row(m.road.sel)
 		if r == nil {
 			return 0, 0, false
 		}
@@ -403,12 +434,12 @@ func (m *Model) scrollRoadToSel(l *roadLayout, total, rowsH int) int {
 }
 
 func (m *Model) roadPanBy(d int) {
-	l := m.roadLay
-	if l == nil || !m.roadAnchored {
+	l := m.road.lay
+	if l == nil || !m.road.anchored {
 		// Panning an unplaced window would move nothing (roadEnsureX's rule).
 		return
 	}
-	m.roadXOff = clamp(m.roadXOff+d*roadPan(m.roadZoom), 0, maxInt(0, l.Cells-m.roadTLW()))
+	m.road.xOff = clamp(m.road.xOff+d*roadPan(m.road.zoom), 0, maxInt(0, l.Cells-m.roadTLW()))
 }
 
 // startRoadmap is openRoadmap minus the status line, because the -roadmap
@@ -422,7 +453,7 @@ func (m *Model) roadPanBy(d int) {
 // The seed is the caller's cursor when that task is on the axis at all —
 // arriving from a dated task and losing it would make the roadmap a place
 // you go rather than a way to look at when you already are. The WINDOW is
-// deliberately not placed here: roadXOff's sentinel defers it to the first
+// deliberately not placed here: road.anchored defers it to the first
 // render, the one place the real terminal width is known (renderRoadmap).
 func (m *Model) startRoadmap() string {
 	seed := ""
@@ -433,22 +464,22 @@ func (m *Model) startRoadmap() string {
 }
 
 // startRoadmapFrom is startRoadmap with the seed made explicit. A tab
-// switch must carry roadSel directly: the roadmap MUTES what the filter
+// switch must carry road.sel directly: the roadmap MUTES what the filter
 // hides rather than dropping it, so its cursor is routinely on a task the
 // board cols do not contain — a round trip through the board cursor
 // (selectID, then curTask inside this function) drops exactly those rows
 // and snaps the walk back.
 func (m *Model) startRoadmapFrom(seed string) string {
 	m.cancelDrag()
-	m.roadScroll, m.roadXOff, m.roadMoved, m.roadAnchored = 0, 0, false, false
-	m.roadSel = seed
+	m.road.scroll, m.road.xOff, m.road.moved, m.road.anchored = 0, 0, false, false
+	m.road.sel = seed
 	m.view = viewRoadmap
 	l := m.buildRoad()
-	m.roadLay = l
-	if l.Row(m.roadSel) == nil {
-		was := m.b.Task(m.roadSel)
+	m.road.lay = l
+	if l.Row(m.road.sel) == nil {
+		was := m.b.Task(m.road.sel)
 		m.clampRoadSel(l)
-		if was != nil && m.roadSel != "" {
+		if was != nil && m.road.sel != "" {
 			// WHY the seed is not here decides the sentence — a done task with
 			// a due is not a task without one, and the map's opening fallback
 			// records what saying the wrong reason costs.
@@ -474,7 +505,7 @@ func (m *Model) openRoadmap() {
 // all.
 func (m *Model) closeRoadmap() {
 	m.view = viewBoard
-	m.carryCursorBack(m.roadMoved, m.roadSel)
+	m.carryCursorBack(m.road.moved, m.road.sel)
 	m.note("board view — the cursor followed the roadmap")
 }
 
@@ -483,19 +514,19 @@ func (m *Model) closeRoadmap() {
 // the old offset means nothing and the new one must be derived from the new
 // geometry — re-anchored on the selection when there is one, today otherwise.
 func (m *Model) cycleRoadZoom() {
-	switch m.roadZoom {
+	switch m.road.zoom {
 	case zoomDay:
-		m.roadZoom = zoomWeek
+		m.road.zoom = zoomWeek
 	case zoomWeek:
-		m.roadZoom = zoomMonth
+		m.road.zoom = zoomMonth
 	default:
-		m.roadZoom = zoomDay
+		m.road.zoom = zoomDay
 	}
 	l := m.buildRoad()
-	m.roadLay = l
+	m.road.lay = l
 	tlW := m.roadTLW()
 	anchor := l.TodayX
-	if r := l.Row(m.roadSel); r != nil {
+	if r := l.Row(m.road.sel); r != nil {
 		anchor = r.X
 	}
 	// A deliberate absolute placement counts as the anchor — pressing z is
@@ -506,11 +537,11 @@ func (m *Model) cycleRoadZoom() {
 	// overwrites (latent, but the invariant is "nothing anchors against an
 	// unreal size", without exceptions).
 	if m.sized {
-		m.roadAnchored = true
+		m.road.anchored = true
 	}
-	m.roadXOff = 0
+	m.road.xOff = 0
 	if l.Cells > tlW {
-		m.roadXOff = clamp(anchor-tlW/2, 0, l.Cells-tlW)
+		m.road.xOff = clamp(anchor-tlW/2, 0, l.Cells-tlW)
 	}
 	// No note: the header names the zoom on every frame.
 }
@@ -539,9 +570,9 @@ func (m *Model) onRoadKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	case key.Matches(msg, m.keys.PeekScroll):
 		m.halfPage(msg, m.roadRowsH(), func(dir int) bool {
-			at := m.roadSel
+			at := m.road.sel
 			m.roadMove(dir)
-			return m.roadSel != at
+			return m.road.sel != at
 		}, "the timeline")
 
 	case key.Matches(msg, m.keys.Up):

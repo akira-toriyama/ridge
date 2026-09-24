@@ -38,7 +38,7 @@ func roadModel(t *testing.T, w, h int) *Model {
 // local date — and no row at all for the dateless majority.
 func TestRoadmapRowsAreTheDatedOpenTasksInDueOrder(t *testing.T) {
 	m := roadModel(t, 240, 40)
-	l := m.roadLay
+	l := m.road.lay
 	want := []string{"t-jv3j", "t-ehk7", "t-p7xw", "t-9sa6"}
 	if len(l.Rows) != len(want) {
 		ids := make([]string, 0, len(l.Rows))
@@ -65,7 +65,7 @@ func TestRoadmapRowsAreTheDatedOpenTasksInDueOrder(t *testing.T) {
 // this is the one view whose whole point is that colour.
 func TestRoadmapDiamondColoursByOverdue(t *testing.T) {
 	m := roadModel(t, 240, 40)
-	l := m.roadLay
+	l := m.road.lay
 	tlW := m.roadTLW()
 
 	row := m.roadRowLine(l, l.Row("t-jv3j"), tlW) // due 07-31, open → overdue
@@ -85,26 +85,26 @@ func TestRoadmapDiamondColoursByOverdue(t *testing.T) {
 	m2.Update(tea.WindowSizeMsg{Width: 240, Height: 40})
 	m2.openRoadmap()
 	_ = frame(m2)
-	l2 := m2.roadLay
+	l2 := m2.road.lay
 	if row := m2.roadRowLine(l2, l2.Row("t-now"), m2.roadTLW()); !strings.Contains(row, m2.th.warn.Render(glyphDue)) {
 		t.Errorf("a due-today ◆ is not warn-styled: %q", row)
 	}
 }
 
 // The timeline half's geometry, on a row with no epic chip to muddy it: the
-// ◆ sits at the due's cell, today's ┊ at today's — both windowed by roadXOff.
+// ◆ sits at the due's cell, today's ┊ at today's — both windowed by road.xOff.
 func TestRoadmapPlacesTheDiamondAndTodayOnTheirCells(t *testing.T) {
 	m := roadModel(t, 240, 40)
-	l := m.roadLay
+	l := m.road.lay
 	r := l.Row("t-p7xw") // due 08-25, no epic membership in the fixture
 	tlW := m.roadTLW()
 
 	cells := ansiStrip(m.roadCells(l, m.b.Task("t-p7xw"), r, tlW))
-	if got := pos(cells, glyphDue); got != r.X-m.roadXOff {
-		t.Errorf("◆ at column %d, want %d in %q", got, r.X-m.roadXOff, cells)
+	if got := pos(cells, glyphDue); got != r.X-m.road.xOff {
+		t.Errorf("◆ at column %d, want %d in %q", got, r.X-m.road.xOff, cells)
 	}
-	if got := pos(cells, glyphToday); got != l.TodayX-m.roadXOff {
-		t.Errorf("┊ at column %d, want %d in %q", got, l.TodayX-m.roadXOff, cells)
+	if got := pos(cells, glyphToday); got != l.TodayX-m.road.xOff {
+		t.Errorf("┊ at column %d, want %d in %q", got, l.TodayX-m.road.xOff, cells)
 	}
 }
 
@@ -136,15 +136,15 @@ func TestRoadmapEpicChipRidesTheTimelineResolved(t *testing.T) {
 // danger through the substitution.
 func TestRoadmapOffWindowDiamondBecomesAnEdgeArrow(t *testing.T) {
 	m := roadModel(t, 240, 40)
-	l := m.roadLay
+	l := m.road.lay
 
-	m.roadXOff = l.Row("t-jv3j").X + 5 // the overdue ◆ is now left of the window
+	m.road.xOff = l.Row("t-jv3j").X + 5 // the overdue ◆ is now left of the window
 	cells := m.roadCells(l, m.b.Task("t-jv3j"), l.Row("t-jv3j"), m.roadTLW())
 	if !strings.Contains(cells, m.th.danger.Render(glyphDropR)) {
 		t.Errorf("an off-left overdue ◆ must leave a danger ◂ at the edge: %q", cells)
 	}
 
-	m.roadXOff = 0
+	m.road.xOff = 0
 	cells = ansiStrip(m.roadCells(l, m.b.Task("t-9sa6"), l.Row("t-9sa6"), 10))
 	if !strings.HasSuffix(cells, glyphDropL) {
 		t.Errorf("an off-right ◆ must leave a ▸ at the window's last cell: %q", cells)
@@ -155,16 +155,16 @@ func TestRoadmapOffWindowDiamondBecomesAnEdgeArrow(t *testing.T) {
 // a deadline that vanishes because of a query is a lie about the board.
 func TestRoadmapFilterMutesAndCountsRatherThanDrops(t *testing.T) {
 	m := roadModel(t, 240, 40)
-	rows := len(m.roadLay.Rows)
+	rows := len(m.road.lay.Rows)
 	m.ti.SetValue("label:gear")
 	_ = m.applyFilter("label:gear")
 	out := frame(m)
 
-	if got := len(m.roadLay.Rows); got != rows {
+	if got := len(m.road.lay.Rows); got != rows {
 		t.Fatalf("the filter dropped roadmap rows: %d, want %d", got, rows)
 	}
 	hidden := 0
-	for _, r := range m.roadLay.Rows {
+	for _, r := range m.road.lay.Rows {
 		if m.taskHidden(r.ID) {
 			hidden++
 		}
@@ -188,12 +188,12 @@ func TestRoadmapCarriesTheCursorBothWaysButOnlyWhenWalked(t *testing.T) {
 		t.Fatal("setup: t-9sa6 is not selectable")
 	}
 	press(m, "C")
-	if m.roadSel != "t-9sa6" {
-		t.Fatalf("the roadmap opened on %q, want the board cursor's t-9sa6", m.roadSel)
+	if m.road.sel != "t-9sa6" {
+		t.Fatalf("the roadmap opened on %q, want the board cursor's t-9sa6", m.road.sel)
 	}
 	press(m, "k")
-	if m.roadSel != "t-p7xw" {
-		t.Fatalf("k walked to %q, want t-p7xw (one due earlier)", m.roadSel)
+	if m.road.sel != "t-p7xw" {
+		t.Fatalf("k walked to %q, want t-p7xw (one due earlier)", m.road.sel)
 	}
 	press(m, "esc")
 	if m.view != viewBoard {
@@ -209,8 +209,8 @@ func TestRoadmapCarriesTheCursorBothWaysButOnlyWhenWalked(t *testing.T) {
 		t.Fatal("setup: t-7wdg is not on the fixture board")
 	}
 	press(m, "C")
-	if m.roadSel != "t-jv3j" || m.roadMoved {
-		t.Fatalf("a dueless seed must land unwalked on the first row, got %q moved=%v", m.roadSel, m.roadMoved)
+	if m.road.sel != "t-jv3j" || m.road.moved {
+		t.Fatalf("a dueless seed must land unwalked on the first row, got %q moved=%v", m.road.sel, m.road.moved)
 	}
 	if !strings.Contains(m.status, "carries no due") {
 		t.Errorf("the fallback did not explain itself: %q", m.status)
@@ -238,8 +238,8 @@ func TestRoadmapSeedOnADoneTaskNamesTheRightReason(t *testing.T) {
 		t.Fatal("setup: the done task is not selectable")
 	}
 	m.openRoadmap()
-	if m.roadSel != "t-open" {
-		t.Fatalf("the cursor fell to %q, want the one open promise", m.roadSel)
+	if m.road.sel != "t-open" {
+		t.Fatalf("the cursor fell to %q, want the one open promise", m.road.sel)
 	}
 	if !strings.Contains(m.status, "is done") {
 		t.Errorf("the fallback blamed the wrong thing: %q", m.status)
@@ -252,8 +252,8 @@ func TestRoadmapZoomCyclesAndTheHeaderNamesIt(t *testing.T) {
 	m := roadModel(t, 240, 40)
 	for _, want := range []string{"week", "month", "day"} {
 		press(m, "z")
-		if m.roadZoom.String() != want {
-			t.Fatalf("zoom = %s, want %s", m.roadZoom, want)
+		if m.road.zoom.String() != want {
+			t.Fatalf("zoom = %s, want %s", m.road.zoom, want)
 		}
 		if !strings.Contains(frame(m), "zoom "+want+" (1 cell = 1 "+want+")") {
 			t.Errorf("the header does not name zoom %s", want)
@@ -266,25 +266,25 @@ func TestRoadmapZoomCyclesAndTheHeaderNamesIt(t *testing.T) {
 func TestRoadmapPanClampsAtTheAxisEnds(t *testing.T) {
 	// Narrow enough that the fixture's ~9-week axis overflows the window.
 	m := roadModel(t, 80, 40)
-	l := m.roadLay
+	l := m.road.lay
 	tlW := m.roadTLW()
 	if l.Cells <= tlW {
 		t.Fatalf("setup: axis %d cells must overflow the %d-cell window", l.Cells, tlW)
 	}
-	sel := m.roadSel
+	sel := m.road.sel
 	for range 100 {
 		press(m, "l")
 	}
-	if got, want := m.roadXOff, l.Cells-tlW; got != want {
+	if got, want := m.road.xOff, l.Cells-tlW; got != want {
 		t.Errorf("panning right stopped at %d, want the clamp %d", got, want)
 	}
 	for range 100 {
 		press(m, "h")
 	}
-	if m.roadXOff != 0 {
-		t.Errorf("panning left stopped at %d, want 0", m.roadXOff)
+	if m.road.xOff != 0 {
+		t.Errorf("panning left stopped at %d, want 0", m.road.xOff)
 	}
-	if m.roadSel != sel || m.roadMoved {
+	if m.road.sel != sel || m.road.moved {
 		t.Error("panning moved the selection")
 	}
 }
@@ -294,8 +294,8 @@ func TestRoadmapPanClampsAtTheAxisEnds(t *testing.T) {
 func TestRoadmapPageSaysSoAtTheEnds(t *testing.T) {
 	m := roadModel(t, 240, 40)
 	m.Update(ctrlD())
-	if m.roadSel != "t-9sa6" {
-		t.Fatalf("^d landed on %q, want the last row t-9sa6", m.roadSel)
+	if m.road.sel != "t-9sa6" {
+		t.Fatalf("^d landed on %q, want the last row t-9sa6", m.road.sel)
 	}
 	m.Update(ctrlD())
 	if !strings.Contains(m.status, "already at the bottom") {
@@ -342,10 +342,10 @@ func TestRoadmapEmptyBoardSaysSo(t *testing.T) {
 // the rows the view exists to surface.
 func TestRoadmapTodayGridlineSurvivesTheEpicChip(t *testing.T) {
 	m := roadModel(t, 240, 40)
-	l := m.roadLay
+	l := m.road.lay
 	r := l.Row("t-jv3j") // overdue AND boxed
 	cells := ansiStrip(m.roadCells(l, m.b.Task("t-jv3j"), r, m.roadTLW()))
-	if got, want := pos(cells, glyphToday), l.TodayX-m.roadXOff; got != want {
+	if got, want := pos(cells, glyphToday), l.TodayX-m.road.xOff; got != want {
 		t.Errorf("┊ at column %d, want %d — the chip covered the gridline: %q", got, want, cells)
 	}
 	if !strings.Contains(cells, glyphEpic) {
@@ -373,23 +373,23 @@ func TestRoadmapOpensWithTodayPlacedAgainstTheRealWidth(t *testing.T) {
 
 	// The pre-size frame the real program draws: it must not burn the anchor.
 	_ = frame(m)
-	if m.roadAnchored {
+	if m.road.anchored {
 		t.Fatal("the window anchored against the constructor's default size")
 	}
 
 	m.Update(tea.WindowSizeMsg{Width: 90, Height: 30})
 	out := frame(m)
-	l, tlW := m.roadLay, m.roadTLW()
+	l, tlW := m.road.lay, m.roadTLW()
 	if l.Cells <= tlW {
 		t.Fatalf("setup: axis %d cells must overflow the %d-cell window", l.Cells, tlW)
 	}
-	if m.roadSel != "t-old" {
-		t.Fatalf("seed = %q, want the board cursor's t-old", m.roadSel)
+	if m.road.sel != "t-old" {
+		t.Fatalf("seed = %q, want the board cursor's t-old", m.road.sel)
 	}
-	if got, want := m.roadXOff, clamp(l.TodayX-tlW/3, 0, l.Cells-tlW); got != want {
-		t.Errorf("roadXOff = %d, want today a third into the REAL %d-cell window (%d)", got, tlW, want)
+	if got, want := m.road.xOff, clamp(l.TodayX-tlW/3, 0, l.Cells-tlW); got != want {
+		t.Errorf("road.xOff = %d, want today a third into the REAL %d-cell window (%d)", got, tlW, want)
 	}
-	if tx := l.TodayX - m.roadXOff; tx < 0 || tx >= tlW {
+	if tx := l.TodayX - m.road.xOff; tx < 0 || tx >= tlW {
 		t.Errorf("today sits at window column %d of %d — the window opened away from it", tx, tlW)
 	}
 	if !strings.Contains(out, glyphDropR) {

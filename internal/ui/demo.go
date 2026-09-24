@@ -692,7 +692,7 @@ func (m *Model) demoState(kind string) error {
 		if c := m.onRoadKey(tea.KeyPressMsg{Code: 'z', Text: "z"}); c != nil {
 			_ = c
 		}
-		if m.roadZoom != zoomWeek {
+		if m.road.zoom != zoomWeek {
 			return fmt.Errorf("demo roadmapweek: z did not zoom to week")
 		}
 
@@ -705,7 +705,7 @@ func (m *Model) demoState(kind string) error {
 		if c := m.onRoadKey(tea.KeyPressMsg{Code: 'z', Text: "z"}); c != nil {
 			_ = c
 		}
-		if m.roadZoom != zoomMonth {
+		if m.road.zoom != zoomMonth {
 			return fmt.Errorf("demo roadmapmonth: z did not zoom to month")
 		}
 
