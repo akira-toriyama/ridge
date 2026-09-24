@@ -243,6 +243,53 @@ func TestAdvBlockedToggleCorruptsANegatedQuery(t *testing.T) {
 	}
 }
 
+// The toggle must cut the query where furrow's lexer does (board.QFields):
+// strings.Fields split a value holding U+3000 or NBSP, and the rejoin handed
+// back two terms the user never typed (t-j39t).
+func TestDropBlockedTokenSplitsOnlyWhereTheLexerDoes(t *testing.T) {
+	for _, tc := range []struct {
+		raw, want string
+		had       bool
+	}{
+		{"", "", false},
+		{"is:blocked", "", true},
+		{"label:ui is:blocked", "label:ui", true},
+		{"is:blocked label:ui", "label:ui", true},
+		{"label:ui\tis:blocked\tepic:e-1", "label:ui epic:e-1", true},
+		{"label:全角　空白 is:blocked", "label:全角　空白", true},
+		{"label:nb\u00a0sp is:blocked", "label:nb\u00a0sp", true},
+		{`label:"needs review" is:blocked`, `label:"needs review"`, true},
+		// Only the exact token: a negation is not the toggle's term, and a
+		// token glued to a quote is not either. Quoting is not honoured beyond
+		// that (board.QFields): a whitespace-delimited is:blocked INSIDE a
+		// quoted phrase is cut too, as it always was.
+		{"-is:blocked", "-is:blocked", false},
+		{`title:"is:blocked" is:blocked`, `title:"is:blocked"`, true},
+	} {
+		got, had := dropBlockedToken(tc.raw)
+		if got != tc.want || had != tc.had {
+			t.Errorf("dropBlockedToken(%q) = (%q, %v), want (%q, %v)", tc.raw, got, had, tc.want, tc.had)
+		}
+	}
+}
+
+// The same fact through the key: `b` twice must hand the typed query back
+// unchanged, wide space included.
+func TestBlockedToggleRoundTripsAValueHoldingAWideSpace(t *testing.T) {
+	m := boardModel(t, 140, 40)
+	const q = "label:全角　空白"
+	m.applyFilter(q)
+	m.ti.SetValue(q)
+	m.Update(tea.KeyPressMsg{Code: 'b', Text: "b"})
+	if want := q + " is:blocked"; m.qRaw != want {
+		t.Fatalf("first b: query %q, want %q", m.qRaw, want)
+	}
+	m.Update(tea.KeyPressMsg{Code: 'b', Text: "b"})
+	if m.qRaw != q {
+		t.Errorf("second b: query %q, want %q back", m.qRaw, q)
+	}
+}
+
 // Typing a filter that hides the selected card silently leaves the cursor on a
 // DIFFERENT task, and every subsequent destructive key (d = done, x = check,
 // enter = move) acts on that one.

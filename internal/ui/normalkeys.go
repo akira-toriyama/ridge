@@ -337,16 +337,15 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
-// dropBlockedToken removes every `is:blocked` token from a whitespace-separated
-// query, reporting whether it was there. strings.Fields splits on every
-// Unicode space, which is wider than furrow's lexer (U+3000 and NBSP are not
-// separators there — board.QTerm), so a quoted value holding one is re-split
-// on the way back: t-j39t.
+// dropBlockedToken removes every `is:blocked` token from the query, reporting
+// whether it was there. Tokens are cut where the lexer cuts them
+// (board.QFields), so a value holding a space the lexer does not split on
+// comes back whole.
 func dropBlockedToken(raw string) (string, bool) {
 	const tok = "is:blocked"
 	var keep []string
 	had := false
-	for _, f := range strings.Fields(raw) {
+	for _, f := range board.QFields(raw) {
 		if f == tok {
 			had = true
 			continue

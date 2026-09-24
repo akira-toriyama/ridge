@@ -84,7 +84,7 @@ func (m *Model) enterAdd() tea.Cmd {
 // vanish from the very view it was added into. Comma'd (OR) and negated
 // tokens inherit nothing: "one of these" is not a value to stamp.
 func inheritContext(raw string) (label, epic, repo string, draft bool) {
-	for _, tok := range strings.Fields(raw) {
+	for _, tok := range board.QFields(raw) {
 		k, v, ok := strings.Cut(tok, ":")
 		// Quoted values (label:"needs review", either quote character) split
 		// across Fields tokens; like OR'd and negated tokens they inherit
