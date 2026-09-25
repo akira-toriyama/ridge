@@ -189,10 +189,11 @@ type egoLayout struct {
 	Layers [][]*egoNode // index 0 = the outermost upstream layer
 	Edges  []egoEdge
 
-	// Skipped are real dep edges the layered drawing cannot express: a cycle
-	// folded two nodes onto the same rank, or an edge pointing back upstream.
-	// They are reported in the UI rather than silently dropped — a graph that
-	// quietly omits an edge is worse than one that admits it.
+	// Skipped are real dep edges the layered drawing cannot express: an edge
+	// that lands flat or backwards, which only a cycle produces now that the
+	// layers follow the uncapped longest path (buildEgo). They are reported in
+	// the UI rather than silently dropped — a graph that quietly omits an edge
+	// is worse than one that admits it.
 	Skipped []egoEdge
 
 	// Overflow counts nodes dropped from a layer by graphHardCols, by rank.
@@ -312,9 +313,30 @@ func buildEgo(g *board.Graph, focus string, radius, maxCols int, hidden func(str
 		return t.Deps
 	}
 
-	up := longestDist(depsOf, focus, radius)
-	down := longestDist(g.Blocks, focus, radius)
-	l.UpCount, l.DownCount = len(up), len(down)
+	// Inclusion: what lies within `radius` hops of the focus, either way.
+	upSet := longestDist(depsOf, focus, radius)
+	downSet := longestDist(g.Blocks, focus, radius)
+	l.UpCount, l.DownCount = len(upSet), len(downSet)
+
+	// Layers: the longest path INSIDE the included set, uncapped. Layering by
+	// the radius-capped distance folded a node whose longest path ran past the
+	// radius onto the outermost layer, beside the node it depends on, and that
+	// edge was then reported as cyclic on a board with no cycle (t-z9nf:
+	// ridge-test at radius 2 put t-60da9 and t-2hmak on one layer). The radius
+	// bounds what is included, not how many layers it draws.
+	within := func(set map[string]int, next func(string) []string) func(string) []string {
+		return func(id string) []string {
+			var out []string
+			for _, v := range next(id) {
+				if _, ok := set[v]; ok {
+					out = append(out, v)
+				}
+			}
+			return out
+		}
+	}
+	up := longestDist(within(upSet, depsOf), focus, len(upSet)+1)
+	down := longestDist(within(downSet, g.Blocks), focus, len(downSet)+1)
 
 	// 1. layer assignment
 	add := func(id string, layer int, both bool) {
