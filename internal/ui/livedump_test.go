@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/akira-toriyama/ridge/internal/board"
 	"github.com/akira-toriyama/ridge/internal/store/memstore"
 )
 
@@ -87,6 +88,22 @@ func TestRefusedStartupFilterIsNamedInTheStatus(t *testing.T) {
 	}
 	if !m.statusErr || !strings.Contains(m.status, "-filter refused") || !strings.Contains(m.status, "bogus") {
 		t.Errorf("status=%q err=%v; want the refusal named", m.status, m.statusErr)
+	}
+
+	// Two refusals at once (an empty board: the graph cannot open either)
+	// share the one status row; written one after the other, the second
+	// erased the first.
+	empty := &liveQueryProvider{b: board.NewBoard(nil), err: errors.New(`unknown qualifier "bogus"`)}
+	both := New(empty, Options{Filter: "bogus:zzz", Graph: true})
+	if !strings.Contains(both.status, "-filter refused") || !strings.Contains(both.status, "graph not opened") {
+		t.Errorf("status=%q; want both refusals on the row", both.status)
+	}
+
+	// A refused lens read names the flag that was typed.
+	lens := &liveQueryProvider{b: memstore.New().Board(), err: errors.New("revisit is not supported")}
+	rv := New(lens, Options{Revisit: true})
+	if !strings.Contains(rv.status, "-revisit refused") {
+		t.Errorf("status=%q; want the lens's refusal named after -revisit", rv.status)
 	}
 }
 

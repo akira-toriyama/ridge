@@ -181,25 +181,36 @@ func New(p board.Provider, o Options) *Model {
 	// swapped for another is the no-op the CLI's refusals exist to prevent
 	// (`-graph` on an empty board drew the board with "loaded 0 tasks" and
 	// exit 0, found in review). Both outrank the notes above.
+	var refused []string
 	if m.qErr != "" {
-		m.startupFail("-filter refused — %s", m.qErr)
+		// The read furrow refused is the lens's when -revisit is on; the
+		// flag named is the one the user typed.
+		flag := "-filter"
+		if o.Filter == "" {
+			flag = "-revisit"
+		}
+		refused = append(refused, fmt.Sprintf("%s refused — %s", flag, m.qErr))
 	}
 	if unopened != "" {
-		m.startupFail("graph not opened (%s); the board is drawn instead", unopened)
+		refused = append(refused, fmt.Sprintf("graph not opened (%s); the board is drawn instead", unopened))
+	}
+	if len(refused) > 0 {
+		m.startupFail(refused)
 	}
 	return m
 }
 
-// startupFail writes a startup refusal to the status line. On a read-only
-// board the warning already there is kept and the refusal rides behind it:
-// the warning is set once and restored by nothing (noteLoad's rule), but a
+// startupFail writes the startup refusals to the status line — ONE row,
+// every one of them (written one at a time, the second erased the first:
+// an empty board with a typo'd -filter and -graph reported only the graph,
+// found in review). On a read-only board the warning already there is kept
+// in front: it is set once and restored by nothing (noteLoad's rule), but a
 // frame that is not what was asked for must say so on that board too.
-func (m *Model) startupFail(f string, a ...any) {
-	line := fmt.Sprintf(f, a...)
+func (m *Model) startupFail(lines []string) {
 	if !m.b.Writable() {
-		line = m.status + " · " + line
+		lines = append([]string{m.status}, lines...)
 	}
-	m.fail("%s", line)
+	m.fail("%s", strings.Join(lines, " · "))
 }
 
 // noteLoad is the startup note. The count is Tasks(), and a task whose
