@@ -82,7 +82,10 @@ Much changed from v1. Each of these was hit and confirmed:
 - **Wrap with `wrapLines` (card.go), never `Style.Width()` / `ansi.Wrap`.**
   Both break only on whitespace, and Japanese has none: a 66-cell run was
   carried whole to the next line, leaving 11 of 73 cells used (t-x8vb).
-  `wrapLines` breaks after whitespace or beside any wide grapheme.
+  `wrapLines` breaks after whitespace or beside any wide grapheme, except
+  before a closing mark or after an opening bracket (kinsoku — a lone `。`
+  once opened a peek body line, t-wgrj). The exception governs opportunities:
+  a run that offers none still hard-breaks where the width falls.
 - **When laying out bordered boxes side by side, always `-dump` at several
   widths and eyeball the column alignment.** Drift accumulates one cell at a
   time: invisible on a narrow screen, exposed on a wide one.

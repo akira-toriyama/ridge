@@ -104,3 +104,38 @@ func TestWrapLinesEdges(t *testing.T) {
 		}
 	}
 }
+
+// A closing mark never opens a line and an opening bracket never ends one
+// (kinsoku). The body line that showed it: 66 cells ended "…数字で1枚にする"
+// and the next line was "。" alone (t-wgrj, ridge-test t-4561x in the peek).
+func TestWrapLinesKeepsClosingMarksOffTheLineStart(t *testing.T) {
+	const body = "目的: 献立を「作れる献立」に絞るための物理制約を、数字で1枚にする。"
+	got := wrapLines(body, 66)
+	if len(got) != 2 || got[1] != "る。" {
+		t.Fatalf("wrapLines(66) = %q, want the break pulled back before る so 。 stays on its line", got)
+	}
+	titles := []string{
+		body,
+		"候補 3 件の持ち込み酒可否とゴミ持ち帰り規定を書面で取り付ける（A・B・C）。「未返信」は除く。",
+		"入館可能時刻と事前入館料（15:00 入館の可否）を 3 件分、比較表の「入館可能時刻と事前入館料」節に記入する",
+		"予約の総ざらい — 温泉・レンタル品・雨天予備日をまとめて確定し、宿とレンタカーの取り消し期限を一覧にする",
+	}
+	// From 5: at 4 a wide mark and its neighbour cannot share a line, so the
+	// hard-break lands where it must.
+	for _, title := range titles {
+		for w := 5; w <= 80; w++ {
+			for i, l := range wrapLines(title, w) {
+				gs := graphemes(l)
+				if len(gs) == 0 {
+					continue
+				}
+				if i > 0 && kinsoku(gs[0], noLineStart) {
+					t.Errorf("w=%d line %d opens with a closing mark: %q", w, i, l)
+				}
+				if kinsoku(gs[len(gs)-1], noLineEnd) {
+					t.Errorf("w=%d line %d ends on an opening bracket: %q", w, i, l)
+				}
+			}
+		}
+	}
+}
