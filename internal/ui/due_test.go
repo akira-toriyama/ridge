@@ -106,8 +106,9 @@ func TestPeekDatesCreatedAndOldUpdatedOnTheCalendarDay(t *testing.T) {
 }
 
 // isOverdue is the one overdue predicate (six readers). Its "and not closed"
-// clause was satisfied by luck: the fixture has no closed task with a due
-// date, so dropping the clause failed nothing.
+// clause is pinned here on a synthetic task: the fixture's one closed task
+// with a due (t-2qyb) reaches memstore's twin through is:overdue, but no ui
+// test frames it, so dropping this clause would fail nothing else.
 func TestIsOverdueIgnoresAClosedTask(t *testing.T) {
 	at := time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)
 	fixedNow(t, at)

@@ -838,3 +838,42 @@ func TestEditRepeatRefusesAClosedTask(t *testing.T) {
 		press(m, "esc")
 	}
 }
+
+// A closed task that somehow carries a rule (no furrow write produces one)
+// still shows it and opens the input, so the drop — furrow's exit 0 —
+// stays reachable; only a non-empty rule is refused there.
+func TestEditRepeatOnAClosedTaskWithARuleStaysClearable(t *testing.T) {
+	closedAt := time.Date(2026, 9, 20, 9, 0, 0, 0, time.UTC)
+	b := board.NewBoard([]*board.Task{
+		{ID: "c", Status: "done", Title: "closed with rule", Priority: 10, Due: closedAt.Add(48 * time.Hour), Closed: closedAt, Repeat: "FREQ=WEEKLY", RepeatAnchor: closedAt},
+	})
+	m := New(memstore.NewWith(b), Options{})
+	m.w, m.h = 240, 50
+	m.recompute()
+	m.relayout()
+	if !m.selectID("c", false) {
+		t.Fatal("could not select c")
+	}
+	m.enterEdit()
+	if out := frame(m); !strings.Contains(out, "FREQ=WEEKLY") || strings.Contains(out, "reopen it first") {
+		t.Errorf("the row must show the rule, not the closed precondition:\n%s", out)
+	}
+	m.edit.menuIdx = int(fieldRepeat)
+	press(m, "enter")
+	if m.edit.stage != stageInput {
+		t.Fatal("the input must open so the rule can be dropped")
+	}
+	m.edit.input.SetValue("daily")
+	press(m, "enter")
+	if !m.statusErr || m.b.Task("c").Repeat != "FREQ=WEEKLY" {
+		t.Errorf("a new rule on a closed task must be refused with the old one kept: status=%q repeat=%q", m.status, m.b.Task("c").Repeat)
+	}
+	m.edit.menuIdx = int(fieldRepeat)
+	press(m, "enter")
+	m.edit.input.SetValue("")
+	press(m, "enter")
+	if m.b.Task("c").Repeat != "" || m.statusErr {
+		t.Errorf("an empty ⏎ must drop the rule on a closed task: status=%q", m.status)
+	}
+	drainPersists(m, t)
+}

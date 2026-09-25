@@ -709,12 +709,14 @@ func inputTitleFor(k inputKind) string {
 // closed task — in that order (measured on v6.0.0: a closed task with no due
 // is answered with the due) — so the row says which applies BEFORE the press,
 // and openField refuses the press on the same ground (reason; "" when the
-// input may open). A closed task never shows a rule: the close consumed it.
+// input may open). A closed task carrying a rule — no furrow write produces
+// one, every close route consumes it (re-measured) — still shows the rule
+// and opens: `--clear-repeat` is exit 0 there, so the drop stays reachable.
 func repeatCell(t *board.Task) (cell, reason string) {
 	switch {
 	case t.Due.IsZero():
 		return "— needs a due first", "no due — a rule counts from the first occurrence; set due first"
-	case !t.Closed.IsZero():
+	case !t.Closed.IsZero() && t.Repeat == "":
 		return "— closed; reopen it first", "closed, so a rule on it could never fire — reopen it first"
 	}
 	return t.Repeat, ""

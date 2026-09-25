@@ -1169,9 +1169,10 @@ func sp(s string) *string { return &s }
 
 // The edit menu's repeat row and quick add's repeat: token (t-zbmv) are
 // `furrow set --repeat` / `--clear-repeat` and `add --repeat`: the argv
-// spellings and furrow's coupling of the rule to the due are the contract,
-// measured here against the pinned release. The two refusals ride the
-// envelope as kind validation, which is how the UI's rollback names them.
+// spellings and furrow's coupling of the rule to the due and to the closed
+// stamp are the contract, run here against the real binary (the CI contract
+// job runs it on the pinned release). The three refusals ride the envelope
+// as kind validation, which is how the UI's rollback names them.
 //
 // bite-exempt: execs a real furrow binary and always skips where furrow is not
 // on PATH — which is CI's build job, so the gate can never judge it there
@@ -1179,6 +1180,8 @@ func TestContractRepeatEditsAreSetRepeatAndClearRepeat(t *testing.T) {
 	p, dir := newLabProvider(t)
 	id := labAdd(t, dir, "締めの確認", "--due", "2026-10-02")
 	bare := labAdd(t, dir, "due なし")
+	closed := labAdd(t, dir, "閉じた", "--due", "2026-10-02")
+	lab(t, dir, "furrow", "done", closed)
 	reload := func() *board.Task {
 		t.Helper()
 		if err := p.Reload(); err != nil {
@@ -1215,9 +1218,14 @@ func TestContractRepeatEditsAreSetRepeatAndClearRepeat(t *testing.T) {
 		t.Errorf("after re-committing the rule: repeat=%q anchor=%v, want the same rule anchored at %v", y.Repeat, y.RepeatAnchor, x.Due)
 	}
 
-	// The two refusals, as the envelope names them.
+	// The three refusals, as the envelope names them — and the drop that is
+	// not one: a closed task takes no rule but sheds one at exit 0.
 	wantKind(t, p.PersistFields(id, board.FieldPatch{Due: sp("")}), "validation")
 	wantKind(t, p.PersistFields(bare, board.FieldPatch{Repeat: sp("weekly")}), "validation")
+	wantKind(t, p.PersistFields(closed, board.FieldPatch{Repeat: sp("weekly")}), "validation")
+	if err := p.PersistFields(closed, board.FieldPatch{Repeat: sp("")}); err != nil {
+		t.Errorf("--clear-repeat on a closed task: %v, want exit 0", err)
+	}
 
 	if err := p.PersistFields(id, board.FieldPatch{Repeat: sp("")}); err != nil {
 		t.Fatalf("set --clear-repeat: %v", err)

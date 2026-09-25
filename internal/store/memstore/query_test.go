@@ -195,8 +195,9 @@ func TestQueryMatchesFixture(t *testing.T) {
 		{q: "no:label", min: 1},
 		{q: "no:repo", want: []string{"t-dg7k"}}, // exactly the fixture's one draft
 		{q: "is:draft", want: []string{"t-dg7k"}},
-		// Of the fixture's four dues, only t-jv3j (2026-07-31) is past the
-		// pinned clock and still open.
+		// Of the fixture's five dues, two are past the pinned clock and only
+		// t-jv3j (2026-07-31) is still open — t-2qyb (07-17) is closed, and a
+		// closed task is never overdue.
 		{q: "is:overdue", want: []string{"t-jv3j"}},
 	}
 	for _, tc := range tests {
