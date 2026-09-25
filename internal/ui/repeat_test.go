@@ -242,8 +242,8 @@ func TestRefusedCloseReportsTheFailureAndTheRollbackRestoresTheRule(t *testing.T
 
 // The two headless frames: the rule on the card and in the peek, and the
 // moment after a close landed — the successor with the mark and the status
-// line naming it in furrow's words; the closed card, at the tail of the done
-// lane, without the mark (below the fold at 50 rows, in the frame at 80).
+// line naming it in furrow's words; the closed card among the earlier closes
+// in the done lane, its priority kept, without the mark.
 func TestRepeatDemosShowTheRuleAndTheSuccessor(t *testing.T) {
 	m := New(memstore.New(), Options{})
 	out, err := m.Dump(240, 50, "repeat", true)
@@ -290,15 +290,18 @@ func TestRepeatDemosShowTheRuleAndTheSuccessor(t *testing.T) {
 		}
 	}
 
-	// The closed card is the done lane's last: 50 rows fold it away, 80 show it.
-	m = New(memstore.New(), Options{})
-	out, err = m.Dump(240, 80, "repeatdone", true)
-	if err != nil {
-		t.Fatal(err)
+	// The closed card keeps its priority (`furrow done` renumbers nothing —
+	// t-s5tj), so it sits among the earlier closes rather than at the lane's
+	// tail, which is what puts it in the frame at 50 rows.
+	if before := memstore.New().Board().Task("t-9sa6").Priority; closed.Priority != before {
+		t.Errorf("the close renumbered t-9sa6: %d → %d", before, closed.Priority)
 	}
-	line := metaLine(out, m.b.Task("t-9sa6"))
+	if done := m.b.LaneTasks(m.b.DoneLane()); done[len(done)-1].ID == "t-9sa6" {
+		t.Error("the closed card sits at the done lane's tail; a kept priority sorts it among the earlier closes")
+	}
+	line := metaLine(out, closed)
 	if line == "" {
-		t.Fatal("at 80 rows the closed card's meta line must be in the frame")
+		t.Fatal("at 50 rows the closed card's meta line must be in the frame")
 	}
 	if strings.Contains(line, glyphRepeat) {
 		t.Errorf("the closed card must not keep the mark: %q", line)

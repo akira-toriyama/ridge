@@ -499,19 +499,7 @@ func (b *Board) MoveTo(id, lane string, idx int) (renumbered []string, err error
 		idx = len(peers)
 	}
 
-	wasDone := b.isDoneLane(t.Status)
-	t.Status = lane
-	t.Updated = nowFn().UTC().Truncate(time.Second)
-	switch {
-	case dst.Done && !wasDone:
-		t.Closed = t.Updated
-		// furrow CONSUMES the rule on a close — the successor carries it, and a
-		// reopen does not hand it back — so the optimistic card must stop
-		// saying "repeats" now rather than at the re-read.
-		t.Repeat, t.RepeatAnchor = "", time.Time{}
-	case !dst.Done && wasDone:
-		t.Closed = time.Time{}
-	}
+	b.enterLane(t, dst)
 
 	if p, ok := sparsePriority(peers, idx); ok {
 		t.Priority = p
@@ -585,17 +573,43 @@ func (b *Board) DoneLane() string {
 	return ""
 }
 
-// Close moves a task to the done lane, appending it at the end.
+// enterLane switches t into dst and stamps what the switch means. Priority
+// is the caller's: MoveTo places the task, Close leaves it where it was.
+func (b *Board) enterLane(t *Task, dst *Lane) {
+	wasDone := b.isDoneLane(t.Status)
+	t.Status = dst.Name
+	t.Updated = nowFn().UTC().Truncate(time.Second)
+	switch {
+	case dst.Done && !wasDone:
+		t.Closed = t.Updated
+		// furrow CONSUMES the rule on a close — the successor carries it, and a
+		// reopen does not hand it back — so the optimistic card must stop
+		// saying "repeats" now rather than at the re-read.
+		t.Repeat, t.RepeatAnchor = "", time.Time{}
+	case !dst.Done && wasDone:
+		t.Closed = time.Time{}
+	}
+}
+
+// Close moves a task to the done lane and KEEPS its priority: `furrow done`
+// changes the lane and the stamps and nothing else (measured on v10: a ready
+// task at 120 sits in done at 120), so an optimistic append at the lane's
+// end put the card at the bottom of Done and the re-read that follows the
+// write moved it up among the earlier closes (t-s5tj).
 func (b *Board) Close(id string) error {
 	d := b.DoneLane()
 	if d == "" {
 		return fmt.Errorf("board has no done lane")
 	}
-	if t := b.Task(id); t != nil && t.Status == d {
+	t, err := b.mustTask(id)
+	if err != nil {
+		return err
+	}
+	if t.Status == d {
 		return nil
 	}
-	_, err := b.MoveTo(id, d, len(b.LaneTasks(d)))
-	return err
+	b.enterLane(t, b.Lane(d))
+	return nil
 }
 
 // ToggleCheck flips checklist item i and stamps Updated.

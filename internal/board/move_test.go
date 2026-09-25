@@ -186,6 +186,28 @@ func TestRespaceDoesNotAdvanceNeighbourUpdated(t *testing.T) {
 	}
 }
 
+// `furrow done` keeps the priority — the lane and the stamps change, nothing
+// else — so the optimistic close must too: appending at the end of Done put
+// the card last, and the re-read then sorted it up among the earlier closes
+// (t-s5tj, measured on the 100-task ridge-test board: ready 120 → done 120,
+// third of five, after an optimistic 140 at the bottom).
+func TestCloseKeepsThePriorityFurrowDoneKeeps(t *testing.T) {
+	b := NewBoard([]*Task{
+		{ID: "x", Status: "done", Priority: 10},
+		{ID: "y", Status: "done", Priority: 20},
+		{ID: "a", Status: "ready", Priority: 15},
+	})
+	if err := b.Close("a"); err != nil {
+		t.Fatal(err)
+	}
+	if got := b.Task("a").Priority; got != 15 {
+		t.Fatalf("priority after close = %d, want 15 kept", got)
+	}
+	if got := laneIDs(b, "done"); got != "x,a,y" {
+		t.Errorf("done lane = %s, want x,a,y — the kept priority sorts a between them", got)
+	}
+}
+
 func TestCloseStampsAndReopenClears(t *testing.T) {
 	b := threeLane()
 	if err := b.Close("a"); err != nil {

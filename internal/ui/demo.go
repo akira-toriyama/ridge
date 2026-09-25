@@ -878,8 +878,9 @@ func (m *Model) demoState(kind string) error {
 		// The frame right after a recurring task's close LANDED and the
 		// reconcile delivered its successor: the successor in the default
 		// lane carrying the rule, and the status line naming it. The closed
-		// card sits at the tail of the done lane with the rule consumed (no
-		// ⟳) — below the fold at 50 rows, in the frame at 80. The successor
+		// card keeps its priority, so it sits among the earlier closes in
+		// the done lane with the rule consumed (no ⟳), in the frame at 50
+		// rows. The successor
 		// is built onto the fixture here — memstore mints none (expanding a
 		// rule is furrow's) — the way furrow births one: body and checklist
 		// copied with the boxes unchecked, this run's deps and the settled
