@@ -215,7 +215,9 @@ func cloneTask(t board.Task) board.Task {
 }
 
 // Sync always fails: there is no store behind the fixture (board.Provider).
-func (p *Store) Sync() error { return fmt.Errorf("the fixture has no store to sync") }
+func (p *Store) Sync() (board.SyncReport, error) {
+	return board.SyncReport{}, fmt.Errorf("the fixture has no store to sync")
+}
 
 // Live is false: the board the model mutates IS the store (board.Provider).
 func (p *Store) Live() bool { return false }

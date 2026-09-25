@@ -1,20 +1,20 @@
 package furrowstore
 
 import (
-	"github.com/akira-toriyama/ridge/internal/board"
-	"github.com/akira-toriyama/ridge/internal/ui"
-
 	"bytes"
 	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/akira-toriyama/ridge/internal/board"
+	"github.com/akira-toriyama/ridge/internal/ui"
 )
 
 // Contract tests: a real furrow binary against a throwaway store in a
@@ -1035,5 +1035,132 @@ func TestContractBoardCalendarComesFromDueTimezone(t *testing.T) {
 	}
 	if got := tk.Due.In(board.Zone()).Format("2006-01-02"); got != "2026-10-02" {
 		t.Errorf("rendered day = %s, want 2026-10-02 — in Auckland that instant is the 3rd", got)
+	}
+}
+
+// `sync --json` progress, decoded: complete, the two body lists (omitted
+// when empty — nil here, and syncNote reads len) and the stash count.
+func TestSyncProgressDecodesIntoTheReport(t *testing.T) {
+	var prog syncProgressJSON
+	raw := `{"committed":true,"pulled":true,"pushed":true,"conflict":false,"complete":false,"pending_bodies":["t-a"],"committed_bodies":["t-b","t-c"],"pending_stash":[{"ref":"stash@{0}","paths":["stray.txt"]}]}`
+	if err := json.Unmarshal([]byte(raw), &prog); err != nil {
+		t.Fatal(err)
+	}
+	got := prog.report()
+	if got.Complete || !slices.Equal(got.Committed, []string{"t-b", "t-c"}) || !slices.Equal(got.Pending, []string{"t-a"}) || got.Stash != 1 {
+		t.Errorf("report = %+v", got)
+	}
+	prog = syncProgressJSON{}
+	if err := json.Unmarshal([]byte(`{"committed":false,"pulled":true,"pushed":true,"conflict":false,"complete":true}`), &prog); err != nil {
+		t.Fatal(err)
+	}
+	if got := prog.report(); !got.Complete || len(got.Committed) != 0 || len(got.Pending) != 0 {
+		t.Errorf("report = %+v, want complete and nothing named", got)
+	}
+}
+
+// The publish chain against the real CLI, on a lab with a bare remote: a body
+// ridge rewrote is a modified file a bare `furrow sync` leaves for its author
+// (Store.Sync's doc; measured on dev 0f7559d: pending_bodies [id], complete
+// false), so the adapter names it with -b and the checkout is clean and
+// pushed after the sync; a hand edit is not ridge's to name and is reported
+// pending instead.
+//
+// bite-exempt: execs a real furrow binary and always skips where furrow is not
+// on PATH — which is CI, so the gate can never judge it there
+func TestContractSyncPublishesTheBodiesRidgeWrote(t *testing.T) {
+	p, dir := newLabProvider(t)
+	remote := t.TempDir()
+	lab(t, dir, "git", "init", "-q", "--bare", remote)
+	lab(t, dir, "git", "config", "user.email", "lab@example.com")
+	lab(t, dir, "git", "config", "user.name", "lab")
+	lab(t, dir, "git", "remote", "add", "origin", remote)
+	lab(t, dir, "git", "add", "-A")
+	lab(t, dir, "git", "commit", "-q", "-m", "init")
+	lab(t, dir, "git", "push", "-q", "-u", "origin", "HEAD")
+	clean := func(when string) {
+		t.Helper()
+		if out := lab(t, dir, "git", "status", "--porcelain"); strings.TrimSpace(string(out)) != "" {
+			t.Errorf("%s: the checkout must be clean, got:\n%s", when, out)
+		}
+		if out := lab(t, dir, "git", "status", "-sb"); strings.Contains(string(out), "ahead") {
+			t.Errorf("%s: the sync must have pushed, got %s", when, strings.SplitN(string(out), "\n", 2)[0])
+		}
+	}
+
+	id := labAdd(t, dir, "本文を書き直す一枚")
+	// The seed body is NEW to git, which a bare sync commits on its own.
+	rep, err := p.Sync()
+	if err != nil {
+		t.Fatalf("first sync: %v", err)
+	}
+	if !rep.Complete {
+		t.Fatalf("first sync must be complete, got %+v", rep)
+	}
+	clean("after the first sync")
+
+	if err := p.PersistBody(id, "ridge が書いた本文\n"); err != nil {
+		t.Fatal(err)
+	}
+	rep, err = p.Sync()
+	if err != nil {
+		t.Fatalf("sync after PersistBody: %v", err)
+	}
+	if !rep.Complete || !slices.Contains(rep.Committed, id) || len(rep.Pending) != 0 {
+		t.Errorf("a body ridge wrote must be committed by the sync that follows, got %+v", rep)
+	}
+	clean("after the sync that named ridge's body")
+	if _, still := p.dirty[id]; still {
+		t.Errorf("a committed body must leave the dirty set")
+	}
+
+	// A hand edit on the checkout: not ridge's, so not named — reported.
+	if err := os.WriteFile(filepath.Join(dir, ".furrow", "bodies", id+".md"), []byte("手で直した本文\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	rep, err = p.Sync()
+	if err != nil {
+		t.Fatalf("sync over a hand edit: %v", err)
+	}
+	if rep.Complete || !slices.Contains(rep.Pending, id) {
+		t.Errorf("a hand-edited body must be reported pending, got %+v", rep)
+	}
+	// Rewritten by ridge, it is ridge's again and goes out.
+	if err := p.PersistBody(id, "ridge が書き直した本文\n"); err != nil {
+		t.Fatal(err)
+	}
+	rep, err = p.Sync()
+	if err != nil {
+		t.Fatalf("sync after the rewrite: %v", err)
+	}
+	if !rep.Complete || !slices.Contains(rep.Committed, id) {
+		t.Errorf("the rewrite must be committed, got %+v", rep)
+	}
+	clean("after the rewrite's sync")
+}
+
+// The bookkeeping without a binary: the argv names every dirty body, sorted;
+// a body rewritten while the sync ran stays named after the sync — its
+// committed_bodies entry is the write furrow saw at the START, so the later
+// write is not in that commit (found by review, reproduced against a real
+// furrow with a write 1.5 s into a 3 s sync: the bare delete lost it).
+func TestSyncNamesEveryDirtyBodyAndKeepsOneRewrittenWhileItRan(t *testing.T) {
+	p := &Store{}
+	p.noteDirty("t-b")
+	p.noteDirty("t-a")
+	named := p.dirtySnapshot()
+	if got := syncArgs(named); !slices.Equal(got, []string{"sync", "--json", "-b", "t-a", "-b", "t-b"}) {
+		t.Errorf("argv = %v", got)
+	}
+	p.noteDirty("t-a") // rewritten mid-sync
+	p.forgetCommitted(named, []string{"t-a", "t-b"})
+	if _, still := p.dirty["t-a"]; !still {
+		t.Error("t-a was rewritten after the snapshot and must stay named for the next sync")
+	}
+	if _, still := p.dirty["t-b"]; still {
+		t.Error("t-b was committed as named and must be forgotten")
+	}
+	if got := syncArgs(p.dirtySnapshot()); !slices.Equal(got, []string{"sync", "--json", "-b", "t-a"}) {
+		t.Errorf("next argv = %v", got)
 	}
 }

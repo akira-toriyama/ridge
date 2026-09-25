@@ -49,9 +49,11 @@ func logicModel(t *testing.T, w, h int) *Model {
 
 type emptyProvider struct{ b *board.Board }
 
-func (p *emptyProvider) Board() *board.Board            { return p.b }
-func (p *emptyProvider) Reload() error                  { p.b = board.NewBoard(nil); return nil }
-func (p *emptyProvider) Sync() error                    { return fmt.Errorf("no store") }
+func (p *emptyProvider) Board() *board.Board { return p.b }
+func (p *emptyProvider) Reload() error       { p.b = board.NewBoard(nil); return nil }
+func (p *emptyProvider) Sync() (board.SyncReport, error) {
+	return board.SyncReport{}, fmt.Errorf("no store")
+}
 func (p *emptyProvider) Query(string) ([]string, error) { return nil, nil }
 func (p *emptyProvider) Live() bool                     { return false }
 func (p *emptyProvider) PersistMove(_, _, _, _ string) (board.MoveReport, error) {

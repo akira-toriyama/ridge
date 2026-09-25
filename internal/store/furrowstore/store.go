@@ -30,6 +30,11 @@ type Store struct {
 
 	mu sync.Mutex
 	b  *board.Board
+	// dirty is every body PersistBody wrote in this process and no Sync has
+	// committed since, each with the generation of its latest write (gen).
+	// Sync's doc says why the adapter names them. Guarded by mu.
+	dirty map[string]uint64
+	gen   uint64
 }
 
 // New probes the store and performs the initial load, so a
@@ -68,12 +73,103 @@ func (p *Store) Reload() error {
 	return nil
 }
 
-// Sync is furrow's thin git wrapper: commit the board, pull --rebase, push.
-// Network-bound, so it gets its own generous deadline; the caller reloads
-// afterwards to pick up whatever the pull brought in.
-func (p *Store) Sync() error {
-	_, err := p.c.runTimeout("sync", 120*time.Second, "sync")
-	return err
+// Sync is furrow's thin git wrapper: commit the board, pull --rebase, push
+// (board.Provider), with every body this process wrote and no sync has
+// committed since named by -b (Store.dirty). A bare `furrow sync` leaves a
+// MODIFIED body for its author — a shared checkout never commits a
+// co-located operator's WIP — and furrow's journal of the bodies it wrote
+// itself does not carry `edit --body` (t-sbcn, filed against furrow), so
+// PersistBody's writes would sit in the checkout unpublished; -b is the
+// sanctioned "commit mine" flag, and on a body already clean it is a no-op
+// (measured on dev 0f7559d). The set is per process: a body written in a
+// session that never synced is a modified body the next session cannot
+// tell from a hand edit, and is reported pending like one. The reply is
+// `sync --json`'s progress; the ids it reports committed leave the set
+// unless a write landed while furrow ran (forgetCommitted — a write inside
+// furrow's own add→commit window is in the commit and stays named anyway,
+// which costs a no-op -b per sync, never a body). Network-bound,
+// so it gets its own generous deadline; the caller reloads afterwards to
+// pick up whatever the pull brought in. On a non-zero exit the progress
+// furrow still prints is not read (execute drops stdout with the error
+// envelope), so a failed sync reports only its error and forgets nothing.
+func (p *Store) Sync() (board.SyncReport, error) {
+	named := p.dirtySnapshot()
+	out, err := p.c.runTimeout("sync", 120*time.Second, syncArgs(named)...)
+	if err != nil {
+		return board.SyncReport{}, err
+	}
+	var prog syncProgressJSON
+	if err := json.Unmarshal(out, &prog); err != nil {
+		return board.SyncReport{}, fmt.Errorf("furrow sync: undecodable progress: %v", err)
+	}
+	p.forgetCommitted(named, prog.CommittedBodies)
+	return prog.report(), nil
+}
+
+// noteDirty records a body this process just wrote, bumping its generation.
+func (p *Store) noteDirty(id string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.dirty == nil {
+		p.dirty = map[string]uint64{}
+	}
+	p.gen++
+	p.dirty[id] = p.gen
+}
+
+// dirtySnapshot copies the dirty set, id → generation, so Sync can tell a
+// body it named from one rewritten while furrow ran.
+func (p *Store) dirtySnapshot() map[string]uint64 {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make(map[string]uint64, len(p.dirty))
+	for id, g := range p.dirty {
+		out[id] = g
+	}
+	return out
+}
+
+// forgetCommitted drops the ids furrow committed, unless a PersistBody
+// landed after the snapshot: committed_bodies names what furrow committed at
+// the sync's START, so that later write is not in the commit and stays
+// named. A bare delete lost such a body for good (found by review).
+func (p *Store) forgetCommitted(named map[string]uint64, committed []string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, id := range committed {
+		if g, ok := named[id]; ok && p.dirty[id] == g {
+			delete(p.dirty, id)
+		}
+	}
+}
+
+// syncArgs is `sync --json` with every named body as -b, sorted so the argv
+// is stable.
+func syncArgs(named map[string]uint64) []string {
+	ids := make([]string, 0, len(named))
+	for id := range named {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	args := []string{"sync", "--json"}
+	for _, id := range ids {
+		args = append(args, "-b", id)
+	}
+	return args
+}
+
+// syncProgressJSON is `furrow sync --json` (furrow's app.SyncProgress), the
+// keys read; the three lists are omitted when empty. pending_stash entries
+// are counted, not read.
+type syncProgressJSON struct {
+	Complete        bool              `json:"complete"`
+	CommittedBodies []string          `json:"committed_bodies"`
+	PendingBodies   []string          `json:"pending_bodies"`
+	PendingStash    []json.RawMessage `json:"pending_stash"`
+}
+
+func (s syncProgressJSON) report() board.SyncReport {
+	return board.SyncReport{Complete: s.Complete, Committed: s.CommittedBodies, Pending: s.PendingBodies, Stash: len(s.PendingStash)}
 }
 
 // boardJSON is `furrow board --json`, the lane vocabulary and store pre-flight.
@@ -484,8 +580,11 @@ func (p *Store) PersistCheck(id string, i int, done bool) error {
 // drift from the optimistic bytes that the post-drain reconcile re-read
 // converges.
 func (p *Store) PersistBody(id, body string) error {
-	_, err := p.c.runStdin("edit-body", []byte(body), "edit", id, "--body", "-")
-	return err
+	if _, err := p.c.runStdin("edit-body", []byte(body), "edit", id, "--body", "-"); err != nil {
+		return err
+	}
+	p.noteDirty(id)
+	return nil
 }
 
 var _ board.Provider = (*Store)(nil)
