@@ -276,7 +276,8 @@ func (m *Model) Dump(w, h int, demo string, plain bool) (string, error) {
 // Dump's sweep read, the tests). A debounce tick is waited out rather than
 // skipped, so the path exercised is the program's own. It runs until the
 // chain ends: a Cmd that re-arms itself (the drag autoscroll tick) would
-// hold it for as long as the gesture would, so hand it startup reads only.
+// hold it for as long as the gesture would, so hand it startup reads — or a
+// fixture gesture whose chain ends, the `done` demo's write.
 func (m *Model) settle(cmd tea.Cmd) {
 	if cmd == nil {
 		return

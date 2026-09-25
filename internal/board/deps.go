@@ -106,8 +106,9 @@ func (g *Graph) Frees(id string) []string {
 	for _, x := range g.OpenBlocks(id) {
 		// A dep listed twice (cluster.go tolerates it) shows up twice in the
 		// reverse index and twice in BlockedBy; it is still one dependent
-		// with one blocker.
-		if seen[x] {
+		// with one blocker. A task naming itself frees nothing by closing
+		// (reach seeds its visited set the same way).
+		if x == id || seen[x] {
 			continue
 		}
 		seen[x] = true

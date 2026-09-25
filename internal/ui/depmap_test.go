@@ -567,6 +567,11 @@ func TestTheHeadlineNumbersMatchTheRowsTheySitUnder(t *testing.T) {
 				!strings.Contains(line, fmt.Sprintf("%d blocked", c.Blocked())) {
 				t.Errorf("scope=%s #%d stat line %q carries neither count", scope, p.Num, line)
 			}
+			// The top task's number is its reach, and the line says so in that
+			// word — "frees" once claimed what a close does not do (t-h9pb).
+			if top := c.Top(); top.ID != "" && !strings.Contains(line, top.ID+" holds up ") {
+				t.Errorf("scope=%s #%d stat line %q does not say what %s holds up", scope, p.Num, line, top.ID)
+			}
 			hdr := ansiStrip(m.renderMapPanel(p, l.ColW)[0])
 			if !strings.Contains(hdr, fmt.Sprintf("#%d", p.Num)) ||
 				!strings.Contains(hdr, fmt.Sprintf("depth %d", c.Depth())) {

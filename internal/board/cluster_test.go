@@ -128,12 +128,12 @@ func TestDanglingDepIsNamedButGroupsNothing(t *testing.T) {
 }
 
 // Top()'s two documented edges, neither of which a unique maximum can reach:
-// ties go to the first in draw order, and a cluster that frees nothing names
+// ties go to the first in draw order, and a cluster that holds nothing up names
 // nobody. Both hold under `>` and both break under `>=` — a swap that reads
 // like a cleanup. Every other Top() assertion misses both: the board-building
 // ones hand Top a unique maximum, and the fixture sweep in
 // ui.TestTheHeadlineNumbersMatchTheRowsTheySitUnder only asserts Top is not
-// done, behind a top.ID != "" guard that excludes the frees-nothing edge.
+// done, behind a top.ID != "" guard that excludes the holds-up-nothing edge.
 func TestTopBreaksTiesByDrawOrderAndNamesNobodyWhenNothingFrees(t *testing.T) {
 	// a and b each free x and y, so Blocking ties at 2. Nodes are ordered by
 	// (Depth, ID), which puts a first.
@@ -145,7 +145,7 @@ func TestTopBreaksTiesByDrawOrderAndNamesNobodyWhenNothingFrees(t *testing.T) {
 	})).Clusters(ClusterAll)[0]
 	for _, id := range []string{"a", "b"} {
 		if got := node(t, tied, id).Blocking; got != 2 {
-			t.Fatalf("setup: %s frees %d, want the tie at 2", id, got)
+			t.Fatalf("setup: %s holds up %d, want the tie at 2", id, got)
 		}
 	}
 	if got := tied.Top().ID; got != "a" {
@@ -164,22 +164,22 @@ func TestTopBreaksTiesByDrawOrderAndNamesNobodyWhenNothingFrees(t *testing.T) {
 	})).Clusters(ClusterAll)[0]
 	for _, id := range []string{"s", "u"} {
 		if got := node(t, split, id).Blocking; got != 1 {
-			t.Fatalf("setup: %s frees %d, want the tie at 1", id, got)
+			t.Fatalf("setup: %s holds up %d, want the tie at 1", id, got)
 		}
 	}
 	if got := split.Top().ID; got != "u" {
 		t.Errorf("Top() = %q, want u — the depth-0 node is drawn first", got)
 	}
 
-	// A task waiting on a phantom is a cluster of one that frees nothing;
-	// naming it would put "p frees 0" on the panel.
+	// A task waiting on a phantom is a cluster of one that holds nothing up;
+	// naming it would put "p holds up 0" on the panel.
 	none := NewGraph(NewBoard([]*Task{mk("p", "backlog", "ghost")})).Clusters(ClusterOpen)[0]
 	if got := none.Top(); got.ID != "" {
-		t.Errorf("Top() = %q, want the zero value — this cluster frees nothing", got.ID)
+		t.Errorf("Top() = %q, want the zero value — this cluster holds nothing up", got.ID)
 	}
 }
 
-// Blocking is "how many tasks closing this frees", so a node reachable by two
+// Blocking is "how many tasks this holds up", so a node reachable by two
 // paths counts ONCE. Counting paths instead of nodes inflates every diamond.
 func TestBlockingCountsMembersNotPaths(t *testing.T) {
 	b := NewBoard([]*Task{
@@ -190,7 +190,7 @@ func TestBlockingCountsMembersNotPaths(t *testing.T) {
 	})
 	c := NewGraph(b).Clusters(ClusterAll)[0]
 	if got := node(t, c, "top").Blocking; got != 3 {
-		t.Errorf("top frees l, r and sink = 3, got %d (sink counted twice?)", got)
+		t.Errorf("top holds up l, r and sink = 3, got %d (sink counted twice?)", got)
 	}
 	if got := c.Top(); got.ID != "top" {
 		t.Errorf("Top() = %q, want top", got.ID)
@@ -329,13 +329,13 @@ func TestCountsAtAllScopeAgreeWithWhatIsActuallyBlocked(t *testing.T) {
 			got, len(c.Nodes))
 	}
 
-	// "root" reaches three members but frees only the two that are waiting,
+	// "root" reaches three members but holds up only the two that are waiting,
 	// and it is finished, so it is not the task to close.
 	if top := c.Top(); top.ID != "mid" {
 		t.Errorf("Top() = %q, want mid — a finished task is not advice", top.ID)
 	}
 	if got := node(t, c, "mid").Blocking; got != 2 {
-		t.Errorf("mid frees %d, want 2", got)
+		t.Errorf("mid holds up %d, want 2", got)
 	}
 	if got := node(t, c, "root").Blocking; got != 3 {
 		t.Errorf("root's blast radius is %d open tasks, want 3", got)
@@ -366,7 +366,7 @@ func TestADuplicatedDepIsNamedOnce(t *testing.T) {
 		t.Errorf("z blockers = %v, want [a]", got)
 	}
 	if got := node(t, c, "a").Blocking; got != 1 {
-		t.Errorf("a frees %d, want 1 — z is one task however often it names a", got)
+		t.Errorf("a holds up %d, want 1 — z is one task however often it names a", got)
 	}
 	if got := len(c.Nodes); got != 2 {
 		t.Errorf("the cluster holds %d members, want 2: %v", got, ids(c))
@@ -386,7 +386,7 @@ func TestASelfDependencyIsBlockedByItselfAndNothingElse(t *testing.T) {
 		t.Errorf("open blockers = %v, want [loop]", n.Open)
 	}
 	if n.Blocking != 0 {
-		t.Errorf("loop frees %d, want 0 — it cannot free itself", n.Blocking)
+		t.Errorf("loop holds up %d, want 0 — it cannot hold itself up", n.Blocking)
 	}
 	if cs[0].Roots() != 0 || cs[0].Blocked() != 1 {
 		t.Errorf("roots=%d blocked=%d, want 0 and 1", cs[0].Roots(), cs[0].Blocked())

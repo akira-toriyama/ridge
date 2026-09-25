@@ -83,6 +83,7 @@ func TestFreesGuards(t *testing.T) {
 		mk("ghosted", "backlog", "root", "t-nowhere"),
 		mk("closed", "done"),
 		mk("after", "backlog", "closed"),
+		mk("loop", "backlog", "loop"),
 	})
 	g := NewGraph(b)
 	if got := g.Frees("root"); strings.Join(got, ",") != "dup" {
@@ -90,6 +91,9 @@ func TestFreesGuards(t *testing.T) {
 	}
 	if got := g.Frees("closed"); len(got) != 0 {
 		t.Errorf("Frees(closed) = %v, want none: a done task frees nothing now", got)
+	}
+	if got := g.Frees("loop"); len(got) != 0 {
+		t.Errorf("Frees(loop) = %v, want none: a task does not free itself", got)
 	}
 }
 

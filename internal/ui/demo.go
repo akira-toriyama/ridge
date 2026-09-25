@@ -1038,10 +1038,12 @@ func (m *Model) demoRepeatTask(demo string) (*board.Task, error) {
 
 // demoFreesTask is a task whose close frees exactly one open dependent — the
 // `done` demo's subject, so its note reads "unblocked 1 task(s)" and not a
-// count a reader must reconcile with the board.
+// count a reader must reconcile with the board. Not a repeating task: the
+// fixture answers a close with no series report, and a ⟳ card closed
+// without its "repeat:" line is a frame the live path never draws.
 func (m *Model) demoFreesTask(demo string) (*board.Task, error) {
 	return m.demoTask(demo, "whose close frees exactly one open task", func(t *board.Task) bool {
-		return !m.g.IsDone(t.ID) && len(m.g.Frees(t.ID)) == 1
+		return t.Repeat == "" && len(m.g.Frees(t.ID)) == 1
 	})
 }
 
