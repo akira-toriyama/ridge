@@ -7,9 +7,10 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/akira-toriyama/ridge/internal/board"
-
 	tea "charm.land/bubbletea/v2"
+	"github.com/akira-toriyama/ridge/internal/board"
+	"github.com/akira-toriyama/ridge/internal/store/memstore"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // scriptedProvider exercises the optimistic queue without a furrow binary:
@@ -45,6 +46,11 @@ type scriptedProvider struct {
 	// doneErr is PersistDone's scripted refusal (nil = accepted), like moveErr.
 	repeat  *board.RepeatReport
 	doneErr error
+	// syncReport is what Sync answers with (the zero value: complete, nothing
+	// named); syncErr is its scripted failure, reloadErr Reload's.
+	syncReport board.SyncReport
+	syncErr    error
+	reloadErr  error
 }
 
 type scriptedMove struct{ id, lane, before, after string }
@@ -62,11 +68,20 @@ func (p *scriptedProvider) Board() *board.Board {
 func (p *scriptedProvider) Reload() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if p.reloadErr != nil {
+		return p.reloadErr
+	}
 	p.current = p.truth()
 	return nil
 }
 
-func (p *scriptedProvider) Sync() error { return nil }
+// Sync answers the scripted report or failure; the zero report says nothing.
+func (p *scriptedProvider) Sync() (board.SyncReport, error) {
+	if p.syncErr != nil {
+		return board.SyncReport{}, p.syncErr
+	}
+	return p.syncReport, nil
+}
 
 func (p *scriptedProvider) Query(raw string) ([]string, error) {
 	p.mu.Lock()
@@ -402,3 +417,113 @@ func (p *scriptedProvider) Unarchive(ids []string) error {
 	return p.epicCall("unarchive " + strings.Join(ids, ","))
 }
 func (p *scriptedProvider) Tidy(c board.TidyClass) error { return p.epicCall("tidy " + c.Flag()) }
+
+// The sync's landing note says what was published and what was not: a
+// pending body is a modified one furrow left uncommitted, which reaches no
+// other machine until a sync names it; a stash is reported beside it, not
+// instead of it. The widest shape stays inside the 240-column floor with the
+// label and timing in front.
+func TestSyncNoteNamesWhatWasPublishedAndWhatWasNot(t *testing.T) {
+	seven := func(prefix string) []string {
+		ids := make([]string, 7)
+		for i := range ids {
+			ids[i] = fmt.Sprintf("%s%d", prefix, i)
+		}
+		return ids
+	}
+	cases := []struct {
+		name string
+		rep  board.SyncReport
+		want string
+	}{
+		{"complete, nothing named", board.SyncReport{Complete: true}, ""},
+		{"published", board.SyncReport{Complete: true, Committed: []string{"t-a", "t-b"}}, "published 2: t-a, t-b"},
+		{"pending", board.SyncReport{Committed: []string{"t-a"}, Pending: []string{"t-h"}},
+			"published 1: t-a · NOT published 1: t-h (modified here — furrow sync -b <id> publishes yours)"},
+		{"pending and a stash", board.SyncReport{Pending: []string{"t-h"}, Stash: 1},
+			"NOT published 1: t-h (modified here — furrow sync -b <id> publishes yours) · stash left behind: 1 (furrow sync --json)"},
+		{"stash alone", board.SyncReport{Stash: 2}, "stash left behind: 2 (furrow sync --json)"},
+		{"incomplete for a reason furrow did not name", board.SyncReport{}, "incomplete — furrow sync --json says what is left"},
+	}
+	for _, tc := range cases {
+		if got := syncNote(tc.rep); got != tc.want {
+			t.Errorf("%s:\n got %q\nwant %q", tc.name, got, tc.want)
+		}
+	}
+	widest := "synced · 9999ms · " + syncNote(board.SyncReport{Committed: seven("t-abcd"), Pending: seven("t-wxyz"), Stash: 3})
+	if w := ansi.StringWidth(widest); w > 240 {
+		t.Errorf("the widest note is %d cells, over the 240-column floor:\n%s", w, widest)
+	}
+	t.Logf("widest note with the label: %d cells", ansi.StringWidth(widest))
+}
+
+// The report rides the sync's reload message onto the status line, after the
+// label and the timing — and survives the two paths that drop the label's
+// own line: a re-read skipped behind a busy queue, and a re-read that failed
+// after the sync succeeded (found by review). A sync that failed has no
+// report, so its error is not followed by a fabricated "incomplete".
+func TestSyncLandingNoteCarriesTheReport(t *testing.T) {
+	m, p := storeFirstModel(t)
+	p.syncReport = board.SyncReport{Pending: []string{"t-h"}}
+	msg := m.syncCmd()().(reloadDoneMsg)
+	if msg.err != nil {
+		t.Fatalf("sync: %v", msg.err)
+	}
+	m.onReloadDone(msg)
+	if want := "NOT published 1: t-h"; !strings.Contains(m.status, want) || !strings.HasPrefix(m.status, "synced · ") {
+		t.Errorf("status = %q, want the synced label and %q", m.status, want)
+	}
+
+	// Skipped behind a busy queue: the snapshot waits, the verdict does not —
+	// and it is appended to the in-flight gesture's line, not put in its place.
+	m, p = storeFirstModel(t)
+	p.syncReport = board.SyncReport{Pending: []string{"t-h"}}
+	msg = m.syncCmd()().(reloadDoneMsg)
+	if c := storeFirst(m, "epic set e-one", func() error { return nil }); c == nil {
+		t.Fatal("setup: the queue must be busy")
+	}
+	m.note("closed t-a — unblocked 1 task(s)")
+	m.onReloadDone(msg)
+	if want := "closed t-a — unblocked 1 task(s) · synced · NOT published 1: t-h"; !strings.HasPrefix(m.status, want) {
+		t.Errorf("busy queue: status = %q, want it to start with %q", m.status, want)
+	}
+
+	// The re-read failed after the sync answered, driven through syncCmd: the
+	// verdict leads, the error follows.
+	m, p = storeFirstModel(t)
+	p.syncReport = board.SyncReport{Complete: true, Committed: []string{"t-a"}}
+	p.reloadErr = errors.New("boom")
+	msg = m.syncCmd()().(reloadDoneMsg)
+	m.onReloadDone(msg)
+	if want := "synced · published 1: t-a · re-read failed: boom"; m.status != want || !m.statusErr {
+		t.Errorf("failed re-read: status = %q (err %t), want %q", m.status, m.statusErr, want)
+	}
+
+	// The sync itself failed: no report, no invented leftover.
+	m, p = storeFirstModel(t)
+	p.syncErr = errors.New("git-failed")
+	msg = m.syncCmd()().(reloadDoneMsg)
+	if msg.note != "" || msg.err == nil {
+		t.Errorf("a failed sync must carry its error and no note, got note %q err %v", msg.note, msg.err)
+	}
+}
+
+// -demo synced freezes the landing note on the fixture: both remedies survive
+// at 240 columns (the status line is truncated at the right, so a note over
+// the floor would lose exactly the half that helps), and a board too small to
+// name seven ids is refused by shape.
+func TestSyncedDemoShowsTheWholeNoteAt240(t *testing.T) {
+	out := strings.Join(dumpFrame(t, 240, 40, "synced"), "\n")
+	for _, want := range []string{"synced · 812ms · published 5:", "+2 more", "NOT published 2:", "publishes yours)", "stash left behind: 1 (furrow sync --json)"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("-demo synced lost %q", want)
+		}
+	}
+	small := New(memstore.NewWith(board.NewBoard([]*board.Task{
+		{ID: "t-1", Title: "一", Status: "ready", Priority: 10},
+		{ID: "t-2", Title: "二", Status: "ready", Priority: 20},
+	})), Options{})
+	if _, err := small.Dump(240, 40, "synced", true); err == nil || !strings.Contains(err.Error(), "seven tasks") {
+		t.Errorf("a two-task board must refuse the demo by shape, got %v", err)
+	}
+}

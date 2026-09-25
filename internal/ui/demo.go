@@ -519,6 +519,27 @@ func (m *Model) demoState(kind string) error {
 			_ = c
 		}
 
+	case "synced":
+		// The sync's landing note. The fixture has no store to sync, so the
+		// report is canned — every branch of syncNote in one line, both id
+		// lists past the 3-id cap (the widest shape's width class; the
+		// widest itself is the test's), so the 240-column floor is checked
+		// by the width sweep and by eye. The ids are the board's own (the
+		// demos never name fixture ids).
+		ids := make([]string, 0, 7)
+		for _, tk := range m.b.Tasks() {
+			ids = append(ids, tk.ID)
+			if len(ids) == 7 {
+				break
+			}
+		}
+		if len(ids) < 7 {
+			return fmt.Errorf("demo synced: no board with seven tasks to name")
+		}
+		m.note("synced · 812ms · %s", syncNote(board.SyncReport{
+			Committed: ids[:5], Pending: ids[5:], Stash: 1,
+		}))
+
 	case "epicreopen":
 		// The same row on the CLOSED box, which is the other verb and the
 		// other wording. Reaching it needs the widened scope, which is the

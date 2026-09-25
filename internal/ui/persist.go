@@ -91,6 +91,9 @@ type reloadDoneMsg struct {
 	ms       int
 	rollback bool
 	err      error
+	// note is prose the trigger computed — a sync's publish report
+	// (syncNote) — appended to the label's line when the reload applies.
+	note string
 }
 
 // markUnread records that a write LANDED in a live store and the board has not
@@ -532,12 +535,46 @@ func (m *Model) syncCmd() tea.Cmd {
 	prov := m.prov
 	return func() tea.Msg {
 		start := time.Now()
-		err := prov.Sync()
+		note := ""
+		rep, err := prov.Sync()
 		if err == nil {
+			// Only a sync that answered has a report; the zero value would
+			// read as "incomplete".
+			note = syncNote(rep)
 			err = prov.Reload()
 		}
-		return reloadDoneMsg{label: "synced", ms: int(time.Since(start).Milliseconds()), err: err}
+		return reloadDoneMsg{label: "synced", note: note,
+			ms: int(time.Since(start).Milliseconds()), err: err}
 	}
+}
+
+// syncNote is what the status line owes the user after a sync: the bodies it
+// published, the modified ones it left on this checkout (board.SyncReport
+// says what those are; the wording blames nobody, because a previous
+// session's own write and another operator's WIP look the same), and a
+// stash left behind. Three ids per list keeps the widest shape — seven and
+// seven, a stash — inside the 240-column floor (pinned by test); "" when
+// there is nothing to say.
+func syncNote(r board.SyncReport) string {
+	const shown = 3
+	var parts []string
+	if n := len(r.Committed); n > 0 {
+		parts = append(parts, fmt.Sprintf("published %d: %s", n, firstIDs(r.Committed, shown)))
+	}
+	if n := len(r.Pending); n > 0 {
+		parts = append(parts, fmt.Sprintf("NOT published %d: %s (modified here — furrow sync -b <id> publishes yours)",
+			n, firstIDs(r.Pending, shown)))
+	}
+	if r.Stash > 0 {
+		parts = append(parts, fmt.Sprintf("stash left behind: %d (furrow sync --json)", r.Stash))
+	}
+	if !r.Complete && len(r.Pending) == 0 && r.Stash == 0 {
+		// A forward guard: furrow's complete is exactly "no pending body and
+		// no stash" today (sync.go's defer), so this fires only if furrow
+		// grows a third leftover.
+		parts = append(parts, "incomplete — furrow sync --json says what is left")
+	}
+	return strings.Join(parts, " · ")
 }
 
 func (m *Model) onReloadDone(msg reloadDoneMsg) tea.Cmd {
@@ -572,7 +609,14 @@ func (m *Model) onReloadDone(msg reloadDoneMsg) tea.Cmd {
 			return heldBody
 		}
 		m.sweepReadStalled()
-		m.fail("%s: %v", label, msg.err)
+		if msg.note != "" {
+			// The re-read failed, not the sync: its verdict still stands, is
+			// said nowhere else, and leads — the line is truncated at the
+			// right, and a long git error would take the verdict with it.
+			m.fail("%s · %s · re-read failed: %v", label, msg.note, msg.err)
+		} else {
+			m.fail("%s: %v", label, msg.err)
+		}
 		return nil
 	}
 	if m.queueBusy() {
@@ -586,6 +630,20 @@ func (m *Model) onReloadDone(msg reloadDoneMsg) tea.Cmd {
 		// "the board didn't update" report hinges on — nothing on screen
 		// distinguishes it from a reload that never ran.
 		m.dbg.event("persist", "reloadskip", map[string]any{"label": label, "ms": msg.ms})
+		if msg.note != "" {
+			// The snapshot waits for the drain; the sync's verdict does not —
+			// it is the only place the user learns a body stayed home. APPENDED
+			// to the in-flight gesture's own line, not replacing it: "closed
+			// t-x — unblocked N" is said nowhere else either, and the drain's
+			// reload carries no label to re-say it (found by review).
+			lead := label
+			if m.status != "" {
+				lead = m.status + " · " + label
+			}
+			wasErr := m.statusErr
+			m.note("%s · %s", lead, msg.note)
+			m.statusErr = wasErr
+		}
 		return nil
 	}
 	m.reload()
@@ -597,7 +655,11 @@ func (m *Model) onReloadDone(msg reloadDoneMsg) tea.Cmd {
 	m.rollingBack = false
 	m.clearUnread()
 	if msg.label != "" {
-		m.note("%s · %dms", msg.label, msg.ms)
+		if msg.note != "" {
+			m.note("%s · %dms · %s", msg.label, msg.ms, msg.note)
+		} else {
+			m.note("%s · %dms", msg.label, msg.ms)
+		}
 	}
 	if id := m.selectAfterReload; id != "" {
 		// Pin past any active filter: a card you just created must be under

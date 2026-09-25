@@ -284,6 +284,7 @@ go run ./cmd/ridge -dump -roadmap            # the due timeline (week/month axes
 go run ./cmd/ridge -dump -demo sweepconfirm  # the sweep with the archive gate open (sweep / sweeprestore / sweepwait are the others)
 go run ./cmd/ridge -dump -demo done          # a task just closed with d: "closed <id> — unblocked N task(s)" counts what the close freed, not what depends on it
 go run ./cmd/ridge -dump -demo repeatdone    # a recurring task just closed: its successor's card and the "repeat: next due <day> (<id>)" line (-demo repeat: the rule in the peek)
+go run ./cmd/ridge -dump -demo synced        # R's landing note: what the sync published, what it left modified on this checkout, a stash left behind
 go run ./cmd/ridge -dump -live -plain -cols 320   # the REAL board (cwd, or FURROW_DIR) at rest — invariants and eyes, not golden: the frame carries the load time and today's dates
 go run ./cmd/ridge -dump -live -sweep        # any view on the real board: -table / -roadmap / -graph / -map / -boxes / -swim / -sweep (-demo is the fixture's; refused with -live)
 TZ=Pacific/Auckland go run ./cmd/ridge -dump -live -plain -table   # dates follow the board's calendar ([due].timezone), not TZ: for a board that declares one, identical to the same frame under TZ=Asia/Tokyo

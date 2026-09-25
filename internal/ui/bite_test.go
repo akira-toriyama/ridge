@@ -7,7 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	lg "charm.land/lipgloss/v2"
-
+	"github.com/akira-toriyama/ridge/internal/board"
 	"github.com/akira-toriyama/ridge/internal/store/memstore"
 )
 
@@ -23,9 +23,9 @@ func newSyncProvider() *syncProvider { return &syncProvider{Store: memstore.New(
 
 func (p *syncProvider) Live() bool { return true }
 
-func (p *syncProvider) Sync() error {
+func (p *syncProvider) Sync() (board.SyncReport, error) {
 	p.syncs++
-	return nil
+	return board.SyncReport{}, nil
 }
 
 func (p *syncProvider) Reload() error {
@@ -208,7 +208,7 @@ func TestASupersededAutoScrollTickIsDropped(t *testing.T) {
 
 // --- `R` sync ------------------------------------------------------------------
 
-// glossary: sync is `furrow sync` THEN a store re-read, never automatic, and
+// glossary: sync is `furrow sync --json` THEN a store re-read, never automatic, and
 // `r` is the re-read alone. Every line of that branch — both guards and the
 // ordering — was uncovered.
 func TestSyncRunsTheStoreSyncThenReReads(t *testing.T) {
@@ -360,7 +360,7 @@ type countingFixture struct {
 	syncs int
 }
 
-func (p *countingFixture) Sync() error {
+func (p *countingFixture) Sync() (board.SyncReport, error) {
 	p.syncs++
 	return p.Store.Sync()
 }

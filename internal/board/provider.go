@@ -27,9 +27,10 @@ type Provider interface {
 	// the add having happened.
 	Reload() error
 
-	// Sync runs the store's git sync (commit, pull --rebase, push). A
-	// provider without a store returns an error.
-	Sync() error
+	// Sync runs the store's git sync (commit, pull --rebase, push) and
+	// reports what it published (SyncReport). A provider without a store
+	// returns an error.
+	Sync() (SyncReport, error)
 
 	// Query evaluates a furrow -q expression against the store and returns
 	// the matching task ids ("" matches everything). The grammar's one
@@ -304,6 +305,24 @@ func (p EpicPatch) Empty() bool {
 type EpicPrevious struct {
 	ID    string
 	Title string
+}
+
+// SyncReport is `furrow sync --json`'s progress, the part a front-end owes
+// the user. Complete is furrow's "nothing left behind" verdict — no pending
+// body, no stash entry — which on the exit-0 path a provider reports means
+// the board is fully published (a failed push exits non-zero, whatever
+// complete then says, and reaches the caller as an error, never as a
+// report). Committed
+// and Pending name bodies by task id: the ones this sync committed, and the
+// modified ones left uncommitted, which reach no other machine until a sync
+// names them (`furrow sync -b <id>`; why a body ridge wrote needs naming is
+// furrowstore.Store.Sync's doc). Stash counts the autostash entries left in
+// `git stash` instead of the working tree.
+type SyncReport struct {
+	Complete  bool
+	Committed []string
+	Pending   []string
+	Stash     int
 }
 
 // EpicClose is what `furrow epic done --json` answers beyond its verdict.
