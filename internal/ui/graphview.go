@@ -213,10 +213,11 @@ func (m *Model) graphSelRank(l *egoLayout) int {
 // This is graphHardCols' mirror on the other axis. The along axis overflows
 // into the scroll, but a rank that will not fit ACROSS cannot be scrolled to
 // without cutting a CJK box mid-glyph, so it is dropped and counted, and the
-// header says so next to the `z` that narrows the radius. On the measured board
-// it never fires: the longest chain is 5 edges, so an ego graph is at most 6
-// ranks, and 6 boxes at graphNodeMinWLR plus their channels fit the 240-column
-// floor.
+// header says so next to the `z` that narrows the radius. The ranks are the
+// longest path inside what the radius included (buildEgo), so a deep board
+// fires it at the default radius: on the measured board (longest chain 5, at
+// most 6 ranks) it never does; on the 100-task ridge-test store a radius-2
+// graph reaches 10 ranks and the 240-column floor hides some.
 func graphRankWindow(l *egoLayout, channels []int, avail, at int) (first, last, hidden int) {
 	n := len(l.Layers)
 	if n == 0 {
