@@ -266,33 +266,13 @@ func TestSweepDeferredReadArrivesWhenTheDrainEnds(t *testing.T) {
 	// Drive the loop the way the program does: every Cmd Update returns is
 	// run and its message fed back, so the deferred read the refusal branch
 	// batches in actually executes (drainPersists discards those Cmds).
-	pump(m, m.firePersist())
+	m.settle(m.firePersist())
 	if m.inflight || len(m.pending) > 0 {
 		t.Fatal("the queue did not drain")
 	}
 	if m.sweep.preview == nil || m.sweep.loading {
 		t.Errorf("the drain (a refused write, nothing unread) did not deliver the read: sweep=%v loading=%v", m.sweep.preview != nil, m.sweep.loading)
 	}
-}
-
-// pump runs cmd, feeds its message to Update and recurses on what comes back,
-// unwrapping batches — a synchronous stand-in for the program loop.
-func pump(m *Model, cmd tea.Cmd) {
-	if cmd == nil {
-		return
-	}
-	msg := cmd()
-	if msg == nil {
-		return
-	}
-	if batch, ok := msg.(tea.BatchMsg); ok {
-		for _, c := range batch {
-			pump(m, c)
-		}
-		return
-	}
-	_, next := m.Update(msg)
-	pump(m, next)
 }
 
 // A board re-read that FAILS under a deferred sweep read is the one drain end
@@ -309,5 +289,27 @@ func TestSweepStalledReadNamesTheWayOut(t *testing.T) {
 	}
 	if out := frame(m); !strings.Contains(out, "previews not read — r reads them") || strings.Contains(out, "reading the previews") {
 		t.Errorf("frame after a failed re-read must name r, got a stale claim")
+	}
+}
+
+// X during an armed drag: the drag is cancelled and the status line is the
+// sweep's, not "drag cancelled" — the note was once written before the
+// cancel and lost to it (found in review).
+func TestSweepKeyDuringADragEndsOnTheSweepNote(t *testing.T) {
+	m := boardModel(t, 240, 60)
+	dst := m.lay.Col("ready")
+	if dst == nil {
+		t.Fatal("no ready column to drag toward")
+	}
+	dragFrom(t, m, "backlog", dst.X+8, dst.Top+4)
+	m.Update(tea.KeyPressMsg{Code: 'X', Text: "X"})
+	if m.view != viewSweep {
+		t.Fatalf("view = %v, want the sweep", m.view)
+	}
+	if !strings.HasPrefix(m.status, "sweep —") {
+		t.Errorf("status = %q, want the sweep's own line", m.status)
+	}
+	if m.drag.armed && !m.drag.cancelled {
+		t.Error("the drag survived X")
 	}
 }

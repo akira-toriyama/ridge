@@ -100,11 +100,7 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.openGraph()
 
 	case key.Matches(msg, m.keys.Map):
-		id := ""
-		if t := m.curTask(); t != nil {
-			id = t.ID
-		}
-		m.openMap(id)
+		m.openMap(m.cursorID())
 
 	case key.Matches(msg, m.keys.Boxes):
 		m.openBoxes()

@@ -103,6 +103,11 @@ Much changed from v1. Each of these was hit and confirmed:
 ## Verification (keep it checkable without a human at a GUI or terminal)
 
 - `-dump` emits one frame with no TTY. `-plain` strips ANSI, so it diffs.
+  `-dump -live` draws the **real store** (the cwd's board, or `FURROW_DIR`)
+  instead of the fixture — for invariants and eyes, never golden (the load
+  time and today's dates are in the frame). `-demo` is refused with it; the
+  views are reached by the opening flags (`-table` … `-sweep`, canonical in
+  `ridge -h`).
 - **Every state that changes the frame must be producible headless in one
   frame** (`-demo` / `-readonly`). A state that cannot be produced is a hole in
   verification — a regression that erased the read-only warning once got

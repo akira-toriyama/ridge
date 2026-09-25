@@ -9,7 +9,7 @@ The contract that ridge never imports furrow's Go packages, and why, is in
 ```sh
 go run ./cmd/ridge            # start on the real furrow board (furrow v5.1.0+ on PATH — the contract job's pin in .github/workflows/build.yml is the floor)
 go run ./cmd/ridge -mock      # start on the built-in fixture (no furrow needed)
-go run ./cmd/ridge -dump      # emit one frame with no TTY (always the fixture)
+go run ./cmd/ridge -dump      # emit one frame with no TTY (the fixture; -live for the real board)
 go run ./cmd/ridge -benchload # measure the real board's load latency and exit (read-only)
 ```
 
@@ -90,6 +90,13 @@ two orientations is glossary: "orientation").
 Ranks that do not fit are dropped and counted in the header (`z` narrows the
 radius) — nothing is silently clipped at the right edge.
 
+`ridge -graph` opens the real board in this view, rooted on the opening
+cursor (the first card of the first lane with work, after `-filter` has
+narrowed the board). With nothing under it — an empty board, a filter that
+excludes every card — the board is drawn and the status line says so.
+Headless: `-dump -graph`; the fixture's states are `-demo graph` /
+`graphall`.
+
 ### Map — dependency map
 
 `T` (the whole-board version of `t`, that task's dependency tree). **Every
@@ -97,6 +104,9 @@ dependency cluster on the board, laid out on one screen.** Where Graph answers
 "what surrounds this task", Map has no root and answers "what on the board is
 entangled with what". No lines are drawn: indentation is depth and `←` names
 the blocker (glossary: "Map", "cluster", "scope").
+
+`ridge -map` opens the real board in this view. Headless: `-dump -map`; the
+fixture's states are `-demo map` / `mapall` / `mapfiltered`.
 
 An excerpt of `-dump -demo map` (the real output is 240 columns in three
 columns; this is narrowed to two):
@@ -134,6 +144,9 @@ now" (why it is not a graph: glossary, "box overview"). `⏎` slices the board
 to that box (an `epic:<id>` slice term), `m` opens the box's overlay, `z`
 includes closed boxes, `^u/^d` page.
 
+`ridge -boxes` opens the real board in this view. Headless: `-dump -boxes`;
+the fixture's states are `-demo boxes` / `boxesall`.
+
 ### Roadmap — the due timeline
 
 `C`. **Open tasks with a due date, in due order, with `◆` placed on a time
@@ -153,8 +166,9 @@ frame is a histogram of the board) and `space` unfolds one. `⏎` slices the
 board to that band, `z` switches scope open/all. Read-only (the band and rail
 terms, and why there are no writes: glossary, "Swimlane", "band", "rail").
 
-Headless: `-dump -demo swim` (default) / `swimopen` (a band unfolded) /
-`swimrepo` (repo axis) / `swimall` (scope all).
+`ridge -swim` opens the real board in this view. Headless: `-dump -swim`; the
+fixture's states are `-dump -demo swim` (default) / `swimopen` (a band
+unfolded) / `swimrepo` (repo axis) / `swimall` (scope all).
 
 ### Sweep — archive / tidy / unarchive
 
@@ -173,10 +187,12 @@ re-reads the previews. Every write is store-first (glossary): the frame keeps
 the pre-write preview until the write lands and both the board and the
 previews are re-read.
 
-Headless: `-dump -demo sweep` (at rest) / `sweepconfirm` (the archive gate,
-one row skipped) / `sweeprestore` (the restore gate on an archived row) /
-`sweepwait` (opened behind a queued write — the read is deferred and the
-frame says so).
+`ridge -sweep` opens the real board in this view. Headless: `-dump -sweep`
+(with `-live`, the real previews — the three reads run before the frame).
+The fixture's states are `-dump -demo sweep` (at rest) / `sweepconfirm` (the
+archive gate, one row skipped) / `sweeprestore` (the restore gate on an
+archived row) / `sweepwait` (opened behind a queued write — the read is
+deferred and the frame says so).
 
 ### Saved views — tabs + views.toml
 
@@ -267,12 +283,15 @@ go run ./cmd/ridge -graphlr -dump -demo graphall  # the dependency graph left-ri
 go run ./cmd/ridge -dump -roadmap            # the due timeline (week/month axes: -demo roadmapweek / roadmapmonth)
 go run ./cmd/ridge -dump -demo sweepconfirm  # the sweep with the archive gate open (sweep / sweeprestore / sweepwait are the others)
 go run ./cmd/ridge -dump -demo repeatdone    # a recurring task just closed: its successor's card and the "repeat: next due <day> (<id>)" line (-demo repeat: the rule in the peek)
+go run ./cmd/ridge -dump -live -plain -cols 320   # the REAL board (cwd, or FURROW_DIR) at rest — invariants and eyes, not golden: the frame carries the load time and today's dates
+go run ./cmd/ridge -dump -live -sweep        # any view on the real board: -table / -roadmap / -graph / -map / -boxes / -swim / -sweep (-demo is the fixture's; refused with -live)
 ```
 
-What `-dump` / `-demo` / `-graphlr` / `-readonly` mean, and why the latter two
-are flags rather than `-demo` states, is in the glossary's "Internals"
-section. The one-line description of each `-demo` state lives in
-`internal/ui/demo.go`'s `demoState` (the comment on each case).
+What `-dump` / `-demo` / `-live` / `-graphlr` / `-readonly` and the
+opening-view flags mean, and why the latter are flags rather than `-demo`
+states, is in the glossary's "Internals" section. The one-line description of
+each `-demo` state lives in `internal/ui/demo.go`'s `demoState` (the comment
+on each case).
 
 ### `-debuglog` — a structured log of the session's operations
 

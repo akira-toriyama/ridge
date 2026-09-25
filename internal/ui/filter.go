@@ -70,7 +70,14 @@ func (m *Model) taskVisible(t *board.Task) bool {
 // eventually deliver the store's verdict: a debounce tick on a live store, or
 // nil when the verdict was applied synchronously (fixture, or an empty
 // query).
-func (m *Model) applyFilter(s string) tea.Cmd {
+func (m *Model) applyFilter(s string) tea.Cmd { return m.setQuery(s, true) }
+
+// startFilter is applyFilter for the -filter flag: a deliberate gesture with
+// no keystroke coming, so no debounce — on a live store the Cmd is the query
+// itself, which New settles before the opening view reads the cursor.
+func (m *Model) startFilter(s string) tea.Cmd { return m.setQuery(s, false) }
+
+func (m *Model) setQuery(s string, debounce bool) tea.Cmd {
 	prev := m.curTask()
 	m.qRaw = strings.TrimSpace(s)
 	if !m.lensOn() {
@@ -79,7 +86,7 @@ func (m *Model) applyFilter(s string) tea.Cmd {
 		// pins stay — the slice paths clear their own (selectSlice).
 		m.pinned = map[string]bool{}
 	}
-	return m.refire(prev, true)
+	return m.refire(prev, debounce)
 }
 
 // refire re-asks the store for a verdict on the effective query. debounce is

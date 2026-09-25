@@ -455,13 +455,7 @@ func (m *Model) roadPanBy(d int) {
 // you go rather than a way to look at when you already are. The WINDOW is
 // deliberately not placed here: road.anchored defers it to the first
 // render, the one place the real terminal width is known (renderRoadmap).
-func (m *Model) startRoadmap() string {
-	seed := ""
-	if t := m.curTask(); t != nil {
-		seed = t.ID
-	}
-	return m.startRoadmapFrom(seed)
-}
+func (m *Model) startRoadmap() string { return m.startRoadmapFrom(m.cursorID()) }
 
 // startRoadmapFrom is startRoadmap with the seed made explicit. A tab
 // switch must carry road.sel directly: the roadmap MUTES what the filter

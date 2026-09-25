@@ -98,10 +98,10 @@ func TestRevisitLensANDsTheTypedQuery(t *testing.T) {
 	}
 }
 
-// -revisit is a view setting like -filter: on the fixture the verdict is
-// already applied in the opening frame, and on a live store the lens's read
-// rides Init the way the startup filter does (hardening_test pins that one;
-// dropping this Cmd would open the TUI with the chip on and the board full).
+// -revisit is a view setting like -filter: the verdict is applied inside New
+// on the fixture and the live store alike (hardening_test pins the filter's;
+// dropping the lens's read would open the TUI with the chip on and the board
+// full).
 func TestRevisitOptionOpensWithTheLensOn(t *testing.T) {
 	m := New(memstore.New(), Options{Revisit: true, Filter: "is:blocked"})
 	m.w, m.h = 200, 40
@@ -114,10 +114,6 @@ func TestRevisitOptionOpensWithTheLensOn(t *testing.T) {
 	p := newScriptedProvider(scriptedBoard)
 	p.qIDs = []string{"a"}
 	live := New(p, Options{Revisit: true})
-	if live.startupFilter == nil {
-		t.Fatal("the lens must leave its verdict Cmd for Init on a live store")
-	}
-	live.Update(live.startupFilter())
 	if len(p.queries) != 1 || p.queries[0] != "revisit:" {
 		t.Fatalf("store reads = %v, want one revisit read with no query", p.queries)
 	}

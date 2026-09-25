@@ -58,13 +58,24 @@ type sweepResultMsg struct {
 
 func (m *Model) sweepCanvasH() int { return m.fullCanvasH(0) }
 
-// openSweep enters the view and asks for the previews.
+// openSweep enters the view and asks for the previews. The note sits
+// between the drag cancel (whose own line it must overwrite — an armed drag
+// ended by X reads "drag cancelled" otherwise, found in review) and the
+// read (whose "read when the queued writes land" line must win).
 func (m *Model) openSweep() tea.Cmd {
+	m.cancelDrag()
+	m.note("sweep — furrow archive / tidy / unarchive · ⏎ previews the write, ⏎ again applies · x skips an archive row · esc returns")
+	return m.startSweep()
+}
+
+// startSweep is openSweep minus the status line (the -sweep flag runs it
+// inside New — the startRoadmap precedent). The Cmd is the preview read on
+// a live store, nil on the fixture.
+func (m *Model) startSweep() tea.Cmd {
 	m.cancelDrag()
 	m.view = viewSweep
 	m.sweep.scroll = 0
 	m.sweep.gate = nil
-	m.note("sweep — furrow archive / tidy / unarchive · ⏎ previews the write, ⏎ again applies · x skips an archive row · esc returns")
 	return m.loadSweep()
 }
 

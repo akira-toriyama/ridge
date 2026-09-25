@@ -46,9 +46,18 @@ type Options struct {
 	// not a -demo name, so `ridge -revisit` is the real-store "what is worth
 	// a fresh look" glance and `-dump -revisit` its headless frame.
 	Revisit bool
-	Peek    bool // open with the detail side-peek
-	Tree    bool // open with the dep-tree overlay (implies Peek)
-	LoadMS  int  // real-store load time, for the startup note
+	// Graph / Map / Boxes / Swim / Sweep open on that full-screen view — an
+	// opening setting like Roadmap, the flag twin of the S / T / E / W / X
+	// keys — so a live dump reaches every view without the -demo harness
+	// (which Dump refuses on a live store). The CLI refuses two opening
+	// views at once; the graph roots on the opening cursor (the first card
+	// of the first lane with work) and stays on the board when there is
+	// none.
+	Graph, Map, Boxes, Swim, Sweep bool
+
+	Peek   bool // open with the detail side-peek
+	Tree   bool // open with the dep-tree overlay (implies Peek)
+	LoadMS int  // real-store load time, for the startup note
 	// Debug is the -debuglog recorder over an already-open sink (nil = off).
 	// The caller opens the file: this package never touches the filesystem.
 	Debug *DebugLog
@@ -73,33 +82,67 @@ func New(p board.Provider, o Options) *Model {
 	m.saveViews = o.SaveViews
 	if o.Filter != "" {
 		m.ti.SetValue(o.Filter)
-		// On a live store applyFilter returns the debounce tick that will
-		// eventually fetch the verdict; a constructor has no runtime to hand
-		// it to, so Init carries it. Dropping it here made -filter a silent
-		// no-op against the real store (the fixture answers synchronously,
-		// which is why every headless frame hid the bug).
-		m.startupFilter = m.applyFilter(o.Filter)
-	}
-	if o.Table {
-		m.view = viewTable
-	}
-	if o.Roadmap {
-		// startRoadmap, NOT openRoadmap: the note-free half. openRoadmap's
-		// status line would land exactly where the read-only warning below
-		// protects itself by writing nothing, and `-readonly -roadmap` would
-		// lose the warning.
-		m.startRoadmap()
-	}
-	if o.GraphLR {
-		m.graph.orient = orientLeftRight
+		// The verdict lands HERE, fixture and live store alike — settled,
+		// not handed to Init: the opening views below seed on the cursor,
+		// and a cursor read before the verdict roots the graph on a task the
+		// filter excludes (measured: `-live -graph -filter zzzz` rooted on a
+		// task while the fixture drew the board). On a live store this is
+		// one furrow exec inside the constructor, beside the three the load
+		// already cost. Dropping the Cmd instead made -filter a silent no-op
+		// against the real store once.
+		//
+		// With the lens on, ONE read serves both: `revisit -q` is the
+		// filtered verdict (furrow ANDs the two), so the query is only set
+		// and setRevisit below asks — a startFilter here fired an `ls -q`
+		// whose verdict the lens's read then fenced out (measured).
+		if o.Revisit {
+			m.qRaw = strings.TrimSpace(o.Filter)
+		} else {
+			m.settle(m.startFilter(o.Filter))
+		}
 	}
 	if o.Revisit {
 		// setRevisit, NOT toggleRevisit: the note-free half, so the read-only
 		// warning below survives (`-readonly -revisit` lost it — the same
-		// regression -roadmap's startRoadmap comment records). The same Init
-		// hand-off as -filter: on a live store the verdict is a Cmd, and only
-		// the fixture answers inside the constructor.
-		m.startupFilter = tea.Batch(m.startupFilter, m.setRevisit(true))
+		// regression -roadmap's startRoadmap comment records). Settled for
+		// -filter's reason: the lens narrows the board the opening views
+		// seed on.
+		m.settle(m.setRevisit(true))
+	}
+	if m.curTask() == nil {
+		// The verdicts above may have emptied the lane newModel parked the
+		// cursor in; the opening views below seed on the cursor.
+		m.parkCursor()
+	}
+	if o.Table {
+		m.view = viewTable
+	}
+	// The full-screen openers' start* halves, NOT open*: the note-free
+	// twins. An opener's status line would land exactly where the read-only
+	// warning below protects itself by writing nothing, and `-readonly
+	// -roadmap` lost the warning once that way. The fallback sentence the
+	// map's and the roadmap's start* return (a seed the view has no row for;
+	// the view still opened) is dropped — the load note overwrites the status
+	// right after anyway. The graph's is kept: it is the one opening view
+	// that can fail to open.
+	var unopened string
+	switch {
+	case o.Roadmap:
+		m.startRoadmap()
+	case o.Graph:
+		unopened = m.startGraph()
+	case o.Map:
+		m.startMap(m.cursorID())
+	case o.Boxes:
+		m.startBoxes()
+	case o.Swim:
+		m.startSwim()
+	case o.Sweep:
+		// The preview read is a Cmd on a live store: Init or Dump runs it.
+		m.startupCmd = m.startSweep()
+	}
+	if o.GraphLR {
+		m.graph.orient = orientLeftRight
 	}
 	if o.Peek || o.Tree {
 		m.peekOpen = true
@@ -131,7 +174,43 @@ func New(p board.Provider, o Options) *Model {
 	if len(o.ViewWarnings) > 0 && m.b.Writable() {
 		m.fail("views.toml: %s", strings.Join(o.ViewWarnings, " · "))
 	}
+	// The two ways the opening frame can be other than what the flags asked
+	// for, each said in the status line (the board's filter row shows a
+	// refusal, but the graph and the packed overviews have no such row, and
+	// -graph's fallback is a different VIEW): a requested state silently
+	// swapped for another is the no-op the CLI's refusals exist to prevent
+	// (`-graph` on an empty board drew the board with "loaded 0 tasks" and
+	// exit 0, found in review). Both outrank the notes above.
+	var refused []string
+	if m.qErr != "" {
+		// The read furrow refused is the lens's when -revisit is on; the
+		// flag named is the one the user typed.
+		flag := "-filter"
+		if o.Filter == "" {
+			flag = "-revisit"
+		}
+		refused = append(refused, fmt.Sprintf("%s refused — %s", flag, m.qErr))
+	}
+	if unopened != "" {
+		refused = append(refused, fmt.Sprintf("graph not opened (%s); the board is drawn instead", unopened))
+	}
+	if len(refused) > 0 {
+		m.startupFail(refused)
+	}
 	return m
+}
+
+// startupFail writes the startup refusals to the status line — ONE row,
+// every one of them (written one at a time, the second erased the first:
+// an empty board with a typo'd -filter and -graph reported only the graph,
+// found in review). On a read-only board the warning already there is kept
+// in front: it is set once and restored by nothing (noteLoad's rule), but a
+// frame that is not what was asked for must say so on that board too.
+func (m *Model) startupFail(lines []string) {
+	if !m.b.Writable() {
+		lines = append([]string{m.status}, lines...)
+	}
+	m.fail("%s", strings.Join(lines, " · "))
 }
 
 // noteLoad is the startup note. The count is Tasks(), and a task whose
@@ -155,8 +234,17 @@ func (m *Model) noteLoad(live bool, loadMS int) {
 
 // Dump renders one frame at w x h — the headless verification surface — and
 // returns it, optionally stripped of ANSI so the output is diffable. demo
-// puts the model into a transient mid-gesture state first.
+// puts the model into a transient mid-gesture state first; it is the
+// fixture's instrument and is refused on a live store.
 func (m *Model) Dump(w, h int, demo string, plain bool) (string, error) {
+	if demo != "" && m.prov.Live() {
+		// The harness's states are shaped around the fixture's synchronous
+		// answers (the revisit demo insists on one; the sweep demos drop the
+		// Cmd a live read is), and sweeprestore archives two tasks through
+		// the provider — a WRITE on a real board. A live frame is the board
+		// at rest, reached through the opening-view Options.
+		return "", fmt.Errorf("-demo %s freezes a fixture state (the harness bypasses the persist queue; sweeprestore writes) — a live store is dumped at rest, through the view flags", demo)
+	}
 	m.w, m.h = w, h
 	// -cols/-rows ARE the terminal here: geometry gated on a real size (the
 	// roadmap's opening window) must not wait for a WindowSizeMsg that will
@@ -165,6 +253,13 @@ func (m *Model) Dump(w, h int, demo string, plain bool) (string, error) {
 	m.help.SetWidth(w)
 	m.recompute()
 	m.relayout()
+	// What the fixture answered inside New, a live store answers as a Cmd:
+	// the sweep's preview read (the -filter / -revisit verdicts are settled
+	// in New itself, so the opening views seed on the narrowed cursor).
+	// There is no program loop here to run it, so Dump is the loop — the
+	// frame would otherwise say "reading…" over four empty sections.
+	m.settle(m.startupCmd)
+	m.startupCmd = nil
 	if err := m.demoState(demo); err != nil {
 		return "", err
 	}
@@ -173,4 +268,38 @@ func (m *Model) Dump(w, h int, demo string, plain bool) (string, error) {
 		out = ansiStrip(out)
 	}
 	return out, nil
+}
+
+// settle runs cmd to completion synchronously: its message goes to Update,
+// a batch is unwrapped, and whatever Update returns is run in turn — a
+// stand-in for the program loop where none runs (New's startup verdicts,
+// Dump's sweep read, the tests). A debounce tick is waited out rather than
+// skipped, so the path exercised is the program's own. It runs until the
+// chain ends: a Cmd that re-arms itself (the drag autoscroll tick) would
+// hold it for as long as the gesture would, so hand it startup reads only.
+func (m *Model) settle(cmd tea.Cmd) {
+	if cmd == nil {
+		return
+	}
+	msg := cmd()
+	if msg == nil {
+		return
+	}
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		for _, c := range batch {
+			m.settle(c)
+		}
+		return
+	}
+	_, next := m.Update(msg)
+	m.settle(next)
+}
+
+// cursorID is the selected task's id, "" in an empty column — the seed the
+// map and the roadmap open on, and what a table re-sort keeps.
+func (m *Model) cursorID() string {
+	if t := m.curTask(); t != nil {
+		return t.ID
+	}
+	return ""
 }
