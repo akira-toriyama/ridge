@@ -492,8 +492,8 @@ func (m *Model) persistPlacement(id, lane, gesture string) tea.Cmd {
 }
 
 // repeatLine is the one line a close's series report renders: `furrow
-// done`'s own words (seriesLine in furrow's cli), the due as the local day
-// every ridge surface spells dates in. The successor's card arrives with the
+// done`'s own words (seriesLine in furrow's cli), the due as the
+// board-calendar day every ridge surface spells dates in. The successor's card arrives with the
 // re-read; this line is what names it, and until the re-read the only place
 // the id exists on screen.
 func repeatLine(r *board.RepeatReport) string {

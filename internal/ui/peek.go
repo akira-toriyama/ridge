@@ -148,10 +148,10 @@ func (m *Model) peekContent(w int) string {
 		}
 		b.WriteString(th.muted.Render(wrapJoin(parts, " · ", w)) + "\n")
 	}
-	// Every date in this panel is the LOCAL day: created is a UTC instant off
-	// furrow's JSON exactly like due, and dating one locally and the other in
-	// UTC put "due 09-02" and "created 09-01" on the same panel for one
-	// instant (measured at UTC+9).
+	// Every date in this panel is the board-calendar day: created is a UTC
+	// instant off furrow's JSON exactly like due, and dating one in the
+	// calendar and the other in UTC put "due 09-02" and "created 09-01" on
+	// the same panel for one instant (measured at UTC+9).
 	stamps := []string{"updated " + ago(t.Updated), "created " + t.Created.In(board.Zone()).Format("2006-01-02")}
 	if !t.Reviewed.IsZero() {
 		// furrow's review clock, separate from updated on purpose (a review
@@ -160,8 +160,8 @@ func (m *Model) peekContent(w int) string {
 		stamps = append(stamps, "reviewed "+ago(t.Reviewed))
 	}
 	if !t.Due.IsZero() {
-		// Local: the instant furrow stores is UTC, and an evening-local due
-		// renders one day early if it is formatted in that zone.
+		// The board's calendar (board.Zone), not UTC: an evening due renders
+		// one day early if it is formatted in the zone furrow stores it in.
 		due := "due " + t.Due.In(board.Zone()).Format("2006-01-02")
 		if isOverdue(t) {
 			due = th.danger.Render(due + " · OVERDUE")

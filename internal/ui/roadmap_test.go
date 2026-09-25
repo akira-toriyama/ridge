@@ -8,7 +8,7 @@ import (
 	"github.com/akira-toriyama/ridge/internal/store/memstore"
 )
 
-// at builds a local instant inside the zone the test pinned. Every date here
+// at builds an instant in the zone the test pinned. Every date here
 // goes through it so a test cannot accidentally mix zones.
 func at(y int, m time.Month, d, hh int) time.Time {
 	return time.Date(y, m, d, hh, 0, 0, 0, board.Zone())
@@ -44,15 +44,16 @@ func TestRoadPopulationDropsDatelessAndDoneAndOrdersByDue(t *testing.T) {
 	}
 }
 
-// A due is a UTC instant recording a LOCAL day (board.ParseDue puts a bare
-// day at its last local second). 23:00Z on the 1st IS the 2nd on a UTC+9
-// box, and an axis derived from the instant's UTC day would place the ◆ one
-// cell early — the peek's "due a day early" bug, now on an axis where it
-// also mis-sorts nothing but mis-places everything.
-func TestRoadCellsSplitOnLocalDaysNotUTCDays(t *testing.T) {
+// A due is a UTC instant recording a day of the board's calendar
+// (board.ParseDue puts a bare day at its last second there). 23:00Z on the
+// 1st IS the 2nd in a UTC+9 calendar, and an axis derived from the instant's
+// UTC day would place the ◆ one cell early — the peek's "due a day early"
+// bug, now on an axis where it also mis-sorts nothing but mis-places
+// everything.
+func TestRoadCellsSplitOnCalendarDaysNotUTCDays(t *testing.T) {
 	fixedZone(t, "TEST", 9)
 	fixedNow(t, at(2026, 9, 1, 12))
-	evening := eveningDue() // 2026-09-01T23:00:00Z = 2026-09-02 08:00 local
+	evening := eveningDue() // 2026-09-01T23:00:00Z = 2026-09-02 08:00 at UTC+9
 	l := packRoad([]*board.Task{
 		{ID: "t-noon", Due: at(2026, 9, 1, 12)},
 		{ID: "t-eve", Due: evening},
@@ -68,8 +69,8 @@ func TestRoadCellsSplitOnLocalDaysNotUTCDays(t *testing.T) {
 	}
 }
 
-// Weeks are Monday-aligned local weeks, months calendar months — not 7-day or
-// 30-day buckets counted from an arbitrary origin.
+// Weeks are Monday-aligned calendar weeks, months calendar months — not
+// 7-day or 30-day buckets counted from an arbitrary origin.
 func TestRoadWeekAndMonthCellsSplitOnCalendarBoundaries(t *testing.T) {
 	fixedZone(t, "TEST", 9)
 	fixedNow(t, at(2026, 9, 1, 12))

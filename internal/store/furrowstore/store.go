@@ -85,6 +85,25 @@ type boardJSON struct {
 	Writable    bool     `json:"writable"`
 	SchemaState string   `json:"schema_state"`
 	Store       string   `json:"store"`
+	// Timezone is [due].timezone (furrow #330, v6.0.0): the IANA name of the
+	// calendar a wall-clock --due binds in, "" when the board declares none.
+	// zoneOf turns it into the board.Zone declaration.
+	Timezone string `json:"timezone"`
+}
+
+// zoneOf is the board's calendar as furrow itself binds it: the IANA name
+// loaded, or nil — the process zone — for a board declaring none ("") and for
+// a name the host cannot load, furrow's fallback for that case too
+// (config.go: "not a loadable IANA zone name; using the process zone").
+func zoneOf(name string) *time.Location {
+	if name == "" {
+		return nil
+	}
+	loc, err := time.LoadLocation(name)
+	if err != nil {
+		return nil
+	}
+	return loc
 }
 
 // taskJSON is one `furrow ls --json` row. Timestamps are RFC3339 or null.
@@ -276,6 +295,9 @@ func (p *Store) load() (*board.Board, error) {
 		epics = append(epics, e.toEpicInfo())
 	}
 
+	// Declared with the snapshot it belongs to, on every load: a frame is a
+	// function of the board's calendar, not the terminal's TZ (t-kt2h).
+	board.SetZone(zoneOf(cfg.Timezone))
 	return board.NewStoreBoard(lanes, tasks, epics, cfg.Writable, cfg.SchemaState), nil
 }
 

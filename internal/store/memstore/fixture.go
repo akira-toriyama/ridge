@@ -47,6 +47,13 @@ func ts(s string) time.Time {
 	return t
 }
 
+// fixtureZone is the calendar the fixture's dues are bound in: every bare-day
+// due below sits at 14:59:59Z, the last second of that day in JST, and the
+// store declares it (board.SetZone) so a frame reads the same day on a UTC
+// runner and an Auckland one (t-kt2h). A fixed offset, not Asia/Tokyo: the
+// fixture must not depend on the host's tzdata.
+var fixtureZone = time.FixedZone("JST", 9*3600)
+
 func fixtureTasks() []*board.Task {
 	return []*board.Task{
 		{
@@ -68,7 +75,7 @@ func fixtureTasks() []*board.Task {
 			// The four Due values in this fixture are NOT from the snapshot
 			// (the real board had none in 2026-07); they exist so the table's
 			// due column and `-demo sort` have dates to show. Each is furrow's
-			// bare-day form: the last second of that local (JST) day, in UTC.
+			// bare-day form: the last second of that day in fixtureZone, in UTC.
 			Due:  ts("2026-07-31T14:59:59Z"),
 			Body: "# 行程表 v2\n\n初版は移動時間だけで組んでいて、買い出しと温泉が全部「ついで」扱いになっていた。[[t-ehk7]] の献立が決まり [[t-t38k]] でベースキャンプが確定したので、寄り道を主役にして引き直す。\n\n- 1日目: 出発 6:30 → 道の駅で昼と1日目夕食の生鮮 → 設営 15:00 まで\n- 2日目: 午前は川、午後は高千穂へ。霧が出たら [[t-px9p]] の屋内代替に切替\n- 3日目: 撤収 10:00 → 家族風呂（受付 14:00 まで・[[t-2qyb]] で確認済み）→ 帰路\n\n判断の軸: 子どもの昼寝時間を移動に重ねる。買い出しは1日1回まで。到着後の設営は明るいうちに終える。雨天代替は「行かない」も選択肢に含める（無理に埋めない）。",
 		},

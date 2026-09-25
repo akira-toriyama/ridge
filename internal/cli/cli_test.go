@@ -19,6 +19,15 @@ import (
 // never vary with this machine's config, even one that only reaches the live
 // path by a future edit.
 func TestMain(m *testing.M) {
+	// Helper-process mode for TestDumpFramesDoNotDependOnTheProcessTZ: the
+	// process zone is read once at startup, so varying it takes a subprocess.
+	// It returns before the XDG pin below, so the helper must inherit the
+	// parent's environment (the test appends to os.Environ) or -dump would
+	// read the developer's real views.toml; and the variable left in a shell
+	// turns every run of this package into a frame dump.
+	if args := os.Getenv("RIDGE_TEST_DUMP_ARGS"); args != "" {
+		os.Exit(int(run(strings.Fields(args), os.Stdout, os.Stderr)))
+	}
 	dir, err := os.MkdirTemp("", "ridge-cli-xdg-*")
 	if err != nil {
 		panic(err)
@@ -601,5 +610,33 @@ func TestBenchloadAcceptsAnUntypedDefault(t *testing.T) {
 	code, _, errb := runArgs(t, "-benchload", "-perflog", filepath.Join(t.TempDir(), "p.tsv"))
 	if code == CodeUsage && strings.Contains(errb, "cannot apply") {
 		t.Errorf("-benchload refused itself over an untyped default: %q", errb)
+	}
+}
+
+// The fixture's frames are a function of its declared calendar (memstore
+// declares JST), not the process zone: -dump renders the same -table and
+// -roadmap frame with TZ=UTC and TZ=Pacific/Auckland in the environment.
+// Auckland is where the fixture's 14:59:59Z dues fall on the next day — the
+// shift t-kt2h measured on the real board. Re-runs this test binary in
+// TestMain's helper mode, because time.Local is fixed at process start.
+func TestDumpFramesDoNotDependOnTheProcessTZ(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	frame := func(tz, view string) string {
+		t.Helper()
+		cmd := exec.Command(exe, "-test.run=^$") //nolint:gosec // re-running this test binary IS the test
+		cmd.Env = append(os.Environ(), "TZ="+tz, "RIDGE_TEST_DUMP_ARGS=-dump -plain "+view+" -cols 240 -rows 50")
+		out, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("TZ=%s %s: %v", tz, view, err)
+		}
+		return string(out)
+	}
+	for _, view := range []string{"-table", "-roadmap"} {
+		if utc, nz := frame("UTC", view), frame("Pacific/Auckland", view); utc != nz {
+			t.Errorf("%s frame changed with TZ — the fixture store must declare its calendar:\n--- UTC\n%s\n--- Pacific/Auckland\n%s", view, utc, nz)
+		}
 	}
 }
