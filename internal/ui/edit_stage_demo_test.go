@@ -137,3 +137,63 @@ func TestNoteDemoSeedsTheFocusedInput(t *testing.T) {
 		}
 	}
 }
+
+// The repeat input's seed is the stored rule — furrow's compiled RRULE — so
+// the frame must show it as typed text on the prompt line, under the stage's
+// title, with the apply/back keys. Line-scoped like the retitle demo: the
+// same rule also sits in the peek beside the overlay.
+func TestEditRepeatDemoSeedsTheStoredRule(t *testing.T) {
+	m := New(memstore.New(), Options{})
+	frame, err := m.Dump(240, 60, "editrepeat", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var promptLines []string
+	for _, l := range strings.Split(frame, "\n") {
+		if strings.Contains(l, "> ") {
+			promptLines = append(promptLines, l)
+		}
+	}
+	if len(promptLines) != 1 {
+		t.Fatalf("want exactly one prompt line in the frame, got %d: %q", len(promptLines), promptLines)
+	}
+	if !strings.Contains(promptLines[0], "FREQ=WEEKLY") {
+		t.Errorf("the input line lost the seeded rule (t-9sa6's fixture rule): %q", promptLines[0])
+	}
+	for _, want := range []string{"edit t-9sa6", "repeat rule", "⏎ apply · esc back"} {
+		if !strings.Contains(frame, want) {
+			t.Errorf("-demo editrepeat: %q is missing from the frame", want)
+		}
+	}
+	if m.edit == nil || !m.edit.input.Focused() {
+		t.Error("the demo's input is not focused")
+	}
+}
+
+// The two precondition rows are menu-stage frames: each demo must show its
+// own wording on the repeat row, under the cursor, and neither may show the
+// other's.
+func TestEditPreconditionDemosStateTheirRow(t *testing.T) {
+	for _, tc := range []struct{ demo, want, not string }{
+		{"editnodue", "— needs a due first", "— closed; reopen it first"},
+		{"editclosed", "— closed; reopen it first", "— needs a due first"},
+	} {
+		m := New(memstore.New(), Options{})
+		frame, err := m.Dump(240, 60, tc.demo, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		row := ""
+		for _, l := range strings.Split(frame, "\n") {
+			if strings.Contains(l, "▌ repeat") {
+				row = l
+			}
+		}
+		if row == "" || !strings.Contains(row, tc.want) {
+			t.Errorf("-demo %s: the cursor row must be the repeat row reading %q, got %q", tc.demo, tc.want, row)
+		}
+		if strings.Contains(frame, tc.not) {
+			t.Errorf("-demo %s: the frame carries the other precondition %q", tc.demo, tc.not)
+		}
+	}
+}

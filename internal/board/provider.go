@@ -365,6 +365,7 @@ type AddOptions struct {
 	Value  int      // 1..5; 0 = unset
 	Effort int      // 1..5; 0 = unset
 	Due    string   // furrow date form incl. the +1d offset; "" = no promise
+	Repeat string   // recurrence spelling, verbatim (--repeat); needs Due — the series counts from it
 	Deps   []string // t- ids; existence/acyclicity stay furrow's rules
 	Checks []string // unchecked checklist items, text verbatim
 	Refs   []string // free text, verbatim (pflag StringArray since furrow #317); "" refused
@@ -394,6 +395,17 @@ func (o AddOptions) Validate() error {
 	if o.Due != "" {
 		if _, err := ParseDue(o.Due); err != nil {
 			return err
+		}
+	}
+	if o.Repeat != "" {
+		// furrow's two refusals for the flag (measured on v6.0.0 and dev):
+		// a blank rule, and a rule with no --due to count from. The
+		// spelling itself is not checked here — the grammar has one home.
+		if strings.TrimSpace(o.Repeat) == "" {
+			return fmt.Errorf("repeat: needs a rule (weekly, every 2 weeks on mon,thu, …)")
+		}
+		if o.Due == "" {
+			return fmt.Errorf("repeat %q needs a due — the date of the first occurrence is what the rule counts from", o.Repeat)
 		}
 	}
 	for _, d := range o.Deps {
@@ -430,9 +442,12 @@ type FieldPatch struct {
 	RmLabels  []string
 	Epic      *string // e- id; "" unfiles
 	Due       *string // furrow date forms incl. the +1d snooze; "" clears
-	Title     *string
-	AddRepos  []string // full owner/repo
-	RmRepos   []string
+	// Repeat is a recurrence spelling as typed (--repeat); "" drops the rule
+	// (--clear-repeat). The grammar is furrow's; the refusals, SetFields'.
+	Repeat   *string
+	Title    *string
+	AddRepos []string // full owner/repo
+	RmRepos  []string
 	// Refs are a SEQUENCE, not a sorted set like labels: furrow appends adds
 	// at the end and keeps the order given. Add is idempotent, Rm is
 	// exact-match and a no-op on an absent ref (measured on dev 60074b8).

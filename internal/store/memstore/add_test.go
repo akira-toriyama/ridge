@@ -1,6 +1,7 @@
 package memstore
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/akira-toriyama/ridge/internal/board"
@@ -35,5 +36,26 @@ func TestAddMirrorsTheDefaultRepoAutoAttach(t *testing.T) {
 	}
 	if got := p.Board().Task(draft); len(got.Repos) != 0 {
 		t.Errorf("draft repos = %v, want none — --draft suppresses the auto-attach", got.Repos)
+	}
+}
+
+// A quick add with a rule (t-zbmv): the fixture stores the spelling as typed
+// (it compiles none) anchored at the first due, as furrow does; a rule with
+// no due is Validate's refusal, before any task exists.
+func TestAddCarriesTheRuleAnchoredAtTheDue(t *testing.T) {
+	p := New()
+	id, err := p.Add("週次の締め", board.AddOptions{Due: "2026-10-02", Repeat: "weekly"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := p.Board().Task(id); got.Repeat != "weekly" || got.Due.IsZero() || !got.RepeatAnchor.Equal(got.Due) {
+		t.Errorf("task = %+v, want repeat weekly anchored at the due", got)
+	}
+	before := len(p.Board().Tasks())
+	if _, err := p.Add("due なし", board.AddOptions{Repeat: "weekly"}); err == nil || !strings.Contains(err.Error(), "needs a due") {
+		t.Errorf("a rule with no due = %v, want the refusal", err)
+	}
+	if len(p.Board().Tasks()) != before {
+		t.Error("a refused add must create nothing")
 	}
 }

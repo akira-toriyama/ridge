@@ -841,6 +841,11 @@ func (p *Store) Add(title string, o board.AddOptions) (string, error) {
 			return "", err
 		}
 		t.Due = d
+		// The spelling as typed — the fixture compiles no rule — anchored at
+		// the first due, as furrow stores it (Validate required the due).
+		if o.Repeat != "" {
+			t.Repeat, t.RepeatAnchor = o.Repeat, d
+		}
 	}
 	for _, c := range o.Checks {
 		t.Checklist = append(t.Checklist, board.ChecklistItem{Text: c})

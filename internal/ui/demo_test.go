@@ -120,6 +120,8 @@ func TestDemoRefusalNamesTheMissingShape(t *testing.T) {
 	m := advSmallModel(t, 240, 50)
 	for _, tc := range []struct{ demo, want string }{
 		{"edit", "checklist"},
+		{"editrepeat", "repeat rule"},
+		{"editclosed", "closed and carrying a due"},
 		{"refs", "two or more refs"},
 		{"editdeps", "waits on both"},
 		{"epicdeps", "filed under a box"},

@@ -21,6 +21,22 @@ func TestParseAddLineSplitsTokensFromTheTitle(t *testing.T) {
 			raw:   "value:3 タイトル語 due:2026-09-01 続き",
 			title: "タイトル語 続き",
 			tk:    addTokens{value: 3, due: "2026-09-01"}},
+		{name: "repeat rides beside the due it needs, quoted for the spellings with spaces",
+			raw:   `週次の締め due:2026-10-02 repeat:"weekly on fri"`,
+			title: "週次の締め",
+			tk:    addTokens{due: "2026-10-02", repeat: "weekly on fri"}},
+		{name: "repeat without a due is furrow's refusal, named before Enter",
+			raw: "t repeat:weekly", title: "t",
+			tk: addTokens{repeat: "weekly",
+				bad: []string{"repeat:weekly — needs a due: the rule counts from the first occurrence"}}},
+		{name: "a due that failed its own check does not also blame the rule",
+			raw: "t due:someday repeat:weekly", title: "t",
+			tk: addTokens{repeat: "weekly",
+				bad: []string{"due:someday — not a date (YYYY-MM-DD / +1d …)"}}},
+		{name: "a blank rule needs a rule; the spelling itself is furrow's to judge",
+			raw: `t due:+1d repeat:"" repeat:garbage`, title: "t",
+			tk: addTokens{due: "+1d", repeat: "garbage",
+				bad: []string{`repeat:"" — needs a rule (weekly · every 2 weeks on mon,thu · …)`}}},
 		{name: "dep comma is the -q list form",
 			raw: "t dep:t-a,t-b", title: "t",
 			tk: addTokens{deps: []string{"t-a", "t-b"}}},
@@ -160,7 +176,7 @@ func TestQuickAddRefusesBadTokensAndKeepsTheLine(t *testing.T) {
 	}
 
 	// Range and the due grammar refuse before the store round trip.
-	for _, bad := range []string{"t value:9", "t due:someday"} {
+	for _, bad := range []string{"t value:9", "t due:someday", "t repeat:weekly"} {
 		m.add.input.SetValue(bad)
 		commitAdd(t, m)
 		if m.mode != modeAdd {
@@ -275,5 +291,42 @@ func TestQuickAddModalEchoesTokensAsChips(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("the modal frame is missing %q — the live echo must show what will be stamped", want)
 		}
+	}
+}
+
+// The repeat: token (t-zbmv) lands as `add --repeat` beside the due it
+// needs; the fixture keeps the spelling as typed, anchored at that due.
+func TestQuickAddRepeatTokenLandsOnTheTask(t *testing.T) {
+	m := boardModel(t, 240, 50)
+	m.curLane = m.b.LaneIndex("ready")
+	press(m, "a")
+	m.add.input.SetValue(`週次の締め due:2026-10-02 repeat:"weekly on fri"`)
+	commitAdd(t, m)
+
+	cur := m.curTask()
+	if cur == nil || cur.Title != "週次の締め" {
+		t.Fatalf("selection = %+v, want the new task with the tokens parsed OUT of the title", cur)
+	}
+	if cur.Repeat != "weekly on fri" || cur.Due.IsZero() || !cur.RepeatAnchor.Equal(cur.Due) {
+		t.Errorf("repeat=%q due=%v anchor=%v, want the quoted spelling anchored at the due", cur.Repeat, cur.Due, cur.RepeatAnchor)
+	}
+}
+
+// The addrepeat demo must echo both chips from the typed line alone — the
+// quote opened the rule's value, not a title — with no warning row: the rule
+// sits beside the due it needs.
+func TestAddRepeatDemoEchoesTheRuleChip(t *testing.T) {
+	m := boardModel(t, 240, 50)
+	if err := m.demoState("addrepeat"); err != nil {
+		t.Fatal(err)
+	}
+	out := frame(m)
+	for _, want := range []string{"週次の締め", "due 2026-10-02", "repeat weekly on fri"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("-demo addrepeat: %q is missing from the frame", want)
+		}
+	}
+	if strings.Contains(out, "needs a due") {
+		t.Errorf("-demo addrepeat: the rule beside its due must raise no warning row:\n%s", out)
 	}
 }

@@ -11,6 +11,10 @@ func TestAddOptionsValidate(t *testing.T) {
 		{Value: 1, Effort: 5},
 		{Due: "+1d"},
 		{Due: "2026-09-01"},
+		{Due: "+1d", Repeat: "weekly"},
+		// The spelling is furrow's to judge — even one furrow rejects
+		// (COUNT=1: "no occurrence after the first one") passes here.
+		{Due: "+1d", Repeat: "FREQ=WEEKLY;COUNT=1"},
 		{Deps: []string{"t-a"}, Checks: []string{"書く"}, Refs: []string{"a.go:1"}},
 		// --ref is a pflag StringArray since furrow #317: `,` and `"` are
 		// ordinary ref text and must not be refused here.
@@ -31,6 +35,10 @@ func TestAddOptionsValidate(t *testing.T) {
 		{AddOptions{Value: 6}, "want 1..5"},
 		{AddOptions{Effort: -1}, "want 1..5"},
 		{AddOptions{Due: "someday"}, "not a date"},
+		// furrow's `--repeat needs a --due` and its blank-rule refusal, both
+		// exit 2 (measured on v6.0.0): mirrored so the modal line survives.
+		{AddOptions{Repeat: "weekly"}, "needs a due"},
+		{AddOptions{Due: "+1d", Repeat: "  "}, "needs a rule"},
 		{AddOptions{Deps: []string{""}}, "needs a task id"},
 		// --dep is still a pflag CSV StringSlice (unlike --ref since furrow
 		// #317): a comma'd id would split silently, a bare `"` is pflag's exit 2.

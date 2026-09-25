@@ -13,7 +13,7 @@ import (
 // overlap (value:4 due:+1d). One line stays the modal's shape — a second stage
 // per field would make six fields cost six prompts.
 //
-//	盤面から起票 value:4 effort:2 due:+1d dep:t-x check:"再現手順を書く" ref:ui/addmode.go is:draft
+//	盤面から起票 value:4 effort:2 due:+1d repeat:weekly dep:t-x check:"再現手順を書く" ref:ui/addmode.go is:draft
 //
 // Splitting is on spaces. A `"` or `'` is significant in exactly TWO spots —
 // opening a field (the whole field is literal title text: the escape hatch
@@ -38,6 +38,7 @@ import (
 type addTokens struct {
 	value, effort int // 0 = absent (value:0 itself is refused into bad)
 	due           string
+	repeat        string // the recurrence spelling, verbatim — furrow's grammar; needs due
 	deps          []string
 	checks        []string
 	refs          []string
@@ -49,7 +50,7 @@ type addTokens struct {
 // two halves are disjoint fields except draft, which the filter can also
 // inherit (is:draft) — either source makes the task a draft, so it ORs.
 func (tk addTokens) apply(o board.AddOptions) board.AddOptions {
-	o.Value, o.Effort, o.Due = tk.value, tk.effort, tk.due
+	o.Value, o.Effort, o.Due, o.Repeat = tk.value, tk.effort, tk.due, tk.repeat
 	o.Deps, o.Checks, o.Refs = tk.deps, tk.checks, tk.refs
 	if tk.draft {
 		o.Draft = true
@@ -69,7 +70,7 @@ type addField struct {
 
 // tokenKeyColon matches a field buffer that has just spelled a token key and
 // its colon — the one mid-field position where a quote opens a value run.
-var tokenKeyColon = regexp.MustCompile(`(?i)^(value|effort|due|dep|check|ref):$`)
+var tokenKeyColon = regexp.MustCompile(`(?i)^(value|effort|due|repeat|dep|check|ref):$`)
 
 // splitAddFields splits the line on spaces with the two-position quote rule
 // above. An unclosed quote runs to the end of the line rather than erroring —
@@ -129,6 +130,9 @@ func parseAddLine(raw string) (title string, tk addTokens) {
 			words = append(words, f.text)
 		}
 	}
+	// The repeat/due coupling is judged after the whole line, in either
+	// order; repeatRaw is the field the refusal quotes.
+	repeatRaw, sawDue := "", false
 	for _, f := range splitAddFields(raw) {
 		if f.quoted {
 			word(f)
@@ -159,6 +163,7 @@ func parseAddLine(raw string) (title string, tk addTokens) {
 				tk.effort = n
 			}
 		case "due":
+			sawDue = true
 			if v == "" {
 				tk.bad = append(tk.bad, f.raw+" — needs a date")
 				continue
@@ -168,6 +173,16 @@ func parseAddLine(raw string) (title string, tk addTokens) {
 				continue
 			}
 			tk.due = v // last one wins; the grammar's one spelling is ParseDue's
+		case "repeat":
+			// A blank rule is furrow's own refusal (`--repeat ''` exits 2);
+			// the spelling is NOT judged here — the grammar has one home, and
+			// a rule furrow refuses comes back with the line reopened
+			// (reopenRefusedAdd). Quoted for the forms with spaces.
+			if strings.TrimSpace(v) == "" {
+				tk.bad = append(tk.bad, f.raw+" — needs a rule (weekly · every 2 weeks on mon,thu · …)")
+				continue
+			}
+			tk.repeat, repeatRaw = v, f.raw // last one wins, like due
 		case "dep":
 			// Comma = several ids, the -q list form (and pflag's own CSV read
 			// of --dep would split it there anyway — splitting here keeps the
@@ -227,6 +242,12 @@ func parseAddLine(raw string) (title string, tk addTokens) {
 		default:
 			word(f)
 		}
+	}
+	// furrow's `--repeat needs a --due` (exit 2), only when no due was typed
+	// at all: a due that failed its own check is already in bad, and naming
+	// the rule beside it would send the reader to fix the wrong token.
+	if tk.repeat != "" && !sawDue {
+		tk.bad = append(tk.bad, repeatRaw+" — needs a due: the rule counts from the first occurrence")
 	}
 	return strings.TrimSpace(strings.Join(words, " ")), tk
 }

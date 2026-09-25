@@ -194,7 +194,23 @@ func TestEditDueRefusesGarbageAndAcceptsForms(t *testing.T) {
 	}
 	drainPersists(m, t)
 
-	// Empty input clears.
+	// Empty input clears — once the rule is gone. t-9sa6 repeats, and a
+	// repeating task keeps its due (furrow's exit 2, mirrored by SetFields):
+	// the empty ⏎ is refused with the promise intact, the repeat row drops
+	// the rule, and only then does the empty due clear.
+	m.edit.menuIdx = int(fieldDue)
+	press(m, "enter")
+	m.edit.input.SetValue("")
+	press(m, "enter")
+	if m.b.Task("t-9sa6").Due.IsZero() || !m.statusErr || !strings.Contains(m.status, "must keep a due") {
+		t.Fatalf("clearing the due under a rule must be refused with the due kept: status=%q", m.status)
+	}
+	m.edit.menuIdx = int(fieldRepeat)
+	press(m, "enter")
+	m.edit.input.SetValue("")
+	press(m, "enter")
+	drainPersists(m, t)
+
 	m.edit.menuIdx = int(fieldDue)
 	press(m, "enter")
 	m.edit.input.SetValue("")
@@ -713,4 +729,151 @@ func TestAClosedMembershipIsRepresentableInTheEpicPicker(t *testing.T) {
 	if out := frame(m); !strings.Contains(out, "閉じた箱 (closed)") {
 		t.Error("the epic row must mark a membership furrow itself lints (epic-closed)")
 	}
+}
+
+// The repeat row (t-zbmv) is `furrow set --repeat` / `--clear-repeat`: the
+// input opens seeded with the stored rule, a spelling lands as typed with the
+// series anchored at the due (the compiled form arrives with the re-read),
+// and an empty ⏎ drops the rule and keeps the due.
+func TestEditRepeatMirrorsSetRepeat(t *testing.T) {
+	m := editModel(t, "t-9sa6") // the fixture's weekly task: a due and FREQ=WEEKLY
+	m.edit.menuIdx = int(fieldRepeat)
+	press(m, "enter")
+	if m.edit.stage != stageInput {
+		t.Fatal("repeat must open the text input")
+	}
+	if got := m.edit.input.Value(); got != "FREQ=WEEKLY" {
+		t.Errorf("the input is seeded with %q, want the stored rule FREQ=WEEKLY", got)
+	}
+	m.edit.input.SetValue("every 2 weeks on mon,thu")
+	press(m, "enter")
+	x := m.b.Task("t-9sa6")
+	if x.Repeat != "every 2 weeks on mon,thu" || !x.RepeatAnchor.Equal(x.Due) {
+		t.Errorf("repeat=%q anchor=%v, want the spelling as typed anchored at the due %v", x.Repeat, x.RepeatAnchor, x.Due)
+	}
+	if m.edit.stage != stageMenu || m.statusErr {
+		t.Errorf("stage=%d statusErr=%v, want back on the menu with no refusal", m.edit.stage, m.statusErr)
+	}
+	drainPersists(m, t)
+
+	m.edit.menuIdx = int(fieldRepeat)
+	press(m, "enter")
+	m.edit.input.SetValue("")
+	press(m, "enter")
+	if x.Repeat != "" || !x.RepeatAnchor.IsZero() || x.Due.IsZero() {
+		t.Errorf("an empty ⏎ must drop the rule and keep the due: %+v", x)
+	}
+	drainPersists(m, t)
+}
+
+// A task with no due cannot carry a rule (furrow's exit 2): the row states
+// it before the press and the press is refused on the menu, queuing nothing.
+func TestEditRepeatRefusesATaskWithNoDue(t *testing.T) {
+	m := boardModel(t, 240, 50)
+	id := ""
+	for _, x := range m.b.Tasks() {
+		if x.Due.IsZero() && x.Repeat == "" && x.Closed.IsZero() && m.selectID(x.ID, false) {
+			id = x.ID
+			break
+		}
+	}
+	if id == "" {
+		t.Fatal("the fixture has no selectable open task without a due")
+	}
+	m.enterEdit()
+	if m.edit == nil {
+		t.Fatal("enterEdit did not open the overlay")
+	}
+	if out := frame(m); !strings.Contains(out, "needs a due first") {
+		t.Errorf("the repeat row must state its precondition before the press:\n%s", out)
+	}
+	m.edit.menuIdx = int(fieldRepeat)
+	press(m, "enter")
+	if m.edit.stage != stageMenu || !m.statusErr || !strings.Contains(m.status, "set due first") {
+		t.Errorf("stage=%d statusErr=%v status=%q, want the press refused on the menu", m.edit.stage, m.statusErr, m.status)
+	}
+	if m.inflight || len(m.pending) > 0 {
+		t.Error("a refused press must queue nothing")
+	}
+	if m.b.Task(id).Repeat != "" {
+		t.Error("a refused press must write nothing")
+	}
+}
+
+// A closed task cannot take a rule either (furrow's exit 2, judged after the
+// due): the row states it and the press is refused, while a closed task
+// with no due is answered with the due, as furrow does.
+func TestEditRepeatRefusesAClosedTask(t *testing.T) {
+	closedAt := time.Date(2026, 9, 20, 9, 0, 0, 0, time.UTC)
+	b := board.NewBoard([]*board.Task{
+		{ID: "c", Status: "done", Title: "closed with due", Priority: 10, Due: closedAt.Add(48 * time.Hour), Closed: closedAt},
+		{ID: "cn", Status: "done", Title: "closed no due", Priority: 20, Closed: closedAt},
+	})
+	m := New(memstore.NewWith(b), Options{})
+	m.w, m.h = 240, 50
+	m.recompute()
+	m.relayout()
+	for _, tc := range []struct{ id, cell, reason string }{
+		{"c", "— closed; reopen it first", "reopen it first"},
+		{"cn", "— needs a due first", "set due first"},
+	} {
+		if !m.selectID(tc.id, false) {
+			t.Fatalf("could not select %s", tc.id)
+		}
+		m.enterEdit()
+		if m.edit == nil {
+			t.Fatal("enterEdit did not open the overlay")
+		}
+		if out := frame(m); !strings.Contains(out, tc.cell) {
+			t.Errorf("%s: the repeat row must read %q before the press:\n%s", tc.id, tc.cell, out)
+		}
+		m.edit.menuIdx = int(fieldRepeat)
+		press(m, "enter")
+		if m.edit.stage != stageMenu || !m.statusErr || !strings.Contains(m.status, tc.reason) {
+			t.Errorf("%s: stage=%d statusErr=%v status=%q, want the press refused on the menu naming %q", tc.id, m.edit.stage, m.statusErr, m.status, tc.reason)
+		}
+		if m.inflight || len(m.pending) > 0 || m.b.Task(tc.id).Repeat != "" {
+			t.Errorf("%s: a refused press must write and queue nothing", tc.id)
+		}
+		press(m, "esc")
+	}
+}
+
+// A closed task that somehow carries a rule (no furrow write produces one)
+// still shows it and opens the input, so the drop — furrow's exit 0 —
+// stays reachable; only a non-empty rule is refused there.
+func TestEditRepeatOnAClosedTaskWithARuleStaysClearable(t *testing.T) {
+	closedAt := time.Date(2026, 9, 20, 9, 0, 0, 0, time.UTC)
+	b := board.NewBoard([]*board.Task{
+		{ID: "c", Status: "done", Title: "closed with rule", Priority: 10, Due: closedAt.Add(48 * time.Hour), Closed: closedAt, Repeat: "FREQ=WEEKLY", RepeatAnchor: closedAt},
+	})
+	m := New(memstore.NewWith(b), Options{})
+	m.w, m.h = 240, 50
+	m.recompute()
+	m.relayout()
+	if !m.selectID("c", false) {
+		t.Fatal("could not select c")
+	}
+	m.enterEdit()
+	if out := frame(m); !strings.Contains(out, "FREQ=WEEKLY") || strings.Contains(out, "reopen it first") {
+		t.Errorf("the row must show the rule, not the closed precondition:\n%s", out)
+	}
+	m.edit.menuIdx = int(fieldRepeat)
+	press(m, "enter")
+	if m.edit.stage != stageInput {
+		t.Fatal("the input must open so the rule can be dropped")
+	}
+	m.edit.input.SetValue("daily")
+	press(m, "enter")
+	if !m.statusErr || m.b.Task("c").Repeat != "FREQ=WEEKLY" {
+		t.Errorf("a new rule on a closed task must be refused with the old one kept: status=%q repeat=%q", m.status, m.b.Task("c").Repeat)
+	}
+	m.edit.menuIdx = int(fieldRepeat)
+	press(m, "enter")
+	m.edit.input.SetValue("")
+	press(m, "enter")
+	if m.b.Task("c").Repeat != "" || m.statusErr {
+		t.Errorf("an empty ⏎ must drop the rule on a closed task: status=%q", m.status)
+	}
+	drainPersists(m, t)
 }

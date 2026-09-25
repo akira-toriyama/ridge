@@ -23,7 +23,7 @@ import (
 // unknown-name error and the tests all read this slice, because the list was
 // duplicated in three places and adding two states updated two of them —
 // `ridge -h` then advertised eight of ten.
-var DemoNames = []string{"move", "drag", "add", "adddraft", "edit", "editpick", "editinput", "editdeps", "editrefs", "note", "refs", "graph", "graphall", "map", "mapall", "mapfiltered", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "revisit", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicshut", "epicdone", "epicdoneparked", "epicreopen", "sliceepicall", "sliceepicclosed", "epicnew", "boxes", "boxesall", "roadmapweek", "roadmapmonth", "swim", "swimopen", "swimrepo", "swimall", "views", "viewsroad", "viewsmany", "sweep", "sweepconfirm", "sweeprestore", "sweepwait", "fail", "unlaned", "repeat", "repeatdone", "done", "synced"}
+var DemoNames = []string{"move", "drag", "add", "adddraft", "addrepeat", "edit", "editpick", "editinput", "editrepeat", "editnodue", "editclosed", "editdeps", "editrefs", "note", "refs", "graph", "graphall", "map", "mapall", "mapfiltered", "help", "slice", "sliceepic", "sort", "filter", "filterchips", "revisit", "epicdeps", "epic", "epiclist", "epicreason", "epicconfirm", "epicshut", "epicdone", "epicdoneparked", "epicreopen", "sliceepicall", "sliceepicclosed", "epicnew", "boxes", "boxesall", "roadmapweek", "roadmapmonth", "swim", "swimopen", "swimrepo", "swimall", "views", "viewsroad", "viewsmany", "sweep", "sweepconfirm", "sweeprestore", "sweepwait", "fail", "unlaned", "repeat", "repeatdone", "done", "synced"}
 
 // Options configures a freshly-constructed Model. The zero value is the
 // default TUI: dark palette, board view, no filter.

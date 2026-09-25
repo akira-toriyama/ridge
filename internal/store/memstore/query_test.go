@@ -195,8 +195,9 @@ func TestQueryMatchesFixture(t *testing.T) {
 		{q: "no:label", min: 1},
 		{q: "no:repo", want: []string{"t-dg7k"}}, // exactly the fixture's one draft
 		{q: "is:draft", want: []string{"t-dg7k"}},
-		// Of the fixture's four dues, only t-jv3j (2026-07-31) is past the
-		// pinned clock and still open.
+		// Of the fixture's five dues, two are past the pinned clock and only
+		// t-jv3j (2026-07-31) is still open — t-2qyb (07-17) is closed, and a
+		// closed task is never overdue.
 		{q: "is:overdue", want: []string{"t-jv3j"}},
 	}
 	for _, tc := range tests {
@@ -433,8 +434,8 @@ func TestQueryPresenceVocabularyIsFurrows(t *testing.T) {
 		has, not int
 	}{
 		{"deps", 12, 22},
-		{"refs", 1, all - 1}, // t-9sa6 carries the two documented ref forms
-		{"due", 4, all - 4},
+		{"refs", 1, all - 1},   // t-9sa6 carries the two documented ref forms
+		{"due", 5, all - 5},    // four open promises and t-2qyb, the closed task that kept its due
 		{"repeat", 2, all - 2}, // t-9sa6 weekly, t-ehk7 monthly — the fixture's two rules
 		{"closed", 9, all - 9},
 		{"reviewed", 1, all - 1}, // t-jv3j, the fixture's one review stamp

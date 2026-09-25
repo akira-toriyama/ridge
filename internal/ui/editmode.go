@@ -34,6 +34,7 @@ const (
 	fieldLabels
 	fieldEpic
 	fieldDue
+	fieldRepeat
 	fieldDeps
 	fieldRepos
 	fieldRefs
@@ -57,6 +58,8 @@ func editFieldName(f editField) string {
 		return "epic"
 	case fieldDue:
 		return "due"
+	case fieldRepeat:
+		return "repeat"
 	case fieldDeps:
 		return "deps"
 	case fieldRepos:
@@ -75,6 +78,7 @@ type inputKind int
 const (
 	inputTitle inputKind = iota
 	inputDue
+	inputRepeat
 	inputNewLabel
 	inputNewRepo
 	inputNewRef
@@ -236,6 +240,20 @@ func (m *Model) openField(f editField, t *board.Task) tea.Cmd {
 			cur = t.Due.In(board.Zone()).Format("2006-01-02")
 		}
 		return e.startInput(h, inputDue, cur, "2026-08-04 · +1d · +2h · empty clears")
+	case fieldRepeat:
+		if _, reason := repeatCell(t); reason != "" {
+			// The row already says so; an input that cannot land would only
+			// collect a rule to throw away.
+			m.fail("repeat %s: %s", t.ID, reason)
+			return nil
+		}
+		// Seeded with the stored rule — furrow's compiled RRULE, which its
+		// --repeat reads back as a raw rule line (all 13 spellings
+		// re-measured), so ⏎ on the seed is the re-anchor `--repeat <rule>`
+		// alone performs: the series restarts at the current due. Still
+		// furrow's to judge — an UNTIL the due has since passed is refused
+		// as a spent rule and rolls back like any other.
+		return e.startInput(h, inputRepeat, t.Repeat, "weekly · every 2 weeks on mon,thu · empty clears")
 	case fieldLabels, fieldEpic, fieldDeps, fieldRepos, fieldRefs, fieldChecklist:
 		e.stage = stageList
 		if f == fieldEpic {
@@ -457,7 +475,7 @@ func (m *Model) onEditInputCancel(k inputKind) {
 		m.exitEdit()
 		m.note("note cancelled — nothing appended")
 		return
-	case inputTitle, inputDue:
+	case inputTitle, inputDue, inputRepeat:
 		e.stage = stageMenu
 	default:
 		e.stage = stageList
@@ -481,6 +499,9 @@ func (m *Model) onEditInputCommit(k inputKind, v string, t *board.Task) tea.Cmd 
 	case inputDue:
 		e.stage = stageMenu
 		return m.applyPatch("due", board.FieldPatch{Due: &v})
+	case inputRepeat:
+		e.stage = stageMenu
+		return m.applyPatch("repeat", board.FieldPatch{Repeat: &v})
 	case inputNewLabel:
 		e.stage = stageList
 		if v == "" {
@@ -663,6 +684,8 @@ func inputTitleFor(k inputKind) string {
 		return "retitle"
 	case inputDue:
 		return "due date"
+	case inputRepeat:
+		return "repeat rule — the series counts from the due"
 	case inputNewLabel:
 		return "add label"
 	case inputNewRepo:
@@ -679,6 +702,24 @@ func inputTitleFor(k inputKind) string {
 		return "append note — one paragraph onto the body"
 	}
 	return ""
+}
+
+// repeatCell is the repeat row's value AND its precondition, as epicActiveCell
+// is the active row's: furrow refuses a rule on a task with no due and on a
+// closed task — in that order (measured on v6.0.0: a closed task with no due
+// is answered with the due) — so the row says which applies BEFORE the press,
+// and openField refuses the press on the same ground (reason; "" when the
+// input may open). A closed task carrying a rule — no furrow write produces
+// one, every close route consumes it (re-measured) — still shows the rule
+// and opens: `--clear-repeat` is exit 0 there, so the drop stays reachable.
+func repeatCell(t *board.Task) (cell, reason string) {
+	switch {
+	case t.Due.IsZero():
+		return "— needs a due first", "no due — a rule counts from the first occurrence; set due first"
+	case !t.Closed.IsZero() && t.Repeat == "":
+		return "— closed; reopen it first", "closed, so a rule on it could never fire — reopen it first"
+	}
+	return t.Repeat, ""
 }
 
 func (m *Model) renderEditMenu(t *board.Task, inner int) string {
@@ -705,6 +746,7 @@ func (m *Model) renderEditMenu(t *board.Task, inner int) string {
 	if !t.Due.IsZero() {
 		due = t.Due.In(board.Zone()).Format("2006-01-02")
 	}
+	repeat, _ := repeatCell(t)
 	cd, ct := t.CheckProgress()
 	rows := []menuRow{
 		{editFieldName(fieldTitle), t.Title},
@@ -713,6 +755,7 @@ func (m *Model) renderEditMenu(t *board.Task, inner int) string {
 		{editFieldName(fieldLabels), strings.Join(t.Labels, ",")},
 		{editFieldName(fieldEpic), epicLabel},
 		{editFieldName(fieldDue), due},
+		{editFieldName(fieldRepeat), repeat},
 		{editFieldName(fieldDeps), strings.Join(t.Deps, ",")},
 		{editFieldName(fieldRepos), strings.Join(t.Repos, ",")},
 		// Refs are free text and may carry a comma (furrow #317), so the

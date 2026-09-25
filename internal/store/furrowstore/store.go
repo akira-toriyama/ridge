@@ -645,6 +645,13 @@ func (p *Store) PersistFields(id string, patch board.FieldPatch) error {
 	default:
 		args = append(args, "--due", *patch.Due)
 	}
+	switch {
+	case patch.Repeat == nil:
+	case *patch.Repeat == "":
+		args = append(args, "--clear-repeat")
+	default:
+		args = append(args, "--repeat", *patch.Repeat)
+	}
 	if len(args) > 2 {
 		if _, err := p.c.run("set-fields", args...); err != nil {
 			return err
@@ -1031,6 +1038,9 @@ func (p *Store) Add(title string, o board.AddOptions) (string, error) {
 	}
 	if o.Due != "" {
 		args = append(args, "--due", o.Due)
+	}
+	if o.Repeat != "" {
+		args = append(args, "--repeat", o.Repeat)
 	}
 	for _, d := range o.Deps {
 		args = append(args, "--dep", d)

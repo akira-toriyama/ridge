@@ -239,6 +239,9 @@ func (m *Model) addLayer() *lg.Layer {
 	if tk.due != "" {
 		chips = append(chips, "due "+chipTrunc(tk.due))
 	}
+	if tk.repeat != "" {
+		chips = append(chips, "repeat "+chipTrunc(tk.repeat))
+	}
 	for _, d := range tk.deps {
 		chips = append(chips, "dep "+chipTrunc(d))
 	}
@@ -272,10 +275,18 @@ func (m *Model) addLayer() *lg.Layer {
 	for _, l := range chipWrap("⚠ ", bad, inner) {
 		rows = append(rows, th.danger.Render(l))
 	}
+	// The token vocabulary, wrapped between tokens like the chips: one padded
+	// line clipped its tail at every width the box takes (44..72), and the
+	// tail is where is:draft sat.
+	hint := []string{"inline:", "value:4", "effort:2", "due:+1d", "repeat:weekly", "dep:t-x", `check:"…"`, "ref:…", "is:draft"}
+	var hintRows []string
+	for _, l := range strings.Split(wrapJoin(hint, " ", inner), "\n") {
+		hintRows = append(hintRows, th.dim.Render(pad(l, inner)))
+	}
 
 	return m.overlayLayer("add", "add item",
 		a.input.View()+"\n\n"+
 			strings.Join(rows, "\n")+"\n"+
 			th.dim.Render(pad("⏎ create · esc cancel · ^c quit · more via the edit menu", inner))+"\n"+
-			th.dim.Render(pad("inline: value:4 effort:2 due:+1d dep:t-x check:\"…\" ref:… is:draft", inner)))
+			strings.Join(hintRows, "\n"))
 }

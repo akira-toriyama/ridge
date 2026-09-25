@@ -425,8 +425,10 @@ func TestDemoSortShowsTheSortedTable(t *testing.T) {
 	if !strings.Contains(out, "due "+glyphSortAsc) {
 		t.Error("the sorted header must carry the direction marker")
 	}
+	// t-2qyb: the closed task that kept its due (07-17), ahead of the open
+	// t-jv3j (07-31) — the table sorts every task by the date alone.
 	rows := rowIDs(m)
-	if len(rows) == 0 || rows[0] != "t-jv3j" {
+	if len(rows) == 0 || rows[0] != "t-2qyb" {
 		t.Errorf("due ▲ must put the earliest-dated fixture task first, got %v", rows[:minInt(3, len(rows))])
 	}
 }
