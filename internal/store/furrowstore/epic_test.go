@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -372,4 +373,101 @@ func TestContractEpicDoneAndReopenRoundTrip(t *testing.T) {
 		t.Fatalf("reopening a closed box must work: %v", err)
 	}
 	wantKind(t, p.EpicReopen(id), "validation")
+}
+
+// The decode must keep null and [] apart (board.EpicClose.LeftOpen says why)
+// and map every row field.
+func TestEpicDoneEnvelopeKeepsNullAndEmptyOpenMembersApart(t *testing.T) {
+	decode := func(raw string) epicEnvelope {
+		var env epicEnvelope
+		if err := json.Unmarshal([]byte(raw), &env); err != nil {
+			t.Fatalf("decode %s: %v", raw, err)
+		}
+		return env
+	}
+	if got := decode(`{"changed":["closed"],"open_members":null,"previous":null}`).leftOpen(); got != nil {
+		t.Errorf("null must decode to a nil slice, got %#v", got)
+	}
+	if got := decode(`{"changed":["closed"],"open_members":[],"previous":null}`).leftOpen(); got == nil || len(got) != 0 {
+		t.Errorf("[] must decode to an empty NON-nil slice, got %#v", got)
+	}
+	some := decode(`{"changed":["closed"],"open_members":[{"id":"t-a","title":"残る","status":"backlog","repeat":""},{"id":"t-b","title":"毎週","status":"inbox","repeat":"FREQ=WEEKLY"}],"previous":{"id":"e-p","title":"前の箱"}}`)
+	want := []board.EpicOpenMember{{ID: "t-a", Title: "残る", Status: "backlog"}, {ID: "t-b", Title: "毎週", Status: "inbox", Repeat: "FREQ=WEEKLY"}}
+	if got := some.leftOpen(); !slices.Equal(got, want) {
+		t.Errorf("leftOpen = %+v, want %+v", got, want)
+	}
+	if got := some.previous(); got != (board.EpicPrevious{ID: "e-p", Title: "前の箱"}) {
+		t.Errorf("previous = %+v", got)
+	}
+}
+
+// The disclosure against the real CLI (furrow #338): open_members is the
+// members in a NON-terminal lane — a parked (icebox / waiting) member and a
+// done one predate the close and are not left behind — in furrow's read order
+// (lane, priority, id), with the repeat rule on the wire ("" for a member that
+// does not recur). The set ridge's gate counts BEFORE the close
+// (Board.OpenMembers) must be the same set, and a box with nothing left
+// answers [], not null.
+//
+// bite-exempt: execs a real furrow binary and always skips where furrow is not
+// on PATH — which is CI, so the gate can never judge it there
+func TestContractEpicDoneDisclosesTheMembersLeftOpen(t *testing.T) {
+	p, dir := newLabProvider(t)
+	id := labEpic(t, dir, "開いたまま閉じる箱", "lab/lab")
+	open := labAdd(t, dir, "残る一枚", "-e", id, "-s", "backlog")
+	wip := labAdd(t, dir, "進行中の一枚", "-e", id, "-s", "in-progress")
+	recur := labAdd(t, dir, "毎週の一枚", "-e", id, "--repeat", "weekly", "--due", "2026-10-02")
+	labAdd(t, dir, "凍った一枚", "-e", id, "-s", "icebox")
+	parked := labAdd(t, dir, "待つ一枚", "-e", id)
+	lab(t, dir, "furrow", "set", parked, "-s", "waiting")
+	fin := labAdd(t, dir, "済んだ一枚", "-e", id)
+	lab(t, dir, "furrow", "done", fin)
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	b := p.Board()
+	for _, lane := range []string{"waiting", "done", "icebox"} {
+		if l := b.Lane(lane); l == nil || !l.Terminal {
+			t.Errorf("lane %s must be terminal on a default store, got %+v", lane, l)
+		}
+	}
+	gate := []string{}
+	for _, tk := range b.OpenMembers(id) {
+		gate = append(gate, tk.ID)
+	}
+	slices.Sort(gate)
+
+	res, err := p.EpicDone(id)
+	if err != nil {
+		t.Fatalf("epic done: %v", err)
+	}
+	got := make([]string, 0, len(res.LeftOpen))
+	for _, m := range res.LeftOpen {
+		got = append(got, m.ID+":"+m.Status)
+	}
+	// inbox (the recurring one lands in the default lane) < backlog < in-progress.
+	want := []string{recur + ":inbox", open + ":backlog", wip + ":in-progress"}
+	if !slices.Equal(got, want) {
+		t.Errorf("open_members = %v, want %v — the parked and done members predate the close", got, want)
+	}
+	disclosed := []string{}
+	for _, m := range res.LeftOpen {
+		disclosed = append(disclosed, m.ID)
+		if (m.Repeat != "") != (m.ID == recur) {
+			t.Errorf("%s repeat = %q; only %s recurs", m.ID, m.Repeat, recur)
+		}
+	}
+	slices.Sort(disclosed)
+	if !slices.Equal(gate, disclosed) {
+		t.Errorf("the gate counted %v but furrow disclosed %v — the two sets must be one", gate, disclosed)
+	}
+
+	empty := labEpic(t, dir, "空の箱", "lab/lab")
+	res, err = p.EpicDone(empty)
+	if err != nil {
+		t.Fatalf("epic done on an empty box: %v", err)
+	}
+	if res.LeftOpen == nil || len(res.LeftOpen) != 0 {
+		t.Errorf("an empty box must answer [] (none), got %#v — nil is reserved for an unreadable board", res.LeftOpen)
+	}
 }

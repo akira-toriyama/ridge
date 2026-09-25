@@ -191,7 +191,9 @@ func (e epicJSON) toEpicInfo() board.EpicInfo {
 var wipDefaults = map[string]int{"ready": 2, "in-progress": 1}
 
 // load runs the three reads concurrently — lane vocabulary, every task
-// (drafts included: that needs the empty -r), every epic OPEN OR CLOSED (that
+// (the empty -r lifts the repo scope: drafts are in, and Board.OpenMembers
+// counts the same board-wide population furrow's open_members reads), every
+// epic OPEN OR CLOSED (that
 // needs --all, and it is why board.Board carries two epic populations rather
 // than one) — and assembles a
 // Board. Measured on the real 914-task store: 63-77ms wall warm, 181ms cold,
@@ -336,10 +338,11 @@ func lanesFrom(cfg boardJSON) []board.Lane {
 	lanes := make([]board.Lane, 0, len(cfg.Lanes))
 	for _, name := range cfg.Lanes {
 		lanes = append(lanes, board.Lane{
-			Name: name,
-			Next: inNext[name] && !inTerminal[name],
-			Done: name == cfg.DoneLane,
-			WIP:  wipDefaults[name],
+			Name:     name,
+			Next:     inNext[name] && !inTerminal[name],
+			Done:     name == cfg.DoneLane,
+			Terminal: inTerminal[name],
+			WIP:      wipDefaults[name],
 		})
 	}
 	return lanes
@@ -670,13 +673,45 @@ func (p *Store) PersistDepRm(id, dep string) error {
 // them is a green local test and a red contract job.
 
 // epicEnvelope is the {before,after,changed} reply every epic mutation answers
-// with. Only `previous` is read: `after` would be a second, narrower source of
-// truth for a board the next reload re-reads in full anyway.
+// with. Only `previous` and `open_members` are read: `after` would be a
+// second, narrower source of truth for a board the next reload re-reads in
+// full anyway.
 type epicEnvelope struct {
 	Previous *struct {
 		ID    string `json:"id"`
 		Title string `json:"title"`
 	} `json:"previous"`
+	// open_members rides `epic done`'s reply alone (furrow #338, v6.0.0):
+	// null decodes to a nil slice and [] to an empty one, which is the
+	// distinction board.EpicClose.LeftOpen is documented to carry.
+	OpenMembers []epicOpenMemberJSON `json:"open_members"`
+}
+
+// epicOpenMemberJSON is one open_members row. repeat is "" for a member that
+// does not recur, never absent.
+type epicOpenMemberJSON struct {
+	ID     string `json:"id"`
+	Title  string `json:"title"`
+	Status string `json:"status"`
+	Repeat string `json:"repeat"`
+}
+
+func (env epicEnvelope) previous() board.EpicPrevious {
+	if env.Previous == nil {
+		return board.EpicPrevious{}
+	}
+	return board.EpicPrevious{ID: env.Previous.ID, Title: env.Previous.Title}
+}
+
+func (env epicEnvelope) leftOpen() []board.EpicOpenMember {
+	if env.OpenMembers == nil {
+		return nil
+	}
+	out := make([]board.EpicOpenMember, len(env.OpenMembers))
+	for i, m := range env.OpenMembers {
+		out[i] = board.EpicOpenMember{ID: m.ID, Title: m.Title, Status: m.Status, Repeat: m.Repeat}
+	}
+	return out
 }
 
 // EpicAdd creates a box via `furrow epic add` (board.Provider). The reply is
@@ -761,16 +796,24 @@ func (p *Store) EpicActivate(id, reason string) error {
 // EpicDeactivate steps away from the box via `furrow epic deactivate` and
 // returns furrow's previous-active suggestion (board.Provider).
 func (p *Store) EpicDeactivate(id string) (board.EpicPrevious, error) {
-	return p.epicVacate("epic-deactivate", "deactivate", id)
+	env, err := p.epicVacate("epic-deactivate", "deactivate", id)
+	if err != nil {
+		return board.EpicPrevious{}, err
+	}
+	return env.previous(), nil
 }
 
 // EpicDone closes the box via `furrow epic done` and returns furrow's
-// previous-active suggestion (board.Provider). Closing an ACTIVE box vacates
-// the slot in the SAME write (measured on v5.0.0: changed = [active closed]),
-// which is why this answers the envelope `deactivate` answers rather than a
-// bare error.
-func (p *Store) EpicDone(id string) (board.EpicPrevious, error) {
-	return p.epicVacate("epic-done", "done", id)
+// previous-active suggestion and its open_members disclosure
+// (board.Provider). Closing an ACTIVE box vacates the slot in the SAME write
+// (measured on v5.0.0: changed = [active closed]), which is why this answers
+// the envelope `deactivate` answers rather than a bare error.
+func (p *Store) EpicDone(id string) (board.EpicClose, error) {
+	env, err := p.epicVacate("epic-done", "done", id)
+	if err != nil {
+		return board.EpicClose{}, err
+	}
+	return board.EpicClose{Previous: env.previous(), LeftOpen: env.leftOpen()}, nil
 }
 
 // EpicReopen clears the closing stamp via `furrow epic reopen`
@@ -783,22 +826,19 @@ func (p *Store) EpicReopen(id string) error {
 }
 
 // epicVacate runs one of the two verbs that can give up the active slot —
-// `deactivate` and `done` — and decodes furrow's previous-active suggestion.
-// An absent `previous` is furrow answering that its activation log decides
-// nobody, which is a legitimate answer and not a failure.
-func (p *Store) epicVacate(op, verb, id string) (board.EpicPrevious, error) {
+// `deactivate` and `done` — and decodes the envelope. An absent `previous` is
+// furrow answering that its activation log decides nobody, which is a
+// legitimate answer and not a failure.
+func (p *Store) epicVacate(op, verb, id string) (epicEnvelope, error) {
 	out, err := p.c.run(op, "epic", verb, id, "--json")
 	if err != nil {
-		return board.EpicPrevious{}, err
+		return epicEnvelope{}, err
 	}
 	var env epicEnvelope
 	if err := json.Unmarshal(out, &env); err != nil {
-		return board.EpicPrevious{}, fmt.Errorf("furrow epic %s: undecodable envelope: %v", verb, err)
+		return epicEnvelope{}, fmt.Errorf("furrow epic %s: undecodable envelope: %v", verb, err)
 	}
-	if env.Previous == nil {
-		return board.EpicPrevious{}, nil
-	}
-	return board.EpicPrevious{ID: env.Previous.ID, Title: env.Previous.Title}, nil
+	return env, nil
 }
 
 // EpicDepAdd makes id wait on dep via `furrow epic dep` (board.Provider).

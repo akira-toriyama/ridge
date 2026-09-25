@@ -628,7 +628,9 @@ func (p *Store) EpicDeactivate(id string) (board.EpicPrevious, error) {
 // EpicDone stamps the box closed and drops the active flag with it, because
 // furrow does both in the one write and a box that is closed AND active is a
 // board furrow cannot produce (board.Provider). It names no previous box, for
-// the reason EpicDeactivate names none.
+// the reason EpicDeactivate names none; it does disclose the members left
+// open (leftOpen), because a gate that says "3 still open" and a landing note
+// that says nothing would leave the fixture unable to draw the disclosure.
 //
 // It also settles every OTHER box's wait on it, which is the rule EpicDepRm
 // already follows: OpenDeps is furrow-derived and never RECOMPUTED here, but
@@ -639,9 +641,9 @@ func (p *Store) EpicDeactivate(id string) (board.EpicPrevious, error) {
 // prose is not this store's job (see the family comment above); the states it
 // does keep out are the ones furrow could not produce, and a re-stamped
 // closing time is not one of those.
-func (p *Store) EpicDone(id string) (board.EpicPrevious, error) {
+func (p *Store) EpicDone(id string) (board.EpicClose, error) {
 	if err := p.gate(); err != nil {
-		return board.EpicPrevious{}, err
+		return board.EpicClose{}, err
 	}
 	err := p.editEpicSet(func(epics []board.EpicInfo) error {
 		target := indexEpic(epics, id)
@@ -655,7 +657,41 @@ func (p *Store) EpicDone(id string) (board.EpicPrevious, error) {
 		}
 		return nil
 	})
-	return board.EpicPrevious{}, err
+	if err != nil {
+		return board.EpicClose{}, err
+	}
+	return board.EpicClose{LeftOpen: p.leftOpen(id)}, nil
+}
+
+// leftOpen is the disclosure `furrow epic done --json` answers with
+// (open_members): the box's members still in a non-terminal lane, in the
+// order furrow's epic_open_members.go states — lane, priority, id, with a
+// status naming no lane ranked after every lane (core/marshal.go
+// laneRankOf). Never nil: the fixture can always read its own board, and nil
+// is the wire's "could not read" (board.EpicClose).
+func (p *Store) leftOpen(id string) []board.EpicOpenMember {
+	b := p.snapshot()
+	members := b.OpenMembers(id)
+	rank := func(status string) int {
+		if i := b.LaneIndex(status); i >= 0 {
+			return i
+		}
+		return len(b.Lanes())
+	}
+	slices.SortFunc(members, func(x, y *board.Task) int {
+		if lx, ly := rank(x.Status), rank(y.Status); lx != ly {
+			return lx - ly
+		}
+		if x.Priority != y.Priority {
+			return x.Priority - y.Priority
+		}
+		return strings.Compare(x.ID, y.ID)
+	})
+	out := make([]board.EpicOpenMember, 0, len(members))
+	for _, t := range members {
+		out = append(out, board.EpicOpenMember{ID: t.ID, Title: t.Title, Status: t.Status, Repeat: t.Repeat})
+	}
+	return out
 }
 
 // EpicReopen clears the closing stamp (board.Provider). The box comes back

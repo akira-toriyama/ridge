@@ -83,8 +83,8 @@ func (p *liveQueryProvider) EpicDeactivate(string) (board.EpicPrevious, error) {
 	return board.EpicPrevious{}, nil
 }
 
-func (p *liveQueryProvider) EpicDone(string) (board.EpicPrevious, error) {
-	return board.EpicPrevious{}, nil
+func (p *liveQueryProvider) EpicDone(string) (board.EpicClose, error) {
+	return board.EpicClose{}, nil
 }
 func (p *liveQueryProvider) EpicReopen(string) error { return nil }
 

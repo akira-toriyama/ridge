@@ -286,9 +286,8 @@ func (m *Model) noteEpicStage() {
 			// furrow closes a box with open members at exit 0, so this line is
 			// the ONLY thing standing between one keystroke and a box closed
 			// over live work.
-			left := box.Total - box.Done
-			m.note("close %s — %d/%d done, %d still open · ⏎ confirms · esc backs out",
-				e.id, box.Done, box.Total, left)
+			m.note("close %s — %d/%d done, %s · ⏎ confirms · esc backs out",
+				e.id, box.Done, box.Total, stillOpen(len(m.b.OpenMembers(e.id)), len(m.b.ParkedMembers(e.id))))
 		}
 	case e.stage == stageGate:
 		m.note("box %s · %s — ⏎ confirms · esc backs out", e.id, epicFieldName(e.field))
@@ -579,17 +578,74 @@ func (m *Model) commitEpicConfirm(box *board.EpicInfo) tea.Cmd {
 		// actually held the slot. furrow answers `previous` either way
 		// (measured: closing an INACTIVE box still names one), and "where to
 		// return" for a slot nobody gave up is an instruction about nothing.
+		// The disclosure of what the close left open always rides along: it
+		// is the only place the gate's count is confirmed by the store.
 		wasActive := box.Active
-		suggestion := new(string)
-		return m.epicWriteNoting("epic done "+id, suggestion, func(p board.Provider) error {
-			prev, err := p.EpicDone(id)
-			if err == nil && wasActive && prev.ID != "" {
-				*suggestion = "previous: " + prev.ID + " " + prev.Title
+		note := new(string)
+		return m.epicWriteNoting("epic done "+id, note, func(p board.Provider) error {
+			res, err := p.EpicDone(id)
+			if err != nil {
+				return err
 			}
-			return err
+			var parts []string
+			if wasActive && res.Previous.ID != "" {
+				parts = append(parts, "previous: "+res.Previous.ID+" "+res.Previous.Title)
+			}
+			*note = strings.Join(append(parts, leftOpenLine(res.LeftOpen)), " · ")
+			return nil
 		})
 	}
 	return nil
+}
+
+// stillOpen words the close gate's count: the members furrow will disclose
+// as open_members (Board.OpenMembers) and, when there are any, the ones
+// parked in a terminal lane other than done. With done in the terminal set
+// (furrow's default; the set is the board's to configure) done + open +
+// parked is the total beside it. Total − Done was the old count, and it
+// called a parked member open (t-321c).
+func stillOpen(open, parked int) string {
+	s := fmt.Sprintf("%d still open", open)
+	if parked > 0 {
+		s += fmt.Sprintf(", %d parked", parked)
+	}
+	return s
+}
+
+// leftOpenLine is the landing note's disclosure, from furrow's open_members
+// (board.EpicClose.LeftOpen — nil is its "could not read", never rendered as
+// none); a recurring member is named because its epic-closed warning does
+// not clear on its own. Both id lists are capped so a box closed over a long
+// tail stays legible; the status line's own width truncation is the hard
+// limit.
+func leftOpenLine(left []board.EpicOpenMember) string {
+	const shown = 6
+	switch {
+	case left == nil:
+		return "left open: unknown — furrow could not read the board after the close"
+	case len(left) == 0:
+		return "nothing left open"
+	}
+	var ids, recur []string
+	for _, mbr := range left {
+		ids = append(ids, mbr.ID)
+		if mbr.Repeat != "" {
+			recur = append(recur, mbr.ID)
+		}
+	}
+	s := fmt.Sprintf("left open %d: %s", len(left), firstIDs(ids, shown))
+	if len(recur) > 0 {
+		s += fmt.Sprintf(" — %d recur (%s): each close mints the successor under this closed box until it is re-filed",
+			len(recur), firstIDs(recur, shown))
+	}
+	return s
+}
+
+func firstIDs(ids []string, shown int) string {
+	if len(ids) <= shown {
+		return strings.Join(ids, ", ")
+	}
+	return fmt.Sprintf("%s +%d more", strings.Join(ids[:shown], ", "), len(ids)-shown)
 }
 
 // epicPatch funnels every `epic set`-shaped write.
@@ -815,11 +871,17 @@ func (m *Model) renderEpicConfirm(box *board.EpicInfo, inner int) string {
 		}
 		hdr = "close this box"
 		// furrow closes a box with open members at exit 0 (measured on
-		// v5.0.0), so this count is the entire warning that exists. Saying the
+		// v5.0.0), so this count is the entire warning that exists, and it is
+		// furrow's own set (Board.OpenMembers), not Total − Done. Saying the
 		// way back in the same breath is what keeps the gate a gate rather
 		// than a scare.
-		detail = fmt.Sprintf("%d/%d done — %d still open under it. furrow closes it anyway. The way back is this same row, which reads `reopen` once it is closed.",
-			box.Done, box.Total, box.Total-box.Done)
+		open, parked := len(m.b.OpenMembers(box.ID)), len(m.b.ParkedMembers(box.ID))
+		parkedNote := ""
+		if parked > 0 {
+			parkedNote = fmt.Sprintf(", and %d parked in a terminal lane other than done (furrow counts those as settled)", parked)
+		}
+		detail = fmt.Sprintf("%d/%d done — %d still open under it%s. furrow closes it anyway. The way back is this same row, which reads `reopen` once it is closed.",
+			box.Done, box.Total, open, parkedNote)
 		if box.Active {
 			detail += " This is the ACTIVE box: closing vacates its repo slot too."
 		}

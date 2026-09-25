@@ -163,15 +163,17 @@ type Provider interface {
 	EpicDeactivate(id string) (EpicPrevious, error)
 
 	// EpicDone closes the box, and vacates the active slot with it when the box
-	// held one — furrow does both in the one write, so this answers the same
-	// "where to return" suggestion EpicDeactivate does. It is not a one-way
-	// door: the read serves closed boxes, so the box stays on the board for
-	// EpicReopen to name.
+	// held one — furrow does both in the one write, so the answer carries the
+	// same "where to return" suggestion EpicDeactivate does, and with it
+	// furrow's disclosure of the members the close left open (EpicClose). It
+	// is not a one-way door: the read serves closed boxes, so the box stays on
+	// the board for EpicReopen to name.
 	//
 	// furrow does NOT refuse a box with open members. Closing one is a
-	// judgement, not an error, so the caller owes the user the progress before
-	// the keystroke rather than trusting a refusal that will not come.
-	EpicDone(id string) (EpicPrevious, error)
+	// judgement, not an error, so the caller owes the user the count before
+	// the keystroke (Board.OpenMembers, the same set furrow discloses after)
+	// rather than trusting a refusal that will not come.
+	EpicDone(id string) (EpicClose, error)
 
 	// EpicReopen clears the closing stamp. The box comes back OPEN and
 	// INACTIVE: furrow refuses to chain reopening to activating, and ridge must
@@ -302,6 +304,30 @@ func (p EpicPatch) Empty() bool {
 type EpicPrevious struct {
 	ID    string
 	Title string
+}
+
+// EpicClose is what `furrow epic done --json` answers beyond its verdict.
+type EpicClose struct {
+	// Previous is the where-to-return suggestion, as EpicDeactivate answers it.
+	Previous EpicPrevious
+	// LeftOpen is furrow's open_members: the members still in a non-terminal
+	// lane when the box closed, in furrow's read order. A nil slice is the
+	// wire's null — furrow could not read the board after the write — and the
+	// caller says it could not look; an empty non-nil slice is the answer
+	// "none". The two stay apart because an unreadable board rendered as
+	// "nothing left open" is a false all-clear.
+	LeftOpen []EpicOpenMember
+}
+
+// EpicOpenMember is one member a close left behind. Repeat is its recurrence
+// rule, "" when it does not recur: closing a repeating member mints the next
+// occurrence under the same CLOSED box, so its epic-closed warning returns
+// every cycle until the live occurrence is re-filed.
+type EpicOpenMember struct {
+	ID     string
+	Title  string
+	Status string
+	Repeat string
 }
 
 // AddOptions is quick add's inherited context — the GitHub Projects rule

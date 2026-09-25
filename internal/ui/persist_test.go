@@ -36,6 +36,9 @@ type scriptedProvider struct {
 	epicFailAt int
 	epicCalls  int
 	epicPrev   board.EpicPrevious
+	// epicLeft is what EpicDone discloses as left open. nil = the "could not
+	// read" answer, which is what an unscripted close answers with.
+	epicLeft []board.EpicOpenMember
 	// repeat is the series report a close answers with — PersistDone's, and
 	// PersistMove's when the lane is done (`set -s done` closes too). nil =
 	// the task carried no rule, which is every task unless a test says so.
@@ -204,12 +207,13 @@ func (p *scriptedProvider) EpicDeactivate(id string) (board.EpicPrevious, error)
 }
 
 // The lifecycle pair rides the same script: done answers the previous-active
-// suggestion the way deactivate does, reopen answers nothing but the verdict.
-func (p *scriptedProvider) EpicDone(id string) (board.EpicPrevious, error) {
+// suggestion the way deactivate does plus the scripted disclosure, reopen
+// answers nothing but the verdict.
+func (p *scriptedProvider) EpicDone(id string) (board.EpicClose, error) {
 	if err := p.epicCall("epicdone " + id); err != nil {
-		return board.EpicPrevious{}, err
+		return board.EpicClose{}, err
 	}
-	return p.epicPrev, nil
+	return board.EpicClose{Previous: p.epicPrev, LeftOpen: p.epicLeft}, nil
 }
 
 func (p *scriptedProvider) EpicReopen(id string) error {

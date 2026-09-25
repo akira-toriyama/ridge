@@ -125,6 +125,7 @@ func TestDemoRefusalNamesTheMissingShape(t *testing.T) {
 		{"epicdeps", "filed under a box"},
 		{"epic", "inactive box"},
 		{"epicconfirm", "is active"},
+		{"epicdoneparked", "parked in a terminal lane"},
 		{"epicshut", "is closed"},
 		{"boxesall", "is closed"},
 		{"slice", "carries a label"},

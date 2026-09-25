@@ -131,7 +131,10 @@ type Lane struct {
 	Name string
 	Next bool // one of the lanes `furrow next` considers
 	Done bool
-	WIP  int // 0 = unset. RENDERED, never enforced — GitHub Projects parity.
+	// Terminal is furrow's own `terminal` set (board --json): settled, not
+	// open. IsTerminal reads it.
+	Terminal bool
+	WIP      int // 0 = unset. RENDERED, never enforced — GitHub Projects parity.
 }
 
 // DisplayName is the lane as a HUMAN reads it — "In progress", not the
@@ -152,8 +155,8 @@ var boardLanes = []Lane{
 	{Name: "backlog"},
 	{Name: "ready", Next: true, WIP: 2},
 	{Name: "in-progress", Next: true, WIP: 1},
-	{Name: "done", Done: true},
-	{Name: "icebox"},
+	{Name: "done", Done: true, Terminal: true},
+	{Name: "icebox", Terminal: true},
 }
 
 // EpicInfo is one epic entity as `furrow epic ls --json` reports it. Epics
@@ -176,6 +179,11 @@ var boardLanes = []Lane{
 //     it anyway would still be wrong: it would be a SECOND rule, kept in step
 //     with `furrow epic dep --list` by nothing but attention. The fixture
 //     tests assert the equivalence; the code does not implement it.
+//     The one derivation kept is Board.OpenMembers: furrow computes the open
+//     count (epicStats.Open) but serves it on no read, and the close gate
+//     needs it BEFORE the write, so a contract test — not attention — holds
+//     it to furrow's open_members. A furrow read serving `open` would retire
+//     it.
 //   - Closed — the closing stamp, zero for an open box.
 //
 // The read is `epic ls --all`, so the CLOSED population is on the board too.
@@ -571,6 +579,43 @@ func (b *Board) DoneLane() string {
 		}
 	}
 	return ""
+}
+
+// IsTerminal reports whether status names a terminal lane (Lane.Terminal). A
+// status naming no lane is NOT terminal — furrow answers the same way, its
+// IsTerminal being a lookup in the configured set — so an unlaned member
+// counts as open below, exactly as `furrow epic done` would disclose it.
+func (b *Board) IsTerminal(status string) bool {
+	l := b.Lane(status)
+	return l != nil && l.Terminal
+}
+
+// OpenMembers is the box's members still in a non-terminal lane, unordered
+// like Tasks(): the set `furrow epic done --json` discloses as open_members
+// after the write and `furrow lint` warns epic-closed for, read here BEFORE
+// the close so the gate can count it. Total − Done is not this number: a
+// member parked in a terminal lane other than done is neither (t-321c).
+func (b *Board) OpenMembers(epicID string) []*Task {
+	var out []*Task
+	for _, t := range b.tasks {
+		if t.Epic == epicID && !b.IsTerminal(t.Status) {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// ParkedMembers is the box's members in a terminal lane other than done —
+// settled by furrow's count and not open by OpenMembers, so a gate can name
+// them instead of showing a number that does not add up.
+func (b *Board) ParkedMembers(epicID string) []*Task {
+	var out []*Task
+	for _, t := range b.tasks {
+		if t.Epic == epicID && b.IsTerminal(t.Status) && !b.isDoneLane(t.Status) {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // enterLane switches t into dst and stamps what the switch means. Priority

@@ -82,8 +82,8 @@ func (p *emptyProvider) EpicDeactivate(string) (board.EpicPrevious, error) {
 	return board.EpicPrevious{}, nil
 }
 
-func (p *emptyProvider) EpicDone(string) (board.EpicPrevious, error) {
-	return board.EpicPrevious{}, nil
+func (p *emptyProvider) EpicDone(string) (board.EpicClose, error) {
+	return board.EpicClose{}, nil
 }
 func (p *emptyProvider) EpicReopen(string) error { return nil }
 func (p *emptyProvider) Add(string, board.AddOptions) (string, error) {
