@@ -842,6 +842,12 @@ func TestLanesFromDropsTerminalLanesFromNext(t *testing.T) {
 	if got["inbox"].Next || got["icebox"].Next {
 		t.Errorf("lanes outside next_lanes stay non-next: %+v", lanes)
 	}
+	// Terminal is the board JSON's terminal set verbatim — the set the close
+	// gate's OpenMembers reads, so it must be neither wider (done only) nor
+	// narrower than what furrow's own IsTerminal answers.
+	if !got["done"].Terminal || !got["icebox"].Terminal || got["ready"].Terminal || got["inbox"].Terminal || got["in-progress"].Terminal {
+		t.Errorf("Terminal must mirror terminal exactly: %+v", lanes)
+	}
 }
 
 // furrow #331 (board layout v10): a task carries a repeat rule, and closing

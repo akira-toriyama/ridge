@@ -502,6 +502,23 @@ func (m *Model) demoState(kind string) error {
 			_ = c
 		}
 
+	case "epicdoneparked":
+		// The close gate on a box with a PARKED member — one in a terminal
+		// lane other than done. Total − Done counted it as open; furrow's
+		// open_members does not (t-321c), and the active box has no such
+		// member, so epicdone alone could not show the count skipping one.
+		box, err := m.demoParkedBox("epicdoneparked")
+		if err != nil {
+			return err
+		}
+		if err := m.demoEpicPanel("epicdoneparked", box.ID); err != nil {
+			return err
+		}
+		m.epic.menuIdx = int(epicFieldClosed)
+		if c := m.openEpicField(epicFieldClosed, m.b.Epic(m.epic.id)); c != nil {
+			_ = c
+		}
+
 	case "epicreopen":
 		// The same row on the CLOSED box, which is the other verb and the
 		// other wording. Reaching it needs the widened scope, which is the
@@ -1154,6 +1171,15 @@ func (m *Model) demoRichBox(demo string) (board.EpicInfo, error) {
 // close gate's "vacates its repo slot" clause are reachable on.
 func (m *Model) demoActiveBox(demo string) (board.EpicInfo, error) {
 	return m.demoBox(demo, "is active", func(e board.EpicInfo) bool { return e.Active })
+}
+
+// demoParkedBox is an open box with a member parked in a terminal lane other
+// than done — the shape on which the close gate's count and Total − Done
+// disagree.
+func (m *Model) demoParkedBox(demo string) (board.EpicInfo, error) {
+	return m.demoBox(demo, "is an open box with a member parked in a terminal lane other than done", func(e board.EpicInfo) bool {
+		return e.Closed.IsZero() && len(m.b.ParkedMembers(e.ID)) > 0
+	})
 }
 
 // demoClosedBox is the closed box the overlay has the most to show on — the

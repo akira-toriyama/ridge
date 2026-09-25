@@ -332,12 +332,12 @@ func TestEpicDoneClosesTheBoxAndSettlesTheWaitsOnIt(t *testing.T) {
 		t.Fatal("the fixture's e-fw2m must start ACTIVE — this test is about the slot")
 	}
 
-	prev, err := p.EpicDone("e-fw2m")
+	res, err := p.EpicDone("e-fw2m")
 	if err != nil {
 		t.Fatalf("epic done: %v", err)
 	}
-	if prev.ID != "" {
-		t.Errorf("previous = %+v, want the zero value — the fixture keeps no activation log", prev)
+	if res.Previous.ID != "" {
+		t.Errorf("previous = %+v, want the zero value — the fixture keeps no activation log", res.Previous)
 	}
 	box := fixtureBox(t, p, "e-fw2m")
 	if box.Closed.IsZero() {
@@ -383,5 +383,57 @@ func TestEpicReopenRevivesTheBoxButNotItsSlot(t *testing.T) {
 	}
 	if p.Board().Epic("e-2b7h") == nil {
 		t.Error("the OTHER closed box must survive an epic write — the set is rebuilt from EpicsAll")
+	}
+}
+
+// The fixture's disclosure is the set the gate counts — non-terminal members —
+// in furrow's read order (lane, priority, id). e-p3dx holds a done and an
+// icebox member that Total − Done would call open, and the reserved box holds
+// nothing, so one test covers "some" and "none" ([] not nil).
+func TestEpicDoneDisclosesTheNonTerminalMembersInLaneOrder(t *testing.T) {
+	p := New()
+	if box := fixtureBox(t, p, "e-p3dx"); box.Total-box.Done != 4 {
+		t.Fatalf("premise: e-p3dx must be 1/5 so Total − Done (4) differs from the open count, got %d/%d", box.Done, box.Total)
+	}
+	res, err := p.EpicDone("e-p3dx")
+	if err != nil {
+		t.Fatalf("epic done: %v", err)
+	}
+	got := make([]string, 0, len(res.LeftOpen))
+	for _, m := range res.LeftOpen {
+		got = append(got, m.ID+":"+m.Status)
+	}
+	want := []string{"t-m4kz:backlog", "t-kv82:in-progress", "t-w3np:in-progress"}
+	if !slices.Equal(got, want) {
+		t.Errorf("left open = %v, want %v — t-phgp (done) and t-q8dn (icebox) predate the close", got, want)
+	}
+	res, err = p.EpicDone("e-7q1m")
+	if err != nil {
+		t.Fatalf("epic done on the memberless box: %v", err)
+	}
+	if res.LeftOpen == nil || len(res.LeftOpen) != 0 {
+		t.Errorf("a memberless box must answer [] (none), got %#v", res.LeftOpen)
+	}
+}
+
+// A member whose status names no lane is open (furrow's IsTerminal is a set
+// lookup) and sorts AFTER every lane, as furrow's laneRankOf ranks it — not
+// first, which is where a raw LaneIndex of −1 would put it.
+func TestEpicDoneRanksAnUnlanedMemberLast(t *testing.T) {
+	p := NewWith(board.NewBoard([]*board.Task{
+		{ID: "t-odd", Title: "棚の外", Status: "someday", Priority: 10, Epic: "e-box"},
+		{ID: "t-late", Title: "後ろの列", Status: "in-progress", Priority: 10, Epic: "e-box"},
+		{ID: "t-early", Title: "前の列", Status: "backlog", Priority: 10, Epic: "e-box"},
+	}, board.EpicInfo{ID: "e-box", Title: "箱", Total: 3}))
+	res, err := p.EpicDone("e-box")
+	if err != nil {
+		t.Fatalf("epic done: %v", err)
+	}
+	got := make([]string, 0, 3)
+	for _, m := range res.LeftOpen {
+		got = append(got, m.ID)
+	}
+	if want := []string{"t-early", "t-late", "t-odd"}; !slices.Equal(got, want) {
+		t.Errorf("left open = %v, want %v", got, want)
 	}
 }

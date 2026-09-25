@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -1074,6 +1075,15 @@ func TestEpicDemoFramesCarryWhatTheyExistFor(t *testing.T) {
 		// panel (found by review).
 		{"epicdone", []string{"box e-fw2m", "close this box", "12 still open under it",
 			"reads `reopen` once it is closed", "vacates its repo slot"}},
+		// The same gate on a box with a PARKED member: the count is furrow's
+		// open_members set, so the icebox member is named as parked and NOT
+		// folded into "still open" the way Total − Done (4) would (t-321c).
+		// The last string is the status line's, pinned here on purpose: the
+		// note is worded by stillOpen, the panel by its own format, and a
+		// note reverted to Total − Done stayed green under the body strings
+		// alone (found by review).
+		{"epicdoneparked", []string{"box e-p3dx", "close this box", "3 still open under it",
+			"and 1 parked in a terminal lane other", "close e-p3dx — 1/5 done, 3 still open, 1 parked"}},
 		// The other verb on the same row, and the only frames that reach a
 		// CLOSED box at all — which takes the widened epic axis to find.
 		{"epicreopen", []string{"box e-2b7h", "reopen this box",
@@ -1115,4 +1125,59 @@ func scriptedEpicBoard() *board.Board {
 		board.EpicInfo{ID: "e-shut", Title: "閉じた箱", Repos: []string{"lab/lab"},
 			Closed: time.Date(2026, 7, 15, 9, 12, 7, 0, time.UTC)},
 	)
+}
+
+// The landing note's disclosure keeps furrow's three answers apart — nil
+// (could not read) is never rendered as "none" — names the recurring member,
+// and caps the id list so a long tail still fits one status line.
+func TestLeftOpenLineKeepsUnknownNoneAndSomeApart(t *testing.T) {
+	long := make([]board.EpicOpenMember, 8)
+	for i := range long {
+		long[i] = board.EpicOpenMember{ID: fmt.Sprintf("t-%d", i), Status: "backlog"}
+	}
+	long[7].Repeat = "FREQ=WEEKLY"
+	allRecur := make([]board.EpicOpenMember, 8)
+	for i := range allRecur {
+		allRecur[i] = board.EpicOpenMember{ID: fmt.Sprintf("t-%d", i), Status: "inbox", Repeat: "FREQ=WEEKLY"}
+	}
+	cases := []struct {
+		name string
+		left []board.EpicOpenMember
+		want string
+	}{
+		{"unreadable", nil, "left open: unknown — furrow could not read the board after the close"},
+		{"none", []board.EpicOpenMember{}, "nothing left open"},
+		{"some, one recurring", []board.EpicOpenMember{
+			{ID: "t-a", Status: "backlog"}, {ID: "t-b", Status: "inbox", Repeat: "FREQ=WEEKLY"},
+		}, "left open 2: t-a, t-b — 1 recur (t-b): each close mints the successor under this closed box until it is re-filed"},
+		{"capped", long, "left open 8: t-0, t-1, t-2, t-3, t-4, t-5 +2 more — 1 recur (t-7): each close mints the successor under this closed box until it is re-filed"},
+		{"capped recur", allRecur, "left open 8: t-0, t-1, t-2, t-3, t-4, t-5 +2 more — 8 recur (t-0, t-1, t-2, t-3, t-4, t-5 +2 more): each close mints the successor under this closed box until it is re-filed"},
+	}
+	for _, tc := range cases {
+		if got := leftOpenLine(tc.left); got != tc.want {
+			t.Errorf("%s:\n got %q\nwant %q", tc.name, got, tc.want)
+		}
+	}
+}
+
+// The disclosure reaches the status line when the close LANDS — after the
+// label, beside the previous-active suggestion when the box held the slot —
+// so what furrow answered is on screen, not only in the debug log.
+func TestEpicCloseNoteCarriesWhatTheStoreLeftOpen(t *testing.T) {
+	m, p := storeFirstModel(t)
+	p.epicLeft = []board.EpicOpenMember{{ID: "t-a", Title: "a", Status: "ready"}}
+	sliceOnEpicAxis(t, m, "e-one")
+	press(m, "m")
+	m.epic.menuIdx = int(epicFieldClosed)
+	if c := m.openEpicField(epicFieldClosed, m.b.Epic(m.epic.id)); c != nil {
+		_ = c
+	}
+	cmd := m.onEpicKey(keyMsg("enter"))
+	if cmd == nil {
+		t.Fatal("the close queued no write")
+	}
+	m.onPersistDone(cmd().(persistDoneMsg))
+	if want := "epic done e-one · left open 1: t-a"; m.status != want {
+		t.Errorf("status = %q, want %q", m.status, want)
+	}
 }

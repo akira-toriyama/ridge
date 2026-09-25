@@ -1,6 +1,8 @@
 package board
 
 import (
+	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -85,4 +87,44 @@ func epicIDs(es []EpicInfo) []string {
 		out = append(out, e.ID)
 	}
 	return out
+}
+
+// The close gate's count is the set `furrow epic done` discloses as
+// open_members — members in a NON-terminal lane — and not Total − Done: a
+// member parked in icebox is neither done nor open, and an unlaned status is
+// open because furrow's IsTerminal is a lookup in the configured set (t-321c).
+func TestOpenMembersIsTheNonTerminalSetAndParkedIsTheRest(t *testing.T) {
+	b := NewBoard([]*Task{
+		{ID: "t-open", Status: "backlog", Priority: 10, Epic: "e-box"},
+		{ID: "t-wip", Status: "in-progress", Priority: 10, Epic: "e-box"},
+		{ID: "t-done", Status: "done", Priority: 10, Epic: "e-box"},
+		{ID: "t-ice", Status: "icebox", Priority: 10, Epic: "e-box"},
+		{ID: "t-odd", Status: "someday", Priority: 10, Epic: "e-box"},
+		{ID: "t-else", Status: "backlog", Priority: 10, Epic: "e-else"},
+	}, EpicInfo{ID: "e-box", Done: 1, Total: 5}, EpicInfo{ID: "e-else", Total: 1})
+	// Compared as sets: the doc promises no order, like Tasks().
+	join := func(ts []*Task) string {
+		ids := make([]string, len(ts))
+		for i, tk := range ts {
+			ids[i] = tk.ID
+		}
+		slices.Sort(ids)
+		return strings.Join(ids, ",")
+	}
+	if got := join(b.OpenMembers("e-box")); got != "t-odd,t-open,t-wip" {
+		t.Errorf("OpenMembers = %s, want t-odd,t-open,t-wip — done and icebox are terminal, an unlaned status is not", got)
+	}
+	if got := join(b.ParkedMembers("e-box")); got != "t-ice" {
+		t.Errorf("ParkedMembers = %s, want t-ice — terminal but not done", got)
+	}
+	// The premise: on this box the old arithmetic and the new set disagree,
+	// so a gate still computing Total − Done cannot pass by coincidence.
+	if box := b.Epic("e-box"); box.Total-box.Done == len(b.OpenMembers("e-box")) {
+		t.Errorf("premise: Total − Done (%d) must differ from the open count", box.Total-box.Done)
+	}
+	for status, want := range map[string]bool{"done": true, "icebox": true, "ready": false, "someday": false, "": false} {
+		if got := b.IsTerminal(status); got != want {
+			t.Errorf("IsTerminal(%q) = %t, want %t", status, got, want)
+		}
+	}
 }
