@@ -115,7 +115,8 @@ func (m *Model) demoState(kind string) error {
 		// Quick add with a rule (t-zbmv): the repeat: token beside the due it
 		// needs, the rule quoted because its spelling carries spaces — the
 		// chips row proves both land and that the quote opened the value,
-		// not the title. No filter, so the chips are the typed line alone.
+		// not the title. No filter, so nothing is inherited beyond the lane
+		// and the board's auto repo.
 		if c := m.enterAdd(); c != nil {
 			_ = c
 		}
@@ -206,6 +207,46 @@ func (m *Model) demoState(kind string) error {
 		if c := m.openField(fieldRepeat, subj); c != nil {
 			_ = c
 		}
+
+	case "editnodue":
+		// The edit MENU on a task with no due, the cursor on the repeat row:
+		// the row states the precondition furrow would answer with exit 2
+		// (`— needs a due first`). The menu is not a mid-keystroke state and
+		// has no demo of its own; the precondition rows are what a still
+		// frame proves here, as `epicconfirm` does for the active row.
+		subj, err := m.demoTask("editnodue", "open with no due", func(t *board.Task) bool {
+			return t.Due.IsZero() && t.Closed.IsZero()
+		})
+		if err != nil {
+			return err
+		}
+		if !m.selectID(subj.ID, false) {
+			return fmt.Errorf("demo editnodue: %s is on the board but not in view", subj.ID)
+		}
+		m.enterEdit()
+		if m.edit == nil {
+			return fmt.Errorf("demo editnodue: the edit menu did not open")
+		}
+		m.edit.menuIdx = int(fieldRepeat)
+
+	case "editclosed":
+		// The same row on a CLOSED task that kept its due — the normal
+		// post-close shape (furrow keeps the due through `done` and consumes
+		// only the rule): `— closed; reopen it first`.
+		subj, err := m.demoTask("editclosed", "closed and carrying a due", func(t *board.Task) bool {
+			return !t.Closed.IsZero() && !t.Due.IsZero()
+		})
+		if err != nil {
+			return err
+		}
+		if !m.selectID(subj.ID, false) {
+			return fmt.Errorf("demo editclosed: %s is on the board but not in view", subj.ID)
+		}
+		m.enterEdit()
+		if m.edit == nil {
+			return fmt.Errorf("demo editclosed: the edit menu did not open")
+		}
+		m.edit.menuIdx = int(fieldRepeat)
 
 	case "graph":
 		// Root the graph on a task that actually HAS both directions, so the

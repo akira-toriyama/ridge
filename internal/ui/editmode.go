@@ -241,17 +241,18 @@ func (m *Model) openField(f editField, t *board.Task) tea.Cmd {
 		}
 		return e.startInput(h, inputDue, cur, "2026-08-04 · +1d · +2h · empty clears")
 	case fieldRepeat:
-		if t.Due.IsZero() {
-			// furrow refuses a rule on a task with no due (exit 2), and the
-			// menu row already says so: an input that cannot land would only
+		if _, reason := repeatCell(t); reason != "" {
+			// The row already says so; an input that cannot land would only
 			// collect a rule to throw away.
-			m.fail("%s has no due — a rule counts from the first occurrence; set due first", t.ID)
+			m.fail("repeat %s: %s", t.ID, reason)
 			return nil
 		}
 		// Seeded with the stored rule — furrow's compiled RRULE, which its
-		// --repeat reads back as a raw rule line, so ⏎ on the seed is the
-		// re-anchor `--repeat <rule>` alone performs (the series restarts at
-		// the current due), never a refusal.
+		// --repeat reads back as a raw rule line (all 13 spellings
+		// re-measured), so ⏎ on the seed is the re-anchor `--repeat <rule>`
+		// alone performs: the series restarts at the current due. Still
+		// furrow's to judge — an UNTIL the due has since passed is refused
+		// as a spent rule and rolls back like any other.
 		return e.startInput(h, inputRepeat, t.Repeat, "weekly · every 2 weeks on mon,thu · empty clears")
 	case fieldLabels, fieldEpic, fieldDeps, fieldRepos, fieldRefs, fieldChecklist:
 		e.stage = stageList
@@ -703,6 +704,22 @@ func inputTitleFor(k inputKind) string {
 	return ""
 }
 
+// repeatCell is the repeat row's value AND its precondition, as epicActiveCell
+// is the active row's: furrow refuses a rule on a task with no due and on a
+// closed task — in that order (measured on v6.0.0: a closed task with no due
+// is answered with the due) — so the row says which applies BEFORE the press,
+// and openField refuses the press on the same ground (reason; "" when the
+// input may open). A closed task never shows a rule: the close consumed it.
+func repeatCell(t *board.Task) (cell, reason string) {
+	switch {
+	case t.Due.IsZero():
+		return "— needs a due first", "no due — a rule counts from the first occurrence; set due first"
+	case !t.Closed.IsZero():
+		return "— closed; reopen it first", "closed, so a rule on it could never fire — reopen it first"
+	}
+	return t.Repeat, ""
+}
+
 func (m *Model) renderEditMenu(t *board.Task, inner int) string {
 	est := func(n int) string {
 		if n == 0 {
@@ -727,13 +744,7 @@ func (m *Model) renderEditMenu(t *board.Task, inner int) string {
 	if !t.Due.IsZero() {
 		due = t.Due.In(board.Zone()).Format("2006-01-02")
 	}
-	// The rule's row carries its precondition, as epicActiveCell does: furrow
-	// refuses a rule on a task with no due, so the row says so before the
-	// press (openField refuses the press on the same ground).
-	repeat := t.Repeat
-	if repeat == "" && t.Due.IsZero() {
-		repeat = "— needs a due first"
-	}
+	repeat, _ := repeatCell(t)
 	cd, ct := t.CheckProgress()
 	rows := []menuRow{
 		{editFieldName(fieldTitle), t.Title},

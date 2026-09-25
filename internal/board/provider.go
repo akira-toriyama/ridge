@@ -442,11 +442,8 @@ type FieldPatch struct {
 	RmLabels  []string
 	Epic      *string // e- id; "" unfiles
 	Due       *string // furrow date forms incl. the +1d snooze; "" clears
-	// Repeat is a recurrence spelling as typed — furrow's short forms or a
-	// raw RRULE, verbatim (--repeat); "" drops the rule (--clear-repeat).
-	// The grammar is furrow's: the optimistic apply keeps the spelling until
-	// the re-read brings the compiled RRULE, and a spelling furrow refuses
-	// rolls back like any refused write. The due coupling SetFields mirrors.
+	// Repeat is a recurrence spelling as typed (--repeat); "" drops the rule
+	// (--clear-repeat). The grammar is furrow's; the refusals, SetFields'.
 	Repeat   *string
 	Title    *string
 	AddRepos []string // full owner/repo

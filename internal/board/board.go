@@ -814,22 +814,33 @@ func (b *Board) SetFields(id string, p FieldPatch) error {
 		}
 		due = d
 	}
-	// The due/rule coupling, furrow's (measured on v6.0.0 and dev): a rule
-	// needs a due to count from, and a repeating task keeps its due until
-	// the rule is dropped — `--clear-due --clear-repeat` in one write is
-	// accepted, so the check reads the state AFTER the patch.
+	// furrow's refusals around a rule, in its order (measured on v6.0.0 and
+	// dev): a blank rule; a rule with no due to count from, and a repeating
+	// task keeping its due until the rule is dropped — `--clear-due
+	// --clear-repeat` in one write is accepted, so the coupling reads the
+	// state AFTER the patch, and only when the patch touches either side (a
+	// task already carrying a rule with no due, which no furrow write
+	// produces, must still take a label); then a rule on a closed task,
+	// which could never fire — `--clear-repeat` there is exit 0. The
+	// spelling itself is not judged: the grammar has one home.
 	dueAfter, repeatAfter := t.Due, t.Repeat
 	if p.Due != nil {
 		dueAfter = due
 	}
 	if p.Repeat != nil {
+		if *p.Repeat != "" && strings.TrimSpace(*p.Repeat) == "" {
+			return fmt.Errorf("repeat: needs a rule — an empty input drops it")
+		}
 		repeatAfter = strings.TrimSpace(*p.Repeat)
 	}
-	if repeatAfter != "" && dueAfter.IsZero() {
+	if (p.Due != nil || p.Repeat != nil) && repeatAfter != "" && dueAfter.IsZero() {
 		if p.Repeat != nil {
 			return fmt.Errorf("%s has no due — a rule counts from the first occurrence, so set the due first", id)
 		}
 		return fmt.Errorf("%s repeats, so it must keep a due — drop the rule first", id)
+	}
+	if p.Repeat != nil && repeatAfter != "" && !t.Closed.IsZero() {
+		return fmt.Errorf("%s is closed, so a rule on it could never fire — reopen it first, or drop the rule", id)
 	}
 
 	if p.Value != nil {

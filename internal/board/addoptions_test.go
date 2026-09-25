@@ -12,7 +12,8 @@ func TestAddOptionsValidate(t *testing.T) {
 		{Due: "+1d"},
 		{Due: "2026-09-01"},
 		{Due: "+1d", Repeat: "weekly"},
-		// The spelling is furrow's to judge: nothing here refuses one.
+		// The spelling is furrow's to judge — even one furrow rejects
+		// (COUNT=1: "no occurrence after the first one") passes here.
 		{Due: "+1d", Repeat: "FREQ=WEEKLY;COUNT=1"},
 		{Deps: []string{"t-a"}, Checks: []string{"書く"}, Refs: []string{"a.go:1"}},
 		// --ref is a pflag StringArray since furrow #317: `,` and `"` are

@@ -799,3 +799,42 @@ func TestEditRepeatRefusesATaskWithNoDue(t *testing.T) {
 		t.Error("a refused press must write nothing")
 	}
 }
+
+// A closed task cannot take a rule either (furrow's exit 2, judged after the
+// due): the row states it and the press is refused, while a closed task
+// with no due is answered with the due, as furrow does.
+func TestEditRepeatRefusesAClosedTask(t *testing.T) {
+	closedAt := time.Date(2026, 9, 20, 9, 0, 0, 0, time.UTC)
+	b := board.NewBoard([]*board.Task{
+		{ID: "c", Status: "done", Title: "closed with due", Priority: 10, Due: closedAt.Add(48 * time.Hour), Closed: closedAt},
+		{ID: "cn", Status: "done", Title: "closed no due", Priority: 20, Closed: closedAt},
+	})
+	m := New(memstore.NewWith(b), Options{})
+	m.w, m.h = 240, 50
+	m.recompute()
+	m.relayout()
+	for _, tc := range []struct{ id, cell, reason string }{
+		{"c", "— closed; reopen it first", "reopen it first"},
+		{"cn", "— needs a due first", "set due first"},
+	} {
+		if !m.selectID(tc.id, false) {
+			t.Fatalf("could not select %s", tc.id)
+		}
+		m.enterEdit()
+		if m.edit == nil {
+			t.Fatal("enterEdit did not open the overlay")
+		}
+		if out := frame(m); !strings.Contains(out, tc.cell) {
+			t.Errorf("%s: the repeat row must read %q before the press:\n%s", tc.id, tc.cell, out)
+		}
+		m.edit.menuIdx = int(fieldRepeat)
+		press(m, "enter")
+		if m.edit.stage != stageMenu || !m.statusErr || !strings.Contains(m.status, tc.reason) {
+			t.Errorf("%s: stage=%d statusErr=%v status=%q, want the press refused on the menu naming %q", tc.id, m.edit.stage, m.statusErr, m.status, tc.reason)
+		}
+		if m.inflight || len(m.pending) > 0 || m.b.Task(tc.id).Repeat != "" {
+			t.Errorf("%s: a refused press must write and queue nothing", tc.id)
+		}
+		press(m, "esc")
+	}
+}

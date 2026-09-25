@@ -169,3 +169,31 @@ func TestEditRepeatDemoSeedsTheStoredRule(t *testing.T) {
 		t.Error("the demo's input is not focused")
 	}
 }
+
+// The two precondition rows are menu-stage frames: each demo must show its
+// own wording on the repeat row, under the cursor, and neither may show the
+// other's.
+func TestEditPreconditionDemosStateTheirRow(t *testing.T) {
+	for _, tc := range []struct{ demo, want, not string }{
+		{"editnodue", "— needs a due first", "— closed; reopen it first"},
+		{"editclosed", "— closed; reopen it first", "— needs a due first"},
+	} {
+		m := New(memstore.New(), Options{})
+		frame, err := m.Dump(240, 60, tc.demo, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		row := ""
+		for _, l := range strings.Split(frame, "\n") {
+			if strings.Contains(l, "▌ repeat") {
+				row = l
+			}
+		}
+		if row == "" || !strings.Contains(row, tc.want) {
+			t.Errorf("-demo %s: the cursor row must be the repeat row reading %q, got %q", tc.demo, tc.want, row)
+		}
+		if strings.Contains(frame, tc.not) {
+			t.Errorf("-demo %s: the frame carries the other precondition %q", tc.demo, tc.not)
+		}
+	}
+}

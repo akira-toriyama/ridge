@@ -89,7 +89,13 @@ func fixtureTasks() []*board.Task {
 			Created:  ts("2026-07-17T11:35:43Z"),
 			Updated:  ts("2026-07-17T13:57:21Z"),
 			Closed:   ts("2026-07-17T13:57:21Z"),
-			Body:     "# 立ち寄り温泉の下調べ\n\n候補3軒に電話で確認した。サイトの情報は古く、1軒は家族風呂を廃止済みだった。\n\n- ○ 山鹿の湯: 家族風呂あり・受付 14:00 まで・タオル販売あり\n- × 川沿いの湯: 家族風呂廃止（2025年）\n- ○ 高原温泉: 家族風呂あり・受付 16:00 まで・混雑は昼過ぎ\n\n結論: 3日目の帰路は山鹿の湯に寄る。受付 14:00 がタイムリミットなので撤収は 10:00 厳守（[[t-jv3j]] の行程に反映済み）。",
+			// NOT from the snapshot: the one closed task that kept its due —
+			// the normal post-close shape (furrow keeps the due through
+			// `done`, consuming only the rule) — so the edit menu's closed
+			// precondition row has a frame (-demo editclosed) and the closed
+			// exclusion of is:overdue has a fixture case beside its synthetic one.
+			Due:  ts("2026-07-17T14:59:59Z"),
+			Body: "# 立ち寄り温泉の下調べ\n\n候補3軒に電話で確認した。サイトの情報は古く、1軒は家族風呂を廃止済みだった。\n\n- ○ 山鹿の湯: 家族風呂あり・受付 14:00 まで・タオル販売あり\n- × 川沿いの湯: 家族風呂廃止（2025年）\n- ○ 高原温泉: 家族風呂あり・受付 16:00 まで・混雑は昼過ぎ\n\n結論: 3日目の帰路は山鹿の湯に寄る。受付 14:00 がタイムリミットなので撤収は 10:00 厳守（[[t-jv3j]] の行程に反映済み）。",
 		},
 		{
 			ID:       "t-2tbn",
