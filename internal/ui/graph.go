@@ -64,7 +64,8 @@ func (o graphOrient) String() string {
 const (
 	// graphAllRadius is the "all" setting of the hop-radius cycle. The real
 	// board's longest chain is 5 edges, so 8 reaches everything while still
-	// bounding every walk in this file.
+	// bounding the inclusion walk (the layering walk is bounded by the size
+	// of what it included — buildEgo).
 	graphAllRadius = 8
 
 	// graphHardCols caps how many nodes one layer may DRAW. The measured
@@ -190,10 +191,11 @@ type egoLayout struct {
 	Edges  []egoEdge
 
 	// Skipped are real dep edges the layered drawing cannot express: an edge
-	// that lands flat or backwards, which only a cycle produces now that the
-	// layers follow the uncapped longest path (buildEgo). They are reported in
-	// the UI rather than silently dropped — a graph that quietly omits an edge
-	// is worse than one that admits it.
+	// that lands flat or backwards. The layers are the longest path inside
+	// the included set, and a node a cycle kept from getting one sits on the
+	// outermost layer (buildEgo), so only a cycle produces one. They are
+	// reported in the UI rather than silently dropped — a graph that quietly
+	// omits an edge is worse than one that admits it.
 	Skipped []egoEdge
 
 	// Overflow counts nodes dropped from a layer by graphHardCols, by rank.
@@ -245,12 +247,16 @@ func (l *egoLayout) FocusRank() int {
 //
 // It is a Bellman-Ford-shaped relaxation rather than a DFS precisely so a cycle
 // cannot recurse forever: distances only ever increase, they are capped at
-// radius by the expansion guard, and the outer loop runs at most radius times.
-// A cycle simply saturates. Iteration order is over SORTED keys, so the same
-// board always produces the same layering.
-func longestDist(next func(string) []string, from string, radius int) map[string]int {
+// limit by the expansion guard, and the outer loop runs at most limit times.
+// A cycle simply saturates — and a node behind a saturated one may then never
+// be reached, which is why buildEgo backfills the included set. Iteration
+// order is over SORTED keys, so the same board always produces the same
+// layering. Called twice per side: with the radius as the limit to decide
+// what is included, and with one more than the included set's size to layer
+// it (a set's longest simple path is shorter than the set).
+func longestDist(next func(string) []string, from string, limit int) map[string]int {
 	dist := map[string]int{from: 0}
-	for round := 0; round < radius; round++ {
+	for round := 0; round < limit; round++ {
 		keys := make([]string, 0, len(dist))
 		for k := range dist {
 			keys = append(keys, k)
@@ -260,7 +266,7 @@ func longestDist(next func(string) []string, from string, radius int) map[string
 		changed := false
 		for _, u := range keys {
 			du := dist[u]
-			if du >= radius {
+			if du >= limit {
 				continue
 			}
 			for _, v := range next(u) {
@@ -318,12 +324,17 @@ func buildEgo(g *board.Graph, focus string, radius, maxCols int, hidden func(str
 	downSet := longestDist(g.Blocks, focus, radius)
 	l.UpCount, l.DownCount = len(upSet), len(downSet)
 
-	// Layers: the longest path INSIDE the included set, uncapped. Layering by
-	// the radius-capped distance folded a node whose longest path ran past the
-	// radius onto the outermost layer, beside the node it depends on, and that
-	// edge was then reported as cyclic on a board with no cycle (t-z9nf:
-	// ridge-test at radius 2 put t-60da9 and t-2hmak on one layer). The radius
-	// bounds what is included, not how many layers it draws.
+	// Layers: the longest path INSIDE the included set. The radius bounds what
+	// is included, not how many layers it draws — a layer capped at the radius
+	// folds a node whose longest path runs past it onto the outermost layer,
+	// beside the node it depends on, and that edge is then "cyclic" on a board
+	// with no cycle (t-z9nf: ridge-test at radius 2 put t-60da9 and t-2hmak
+	// on one layer). A set's longest simple path is shorter than the set, so
+	// the limit never binds on an acyclic board; on a cyclic one it saturates,
+	// and a node reachable only through a saturated node gets no distance at
+	// all — every such node is backfilled onto the outermost layer, so what
+	// the radius included is drawn (its folded edges land in Skipped, where
+	// the header admits them) rather than dropped in silence.
 	within := func(set map[string]int, next func(string) []string) func(string) []string {
 		return func(id string) []string {
 			var out []string
@@ -335,8 +346,18 @@ func buildEgo(g *board.Graph, focus string, radius, maxCols int, hidden func(str
 			return out
 		}
 	}
-	up := longestDist(within(upSet, depsOf), focus, len(upSet)+1)
-	down := longestDist(within(downSet, g.Blocks), focus, len(downSet)+1)
+	layer := func(set map[string]int, next func(string) []string) map[string]int {
+		limit := len(set) + 1
+		dist := longestDist(within(set, next), focus, limit)
+		for id := range set {
+			if _, ok := dist[id]; !ok {
+				dist[id] = limit
+			}
+		}
+		return dist
+	}
+	up := layer(upSet, depsOf)
+	down := layer(downSet, g.Blocks)
 
 	// 1. layer assignment
 	add := func(id string, layer int, both bool) {
@@ -541,29 +562,35 @@ func (l *egoLayout) orderRanks() {
 // canvas `avail` long — screen columns top-down, screen rows left-right.
 //
 // Real nodes all get the SAME extent — the grid reads as a grid — sized so the
-// busiest layer fits. Dummies get a routing artefact's worth, because a
-// pass-through should not cost a whole box. Each layer is then CENTRED, which
-// is what puts the focus box in the middle of the frame with its fan-out spread
-// symmetrically around it.
+// busiest layer fits, its dummies and gaps included: a dummy costs a routing
+// artefact's worth rather than a whole box, but a layer that carries seven of
+// them beside two boxes is wider than its boxes alone say (sized by boxes
+// only, that top-down layer ran 35 cells past the right edge at every width).
+// Each layer is then CENTRED, which is what puts the focus box in the middle
+// of the frame with its fan-out spread symmetrically around it.
 func (l *egoLayout) place(o graphOrient, avail int) {
 	if avail < 1 {
 		avail = 1
 	}
-	cols := 1
+	lo, hi, gap, dummy := nodeSpans(o)
+	span := hi
 	for _, row := range l.Layers {
-		n := 0
+		boxes, dummies := 0, 0
 		for _, nd := range row {
 			if nd.Kind == egoReal {
-				n++
+				boxes++
+			} else {
+				dummies++
 			}
 		}
-		if n > cols {
-			cols = n
+		if boxes == 0 {
+			continue // insurance: ranks are made from real nodes, so none is box-free
+		}
+		room := avail - dummies*dummy - (len(row)-1)*gap
+		if fit := room / boxes; fit < span {
+			span = fit
 		}
 	}
-
-	lo, hi, gap, dummy := nodeSpans(o)
-	span := (avail - (cols-1)*gap) / cols
 	span = clamp(span, lo, hi)
 	if o == orientTopDown && span > avail {
 		// A box wider than the whole canvas is meaningless, so top-down
