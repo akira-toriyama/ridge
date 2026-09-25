@@ -46,8 +46,9 @@ func TestUnknownDepBlocks(t *testing.T) {
 func TestReverseDeps(t *testing.T) {
 	b := NewBoard([]*Task{
 		mk("root", "backlog"),
+		mk("other", "backlog"),
 		mk("x", "ready", "root"),
-		mk("y", "backlog", "root"),
+		mk("y", "backlog", "root", "other"),
 		mk("z", "done", "root"),
 	})
 	g := NewGraph(b)
@@ -55,12 +56,44 @@ func TestReverseDeps(t *testing.T) {
 	if got := g.Blocks("root"); strings.Join(got, ",") != "x,y,z" {
 		t.Errorf("Blocks(root) = %v, want x,y,z", got)
 	}
-	// OpenBlocks is what closing root would actually free up.
+	// OpenBlocks is every open dependent; Frees is the part a close of root
+	// actually releases — y stays held by other.
 	if got := g.OpenBlocks("root"); strings.Join(got, ",") != "x,y" {
 		t.Errorf("OpenBlocks(root) = %v, want x,y", got)
 	}
+	if got := g.Frees("root"); strings.Join(got, ",") != "x" {
+		t.Errorf("Frees(root) = %v, want x", got)
+	}
+	if got := g.Frees("other"); len(got) != 0 {
+		t.Errorf("Frees(other) = %v, want none: y still waits on root", got)
+	}
 	if got := g.Blocks("x"); len(got) != 0 {
 		t.Errorf("Blocks(x) = %v, want none", got)
+	}
+}
+
+// The edges Frees must not be fooled by: a dep listed twice is one blocker
+// (once in the answer, not zero and not twice); a dep the board does not
+// know keeps blocking, so the dependent is not freed; a subject already in
+// done frees nothing — its dependents were freed when it closed.
+func TestFreesGuards(t *testing.T) {
+	b := NewBoard([]*Task{
+		mk("root", "backlog"),
+		mk("dup", "backlog", "root", "root"),
+		mk("ghosted", "backlog", "root", "t-nowhere"),
+		mk("closed", "done"),
+		mk("after", "backlog", "closed"),
+		mk("loop", "backlog", "loop"),
+	})
+	g := NewGraph(b)
+	if got := g.Frees("root"); strings.Join(got, ",") != "dup" {
+		t.Errorf("Frees(root) = %v, want dup once: the doubled dep is one blocker, the unknown dep still blocks ghosted", got)
+	}
+	if got := g.Frees("closed"); len(got) != 0 {
+		t.Errorf("Frees(closed) = %v, want none: a done task frees nothing now", got)
+	}
+	if got := g.Frees("loop"); len(got) != 0 {
+		t.Errorf("Frees(loop) = %v, want none: a task does not free itself", got)
 	}
 }
 

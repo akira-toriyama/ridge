@@ -132,7 +132,7 @@ func (m *Model) renderMapPanel(p mapPanel, w int) []string {
 	}
 	if top := c.Top(); top.ID != "" {
 		bits = append(bits, th.muted.Render(
-			fmt.Sprintf("%s frees %d", top.ID, top.Blocking)))
+			fmt.Sprintf("%s holds up %d", top.ID, top.Blocking)))
 	}
 	out = append(out, pad(strings.Repeat(" ", mapSelGutter)+
 		strings.Join(bits, th.dim.Render(" · ")), w))
@@ -294,7 +294,7 @@ func (m *Model) mapHeader(l *mapLayout, clipped bool) string {
 		fmt.Sprintf("longest chain %d", depth),
 	}
 	if top.ID != "" {
-		bits = append(bits, fmt.Sprintf("%s frees %d", top.ID, top.Blocking))
+		bits = append(bits, fmt.Sprintf("%s holds up %d", top.ID, top.Blocking))
 	}
 	if unresolved > 0 {
 		bits = append(bits, th.warn.Render(fmt.Sprintf("%d dep(s) not on this board", unresolved)))

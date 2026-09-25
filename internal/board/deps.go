@@ -81,12 +81,45 @@ func (g *Graph) OpenBlockedBy(id string) []string {
 // exist nowhere on disk and are the half of a dep a raw shard cannot show you.
 func (g *Graph) Blocks(id string) []string { return g.rev[id] }
 
-// OpenBlocks is Blocks restricted to tasks that are not done, i.e. what would
-// actually be unblocked by closing this task.
+// OpenBlocks is Blocks restricted to tasks that are not done — the open
+// dependents, each one blocker shorter once this task closes. It is NOT what
+// a close frees: a dependent with a second open blocker stays blocked, and
+// that subset is Frees.
 func (g *Graph) OpenBlocks(id string) []string {
 	var out []string
 	for _, x := range g.rev[id] {
 		if !g.IsDone(x) {
+			out = append(out, x)
+		}
+	}
+	return out
+}
+
+// Frees is the subset of OpenBlocks that closing id leaves with no open
+// blocker at all — the dependents whose only unfinished dep is id. The close
+// note counts these; counting OpenBlocks announced "unblocked 1 task(s)" for
+// a dependent still held by five other open deps (t-h9pb, measured on the
+// 100-task ridge-test board).
+func (g *Graph) Frees(id string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, x := range g.OpenBlocks(id) {
+		// A dep listed twice (cluster.go tolerates it) shows up twice in the
+		// reverse index and twice in BlockedBy; it is still one dependent
+		// with one blocker. A task naming itself frees nothing by closing
+		// (reach seeds its visited set the same way).
+		if x == id || seen[x] {
+			continue
+		}
+		seen[x] = true
+		bb := g.BlockedBy(x)
+		held := len(bb) == 0
+		for _, d := range bb {
+			if d != id {
+				held = true
+			}
+		}
+		if !held {
 			out = append(out, x)
 		}
 	}

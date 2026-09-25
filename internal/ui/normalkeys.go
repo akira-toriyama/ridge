@@ -262,7 +262,7 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 			if m.refuseWhileRollingBack("done " + id) {
 				return nil
 			}
-			unblocked := len(m.g.OpenBlocks(id))
+			unblocked := len(m.g.Frees(id))
 			if err := m.b.Close(id); err != nil {
 				m.fail("%v", err)
 				return nil

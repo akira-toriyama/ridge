@@ -925,6 +925,22 @@ func (m *Model) demoState(kind string) error {
 		// The gesture's own line leads, as on the live path (persistOp.gesture).
 		m.note("closed %s · %s", subj.ID, repeatLine(&board.RepeatReport{Created: next.ID, Due: next.Due}))
 
+	case "done":
+		// `d` on a task whose close frees exactly one dependent. The gesture's
+		// own line — "closed <id> — unblocked N task(s)" — is written on the
+		// keystroke and said nowhere else, and N is what the close FREES, not
+		// how many open tasks depend on it (t-h9pb); it is a frame state, so
+		// it has a frame. The fixture answers the write synchronously and the
+		// chain is settled here as Dump settles a live store's startup reads;
+		// the latency readout is pinned like the other write demos'.
+		subj, err := m.demoFreesTask("done")
+		if err != nil {
+			return err
+		}
+		m.selectID(subj.ID, false)
+		m.settle(m.onNormalKey(tea.KeyPressMsg{Code: 'd', Text: "d"}))
+		m.lastPersist = "done " + subj.ID + " 104ms"
+
 	case "fail":
 		// A refused write. The ⚠ styling has its own colour and its own row,
 		// and nothing else in the demo set renders an error at all.
@@ -1018,6 +1034,17 @@ func (m *Model) demoBox(demo, need string, pred func(board.EpicInfo) bool) (boar
 // board order wins, and a board with none refuses by shape.
 func (m *Model) demoRepeatTask(demo string) (*board.Task, error) {
 	return m.demoTask(demo, "a task carrying a repeat rule", func(t *board.Task) bool { return t.Repeat != "" })
+}
+
+// demoFreesTask is a task whose close frees exactly one open dependent — the
+// `done` demo's subject, so its note reads "unblocked 1 task(s)" and not a
+// count a reader must reconcile with the board. Not a repeating task: the
+// fixture answers a close with no series report, and a ⟳ card closed
+// without its "repeat:" line is a frame the live path never draws.
+func (m *Model) demoFreesTask(demo string) (*board.Task, error) {
+	return m.demoTask(demo, "whose close frees exactly one open task", func(t *board.Task) bool {
+		return t.Repeat == "" && len(m.g.Frees(t.ID)) == 1
+	})
 }
 
 // demoAnyTask is the board's first task, for the demos that only need an id
