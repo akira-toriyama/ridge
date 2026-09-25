@@ -46,8 +46,9 @@ func TestUnknownDepBlocks(t *testing.T) {
 func TestReverseDeps(t *testing.T) {
 	b := NewBoard([]*Task{
 		mk("root", "backlog"),
+		mk("other", "backlog"),
 		mk("x", "ready", "root"),
-		mk("y", "backlog", "root"),
+		mk("y", "backlog", "root", "other"),
 		mk("z", "done", "root"),
 	})
 	g := NewGraph(b)
@@ -55,9 +56,16 @@ func TestReverseDeps(t *testing.T) {
 	if got := g.Blocks("root"); strings.Join(got, ",") != "x,y,z" {
 		t.Errorf("Blocks(root) = %v, want x,y,z", got)
 	}
-	// OpenBlocks is what closing root would actually free up.
+	// OpenBlocks is every open dependent; Frees is the part a close of root
+	// actually releases — y stays held by other.
 	if got := g.OpenBlocks("root"); strings.Join(got, ",") != "x,y" {
 		t.Errorf("OpenBlocks(root) = %v, want x,y", got)
+	}
+	if got := g.Frees("root"); strings.Join(got, ",") != "x" {
+		t.Errorf("Frees(root) = %v, want x", got)
+	}
+	if got := g.Frees("other"); len(got) != 0 {
+		t.Errorf("Frees(other) = %v, want none: y still waits on root", got)
 	}
 	if got := g.Blocks("x"); len(got) != 0 {
 		t.Errorf("Blocks(x) = %v, want none", got)
