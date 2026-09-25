@@ -287,11 +287,14 @@ func TestOverdueDueRendersDanger(t *testing.T) {
 	m.setPos(1) // keep the cursor OFF t-late: the inverse band drops cell styles
 	out := m.View().Content
 
-	late := m.th.danger.Render(pad(day("2026-08-01T00:00:00Z").In(board.Zone()).Format("2006-01-02"), 10))
+	// The cell is padded to the column's own width — read from the geometry,
+	// not spelled here, so a widened column cannot make this vacuous.
+	dueW := m.tableGeom()[tcDue].w
+	late := m.th.danger.Render(pad(day("2026-08-01T00:00:00Z").In(board.Zone()).Format("2006-01-02"), dueW))
 	if !strings.Contains(out, late) {
 		t.Error("an overdue due must render in the danger style")
 	}
-	fine := m.th.danger.Render(pad(day("2026-12-01T00:00:00Z").In(board.Zone()).Format("2006-01-02"), 10))
+	fine := m.th.danger.Render(pad(day("2026-12-01T00:00:00Z").In(board.Zone()).Format("2006-01-02"), dueW))
 	if strings.Contains(out, fine) {
 		t.Error("a future due must NOT render in the danger style")
 	}
@@ -354,6 +357,9 @@ func TestTableColumnsAlignUnderCJKTitles(t *testing.T) {
 			want := ""
 			if !task.Due.IsZero() {
 				want = task.Due.In(board.Zone()).Format("2006-01-02")
+			}
+			if task.Repeat != "" {
+				want += " " + glyphRepeat // beside the day, as `furrow ls` tags a recurring row
 			}
 			if got := cell(lines[y], dueCol); got != want {
 				t.Errorf("w=%d row %d (%s): due cell reads %q, want %q", w, i, task.ID, got, want)

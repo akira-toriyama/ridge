@@ -119,6 +119,13 @@ func fixtureTasks() []*board.Task {
 			Created: ts("2026-07-16T15:27:16Z"),
 			Updated: ts("2026-07-16T15:27:16Z"),
 			Due:     ts("2026-09-30T14:59:59Z"), // see t-jv3j's Due note
+			// The two Repeat rules (here and t-ehk7) are not from the snapshot
+			// either: they are furrow's compiled forms of `--repeat weekly` and
+			// `--repeat monthly` (measured on dev 2026-09-24), so the card's
+			// mark, the peek's rule line, the table's due cell and `has:repeat`
+			// all have a frame. The anchor is the first due, as furrow stores it.
+			Repeat:       "FREQ=WEEKLY",
+			RepeatAnchor: ts("2026-09-30T14:59:59Z"),
 			// NOT from the snapshot, like the Due values: one file:line and one
 			// URL so the peek's refs section and the refs sub-editor render both
 			// forms furrow documents (`furrow ref` — file:line or URL) in one
@@ -164,10 +171,12 @@ func fixtureTasks() []*board.Task {
 				{Text: "子ども向けの別枠（とうもろこし・マシュマロ）を確保", Done: false},
 				{Text: "保冷の詰め順をクーラー割りと突き合わせる", Done: false},
 			},
-			Created: ts("2026-07-16T15:47:39Z"),
-			Updated: ts("2026-07-16T15:47:39Z"),
-			Due:     ts("2026-08-20T14:59:59Z"), // see t-jv3j's Due note
-			Body:    "# キャンプ献立プラン\n\n方針: 初日は移動で疲れているので火を使う品を1品に絞る。2日目の夜が本番（ダッチオーブン）。3日目は残り物を使い切って撤収を軽くする。常備菜（[[t-phgp]] の回転から抜く分）を保冷の底に敷いて、現地調達は生鮮だけにする。\n\n- 1日目夜: 焼くだけの肉 + 持参の常備菜2品 + 汁物\n- 2日目朝: ホットサンド（前夜に仕込み）\n- 2日目夜: ダッチオーブンの丸鶏 + 道の駅の野菜\n- 3日目朝: 残り野菜の雑炊\n- 昼はすべて行程側（[[t-jv3j]]）の道の駅で現地判断\n\n買い出しリストは店別に分ける: 出発前（乾物・調味料・常備菜の補充）/ 道の駅1（初日の生鮮）/ 道の駅2（丸鶏の受け取り予約 — 電話済み、当日 10-14 時受取）。\n\n保冷の制約: クーラーは2台体制（[[t-9m2q]]）で、生鮮は開閉の少ない方へ。氷の持ちは [[t-614w]] の実測で3日目まで足りる見込みだが、丸鶏だけは受け取りを2日目にして冷蔵時間を最短化する。\n\n子どもの好き嫌い対応: 丸鶏の付け合わせに素焼きのとうもろこしを別枠で確保。デザートはマシュマロ（焚き火の火起こし練習 [[t-fn4k]] とセットで本人たちに焼かせる）。",
+			Created:      ts("2026-07-16T15:47:39Z"),
+			Updated:      ts("2026-07-16T15:47:39Z"),
+			Due:          ts("2026-08-20T14:59:59Z"), // see t-jv3j's Due note
+			Repeat:       "FREQ=MONTHLY",             // see t-9sa6's Repeat note
+			RepeatAnchor: ts("2026-08-20T14:59:59Z"),
+			Body:         "# キャンプ献立プラン\n\n方針: 初日は移動で疲れているので火を使う品を1品に絞る。2日目の夜が本番（ダッチオーブン）。3日目は残り物を使い切って撤収を軽くする。常備菜（[[t-phgp]] の回転から抜く分）を保冷の底に敷いて、現地調達は生鮮だけにする。\n\n- 1日目夜: 焼くだけの肉 + 持参の常備菜2品 + 汁物\n- 2日目朝: ホットサンド（前夜に仕込み）\n- 2日目夜: ダッチオーブンの丸鶏 + 道の駅の野菜\n- 3日目朝: 残り野菜の雑炊\n- 昼はすべて行程側（[[t-jv3j]]）の道の駅で現地判断\n\n買い出しリストは店別に分ける: 出発前（乾物・調味料・常備菜の補充）/ 道の駅1（初日の生鮮）/ 道の駅2（丸鶏の受け取り予約 — 電話済み、当日 10-14 時受取）。\n\n保冷の制約: クーラーは2台体制（[[t-9m2q]]）で、生鮮は開閉の少ない方へ。氷の持ちは [[t-614w]] の実測で3日目まで足りる見込みだが、丸鶏だけは受け取りを2日目にして冷蔵時間を最短化する。\n\n子どもの好き嫌い対応: 丸鶏の付け合わせに素焼きのとうもろこしを別枠で確保。デザートはマシュマロ（焚き火の火起こし練習 [[t-fn4k]] とセットで本人たちに焼かせる）。",
 		},
 		{
 			ID:       "t-9m2q",

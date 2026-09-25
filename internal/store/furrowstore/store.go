@@ -113,6 +113,32 @@ type taskJSON struct {
 	Closed   *time.Time `json:"closed"`
 	Reviewed *time.Time `json:"reviewed"`
 	Due      *time.Time `json:"due"`
+	// Both omitted (not null) on a task that does not repeat — furrow's
+	// omitempty — so the zero values are the "no rule" reading.
+	Repeat       string     `json:"repeat"`
+	RepeatAnchor *time.Time `json:"repeat_anchor"`
+}
+
+// repeatJSON is the `repeat` key a close's envelope carries when the task
+// carried a rule: `done --json` and `set -s <done> --json` put the same shape
+// on the per-id envelope (measured on furrow dev 2026-09-24 and on v6.0.0's
+// help text). created/due are null when the series ended.
+type repeatJSON struct {
+	Created   *string    `json:"created"`
+	Due       *time.Time `json:"due"`
+	Skipped   int        `json:"skipped"`
+	Completed bool       `json:"completed"`
+}
+
+func (r *repeatJSON) toReport() *board.RepeatReport {
+	if r == nil {
+		return nil
+	}
+	rep := &board.RepeatReport{Skipped: r.Skipped, Completed: r.Completed, Due: fromPtr(r.Due)}
+	if r.Created != nil {
+		rep.Created = *r.Created
+	}
+	return rep
 }
 
 // epicJSON is one `furrow epic ls --all --json` row, and it doubles as the epic
@@ -215,22 +241,24 @@ func (p *Store) load() (*board.Board, error) {
 	tasks := make([]*board.Task, 0, len(rows))
 	for _, r := range rows {
 		t := &board.Task{
-			ID:       r.ID,
-			Title:    r.Title,
-			Status:   r.Status,
-			Priority: r.Priority,
-			Value:    r.Value,
-			Effort:   r.Effort,
-			Labels:   r.Labels,
-			Repos:    r.Repos,
-			Deps:     r.Deps,
-			Refs:     r.Refs,
-			Epic:     r.Epic,
-			Created:  fromPtr(r.Created),
-			Updated:  fromPtr(r.Updated),
-			Closed:   fromPtr(r.Closed),
-			Reviewed: fromPtr(r.Reviewed),
-			Due:      fromPtr(r.Due),
+			ID:           r.ID,
+			Title:        r.Title,
+			Status:       r.Status,
+			Priority:     r.Priority,
+			Value:        r.Value,
+			Effort:       r.Effort,
+			Labels:       r.Labels,
+			Repos:        r.Repos,
+			Deps:         r.Deps,
+			Refs:         r.Refs,
+			Epic:         r.Epic,
+			Created:      fromPtr(r.Created),
+			Updated:      fromPtr(r.Updated),
+			Closed:       fromPtr(r.Closed),
+			Reviewed:     fromPtr(r.Reviewed),
+			Due:          fromPtr(r.Due),
+			Repeat:       r.Repeat,
+			RepeatAnchor: fromPtr(r.RepeatAnchor),
 		}
 		for _, c := range r.Checklist {
 			t.Checklist = append(t.Checklist, board.ChecklistItem{Text: c.Text, Done: c.Done})
@@ -332,18 +360,42 @@ func fromPtr(t *time.Time) time.Time {
 	return *t
 }
 
-// setEnvelope is one element of `furrow set --json`'s per-id envelope array;
-// only the respace report matters here. Each renumbered entry is
-// {id, from, to} — the neighbour and its old/new priority.
+// setEnvelope is one element of `furrow set --json`'s per-id envelope array,
+// and `done --json`'s too — the two closes ridge issues answer with the same
+// {before, after, changed, …} shape. Only the respace report and the series
+// report matter here. Each renumbered entry is {id, from, to} — the neighbour
+// and its old/new priority.
 type setEnvelope struct {
 	Renumbered []struct {
 		ID string `json:"id"`
 	} `json:"renumbered"`
+	Repeat *repeatJSON `json:"repeat"`
+}
+
+// decodeSetEnvelopes reads one write's envelope array.
+func decodeSetEnvelopes(what string, out []byte) ([]setEnvelope, error) {
+	var envs []setEnvelope
+	if err := json.Unmarshal(out, &envs); err != nil {
+		return nil, fmt.Errorf("furrow %s: undecodable envelope: %v", what, err)
+	}
+	return envs, nil
+}
+
+// seriesOf is a one-id write's series report: the first envelope carrying
+// one. Every write here names ONE id, so a second envelope with a report
+// would be a contract change, not data.
+func seriesOf(envs []setEnvelope) *board.RepeatReport {
+	for _, e := range envs {
+		if e.Repeat != nil {
+			return e.Repeat.toReport()
+		}
+	}
+	return nil
 }
 
 // PersistMove records an already-applied placement via `furrow set`
 // (board.Provider).
-func (p *Store) PersistMove(id, lane, beforeID, afterID string) ([]string, error) {
+func (p *Store) PersistMove(id, lane, beforeID, afterID string) (board.MoveReport, error) {
 	args := []string{"set", id, "-s", lane}
 	switch {
 	case beforeID != "":
@@ -354,26 +406,35 @@ func (p *Store) PersistMove(id, lane, beforeID, afterID string) ([]string, error
 	args = append(args, "--json")
 	out, err := p.c.run("set", args...)
 	if err != nil {
-		return nil, err
+		return board.MoveReport{}, err
 	}
-	var envs []setEnvelope
-	if err := json.Unmarshal(out, &envs); err != nil {
-		return nil, fmt.Errorf("furrow set: undecodable envelope: %v", err)
+	envs, err := decodeSetEnvelopes("set", out)
+	if err != nil {
+		return board.MoveReport{}, err
 	}
-	var renumbered []string
+	rep := board.MoveReport{Repeat: seriesOf(envs)}
 	for _, e := range envs {
 		for _, r := range e.Renumbered {
-			renumbered = append(renumbered, r.ID)
+			rep.Renumbered = append(rep.Renumbered, r.ID)
 		}
 	}
-	return renumbered, nil
+	return rep, nil
 }
 
 // PersistDone records an already-applied close via `furrow done`
-// (board.Provider).
-func (p *Store) PersistDone(id string) error {
-	_, err := p.c.run("done", "done", id)
-	return err
+// (board.Provider). --json is what makes the series report reachable: the
+// plain form prints it as prose for a terminal, and this write's caller is
+// the one that has to say "next due <day> (<id>)" on the status line.
+func (p *Store) PersistDone(id string) (*board.RepeatReport, error) {
+	out, err := p.c.run("done", "done", id, "--json")
+	if err != nil {
+		return nil, err
+	}
+	envs, err := decodeSetEnvelopes("done", out)
+	if err != nil {
+		return nil, err
+	}
+	return seriesOf(envs), nil
 }
 
 // PersistCheck records an already-applied checklist toggle via `furrow

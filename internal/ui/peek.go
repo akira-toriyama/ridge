@@ -170,6 +170,21 @@ func (m *Model) peekContent(w int) string {
 		}
 		b.WriteString(due + "\n")
 	}
+	if t.Repeat != "" {
+		// The rule as furrow stores it — a compiled RRULE, which is also what
+		// `furrow show` prints (there is no prose direction) — with the series
+		// start beside it, in `show`'s own wording. Under the due on purpose:
+		// the occurrence on the board IS the next one, and closing it is what
+		// writes the one after. wrapLines, not a bare line: the rule has no
+		// whitespace, and a bounded UNTIL rule is 40-odd cells on its own.
+		line := glyphRepeat + " repeats " + t.Repeat
+		if !t.RepeatAnchor.IsZero() {
+			line += " (since " + t.RepeatAnchor.In(board.Zone()).Format("2006-01-02") + ")"
+		}
+		for _, l := range wrapLines(line, w) {
+			b.WriteString(th.muted.Render(l) + "\n")
+		}
+	}
 	// wrapJoin like the meta lines: three stamps overflow a narrow peek.
 	b.WriteString(th.dim.Render(wrapJoin(stamps, " · ", w)) + "\n")
 	if why := m.revisitWhy[t.ID]; m.revisitOn && len(why) > 0 {

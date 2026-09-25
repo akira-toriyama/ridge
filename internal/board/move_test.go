@@ -3,6 +3,7 @@ package board
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func laneIDs(b *Board, lane string) string {
@@ -201,6 +202,37 @@ func TestCloseStampsAndReopenClears(t *testing.T) {
 	}
 	if !b.Task("a").Closed.IsZero() {
 		t.Error("leaving the done lane must clear Closed")
+	}
+}
+
+// furrow consumes a repeat rule on a close — the successor carries it, and a
+// reopen does not hand it back — so the optimistic apply must drop it too, or
+// the closed card keeps saying "repeats" until the re-read (and forever on the
+// fixture, which never re-reads).
+func TestCloseConsumesTheRepeatRuleAndReopenDoesNotRestoreIt(t *testing.T) {
+	b := threeLane()
+	a := b.Task("a")
+	a.Repeat, a.RepeatAnchor = "FREQ=WEEKLY", time.Date(2026, 10, 1, 14, 59, 59, 0, time.UTC)
+	if err := b.Close("a"); err != nil {
+		t.Fatal(err)
+	}
+	if a.Repeat != "" || !a.RepeatAnchor.IsZero() {
+		t.Errorf("close kept the rule: repeat=%q anchor=%v", a.Repeat, a.RepeatAnchor)
+	}
+	if _, err := b.MoveTo("a", "ready", 0); err != nil {
+		t.Fatal(err)
+	}
+	if a.Repeat != "" {
+		t.Errorf("reopen restored the rule: %q", a.Repeat)
+	}
+	// A move that is not a close leaves the rule alone.
+	c := b.Task("c")
+	c.Repeat = "FREQ=DAILY"
+	if _, err := b.MoveTo("c", "ready", 0); err != nil {
+		t.Fatal(err)
+	}
+	if c.Repeat != "FREQ=DAILY" {
+		t.Errorf("a plain move consumed the rule: %q", c.Repeat)
 	}
 }
 

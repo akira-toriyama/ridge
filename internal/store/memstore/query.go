@@ -138,6 +138,7 @@ var presenceValues = map[string]bool{
 	"label": true, "repo": true, "epic": true, "value": true,
 	"effort": true, "deps": true, "refs": true, "checklist": true,
 	"closed": true, "reviewed": true, "body": true, "due": true,
+	"repeat": true,
 }
 
 // queryVocab is the board-derived half of the grammar. furrow validates a
@@ -589,6 +590,8 @@ func hasField(t *board.Task, field string) bool {
 		return !t.Reviewed.IsZero()
 	case "due":
 		return !t.Due.IsZero()
+	case "repeat":
+		return t.Repeat != ""
 	}
 	return false
 }

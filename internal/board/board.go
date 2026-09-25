@@ -66,24 +66,26 @@ type ChecklistItem struct {
 // NOT tasks: they are separate entities without a lane (EpicInfo), and a task
 // carries only its membership id in Epic.
 type Task struct {
-	ID        string
-	Title     string
-	Status    string // the lane
-	Priority  int    // sparse, 10-step; order WITHIN the lane
-	Value     int    // 1..5
-	Effort    int    // 1..5
-	Labels    []string
-	Repos     []string
-	Epic      string // e- id of the box this task is filed under ("" = unfiled)
-	Deps      []string
-	Refs      []string
-	Checklist []ChecklistItem
-	Created   time.Time
-	Updated   time.Time
-	Closed    time.Time
-	Reviewed  time.Time
-	Due       time.Time // zero = no promise
-	Body      string
+	ID           string
+	Title        string
+	Status       string // the lane
+	Priority     int    // sparse, 10-step; order WITHIN the lane
+	Value        int    // 1..5
+	Effort       int    // 1..5
+	Labels       []string
+	Repos        []string
+	Epic         string // e- id of the box this task is filed under ("" = unfiled)
+	Deps         []string
+	Refs         []string
+	Checklist    []ChecklistItem
+	Created      time.Time
+	Updated      time.Time
+	Closed       time.Time
+	Reviewed     time.Time
+	Due          time.Time // zero = no promise
+	Repeat       string    // furrow's compiled RRULE; "" = not repeating. A close consumes it (MoveTo mirrors that); never expanded here
+	RepeatAnchor time.Time // the series start, present iff Repeat is
+	Body         string
 }
 
 // shortRepo renders "akira-toriyama/vista" as "vista" for a narrow surface,
@@ -503,6 +505,10 @@ func (b *Board) MoveTo(id, lane string, idx int) (renumbered []string, err error
 	switch {
 	case dst.Done && !wasDone:
 		t.Closed = t.Updated
+		// furrow CONSUMES the rule on a close — the successor carries it, and a
+		// reopen does not hand it back — so the optimistic card must stop
+		// saying "repeats" now rather than at the re-read.
+		t.Repeat, t.RepeatAnchor = "", time.Time{}
 	case !dst.Done && wasDone:
 		t.Closed = time.Time{}
 	}

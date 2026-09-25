@@ -36,6 +36,12 @@ type scriptedProvider struct {
 	epicFailAt int
 	epicCalls  int
 	epicPrev   board.EpicPrevious
+	// repeat is the series report a close answers with — PersistDone's, and
+	// PersistMove's when the lane is done (`set -s done` closes too). nil =
+	// the task carried no rule, which is every task unless a test says so.
+	// doneErr is PersistDone's scripted refusal (nil = accepted), like moveErr.
+	repeat  *board.RepeatReport
+	doneErr error
 }
 
 type scriptedMove struct{ id, lane, before, after string }
@@ -95,19 +101,26 @@ func (p *scriptedProvider) Add(title string, _ board.AddOptions) (string, error)
 	return "t-new", nil
 }
 
-func (p *scriptedProvider) PersistMove(id, lane, beforeID, afterID string) ([]string, error) {
+func (p *scriptedProvider) PersistMove(id, lane, beforeID, afterID string) (board.MoveReport, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.calls = append(p.calls, "move "+id)
 	p.moves = append(p.moves, scriptedMove{id, lane, beforeID, afterID})
-	return nil, p.moveErr
+	rep := board.MoveReport{}
+	if lane == "done" {
+		rep.Repeat = p.repeat
+	}
+	return rep, p.moveErr
 }
 
-func (p *scriptedProvider) PersistDone(id string) error {
+func (p *scriptedProvider) PersistDone(id string) (*board.RepeatReport, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.calls = append(p.calls, "done "+id)
-	return nil
+	if p.doneErr != nil {
+		return nil, p.doneErr
+	}
+	return p.repeat, nil
 }
 
 func (p *scriptedProvider) PersistCheck(id string, i int, done bool) error {

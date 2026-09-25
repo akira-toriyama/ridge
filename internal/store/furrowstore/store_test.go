@@ -181,12 +181,15 @@ func TestContractPersistMoveAnchorsAndRespace(t *testing.T) {
 	// Exhaust the gap between two neighbours: the store must respace and say so.
 	lab(t, dir, "furrow", "set", b, "-p", "100")
 	lab(t, dir, "furrow", "set", a, "-p", "101")
-	renumbered, err := p.PersistMove(c, "ready", a, "")
+	rep, err := p.PersistMove(c, "ready", a, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(renumbered) == 0 {
+	if len(rep.Renumbered) == 0 {
 		t.Error("an exhausted gap must report renumbered neighbours")
+	}
+	if rep.Repeat != nil {
+		t.Errorf("a placement outside the done lane reported a series: %+v", rep.Repeat)
 	}
 }
 
@@ -194,8 +197,12 @@ func TestContractPersistDoneCheckBody(t *testing.T) {
 	p, dir := newLabProvider(t)
 	id := labAdd(t, dir, "仕上げ対象", "--check", "項目")
 
-	if err := p.PersistDone(id); err != nil {
+	rep, err := p.PersistDone(id)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if rep != nil {
+		t.Errorf("a close of a task with no rule reported a series: %+v", rep)
 	}
 	if err := p.PersistCheck(id, 0, true); err != nil {
 		t.Fatal(err)
@@ -834,5 +841,144 @@ func TestLanesFromDropsTerminalLanesFromNext(t *testing.T) {
 	}
 	if got["inbox"].Next || got["icebox"].Next {
 		t.Errorf("lanes outside next_lanes stay non-next: %+v", lanes)
+	}
+}
+
+// furrow #331 (board layout v10): a task carries a repeat rule, and closing
+// it — by `done` or by `set -s <done>` — writes the next occurrence in the
+// same write and answers with a `repeat` report. Both roads must surface the
+// successor's id: it exists nowhere else until the re-read.
+//
+// bite-exempt: execs a real furrow binary and always skips where furrow is not
+// on PATH — which is CI's build job, so the gate can never judge it there
+func TestContractRepeatRidesTheLoadAndBothCloses(t *testing.T) {
+	p, dir := newLabProvider(t)
+	id := labAdd(t, dir, "週次の締め", "--due", "2026-10-01", "--repeat", "weekly")
+	plain := labAdd(t, dir, "単発")
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	x := p.Board().Task(id)
+	if x.Repeat != "FREQ=WEEKLY" {
+		t.Fatalf("repeat = %q, want furrow's compiled FREQ=WEEKLY", x.Repeat)
+	}
+	if x.RepeatAnchor.IsZero() || !x.RepeatAnchor.Equal(x.Due) {
+		t.Errorf("repeat_anchor = %v, want the first due %v", x.RepeatAnchor, x.Due)
+	}
+	if y := p.Board().Task(plain); y.Repeat != "" || !y.RepeatAnchor.IsZero() {
+		t.Errorf("a task with no rule read one: %q %v", y.Repeat, y.RepeatAnchor)
+	}
+
+	// Road one: `done`.
+	rep, err := p.PersistDone(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep == nil || rep.Created == "" || rep.Due.IsZero() || rep.Completed {
+		t.Fatalf("done answered no usable series report: %+v", rep)
+	}
+	if !rep.Due.After(x.Due) {
+		t.Errorf("successor due %v is not after the settled %v", rep.Due, x.Due)
+	}
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	succ := p.Board().Task(rep.Created)
+	if succ == nil {
+		t.Fatalf("the reported successor %s is not on the re-read board", rep.Created)
+	}
+	if succ.Repeat != "FREQ=WEEKLY" || !succ.Due.Equal(rep.Due) {
+		t.Errorf("successor carries repeat=%q due=%v, want the rule and the reported due %v", succ.Repeat, succ.Due, rep.Due)
+	}
+	if prev := p.Board().Task(id); prev.Repeat != "" || prev.Status != p.Board().DoneLane() {
+		t.Errorf("the closed occurrence must lose the rule and sit in done: %q %s", prev.Repeat, prev.Status)
+	}
+
+	// Road two: a placement into the done lane.
+	mv, err := p.PersistMove(succ.ID, p.Board().DoneLane(), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mv.Repeat == nil || mv.Repeat.Created == "" || mv.Repeat.Created == succ.ID || mv.Repeat.Completed {
+		t.Fatalf("set -s done answered no usable series report: %+v", mv.Repeat)
+	}
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	if p.Board().Task(mv.Repeat.Created) == nil {
+		t.Errorf("the successor %s reported by the move is not on the re-read board", mv.Repeat.Created)
+	}
+
+	// A spent series: the report says so instead of naming a successor.
+	// COUNT=2, not 1 — furrow refuses a rule with no occurrence after the
+	// first ("it would end the series on the very next close", exit 2), so
+	// the shortest series that can be spent is two closes long.
+	two := labAdd(t, dir, "二回きり", "--due", "2026-10-01", "--repeat", "FREQ=WEEKLY;COUNT=2")
+	rep, err = p.PersistDone(two)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep == nil || rep.Created == "" || rep.Completed {
+		t.Fatalf("the first close of a two-occurrence series must mint the second: %+v", rep)
+	}
+	rep, err = p.PersistDone(rep.Created)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep == nil || !rep.Completed || rep.Created != "" || !rep.Due.IsZero() {
+		t.Errorf("closing the last occurrence must report completed with no successor: %+v", rep)
+	}
+}
+
+// The whole road through the program: `d` on a recurring task against the
+// real store, and the status line the user reads must name the successor
+// furrow wrote. Read through the -debuglog status layer — the final model's
+// status is not reachable from this package, and the log is the same funnel.
+//
+// bite-exempt: execs a real furrow binary and always skips where furrow is not
+// on PATH — which is CI's build job, so the gate can never judge it there
+func TestContractProgramClosesARepeatingTaskForReal(t *testing.T) {
+	p, dir := newLabProvider(t)
+	id := labAdd(t, dir, "閉じる対象", "--due", "2026-10-01", "--repeat", "weekly")
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+
+	var log bytes.Buffer
+	m := ui.New(p, ui.Options{Debug: ui.NewDebugLog(&log)})
+	var in bytes.Buffer
+	in.WriteString("d")
+	in.WriteString("q") // waits for the drain (quitOrFlush), so the write lands first
+	var out bytes.Buffer
+	if _, err := tea.NewProgram(m,
+		tea.WithInput(&in), tea.WithOutput(&out),
+		tea.WithoutSignals(), tea.WithWindowSize(140, 40),
+	).Run(); err != nil {
+		t.Fatalf("program: %v", err)
+	}
+
+	// The store: the occurrence closed, its successor born in the default lane.
+	if got := labLaneOrder(t, dir, "done"); len(got) != 1 || got[0] != id {
+		t.Fatalf("store done = %v, want [%s]", got, id)
+	}
+	inbox := labLaneOrder(t, dir, "inbox")
+	if len(inbox) != 1 {
+		t.Fatalf("store inbox = %v, want the one successor", inbox)
+	}
+	// The screen: the status note named it.
+	var announced bool
+	for _, line := range strings.Split(strings.TrimSpace(log.String()), "\n") {
+		var ev struct {
+			Layer, Kind, Text string
+		}
+		if err := json.Unmarshal([]byte(line), &ev); err != nil {
+			t.Fatalf("debug log line %q: %v", line, err)
+		}
+		if ev.Layer == "status" && ev.Kind == "note" && strings.Contains(ev.Text, "repeat: next due") && strings.Contains(ev.Text, "("+inbox[0]+")") {
+			announced = true
+		}
+	}
+	if !announced {
+		t.Errorf("no status note named the successor %s; log:\n%s", inbox[0], log.String())
 	}
 }
