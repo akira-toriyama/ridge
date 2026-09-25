@@ -66,30 +66,25 @@ type ChecklistItem struct {
 // NOT tasks: they are separate entities without a lane (EpicInfo), and a task
 // carries only its membership id in Epic.
 type Task struct {
-	ID        string
-	Title     string
-	Status    string // the lane
-	Priority  int    // sparse, 10-step; order WITHIN the lane
-	Value     int    // 1..5
-	Effort    int    // 1..5
-	Labels    []string
-	Repos     []string
-	Epic      string // e- id of the box this task is filed under ("" = unfiled)
-	Deps      []string
-	Refs      []string
-	Checklist []ChecklistItem
-	Created   time.Time
-	Updated   time.Time
-	Closed    time.Time
-	Reviewed  time.Time
-	Due       time.Time // zero = no promise
-	// Repeat is the recurrence rule the task runs on — furrow's compiled RRULE
-	// line, held by exactly one task of a series at a time (a close hands it
-	// to the successor). "" = not repeating. RepeatAnchor is the series start,
-	// present iff Repeat is. ridge shows both and expands neither: the next
-	// occurrence is furrow's to compute, and it arrives with the re-read.
-	Repeat       string
-	RepeatAnchor time.Time
+	ID           string
+	Title        string
+	Status       string // the lane
+	Priority     int    // sparse, 10-step; order WITHIN the lane
+	Value        int    // 1..5
+	Effort       int    // 1..5
+	Labels       []string
+	Repos        []string
+	Epic         string // e- id of the box this task is filed under ("" = unfiled)
+	Deps         []string
+	Refs         []string
+	Checklist    []ChecklistItem
+	Created      time.Time
+	Updated      time.Time
+	Closed       time.Time
+	Reviewed     time.Time
+	Due          time.Time // zero = no promise
+	Repeat       string    // furrow's compiled RRULE; "" = not repeating. A close consumes it (MoveTo mirrors that); never expanded here
+	RepeatAnchor time.Time // the series start, present iff Repeat is
 	Body         string
 }
 

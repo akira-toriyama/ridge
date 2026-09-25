@@ -241,10 +241,12 @@ func (m *Model) commitMove(id, from, to string, dispIdx int) (moved bool, cmd te
 	}
 	m.recompute()
 	m.selectID(id, false)
+	gesture := ""
 	if len(renumbered) > 0 {
-		m.note("respaced %s (%d neighbours renumbered)", to, len(renumbered))
+		gesture = fmt.Sprintf("respaced %s (%d neighbours renumbered)", to, len(renumbered))
+		m.note("%s", gesture)
 	}
-	return true, m.persistPlacement(id, to), nil
+	return true, m.persistPlacement(id, to, gesture), nil
 }
 
 // displayIndex is the card's slot in a displayed (filtered) column, -1 when

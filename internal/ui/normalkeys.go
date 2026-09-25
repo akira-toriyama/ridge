@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -271,16 +272,16 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 				return nil
 			}
 			m.recompute()
+			gesture := "closed " + id
 			if unblocked > 0 {
-				m.note("closed %s — unblocked %d task(s)", id, unblocked)
-			} else {
-				m.note("closed %s", id)
+				gesture = fmt.Sprintf("closed %s — unblocked %d task(s)", id, unblocked)
 			}
+			m.note("%s", gesture)
 			// The series report rides persistOp.note: a recurring task's
 			// close writes its successor in the same furrow write, and the
 			// reply is the only place the new id exists until the re-read.
 			note := new(string)
-			return m.enqueuePersistNoting("done "+id, note, func() ([]string, error) {
+			return m.enqueuePersistNoting("done "+id, gesture, note, func() ([]string, error) {
 				rep, err := m.prov.PersistDone(id)
 				if rep != nil {
 					*note = repeatLine(rep)

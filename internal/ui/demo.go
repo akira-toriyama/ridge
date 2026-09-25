@@ -876,11 +876,14 @@ func (m *Model) demoState(kind string) error {
 
 	case "repeatdone":
 		// The frame right after a recurring task's close LANDED and the
-		// reconcile delivered its successor: the closed card in the done
-		// lane (rule consumed — no ⟳), the successor in the default lane
-		// carrying the rule, and the status line naming it. The successor is
-		// built onto the fixture here — memstore mints none (expanding a rule
-		// is furrow's) — as the weekly rule's true next occurrence, and the
+		// reconcile delivered its successor: the successor in the default
+		// lane carrying the rule, and the status line naming it. The closed
+		// card sits at the tail of the done lane with the rule consumed (no
+		// ⟳) — below the fold at 50 rows, in the frame at 80. The successor
+		// is built onto the fixture here — memstore mints none (expanding a
+		// rule is furrow's) — the way furrow births one: body and checklist
+		// copied with the boxes unchecked, this run's deps and the settled
+		// stamps dropped, the due the weekly rule's true next occurrence. The
 		// line is rendered by the same repeatLine the live close uses, so the
 		// wording cannot drift from the real path.
 		subj, err := m.demoRepeatTask("repeatdone")
@@ -896,6 +899,15 @@ func (m *Model) demoState(kind string) error {
 		next.Due = subj.Due.AddDate(0, 0, 7)
 		next.Closed, next.Reviewed = time.Time{}, time.Time{}
 		next.Deps = nil
+		// Own slices, not the subject's backing arrays: the two cards must
+		// not change together, and the boxes start unchecked.
+		next.Labels = append([]string(nil), subj.Labels...)
+		next.Repos = append([]string(nil), subj.Repos...)
+		next.Refs = append([]string(nil), subj.Refs...)
+		next.Checklist = make([]board.ChecklistItem, len(subj.Checklist))
+		for i, c := range subj.Checklist {
+			next.Checklist[i] = board.ChecklistItem{Text: c.Text}
+		}
 		if last := m.b.LaneTasks(next.Status); len(last) > 0 {
 			next.Priority = last[len(last)-1].Priority + 10
 		} else {
@@ -910,7 +922,8 @@ func (m *Model) demoState(kind string) error {
 		}
 		m.recompute()
 		m.lastPersist = "done " + subj.ID + " 104ms"
-		m.note("done %s · %s", subj.ID, repeatLine(&board.RepeatReport{Created: next.ID, Due: next.Due}))
+		// The gesture's own line leads, as on the live path (persistOp.gesture).
+		m.note("closed %s · %s", subj.ID, repeatLine(&board.RepeatReport{Created: next.ID, Due: next.Due}))
 
 	case "fail":
 		// A refused write. The ⚠ styling has its own colour and its own row,
@@ -1000,8 +1013,6 @@ func (m *Model) demoBox(demo, need string, pred func(board.EpicInfo) bool) (boar
 	return board.EpicInfo{}, fmt.Errorf("demo %s: no box on this board %s", demo, need)
 }
 
-// demoAnyTask is the board's first task, for the demos that only need an id
-// to print (a queued op's label, a refused write's message, a typed dep:).
 // demoRepeatTask is a task carrying a repeat rule — the two repeat demos'
 // subject. The fixture holds two (t-9sa6 weekly, t-ehk7 monthly); first in
 // board order wins, and a board with none refuses by shape.
@@ -1009,6 +1020,8 @@ func (m *Model) demoRepeatTask(demo string) (*board.Task, error) {
 	return m.demoTask(demo, "a task carrying a repeat rule", func(t *board.Task) bool { return t.Repeat != "" })
 }
 
+// demoAnyTask is the board's first task, for the demos that only need an id
+// to print (a queued op's label, a refused write's message, a typed dep:).
 func (m *Model) demoAnyTask(demo string) (*board.Task, error) {
 	if ts := m.b.Tasks(); len(ts) > 0 {
 		return ts[0], nil

@@ -39,7 +39,9 @@ type scriptedProvider struct {
 	// repeat is the series report a close answers with — PersistDone's, and
 	// PersistMove's when the lane is done (`set -s done` closes too). nil =
 	// the task carried no rule, which is every task unless a test says so.
-	repeat *board.RepeatReport
+	// doneErr is PersistDone's scripted refusal (nil = accepted), like moveErr.
+	repeat  *board.RepeatReport
+	doneErr error
 }
 
 type scriptedMove struct{ id, lane, before, after string }
@@ -115,6 +117,9 @@ func (p *scriptedProvider) PersistDone(id string) (*board.RepeatReport, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.calls = append(p.calls, "done "+id)
+	if p.doneErr != nil {
+		return nil, p.doneErr
+	}
 	return p.repeat, nil
 }
 

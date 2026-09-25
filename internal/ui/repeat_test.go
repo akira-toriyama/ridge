@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -22,14 +23,21 @@ func TestRepeatGlyphIsOneCell(t *testing.T) {
 	}
 }
 
-// lineWith is the first frame line naming id, "" when none does.
-func lineWith(out, id string) string {
+// lineWith is the first frame line containing needle, "" when none does. A
+// bare id is not a safe needle — the title bar's latency readout and the
+// status line name ids too — so callers pass the card's "id repo" pair.
+func lineWith(out, needle string) string {
 	for _, l := range strings.Split(out, "\n") {
-		if strings.Contains(l, id) {
+		if strings.Contains(l, needle) {
 			return l
 		}
 	}
 	return ""
+}
+
+// metaLine is the card's meta line: the id followed by its repo chip.
+func metaLine(out string, task *board.Task) string {
+	return lineWith(out, task.ID+" "+task.ShortRepo())
 }
 
 func TestRepeatCardCarriesTheMarkOnItsMetaLine(t *testing.T) {
@@ -47,9 +55,9 @@ func TestRepeatCardCarriesTheMarkOnItsMetaLine(t *testing.T) {
 		if !m.selectID(tc.id, false) {
 			t.Fatalf("%s is not on the fixture board", tc.id)
 		}
-		line := lineWith(frame(m), tc.id)
+		line := metaLine(frame(m), m.b.Task(tc.id))
 		if line == "" {
-			t.Fatalf("%s is selected but not in the frame", tc.id)
+			t.Fatalf("%s is selected but its meta line is not in the frame", tc.id)
 		}
 		if got := strings.Contains(line, glyphRepeat); got != tc.want {
 			t.Errorf("%s meta line carries %s = %v, want %v: %q", tc.id, glyphRepeat, got, tc.want, line)
@@ -79,7 +87,11 @@ func TestRepeatPeekPrintsTheRuleAndTheSeriesStart(t *testing.T) {
 	}
 }
 
-func TestRepeatLineSpeaksFurrowsWords(t *testing.T) {
+// The words are furrow's seriesLine (internal/cli/cmd_mutate.go), byte for
+// byte on the spent form; the one divergence is the due, which furrow prints
+// as the instant in the board's calendar and ridge as the local day every
+// other surface spells dates in.
+func TestRepeatLineMirrorsFurrowsSeriesLineExceptTheDay(t *testing.T) {
 	due := time.Date(2026, 10, 8, 14, 59, 59, 0, time.UTC)
 	day := due.In(board.Zone()).Format("2006-01-02")
 	for _, tc := range []struct {
@@ -97,54 +109,85 @@ func TestRepeatLineSpeaksFurrowsWords(t *testing.T) {
 	}
 }
 
-// `d` on a recurring task: the store's reply names the successor, and the
-// status line must carry it once the write lands — the card itself only
-// arrives with the re-read, so this line is the id's first appearance.
-func TestDoneAnnouncesTheSuccessorTheStoreReported(t *testing.T) {
+// `d` on a recurring task: the store's reply names the successor, and once the
+// write lands the status line must carry it AFTER the gesture's own line —
+// "unblocked N task(s)" is said nowhere else, and the write lands ~100ms
+// after it was written, so a note that replaced it would erase it unread.
+func TestDoneAnnouncesTheSuccessorAfterTheGesturesOwnNote(t *testing.T) {
 	m, p := scriptedModel(t)
 	due := time.Date(2026, 10, 8, 14, 59, 59, 0, time.UTC)
 	p.repeat = &board.RepeatReport{Created: "t-succ", Due: due}
-	m.selectID("b", false)
+	day := due.In(board.Zone()).Format("2006-01-02")
 
+	// c waits on b, so closing b unblocks one task — the gesture line that
+	// must survive the landing.
+	m.b.Task("c").Deps = []string{"b"}
+	m.recompute()
+	m.selectID("b", false)
 	cmd := m.onNormalKey(tea.KeyPressMsg{Code: 'd', Text: "d"})
 	if cmd == nil {
 		t.Fatal("done must return the persist Cmd")
 	}
-	if !strings.HasPrefix(m.status, "closed b") {
+	if m.status != "closed b — unblocked 1 task(s)" {
 		t.Fatalf("before the write lands the gesture's own note stands, got %q", m.status)
 	}
 	m.onPersistDone(cmd().(persistDoneMsg))
-	want := "done b · repeat: next due " + due.In(board.Zone()).Format("2006-01-02") + " (t-succ)"
+	want := "closed b — unblocked 1 task(s) · repeat: next due " + day + " (t-succ)"
 	if m.status != want || m.statusErr {
 		t.Errorf("status after the close landed = %q (err=%v), want %q", m.status, m.statusErr, want)
 	}
 }
 
-// The same close by the other road — a placement into the done lane is
-// `furrow set -s done`, which advances the series exactly as `done` does.
-func TestMoveIntoDoneAnnouncesTheSuccessorToo(t *testing.T) {
+// The same close by the other road, through the gesture's own commit path —
+// a placement into the done lane is `furrow set -s done`, which advances the
+// series exactly as `done` does. With no respace the label leads; with one,
+// the respace note does.
+func TestMoveIntoDoneAnnouncesTheSuccessorThroughCommitMove(t *testing.T) {
 	m, p := scriptedModel(t)
 	due := time.Date(2026, 10, 8, 14, 59, 59, 0, time.UTC)
 	p.repeat = &board.RepeatReport{Created: "t-succ", Due: due}
+	day := due.In(board.Zone()).Format("2006-01-02")
 
-	if _, err := m.b.MoveTo("b", "done", 0); err != nil {
+	m.note("before")
+	moved, cmd, err := m.commitMove("b", "ready", "done", 0)
+	if err != nil || !moved || cmd == nil {
+		t.Fatalf("commitMove = %v %v %v", moved, cmd, err)
+	}
+	if m.status != "before" {
+		t.Fatalf("a move with no respace writes no note, got %q", m.status)
+	}
+	m.onPersistDone(cmd().(persistDoneMsg))
+	if want := "move b · repeat: next due " + day + " (t-succ)"; m.status != want {
+		t.Errorf("status after the move landed = %q, want %q", m.status, want)
+	}
+
+	// Exhaust the gap in the done lane so the next placement respaces: the
+	// respace note is the gesture's line, and the series report extends it.
+	if _, err := m.b.MoveTo("c", "done", 1); err != nil {
 		t.Fatal(err)
 	}
+	m.b.Task("b").Priority, m.b.Task("c").Priority = 20, 21
 	m.recompute()
-	cmd := m.persistPlacement("b", "done")
+	moved, cmd, err = m.commitMove("a", "ready", "done", 1)
+	if err != nil || !moved || cmd == nil {
+		t.Fatalf("commitMove = %v %v %v", moved, cmd, err)
+	}
+	if !strings.HasPrefix(m.status, "respaced done (") {
+		t.Fatalf("the exhausted gap must note the respace before the write, got %q", m.status)
+	}
+	respace := m.status
 	m.onPersistDone(cmd().(persistDoneMsg))
-	if want := "move b · repeat: next due " + due.In(board.Zone()).Format("2006-01-02") + " (t-succ)"; m.status != want {
-		t.Errorf("status after the move landed = %q, want %q", m.status, want)
+	if want := respace + " · repeat: next due " + day + " (t-succ)"; m.status != want {
+		t.Errorf("status after the respacing move landed = %q, want %q", m.status, want)
 	}
 
 	// A placement anywhere else answers no series, and the line must not
 	// pretend one: the scripted store reports only for the done lane.
 	m.note("before")
-	if _, err := m.b.MoveTo("a", "ready", 0); err != nil {
-		t.Fatal(err)
+	moved, cmd, err = m.commitMove("z", "backlog", "ready", 0)
+	if err != nil || !moved || cmd == nil {
+		t.Fatalf("commitMove = %v %v %v", moved, cmd, err)
 	}
-	m.recompute()
-	cmd = m.persistPlacement("a", "ready")
 	m.onPersistDone(cmd().(persistDoneMsg))
 	if strings.Contains(m.status, "repeat") {
 		t.Errorf("a plain move announced a series: %q", m.status)
@@ -152,20 +195,55 @@ func TestMoveIntoDoneAnnouncesTheSuccessorToo(t *testing.T) {
 }
 
 // A close of a task with no rule keeps the gesture's own note: the store
-// answered nil, and "done b · " with nothing after it would be a lie of shape.
+// answered nil, and "closed b · " with nothing after it would be a lie of shape.
 func TestDoneWithoutARuleKeepsTheGesturesNote(t *testing.T) {
 	m, _ := scriptedModel(t)
 	m.selectID("b", false)
 	cmd := m.onNormalKey(tea.KeyPressMsg{Code: 'd', Text: "d"})
 	m.onPersistDone(cmd().(persistDoneMsg))
-	if !strings.HasPrefix(m.status, "closed b") || strings.Contains(m.status, "repeat") {
+	if m.status != "closed b" {
 		t.Errorf("status = %q, want the gesture's own closed note", m.status)
 	}
 }
 
+// A refused close reports the refusal, never a series — and the rollback
+// re-read hands the rule back: the optimistic close consumed it locally, and
+// the store, having refused, still holds it.
+func TestRefusedCloseReportsTheFailureAndTheRollbackRestoresTheRule(t *testing.T) {
+	p := newScriptedProvider(func() *board.Board {
+		b := scriptedBoard()
+		b.Task("b").Repeat = "FREQ=WEEKLY"
+		return b
+	})
+	m := New(p, Options{})
+	m.w, m.h = 140, 40
+	m.recompute()
+	m.relayout()
+	p.repeat = &board.RepeatReport{Created: "t-succ", Due: time.Date(2026, 10, 8, 14, 59, 59, 0, time.UTC)}
+	p.doneErr = errors.New("boom")
+
+	m.selectID("b", false)
+	cmd := m.onNormalKey(tea.KeyPressMsg{Code: 'd', Text: "d"})
+	if m.b.Task("b").Repeat != "" {
+		t.Fatal("the optimistic close must consume the rule before the write")
+	}
+	rb := m.onPersistDone(cmd().(persistDoneMsg))
+	if !m.statusErr || !strings.Contains(m.status, "done b: boom") || strings.Contains(m.status, "repeat") {
+		t.Errorf("a refused close must report the refusal alone, got %q (err=%v)", m.status, m.statusErr)
+	}
+	if rb == nil {
+		t.Fatal("a refused optimistic write must return the rollback re-read")
+	}
+	m.onReloadDone(rb().(reloadDoneMsg))
+	if got := m.b.Task("b"); got.Status != "ready" || got.Repeat != "FREQ=WEEKLY" {
+		t.Errorf("after the rollback b is %s with repeat %q, want ready with the rule back", got.Status, got.Repeat)
+	}
+}
+
 // The two headless frames: the rule on the card and in the peek, and the
-// moment after a close landed — closed card without the mark, successor with
-// it, the status line naming the successor in furrow's words.
+// moment after a close landed — the successor with the mark and the status
+// line naming it in furrow's words; the closed card, at the tail of the done
+// lane, without the mark (below the fold at 50 rows, in the frame at 80).
 func TestRepeatDemosShowTheRuleAndTheSuccessor(t *testing.T) {
 	m := New(memstore.New(), Options{})
 	out, err := m.Dump(240, 50, "repeat", true)
@@ -175,24 +253,54 @@ func TestRepeatDemosShowTheRuleAndTheSuccessor(t *testing.T) {
 	if !strings.Contains(out, glyphRepeat+" repeats FREQ=WEEKLY") {
 		t.Error("-demo repeat must open the peek on a task carrying a rule")
 	}
+	if m.curTask() == nil || m.curTask().ID != "t-9sa6" {
+		t.Errorf("-demo repeat's cursor is on %v, want the fixture's first rule t-9sa6", m.curTask())
+	}
 
 	m = New(memstore.New(), Options{})
 	out, err = m.Dump(240, 50, "repeatdone", true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "done t-9sa6 · repeat: next due") || !strings.Contains(out, "(t-next1)") {
+	if !strings.Contains(out, "closed t-9sa6 · repeat: next due") || !strings.Contains(out, "(t-next1)") {
 		t.Errorf("-demo repeatdone must announce the successor in furrow's words; frame status: %q", m.status)
 	}
-	succ := lineWith(out, "t-next1")
-	if succ == "" || !strings.Contains(succ, glyphRepeat) {
-		t.Errorf("the successor's card must carry the rule it inherited: %q", succ)
+	succ := m.b.Task("t-next1")
+	if succ == nil {
+		t.Fatal("the successor is not on the board")
+	}
+	if line := metaLine(out, succ); line == "" || !strings.Contains(line, glyphRepeat) {
+		t.Errorf("the successor's card must carry the rule it inherited: %q", line)
 	}
 	closed := m.b.Task("t-9sa6")
 	if closed.Status != m.b.DoneLane() || closed.Repeat != "" {
 		t.Errorf("the closed subject must sit in the done lane with the rule consumed: %s %q", closed.Status, closed.Repeat)
 	}
-	if strings.Contains(lineWith(out, "t-9sa6 "), glyphRepeat) {
-		t.Error("the closed card must not keep the mark")
+	// Born the way furrow births one: boxes unchecked, and its own slices —
+	// ticking the closed card's box must not tick the successor's.
+	for i, c := range succ.Checklist {
+		if c.Done {
+			t.Errorf("successor checklist item %d is ticked; furrow copies the list unticked", i)
+		}
+	}
+	if len(closed.Checklist) > 0 {
+		closed.Checklist[0].Done = true
+		if succ.Checklist[0].Done {
+			t.Error("the successor's checklist aliases the closed card's")
+		}
+	}
+
+	// The closed card is the done lane's last: 50 rows fold it away, 80 show it.
+	m = New(memstore.New(), Options{})
+	out, err = m.Dump(240, 80, "repeatdone", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	line := metaLine(out, m.b.Task("t-9sa6"))
+	if line == "" {
+		t.Fatal("at 80 rows the closed card's meta line must be in the frame")
+	}
+	if strings.Contains(line, glyphRepeat) {
+		t.Errorf("the closed card must not keep the mark: %q", line)
 	}
 }

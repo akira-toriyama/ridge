@@ -119,8 +119,9 @@ columns; this is narrowed to two):
 
 `Space` opens it. Resolved two-way dependency lists (`blocked by` / `blocks`
 resolved to id, title and lane), the checklist, the body; a recurring task's
-rule and series start (`⟳ repeats FREQ=… (since <day>)`, as `furrow show`
-prints them). `t` shows the transitive tree. `Enter` opens the **field edit
+rule and its series start (`⟳ repeats FREQ=… (since <day>)` — the two facts
+of `furrow show`'s `repeat:` line, the start as a day). `t` shows the
+transitive tree. `Enter` opens the **field edit
 menu** (glossary: "edit menu"): title / value / effort / labels / epic / due /
 deps / repos / refs / checklist — the repeat rule is not among them
 (`furrow set --repeat` is the CLI's).

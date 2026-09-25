@@ -372,9 +372,7 @@ type setEnvelope struct {
 	Repeat *repeatJSON `json:"repeat"`
 }
 
-// decodeSetEnvelopes reads one write's envelope array. The series report is
-// taken from the first envelope carrying one: every write here names ONE id,
-// so a second envelope with a report would be a contract change, not data.
+// decodeSetEnvelopes reads one write's envelope array.
 func decodeSetEnvelopes(what string, out []byte) ([]setEnvelope, error) {
 	var envs []setEnvelope
 	if err := json.Unmarshal(out, &envs); err != nil {
@@ -383,6 +381,9 @@ func decodeSetEnvelopes(what string, out []byte) ([]setEnvelope, error) {
 	return envs, nil
 }
 
+// seriesOf is a one-id write's series report: the first envelope carrying
+// one. Every write here names ONE id, so a second envelope with a report
+// would be a contract change, not data.
 func seriesOf(envs []setEnvelope) *board.RepeatReport {
 	for _, e := range envs {
 		if e.Repeat != nil {
