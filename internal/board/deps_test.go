@@ -72,6 +72,27 @@ func TestReverseDeps(t *testing.T) {
 	}
 }
 
+// The edges Frees must not be fooled by: a dep listed twice is one blocker
+// (once in the answer, not zero and not twice); a dep the board does not
+// know keeps blocking, so the dependent is not freed; a subject already in
+// done frees nothing — its dependents were freed when it closed.
+func TestFreesGuards(t *testing.T) {
+	b := NewBoard([]*Task{
+		mk("root", "backlog"),
+		mk("dup", "backlog", "root", "root"),
+		mk("ghosted", "backlog", "root", "t-nowhere"),
+		mk("closed", "done"),
+		mk("after", "backlog", "closed"),
+	})
+	g := NewGraph(b)
+	if got := g.Frees("root"); strings.Join(got, ",") != "dup" {
+		t.Errorf("Frees(root) = %v, want dup once: the doubled dep is one blocker, the unknown dep still blocks ghosted", got)
+	}
+	if got := g.Frees("closed"); len(got) != 0 {
+		t.Errorf("Frees(closed) = %v, want none: a done task frees nothing now", got)
+	}
+}
+
 func TestTreeOfIsCycleSafeAndElidesDone(t *testing.T) {
 	// A deliberate cycle: a -> b -> a. The real board has none, but a tree
 	// walker that trusts that is a walker that hangs on the first bad merge.

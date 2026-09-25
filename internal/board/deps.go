@@ -102,8 +102,23 @@ func (g *Graph) OpenBlocks(id string) []string {
 // 100-task ridge-test board).
 func (g *Graph) Frees(id string) []string {
 	var out []string
+	seen := map[string]bool{}
 	for _, x := range g.OpenBlocks(id) {
-		if bb := g.BlockedBy(x); len(bb) == 1 && bb[0] == id {
+		// A dep listed twice (cluster.go tolerates it) shows up twice in the
+		// reverse index and twice in BlockedBy; it is still one dependent
+		// with one blocker.
+		if seen[x] {
+			continue
+		}
+		seen[x] = true
+		bb := g.BlockedBy(x)
+		held := len(bb) == 0
+		for _, d := range bb {
+			if d != id {
+				held = true
+			}
+		}
+		if !held {
 			out = append(out, x)
 		}
 	}

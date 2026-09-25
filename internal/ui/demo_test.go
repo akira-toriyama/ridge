@@ -131,6 +131,7 @@ func TestDemoRefusalNamesTheMissingShape(t *testing.T) {
 		{"epicnew", "carries a repo"},
 		{"repeat", "repeat rule"},
 		{"repeatdone", "repeat rule"},
+		{"done", "frees exactly one"},
 	} {
 		_, err := m.Dump(240, 50, tc.demo, true)
 		if err == nil || !strings.Contains(err.Error(), tc.want) {

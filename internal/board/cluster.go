@@ -60,11 +60,12 @@ type ClusterNode struct {
 	// row. Blockers answers "what edges does this node have" (the `←` tag);
 	// Open answers "is it stuck" (every count).
 	Open []string
-	// Blocking is how many OPEN members this node blocks, directly or
-	// transitively — what closing it would actually free. The whole point of an
-	// overview: "these eight are held up by exactly two tasks" is a fact no
-	// per-task view can state. Done members are not counted: they are not
-	// waiting on anything.
+	// Blocking is how many OPEN members this node holds up, directly or
+	// transitively — how far it reaches, not how many a close frees (a
+	// member downstream may wait on others too; Graph.Frees is that). The
+	// whole point of an overview: "these eight are held up by exactly two
+	// tasks" is a fact no per-task view can state. Done members are not
+	// counted: they are not waiting on anything.
 	Blocking int
 	// Done reports a member in a done lane. Only reachable at ClusterAll.
 	Done bool
@@ -126,10 +127,10 @@ func (c Cluster) count(pred func(ClusterNode) bool) int {
 	return n
 }
 
-// Top is the OPEN member whose closing would free the most others, or the zero
-// value when nothing in the cluster frees anything. Ties go to the first in
-// draw order, so the answer is stable across frames. Done members are excluded
-// as subjects: naming a finished task as the one to close is advice nobody can
+// Top is the OPEN member that holds up the most others, or the zero value
+// when nothing in the cluster holds anything up. Ties go to the first in draw
+// order, so the answer is stable across frames. Done members are excluded as
+// subjects: naming a finished task as the one to close is advice nobody can
 // take.
 func (c Cluster) Top() ClusterNode {
 	var best ClusterNode
@@ -352,9 +353,9 @@ func (g *Graph) buildCluster(comp []string, blockers, fwd map[string][]string) C
 // reach counts the OPEN members downstream of id — the transitive blast radius
 // of closing it. Cycle-safe by the visited set, which also makes a node
 // reachable by two paths count ONCE, so the number is "how many tasks this
-// frees" and not "how many paths lead away from it". Done members are walked
-// THROUGH but not counted: closing a task does not free something already
-// finished, and saying it did is how "frees 10" ended up over ten `v` rows.
+// holds up" and not "how many paths lead away from it". Done members are
+// walked THROUGH but not counted: a finished task is held up by nothing, and
+// counting them is how "frees 10" ended up over ten `v` rows.
 func (g *Graph) reach(id string, fwd map[string][]string, within map[string]bool) int {
 	visited := map[string]bool{id: true}
 	stack := []string{id}
