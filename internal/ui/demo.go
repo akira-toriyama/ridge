@@ -111,6 +111,16 @@ func (m *Model) demoState(kind string) error {
 		}
 		m.add.input.SetValue("思いつきを控える")
 
+	case "addrepeat":
+		// Quick add with a rule (t-zbmv): the repeat: token beside the due it
+		// needs, the rule quoted because its spelling carries spaces — the
+		// chips row proves both land and that the quote opened the value,
+		// not the title. No filter, so the chips are the typed line alone.
+		if c := m.enterAdd(); c != nil {
+			_ = c
+		}
+		m.add.input.SetValue(`週次の締め due:2026-10-02 repeat:"weekly on fri"`)
+
 	case "edit":
 		// Open the field-edit overlay on a task with a checklist AND labels
 		// (demoEditTask; t-9sa6 on the fixture)
@@ -173,6 +183,27 @@ func (m *Model) demoState(kind string) error {
 		}
 		m.edit.menuIdx = int(fieldTitle)
 		if c := m.openField(fieldTitle, subj); c != nil {
+			_ = c
+		}
+
+	case "editrepeat":
+		// The repeat rule's input (t-zbmv), seeded with the task's stored
+		// rule: the one edit-menu seed that is furrow's spelling (the
+		// compiled RRULE) rather than the user's, so the frame proves the
+		// seed reads as typed text, next to the stage's own key line.
+		subj, err := m.demoRepeatTask("editrepeat")
+		if err != nil {
+			return err
+		}
+		if !m.selectID(subj.ID, false) {
+			return fmt.Errorf("demo editrepeat: %s is on the board but not in view", subj.ID)
+		}
+		m.enterEdit()
+		if m.edit == nil {
+			return fmt.Errorf("demo editrepeat: the edit menu did not open")
+		}
+		m.edit.menuIdx = int(fieldRepeat)
+		if c := m.openField(fieldRepeat, subj); c != nil {
 			_ = c
 		}
 

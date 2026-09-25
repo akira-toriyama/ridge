@@ -133,8 +133,13 @@ rule and its series start (`⟳ repeats FREQ=… (since <day>)` — the two fact
 of `furrow show`'s `repeat:` line, the start as a day). `t` shows the
 transitive tree. `Enter` opens the **field edit
 menu** (glossary: "edit menu"): title / value / effort / labels / epic / due /
-deps / repos / refs / checklist — the repeat rule is not among them
-(`furrow set --repeat` is the CLI's).
+repeat / deps / repos / refs / checklist. The repeat row is `furrow set
+--repeat` / `--clear-repeat` (an empty input clears): it opens on the stored
+rule, the spelling is furrow's to judge (`weekly`, `every 2 weeks on mon,thu`,
+a raw RRULE — a refusal rolls back), it needs a due (the row says so on a task
+without one), and every rule write re-anchors the series at the task's due,
+exactly as the CLI's `--repeat` alone does. Quick add takes the same rule as
+the `repeat:` token beside its `due:`.
 
 ### Boxes — the box overview
 
@@ -284,6 +289,7 @@ go run ./cmd/ridge -dump -roadmap            # the due timeline (week/month axes
 go run ./cmd/ridge -dump -demo sweepconfirm  # the sweep with the archive gate open (sweep / sweeprestore / sweepwait are the others)
 go run ./cmd/ridge -dump -demo done          # a task just closed with d: "closed <id> — unblocked N task(s)" counts what the close freed, not what depends on it
 go run ./cmd/ridge -dump -demo repeatdone    # a recurring task just closed: its successor's card and the "repeat: next due <day> (<id>)" line (-demo repeat: the rule in the peek)
+go run ./cmd/ridge -dump -demo editrepeat    # the edit menu's repeat input, seeded with the stored rule (-demo addrepeat: quick add's repeat: token echoed as a chip beside its due)
 go run ./cmd/ridge -dump -demo synced        # R's landing note: what the sync published, what it left modified on this checkout, a stash left behind
 go run ./cmd/ridge -dump -live -plain -cols 320   # the REAL board (cwd, or FURROW_DIR) at rest — invariants and eyes, not golden: the frame carries the load time and today's dates
 go run ./cmd/ridge -dump -live -sweep        # any view on the real board: -table / -roadmap / -graph / -map / -boxes / -swim / -sweep (-demo is the fixture's; refused with -live)

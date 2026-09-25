@@ -814,6 +814,23 @@ func (b *Board) SetFields(id string, p FieldPatch) error {
 		}
 		due = d
 	}
+	// The due/rule coupling, furrow's (measured on v6.0.0 and dev): a rule
+	// needs a due to count from, and a repeating task keeps its due until
+	// the rule is dropped — `--clear-due --clear-repeat` in one write is
+	// accepted, so the check reads the state AFTER the patch.
+	dueAfter, repeatAfter := t.Due, t.Repeat
+	if p.Due != nil {
+		dueAfter = due
+	}
+	if p.Repeat != nil {
+		repeatAfter = strings.TrimSpace(*p.Repeat)
+	}
+	if repeatAfter != "" && dueAfter.IsZero() {
+		if p.Repeat != nil {
+			return fmt.Errorf("%s has no due — a rule counts from the first occurrence, so set the due first", id)
+		}
+		return fmt.Errorf("%s repeats, so it must keep a due — drop the rule first", id)
+	}
 
 	if p.Value != nil {
 		t.Value = *p.Value
@@ -834,6 +851,16 @@ func (b *Board) SetFields(id string, p FieldPatch) error {
 	}
 	if p.Due != nil {
 		t.Due = due
+	}
+	if p.Repeat != nil {
+		// Every rule write anchors the series at the task's due as of the
+		// same write — `--due X --repeat R` at X, `--repeat R` alone at the
+		// due already carried, a re-commit of the same rule included; a due
+		// write alone moves THIS occurrence and never the anchor.
+		t.Repeat, t.RepeatAnchor = repeatAfter, time.Time{}
+		if repeatAfter != "" {
+			t.RepeatAnchor = t.Due
+		}
 	}
 	if p.Title != nil {
 		t.Title = strings.TrimSpace(*p.Title)

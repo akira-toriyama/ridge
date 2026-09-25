@@ -34,6 +34,7 @@ const (
 	fieldLabels
 	fieldEpic
 	fieldDue
+	fieldRepeat
 	fieldDeps
 	fieldRepos
 	fieldRefs
@@ -57,6 +58,8 @@ func editFieldName(f editField) string {
 		return "epic"
 	case fieldDue:
 		return "due"
+	case fieldRepeat:
+		return "repeat"
 	case fieldDeps:
 		return "deps"
 	case fieldRepos:
@@ -75,6 +78,7 @@ type inputKind int
 const (
 	inputTitle inputKind = iota
 	inputDue
+	inputRepeat
 	inputNewLabel
 	inputNewRepo
 	inputNewRef
@@ -236,6 +240,19 @@ func (m *Model) openField(f editField, t *board.Task) tea.Cmd {
 			cur = t.Due.In(board.Zone()).Format("2006-01-02")
 		}
 		return e.startInput(h, inputDue, cur, "2026-08-04 · +1d · +2h · empty clears")
+	case fieldRepeat:
+		if t.Due.IsZero() {
+			// furrow refuses a rule on a task with no due (exit 2), and the
+			// menu row already says so: an input that cannot land would only
+			// collect a rule to throw away.
+			m.fail("%s has no due — a rule counts from the first occurrence; set due first", t.ID)
+			return nil
+		}
+		// Seeded with the stored rule — furrow's compiled RRULE, which its
+		// --repeat reads back as a raw rule line, so ⏎ on the seed is the
+		// re-anchor `--repeat <rule>` alone performs (the series restarts at
+		// the current due), never a refusal.
+		return e.startInput(h, inputRepeat, t.Repeat, "weekly · every 2 weeks on mon,thu · empty clears")
 	case fieldLabels, fieldEpic, fieldDeps, fieldRepos, fieldRefs, fieldChecklist:
 		e.stage = stageList
 		if f == fieldEpic {
@@ -457,7 +474,7 @@ func (m *Model) onEditInputCancel(k inputKind) {
 		m.exitEdit()
 		m.note("note cancelled — nothing appended")
 		return
-	case inputTitle, inputDue:
+	case inputTitle, inputDue, inputRepeat:
 		e.stage = stageMenu
 	default:
 		e.stage = stageList
@@ -481,6 +498,9 @@ func (m *Model) onEditInputCommit(k inputKind, v string, t *board.Task) tea.Cmd 
 	case inputDue:
 		e.stage = stageMenu
 		return m.applyPatch("due", board.FieldPatch{Due: &v})
+	case inputRepeat:
+		e.stage = stageMenu
+		return m.applyPatch("repeat", board.FieldPatch{Repeat: &v})
 	case inputNewLabel:
 		e.stage = stageList
 		if v == "" {
@@ -663,6 +683,8 @@ func inputTitleFor(k inputKind) string {
 		return "retitle"
 	case inputDue:
 		return "due date"
+	case inputRepeat:
+		return "repeat rule — the series counts from the due"
 	case inputNewLabel:
 		return "add label"
 	case inputNewRepo:
@@ -705,6 +727,13 @@ func (m *Model) renderEditMenu(t *board.Task, inner int) string {
 	if !t.Due.IsZero() {
 		due = t.Due.In(board.Zone()).Format("2006-01-02")
 	}
+	// The rule's row carries its precondition, as epicActiveCell does: furrow
+	// refuses a rule on a task with no due, so the row says so before the
+	// press (openField refuses the press on the same ground).
+	repeat := t.Repeat
+	if repeat == "" && t.Due.IsZero() {
+		repeat = "— needs a due first"
+	}
 	cd, ct := t.CheckProgress()
 	rows := []menuRow{
 		{editFieldName(fieldTitle), t.Title},
@@ -713,6 +742,7 @@ func (m *Model) renderEditMenu(t *board.Task, inner int) string {
 		{editFieldName(fieldLabels), strings.Join(t.Labels, ",")},
 		{editFieldName(fieldEpic), epicLabel},
 		{editFieldName(fieldDue), due},
+		{editFieldName(fieldRepeat), repeat},
 		{editFieldName(fieldDeps), strings.Join(t.Deps, ",")},
 		{editFieldName(fieldRepos), strings.Join(t.Repos, ",")},
 		// Refs are free text and may carry a comma (furrow #317), so the

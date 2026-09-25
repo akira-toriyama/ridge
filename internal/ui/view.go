@@ -621,8 +621,12 @@ func (m *Model) helpLayer() *lg.Layer {
 	shelves = append(shelves, lg.JoinHorizontal(lg.Top, shelf...))
 	rows := []string{strings.Join(shelves, "\n\n")}
 
+	// The has:/no: fields are furrow's presence vocabulary as `furrow vocab
+	// query-presence` prints it (v6.0.0), spelled like the is: values beside
+	// them; re-measure there when furrow grows a field.
 	syntax := wrapJoin([]string{"filter syntax (furrow -q):",
-		"field:value · comma = OR · leading - negates · no:/has:",
+		"field:value · comma = OR · leading - negates",
+		"· has:/no: label|repo|epic|value|effort|deps|refs|checklist|closed|reviewed|body|due|repeat",
 		"· is:actionable|blocked|stale|open|closed|draft|unfiled|overdue",
 		"· value:>=4 · updated:>=-2w · epic:/depends-on:/blocks: · free words over title+body"}, " ", inner)
 	foot := m.th.dim.Render(syntax)

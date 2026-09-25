@@ -1164,3 +1164,82 @@ func TestSyncNamesEveryDirtyBodyAndKeepsOneRewrittenWhileItRan(t *testing.T) {
 		t.Errorf("next argv = %v", got)
 	}
 }
+
+func sp(s string) *string { return &s }
+
+// The edit menu's repeat row and quick add's repeat: token (t-zbmv) are
+// `furrow set --repeat` / `--clear-repeat` and `add --repeat`: the argv
+// spellings and furrow's coupling of the rule to the due are the contract,
+// measured here against the pinned release. The two refusals ride the
+// envelope as kind validation, which is how the UI's rollback names them.
+//
+// bite-exempt: execs a real furrow binary and always skips where furrow is not
+// on PATH — which is CI's build job, so the gate can never judge it there
+func TestContractRepeatEditsAreSetRepeatAndClearRepeat(t *testing.T) {
+	p, dir := newLabProvider(t)
+	id := labAdd(t, dir, "締めの確認", "--due", "2026-10-02")
+	bare := labAdd(t, dir, "due なし")
+	reload := func() *board.Task {
+		t.Helper()
+		if err := p.Reload(); err != nil {
+			t.Fatal(err)
+		}
+		return p.Board().Task(id)
+	}
+	firstDue := reload().Due
+
+	if err := p.PersistFields(id, board.FieldPatch{Repeat: sp("every 2 weeks on mon,thu")}); err != nil {
+		t.Fatalf("set --repeat: %v", err)
+	}
+	x := reload()
+	if x.Repeat != "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,TH" || !x.RepeatAnchor.Equal(firstDue) {
+		t.Fatalf("after set --repeat: repeat=%q anchor=%v, want the compiled rule anchored at the due %v", x.Repeat, x.RepeatAnchor, firstDue)
+	}
+
+	// A due alone moves this occurrence; the anchor stays.
+	if err := p.PersistFields(id, board.FieldPatch{Due: sp("2026-10-09")}); err != nil {
+		t.Fatal(err)
+	}
+	x = reload()
+	if x.Due.Equal(firstDue) || !x.RepeatAnchor.Equal(firstDue) {
+		t.Errorf("after set --due: due=%v anchor=%v, want a moved due and the anchor at %v", x.Due, x.RepeatAnchor, firstDue)
+	}
+
+	// The seed round trip: the compiled rule read back as a raw RRULE is
+	// never refused, and re-anchors at the due now carried.
+	if err := p.PersistFields(id, board.FieldPatch{Repeat: sp(x.Repeat)}); err != nil {
+		t.Fatalf("set --repeat with the compiled rule: %v", err)
+	}
+	y := reload()
+	if y.Repeat != x.Repeat || !y.RepeatAnchor.Equal(x.Due) {
+		t.Errorf("after re-committing the rule: repeat=%q anchor=%v, want the same rule anchored at %v", y.Repeat, y.RepeatAnchor, x.Due)
+	}
+
+	// The two refusals, as the envelope names them.
+	wantKind(t, p.PersistFields(id, board.FieldPatch{Due: sp("")}), "validation")
+	wantKind(t, p.PersistFields(bare, board.FieldPatch{Repeat: sp("weekly")}), "validation")
+
+	if err := p.PersistFields(id, board.FieldPatch{Repeat: sp("")}); err != nil {
+		t.Fatalf("set --clear-repeat: %v", err)
+	}
+	if z := reload(); z.Repeat != "" || !z.RepeatAnchor.IsZero() || z.Due.IsZero() {
+		t.Errorf("after --clear-repeat: %+v, want the rule and anchor gone and the due kept", z)
+	}
+	// Dropping a rule the task no longer has is exit 0 (changed: []).
+	if err := p.PersistFields(id, board.FieldPatch{Repeat: sp("")}); err != nil {
+		t.Errorf("a second --clear-repeat: %v, want exit 0", err)
+	}
+
+	// add --repeat rides beside --due; the compiled form is on the re-read.
+	added, err := p.Add("週次の締め", board.AddOptions{Repo: "lab/lab", Due: "2026-10-02", Repeat: "weekly on fri"})
+	if err != nil {
+		t.Fatalf("add --repeat: %v", err)
+	}
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	got := p.Board().Task(added)
+	if got == nil || !strings.HasPrefix(got.Repeat, "FREQ=WEEKLY") || !strings.Contains(got.Repeat, "BYDAY=FR") || !got.RepeatAnchor.Equal(got.Due) {
+		t.Errorf("add --repeat landed as %+v, want a weekly-on-Friday rule anchored at the due", got)
+	}
+}
