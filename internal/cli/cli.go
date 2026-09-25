@@ -79,7 +79,7 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 		// the fixture their -demo states already draw them, but -demo is the
 		// fixture's instrument (refused with -live), so these are how a live
 		// dump reaches every view.
-		graph  = fs.Bool("graph", false, "open on the dependency graph, rooted on the opening cursor (the S key)")
+		graph  = fs.Bool("graph", false, "open on the dependency graph, rooted on the opening cursor (the S key; with no card under it the board is drawn and the status line says so)")
 		depmap = fs.Bool("map", false, "open on the dependency map: every cluster at once (the T key)")
 		boxes  = fs.Bool("boxes", false, "open on the box overview: every box by repo (the E key)")
 		swim   = fs.Bool("swim", false, "open on the swimlane view: lanes across, boxes down (the W key)")

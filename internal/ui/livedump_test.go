@@ -1,8 +1,11 @@
 package ui
 
 import (
+	"errors"
 	"strings"
 	"testing"
+
+	"github.com/akira-toriyama/ridge/internal/store/memstore"
 )
 
 // Dump on a live store (the -live path). Two rules the fixture never
@@ -61,6 +64,44 @@ func TestGraphFlagWithNothingUnderTheCursorSaysSo(t *testing.T) {
 	}
 	if !m.statusErr || !strings.Contains(m.status, "graph not opened") {
 		t.Errorf("status=%q err=%v; want the unopened graph named as a failure", m.status, m.statusErr)
+	}
+
+	// On a read-only board the warning is kept and the fact rides behind
+	// it — the one board state that must stay checkable headless is not
+	// where the swapped view goes unexplained.
+	ro := New(memstore.NewGated("board-behind"), Options{Filter: "title:nothing", Graph: true})
+	if !strings.Contains(ro.status, "read-only") || !strings.Contains(ro.status, "graph not opened") {
+		t.Errorf("read-only status=%q; want the warning AND the unopened graph", ro.status)
+	}
+}
+
+// A -filter furrow refuses keeps the last good verdict (none: the full
+// board) and the graph roots on the unfiltered cursor — and the status line
+// says the filter was refused, because the graph has no filter row to show
+// ⚠ in (the board does; the graph said nothing, found in review).
+func TestRefusedStartupFilterIsNamedInTheStatus(t *testing.T) {
+	p := &liveQueryProvider{b: memstore.New().Board(), err: errors.New(`unknown qualifier "bogus"`)}
+	m := New(p, Options{Filter: "bogus:zzz", Graph: true})
+	if m.view != viewGraph {
+		t.Fatalf("view = %v; want the graph on the unfiltered cursor", m.view)
+	}
+	if !m.statusErr || !strings.Contains(m.status, "-filter refused") || !strings.Contains(m.status, "bogus") {
+		t.Errorf("status=%q err=%v; want the refusal named", m.status, m.statusErr)
+	}
+}
+
+// -filter with -revisit is ONE read: `revisit -q` is the filtered verdict,
+// so an `ls -q` fired first is dead work its successor fences out (measured
+// as an extra exec on the live path, found in review).
+func TestFilterWithRevisitAsksTheStoreOnce(t *testing.T) {
+	p := newScriptedProvider(scriptedBoard)
+	p.qIDs = []string{"a"}
+	m := New(p, Options{Filter: "lane:ready", Revisit: true})
+	if len(p.queries) != 1 || p.queries[0] != "revisit:lane:ready" {
+		t.Fatalf("store reads = %v, want one revisit read carrying the query", p.queries)
+	}
+	if m.countVisible() != 1 || m.qRaw != "lane:ready" {
+		t.Errorf("visible = %d, qRaw = %q — the one read must apply the filtered lens", m.countVisible(), m.qRaw)
 	}
 }
 

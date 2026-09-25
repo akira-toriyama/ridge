@@ -90,7 +90,16 @@ func New(p board.Provider, o Options) *Model {
 		// one furrow exec inside the constructor, beside the three the load
 		// already cost. Dropping the Cmd instead made -filter a silent no-op
 		// against the real store once.
-		m.settle(m.startFilter(o.Filter))
+		//
+		// With the lens on, ONE read serves both: `revisit -q` is the
+		// filtered verdict (furrow ANDs the two), so the query is only set
+		// and setRevisit below asks — a startFilter here fired an `ls -q`
+		// whose verdict the lens's read then fenced out (measured).
+		if o.Revisit {
+			m.qRaw = strings.TrimSpace(o.Filter)
+		} else {
+			m.settle(m.startFilter(o.Filter))
+		}
 	}
 	if o.Revisit {
 		// setRevisit, NOT toggleRevisit: the note-free half, so the read-only
@@ -165,16 +174,32 @@ func New(p board.Provider, o Options) *Model {
 	if len(o.ViewWarnings) > 0 && m.b.Writable() {
 		m.fail("views.toml: %s", strings.Join(o.ViewWarnings, " · "))
 	}
-	// -graph with nothing under the cursor (an empty board, a filter that
-	// excludes every card) draws the board, and the frame must say so — a
-	// requested view silently swapped for another is the no-op the CLI's
-	// refusals exist to prevent (it drew the board with "loaded 0 tasks"
-	// and exit 0, found in review). Outranks the notes above; never the
-	// read-only warning, ViewWarnings' rule.
-	if unopened != "" && m.b.Writable() {
-		m.fail("graph not opened (%s); the board is drawn instead", unopened)
+	// The two ways the opening frame can be other than what the flags asked
+	// for, each said in the status line (the board's filter row shows a
+	// refusal, but the graph and the packed overviews have no such row, and
+	// -graph's fallback is a different VIEW): a requested state silently
+	// swapped for another is the no-op the CLI's refusals exist to prevent
+	// (`-graph` on an empty board drew the board with "loaded 0 tasks" and
+	// exit 0, found in review). Both outrank the notes above.
+	if m.qErr != "" {
+		m.startupFail("-filter refused — %s", m.qErr)
+	}
+	if unopened != "" {
+		m.startupFail("graph not opened (%s); the board is drawn instead", unopened)
 	}
 	return m
+}
+
+// startupFail writes a startup refusal to the status line. On a read-only
+// board the warning already there is kept and the refusal rides behind it:
+// the warning is set once and restored by nothing (noteLoad's rule), but a
+// frame that is not what was asked for must say so on that board too.
+func (m *Model) startupFail(f string, a ...any) {
+	line := fmt.Sprintf(f, a...)
+	if !m.b.Writable() {
+		line = m.status + " · " + line
+	}
+	m.fail("%s", line)
 }
 
 // noteLoad is the startup note. The count is Tasks(), and a task whose
