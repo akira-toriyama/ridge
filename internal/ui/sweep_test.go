@@ -291,3 +291,25 @@ func TestSweepStalledReadNamesTheWayOut(t *testing.T) {
 		t.Errorf("frame after a failed re-read must name r, got a stale claim")
 	}
 }
+
+// X during an armed drag: the drag is cancelled and the status line is the
+// sweep's, not "drag cancelled" — the note was once written before the
+// cancel and lost to it (found in review).
+func TestSweepKeyDuringADragEndsOnTheSweepNote(t *testing.T) {
+	m := boardModel(t, 240, 60)
+	dst := m.lay.Col("ready")
+	if dst == nil {
+		t.Fatal("no ready column to drag toward")
+	}
+	dragFrom(t, m, "backlog", dst.X+8, dst.Top+4)
+	m.Update(tea.KeyPressMsg{Code: 'X', Text: "X"})
+	if m.view != viewSweep {
+		t.Fatalf("view = %v, want the sweep", m.view)
+	}
+	if !strings.HasPrefix(m.status, "sweep —") {
+		t.Errorf("status = %q, want the sweep's own line", m.status)
+	}
+	if m.drag.armed && !m.drag.cancelled {
+		t.Error("the drag survived X")
+	}
+}

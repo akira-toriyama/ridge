@@ -25,44 +25,42 @@ func TestDumpRefusesTheHarnessOnALiveStore(t *testing.T) {
 	}
 }
 
-func TestLiveDumpSettlesTheStartupVerdict(t *testing.T) {
+// The opening view seeds on the cursor, so the -filter verdict must land
+// before it — on a live store too, where the verdict is an exec. Before the
+// settle moved into New, `-live -graph -filter <nothing>` rooted the graph on
+// a task the filter excluded while the fixture drew the board (found in
+// review).
+func TestLiveFilterNarrowsTheBoardBeforeTheOpeningViewSeeds(t *testing.T) {
 	p := newScriptedProvider(scriptedBoard)
-	p.qIDs = []string{"a"}
-	m := New(p, Options{Filter: "lane:ready"})
-	if m.startupCmd == nil {
-		t.Fatal("a live store must leave the verdict as a Cmd for Init or Dump")
+	p.qIDs = []string{"b"} // not the unfiltered cursor (the first card of the first lane with work)
+	m := New(p, Options{Filter: "title:b", Graph: true})
+	if m.view != viewGraph || m.graph.focus != "b" {
+		t.Fatalf("view=%v focus=%q; want the graph rooted on the one task the filter left", m.view, m.graph.focus)
+	}
+	if len(p.queries) != 1 {
+		t.Fatalf("store queries = %v, want the startup filter asked once", p.queries)
 	}
 	out, err := m.Dump(240, 40, "", true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(p.queries) != 1 || p.queries[0] != "lane:ready" {
-		t.Fatalf("store reads = %v, want the one startup query", p.queries)
-	}
-	if n := m.countVisible(); n != 1 {
-		t.Errorf("visible = %d, want 1 — the verdict must be applied before the frame", n)
-	}
-	if m.startupCmd != nil {
-		t.Error("the settled Cmd was left for an Init that never comes")
-	}
-	if !strings.Contains(out, "lane:ready") {
-		t.Errorf("the frame does not carry the query in its filter row:\n%s", out)
+	if !strings.Contains(out, "⟨GRAPH⟩") || !strings.Contains(out, "rooted on b") {
+		t.Errorf("the frame is not the graph rooted on b:\n%s", out)
 	}
 }
 
-func TestLiveDumpSettlesTheRevisitLens(t *testing.T) {
+// With nothing under the cursor — here a filter that excludes every card —
+// the graph cannot open, the board is drawn, and the frame says so instead
+// of passing the board off as the requested view.
+func TestGraphFlagWithNothingUnderTheCursorSaysSo(t *testing.T) {
 	p := newScriptedProvider(scriptedBoard)
-	p.qIDs = []string{"a"}
-	m := New(p, Options{Revisit: true})
-	if _, err := m.Dump(240, 40, "", true); err != nil {
-		t.Fatal(err)
+	p.qIDs = nil
+	m := New(p, Options{Filter: "title:nothing", Graph: true})
+	if m.view != viewBoard {
+		t.Fatalf("view=%v; want the board (there is no task to root the graph on)", m.view)
 	}
-	if len(p.queries) != 1 || p.queries[0] != "revisit:" {
-		t.Fatalf("store reads = %v, want one revisit read with no query", p.queries)
-	}
-	if m.countVisible() != 1 || m.revisitWhy["a"] == nil {
-		t.Errorf("visible = %d, why[a]=%v — the lens must be applied before the frame",
-			m.countVisible(), m.revisitWhy["a"])
+	if !m.statusErr || !strings.Contains(m.status, "graph not opened") {
+		t.Errorf("status=%q err=%v; want the unopened graph named as a failure", m.status, m.statusErr)
 	}
 }
 

@@ -125,28 +125,22 @@ func TestQuitWaitsForAQueuedAdd(t *testing.T) {
 
 // Options.Filter was assigned to the model but its verdict Cmd was dropped:
 // against a live store the bar showed the text over an unfiltered board,
-// forever. (The fixture answers synchronously, which is why -dump never saw
-// it.)
+// forever. The verdict is settled inside New now — one exec, no debounce —
+// so the opening views seed on the narrowed cursor on the fixture and the
+// live store alike, and nothing is left for Init.
 func TestStartupFilterReachesTheLiveStore(t *testing.T) {
 	p := newScriptedProvider(scriptedBoard)
 	p.qIDs = []string{"a"}
 	m := New(p, Options{Filter: "lane:ready"})
-	if m.startupCmd == nil {
-		t.Fatal("a startup filter on a live store must leave its verdict Cmd for Init")
-	}
-
-	// Run the debounce round the way the program loop would.
-	c := m.onFilterTick(filterTickMsg{seq: m.qSeq})
-	if c == nil {
-		t.Fatal("the startup tick must query the store")
-	}
-	m.Update(c())
 	if len(p.queries) != 1 || p.queries[0] != "lane:ready" {
-		t.Fatalf("store queries = %v, want the startup filter", p.queries)
+		t.Fatalf("store queries = %v, want the startup filter, asked once inside New", p.queries)
 	}
 	if m.countVisible() != 1 || !m.qMatched["a"] {
 		t.Errorf("visible = %d, qMatched[a]=%v — the startup verdict must filter the board",
 			m.countVisible(), m.qMatched["a"])
+	}
+	if m.startupCmd != nil {
+		t.Error("the verdict was left for Init; it must be applied before the first frame")
 	}
 }
 

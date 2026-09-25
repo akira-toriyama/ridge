@@ -91,7 +91,10 @@ Ranks that do not fit are dropped and counted in the header (`z` narrows the
 radius) — nothing is silently clipped at the right edge.
 
 `ridge -graph` opens the real board in this view, rooted on the opening
-cursor. Headless: `-dump -graph`; the fixture's states are `-demo graph` /
+cursor (the first card of the first lane with work, after `-filter` has
+narrowed the board). With nothing under it — an empty board, a filter that
+excludes every card — the board is drawn and the status line says so.
+Headless: `-dump -graph`; the fixture's states are `-demo graph` /
 `graphall`.
 
 ### Map — dependency map

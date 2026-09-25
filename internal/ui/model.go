@@ -145,10 +145,11 @@ type Model struct {
 	viewIdx   int
 	saveViews func([]views.View) error
 
-	// startupCmd is what a live store answers as Cmds where the fixture
-	// answers inside New (the -filter / -revisit verdicts, the sweep's
-	// preview read). Init hands it to the program; Dump, which has no
-	// program, settles it itself.
+	// startupCmd is the sweep's preview read when -sweep opens on a live
+	// store — what the fixture answers inside New. Init hands it to the
+	// program; Dump, which has no program, settles it itself. (The -filter /
+	// -revisit verdicts are settled inside New: the opening views seed on
+	// the cursor they narrow.)
 	startupCmd tea.Cmd
 
 	edit *editState // non-nil exactly while mode == modeEdit
@@ -303,13 +304,7 @@ func newModel(p board.Provider, dbg *DebugLog) *Model {
 		graph:   graphState{radius: 2},
 	}
 	m.reload()
-	// Start on the first lane that actually has work.
-	for i, l := range m.b.Lanes() {
-		if len(m.cols[l.Name]) > 0 {
-			m.curLane = i
-			break
-		}
-	}
+	m.parkCursor()
 	m.recompute()
 	if !m.b.Writable() {
 		m.fail("board is read-only (%s) — writes will fail until `furrow upgrade`", m.b.SchemaState())
@@ -324,6 +319,19 @@ func (m *Model) Init() tea.Cmd {
 		return tea.Batch(tea.RequestBackgroundColor, m.startupCmd)
 	}
 	return tea.RequestBackgroundColor
+}
+
+// parkCursor puts the cursor on the first lane that actually has work — the
+// opening position, and New re-applies it after a startup verdict empties
+// the lane it was parked in (the opening views seed on the cursor, and an
+// empty lane under it drew the board for `-graph -filter lane:ready`).
+func (m *Model) parkCursor() {
+	for i, l := range m.b.Lanes() {
+		if len(m.cols[l.Name]) > 0 {
+			m.curLane = i
+			return
+		}
+	}
 }
 
 // reload swaps in the provider's current board, keeping the selection on the

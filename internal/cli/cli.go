@@ -70,7 +70,7 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 		filter = fs.String("filter", "", "initial filter query, e.g. 'lane:backlog is:blocked'")
 		peek   = fs.Bool("peek", false, "-dump with the detail side-peek open")
 		tree   = fs.Bool("tree", false, "-dump with the dep tree overlay open (implies -peek)")
-		table  = fs.Bool("table", false, "-dump the table view")
+		table  = fs.Bool("table", false, "open on the table view")
 		// A view setting like -table, not a -demo name: it composes with the
 		// demos and it opens the interactive TUI on the timeline too.
 		roadmap = fs.Bool("roadmap", false, "open on the roadmap view: every open task that carries a due, on a time axis")
@@ -81,7 +81,7 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 		// dump reaches every view.
 		graph  = fs.Bool("graph", false, "open on the dependency graph, rooted on the opening cursor (the S key)")
 		depmap = fs.Bool("map", false, "open on the dependency map: every cluster at once (the T key)")
-		boxes  = fs.Bool("boxes", false, "open on the box overview: every epic by repo (the E key)")
+		boxes  = fs.Bool("boxes", false, "open on the box overview: every box by repo (the E key)")
 		swim   = fs.Bool("swim", false, "open on the swimlane view: lanes across, boxes down (the W key)")
 		sweep  = fs.Bool("sweep", false, "open on the sweep: furrow archive / tidy / unarchive previews (the X key)")
 		// No back quotes in this usage string: flag reads the first back-quoted
@@ -166,7 +166,7 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 		}
 	}
 	if len(opening) > 1 {
-		_, _ = fmt.Fprintf(stderr, "error: %s both name the opening view; pick one\n", strings.Join(opening, " and "))
+		_, _ = fmt.Fprintf(stderr, "error: %s each name the opening view; pick one\n", strings.Join(opening, " and "))
 		return CodeUsage
 	}
 	// The peek is board/table chrome; no full-screen view composites it, so

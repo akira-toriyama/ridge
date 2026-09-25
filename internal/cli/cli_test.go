@@ -356,6 +356,17 @@ func TestLiveDumpDrawsTheStoreFurrowResolves(t *testing.T) {
 	if err != nil || !strings.Contains(string(b), "\t") {
 		t.Errorf("-perflog on a live dump wrote nothing: err=%v content=%q", err, b)
 	}
+	// Every full-screen view reaches a live frame too — the reason the
+	// opening-view flags exist (the graph roots on the one task).
+	for view, badge := range fullScreenViews {
+		code, out, errb := runArgs(t, "-dump", "-live", "-plain", view)
+		if code != CodeOK {
+			t.Fatalf("-dump -live %s exited %d, want %d; stderr=%q", view, code, CodeOK, errb)
+		}
+		if !strings.Contains(out, badge) {
+			t.Errorf("-dump -live %s: the frame does not carry %s:\n%s", view, badge, out)
+		}
+	}
 }
 
 // An unopenable -perflog is fatal: a measurement run that silently measures
