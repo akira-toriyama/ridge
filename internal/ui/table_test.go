@@ -236,9 +236,10 @@ func TestTableRendersDueEpicUpdatedColumns(t *testing.T) {
 			t.Errorf("header lacks the %s column: %q", col, head)
 		}
 	}
-	// The fixture's dated tasks render their LOCAL day — computed through the
-	// same conversion, so the test holds in every timezone (a hardcoded
-	// "2026-08-20" fails east of UTC+9, where that instant is the 21st).
+	// The fixture's dated tasks render their board-calendar day — computed
+	// through the same conversion, so the test holds in every timezone (a
+	// hardcoded "2026-08-20" fails east of UTC+9, where that instant is the
+	// 21st).
 	if want := m.b.Task("t-ehk7").Due.In(board.Zone()).Format("2006-01-02"); !strings.Contains(out, want) {
 		t.Errorf("t-ehk7's due day %s is not in the frame", want)
 	}

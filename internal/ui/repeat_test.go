@@ -89,8 +89,8 @@ func TestRepeatPeekPrintsTheRuleAndTheSeriesStart(t *testing.T) {
 
 // The words are furrow's seriesLine (internal/cli/cmd_mutate.go), byte for
 // byte on the spent form; the one divergence is the due, which furrow prints
-// as the instant in the board's calendar and ridge as the local day every
-// other surface spells dates in.
+// as the instant in the board's calendar and ridge as that calendar's day,
+// the way every other surface spells dates.
 func TestRepeatLineMirrorsFurrowsSeriesLineExceptTheDay(t *testing.T) {
 	due := time.Date(2026, 10, 8, 14, 59, 59, 0, time.UTC)
 	day := due.In(board.Zone()).Format("2006-01-02")

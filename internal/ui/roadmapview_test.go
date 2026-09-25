@@ -35,7 +35,7 @@ func roadModel(t *testing.T, w, h int) *Model {
 }
 
 // The fixture's four dated open tasks, in due order, each row carrying its
-// local date — and no row at all for the dateless majority.
+// board-calendar date — and no row at all for the dateless majority.
 func TestRoadmapRowsAreTheDatedOpenTasksInDueOrder(t *testing.T) {
 	m := roadModel(t, 240, 40)
 	l := m.road.lay

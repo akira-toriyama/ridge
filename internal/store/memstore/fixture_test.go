@@ -2,9 +2,9 @@ package memstore
 
 import (
 	"testing"
+	"time"
 
 	"charm.land/lipgloss/v2"
-
 	"github.com/akira-toriyama/ridge/internal/board"
 )
 
@@ -203,5 +203,22 @@ func TestFixtureTitlesReachTheRealBoardsBands(t *testing.T) {
 		if !lanesAt150[lane] {
 			t.Errorf("no title of 150+ cells in %s — that lane's surfaces have no long-title frame", lane)
 		}
+	}
+}
+
+// The fixture declares its calendar (fixtureZone, JST) the way the furrow
+// adapter declares the board's: its dues are bound at 14:59:59Z, the last
+// second of the day in JST, so the day a frame shows is the same on a UTC
+// runner and an Auckland one (internal/cli varies TZ on a subprocess to
+// prove that; here, under no pin, Zone() is the declaration itself).
+func TestFixtureDeclaresItsCalendar(t *testing.T) {
+	t.Cleanup(board.SetClock(nil, func() *time.Location { return nil }))
+	t.Cleanup(func() { board.SetZone(nil) })
+	_ = New()
+	if board.Zone() != fixtureZone {
+		t.Fatalf("Zone() = %v after New(), want fixtureZone — the fixture must declare it", board.Zone())
+	}
+	if got := ts("2026-09-30T14:59:59Z").In(board.Zone()).Format("2006-01-02"); got != "2026-09-30" {
+		t.Errorf("a fixture due renders as %s, want 2026-09-30 — in Auckland it is the 1st", got)
 	}
 }

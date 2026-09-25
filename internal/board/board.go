@@ -13,43 +13,67 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
-// nowFn and localZone are the ONE clock every package reads — the board,
-// the UI and the fixture store alike, through Now and Zone — so a due parsed
-// here and rendered there cannot compute its instant in one zone and its day
-// in another (ui and memstore once carried a private copy each, pinned
+// nowFn and zone are the ONE clock every package reads — the board, the UI
+// and the fixture store alike, through Now and Zone — so a due parsed here
+// and rendered there cannot compute its instant in one zone and its day in
+// another (ui and memstore once carried a private copy each, pinned
 // independently, so a test that froze one got a half-frozen clock: t-xy0c).
 // Tests pin them through SetClock, never time.Local: time.Now reads
 // time.Local from the runtime's timer goroutine, so a test writing it races
 // with any timer still alive from an earlier test (measured under -race).
-// Both are plain vars read on the UI thread only; a test must not pin them
-// while a real tea.Program is running.
+// nowFn is a plain var read on the UI thread only; a test must not pin it
+// while a real tea.Program is running. The zone is two atomics because the
+// store declares it (SetZone) from the load goroutine while the UI thread
+// renders, and a test's pin (SetClock) has to outrank that declaration: a
+// pin a later store construction could overwrite is not a pin (found by
+// review — t-xy0c's half-frozen clock in a new shape).
 var (
-	nowFn     = time.Now
-	localZone = func() *time.Location { return time.Local }
+	nowFn    = time.Now
+	declared atomic.Pointer[time.Location] // SetZone's
+	pinned   atomic.Pointer[time.Location] // SetClock's; wins while set
 )
 
 // Now is the instant every overdue check, staleness window and relative
 // stamp compares against.
 func Now() time.Time { return nowFn() }
 
-// Zone is the local zone: what ParseDue reads a bare day in, and what every
-// date rendering formats an instant in.
-func Zone() *time.Location { return localZone() }
+// Zone is the board's calendar: what ParseDue reads a bare day in, and what
+// every date rendering formats an instant in. It is furrow's [due].timezone
+// (SetZone), NOT the terminal's zone — a due furrow bound at 23:59:59 in
+// Asia/Tokyo is the next day in Auckland, and furrow's own output keeps the
+// board's day (t-kt2h). While no calendar is declared it is the process
+// zone, which is furrow's fallback too.
+func Zone() *time.Location {
+	if loc := pinned.Load(); loc != nil {
+		return loc
+	}
+	if loc := declared.Load(); loc != nil {
+		return loc
+	}
+	return time.Local
+}
+
+// SetZone declares the board's calendar; nil = none declared. The store
+// calls it on every load, so a changed [due].timezone takes effect at the
+// re-read. A test pin in force (SetClock) outranks it until restored.
+func SetZone(loc *time.Location) { declared.Store(loc) }
 
 // SetClock pins the clock and the zone for a test; a nil argument keeps that
-// half. The returned func restores both. Not for product code.
-func SetClock(now func() time.Time, zone func() *time.Location) (restore func()) {
-	prevNow, prevZone := nowFn, localZone
+// half, and a z returning nil lifts the zone pin (the declaration is then in
+// force). The returned func restores both. Not for product code.
+func SetClock(now func() time.Time, z func() *time.Location) (restore func()) {
+	prevNow, prevPin := nowFn, pinned.Load()
 	if now != nil {
 		nowFn = now
 	}
-	if zone != nil {
-		localZone = zone
+	if z != nil {
+		pinned.Store(z())
 	}
-	return func() { nowFn, localZone = prevNow, prevZone }
+	return func() { nowFn = prevNow; pinned.Store(prevPin) }
 }
 
 // priorityStep is furrow's sparse-priority spacing: reordering edits one
@@ -694,12 +718,13 @@ var dueOffset = regexp.MustCompile(`^[+-][0-9]+[mhdw]$`)
 
 // ParseDue mirrors furrow's `--due` grammar so the TUI can validate a keystroke
 // without a round trip: a bare day (which furrow reads as the WHOLE day, i.e.
-// end of that day LOCAL), a day+time read as LOCAL, an RFC3339 instant, or a
-// signed offset from now. The grammar itself stays furrow's — ridge sends the
-// raw string on to `furrow set --due` and this value only has to hold until the
-// post-persist reconcile re-reads furrow's own truth. Keep it a mirror: a form
-// this refuses is a form the UI cannot reach at all. Exported for the add
-// paths (AddOptions.Validate, memstore's fixture add) — same mirror, one spelling.
+// its end in the board's calendar — Zone), a day+time read in that calendar,
+// an RFC3339 instant, or a signed offset from now. The grammar itself stays
+// furrow's — ridge sends the raw string on to `furrow set --due` and this
+// value only has to hold until the post-persist reconcile re-reads furrow's
+// own truth. Keep it a mirror: a form this refuses is a form the UI cannot
+// reach at all. Exported for the add paths (AddOptions.Validate, memstore's
+// fixture add) — same mirror, one spelling.
 func ParseDue(s string) (time.Time, error) {
 	s = strings.TrimSpace(s)
 	if dueOffset.MatchString(s) {
@@ -722,10 +747,15 @@ func ParseDue(s string) (time.Time, error) {
 			}
 		}
 	}
-	// A bare day is a promise for the whole day, so it lands at its last local
-	// second — not at midnight, which would flag the task overdue all day.
-	if t, err := time.ParseInLocation("2006-01-02", s, localZone()); err == nil {
-		return t.AddDate(0, 0, 1).Add(-time.Second).UTC(), nil
+	// A bare day is a promise for the whole day, so it lands at its last
+	// second in the board's calendar — not at midnight, which would flag the
+	// task overdue all day. Built as a WALL-CLOCK 23:59:59 from the typed
+	// y/m/d, as furrow's ParseDue builds it (internal/app/due.go): midnight +
+	// 24h − 1s lands an hour off on a DST day, and a ParseInLocation of a day
+	// whose midnight does not exist (Santiago springs forward AT 00:00)
+	// normalizes to the day before.
+	if u, err := time.Parse("2006-01-02", s); err == nil {
+		return time.Date(u.Year(), u.Month(), u.Day(), 23, 59, 59, 0, Zone()).UTC(), nil
 	}
 	if t, err := time.Parse(time.RFC3339, s); err == nil {
 		return t.UTC(), nil
@@ -735,7 +765,7 @@ func ParseDue(s string) (time.Time, error) {
 	// a month: "2026-09-13 10:30" typed into the edit overlay was refused
 	// here and accepted by `furrow set --due`.
 	for _, layout := range []string{"2006-01-02T15:04:05", "2006-01-02T15:04", "2006-01-02 15:04:05", "2006-01-02 15:04"} {
-		if t, err := time.ParseInLocation(layout, s, localZone()); err == nil {
+		if t, err := time.ParseInLocation(layout, s, Zone()); err == nil {
 			return t.UTC(), nil
 		}
 	}

@@ -10,8 +10,8 @@ import (
 
 // fixedZone pins the zone (never time.Local — see the clock's declaration)
 // for the duration of a test. The whole point of the due grammar is that
-// furrow reads dates in LOCAL time, and that is invisible on a machine (or a
-// CI runner) whose zone happens to be UTC.
+// furrow reads dates in the board's calendar, and that is invisible on a
+// machine (or a CI runner) whose zone happens to be UTC.
 func fixedZone(t *testing.T, name string, offsetHours int) {
 	t.Helper()
 	zone := time.FixedZone(name, offsetHours*3600)
@@ -26,12 +26,13 @@ func fixedNow(t *testing.T, at time.Time) {
 
 // The grammar is furrow's, measured against the real binary (2026-08-10):
 // signed offsets in m/h/d/w — including 0 and negatives — a bare day that means
-// the WHOLE day (end of it, local), a zone-less day+time read as local, and an
-// RFC3339 instant. A form ridge refuses is a form the UI cannot reach at all,
-// so the mirror has to be as wide as the original.
+// the WHOLE day (end of it in the board's calendar), a zone-less day+time
+// read in that calendar, and an RFC3339 instant. A form ridge refuses is a
+// form the UI cannot reach at all, so the mirror has to be as wide as the
+// original.
 func TestParseDueMatchesFurrowsOffsetGrammar(t *testing.T) {
 	fixedZone(t, "TEST", 9)
-	now := time.Date(2026, 8, 10, 17, 1, 39, 500_000_000, localZone())
+	now := time.Date(2026, 8, 10, 17, 1, 39, 500_000_000, Zone())
 	fixedNow(t, now)
 
 	tests := []struct {
@@ -61,34 +62,35 @@ func TestParseDueMatchesFurrowsOffsetGrammar(t *testing.T) {
 	}
 }
 
-// A bare day is a promise for the whole day. furrow stores its LAST local
-// second (measured: `--due 2026-09-01` → 2026-09-01T14:59:59Z on a UTC+9 box);
-// midnight would render the task OVERDUE from the first minute of the day it
-// was promised for.
-func TestParseDueBareDayIsEndOfDayLocal(t *testing.T) {
+// A bare day is a promise for the whole day. furrow stores its LAST second in
+// the board's calendar (measured: `--due 2026-09-01` → 2026-09-01T14:59:59Z
+// in a UTC+9 calendar); midnight would render the task OVERDUE from the first
+// minute of the day it was promised for.
+func TestParseDueBareDayIsEndOfDayInTheBoardsCalendar(t *testing.T) {
 	fixedZone(t, "TEST", 9)
 	got, err := ParseDue("2026-09-01")
 	if err != nil {
 		t.Fatalf("parseDue: %v", err)
 	}
-	want := time.Date(2026, 9, 1, 23, 59, 59, 0, localZone())
+	want := time.Date(2026, 9, 1, 23, 59, 59, 0, Zone())
 	if !got.Equal(want) {
-		t.Errorf("ParseDue(bare day) = %s, want %s (end of that day, local)",
+		t.Errorf("ParseDue(bare day) = %s, want %s (end of that day in the board's calendar)",
 			got.Format(time.RFC3339), want.Format(time.RFC3339))
 	}
 }
 
-// YYYY-MM-DDTHH:MM carries no zone, and furrow reads it in the LOCAL one. A
-// zone-less time.Parse would read it as UTC — nine hours off, the other way.
-func TestParseDueDayTimeIsLocalNotUTC(t *testing.T) {
+// YYYY-MM-DDTHH:MM carries no zone, and furrow reads it in the board's
+// calendar. A zone-less time.Parse would read it as UTC — nine hours off, the
+// other way.
+func TestParseDueDayTimeIsInTheBoardsCalendarNotUTC(t *testing.T) {
 	fixedZone(t, "TEST", 9)
 	got, err := ParseDue("2026-09-01T10:30")
 	if err != nil {
 		t.Fatalf("parseDue: %v", err)
 	}
-	want := time.Date(2026, 9, 1, 10, 30, 0, 0, localZone())
+	want := time.Date(2026, 9, 1, 10, 30, 0, 0, Zone())
 	if !got.Equal(want) {
-		t.Errorf("ParseDue(day+time) = %s, want %s (local)",
+		t.Errorf("ParseDue(day+time) = %s, want %s (board calendar)",
 			got.Format(time.RFC3339), want.Format(time.RFC3339))
 	}
 	// An RFC3339 instant carries its own zone and passes straight through.
@@ -127,7 +129,7 @@ func TestParseDueRefusesWhatFurrowRefuses(t *testing.T) {
 // mirror rather than narrowing it.
 func TestParseDueRefusesOffsetsThatOverflowInsteadOfWrappingIntoThePast(t *testing.T) {
 	fixedZone(t, "TEST", 9)
-	now := time.Date(2026, 9, 13, 12, 0, 0, 0, localZone())
+	now := time.Date(2026, 9, 13, 12, 0, 0, 0, Zone())
 	fixedNow(t, now)
 
 	// Boundary-valued, computed from the same constants the guard uses so the
@@ -183,7 +185,7 @@ func TestParseDueRefusesOffsetsThatOverflowInsteadOfWrappingIntoThePast(t *testi
 // the doc comment claims has to be as wide as the original.
 func TestParseDueAcceptsEveryWallClockLayoutFurrowDoes(t *testing.T) {
 	fixedZone(t, "TEST", 9)
-	want := time.Date(2026, 9, 13, 10, 30, 0, 0, localZone()).UTC()
+	want := time.Date(2026, 9, 13, 10, 30, 0, 0, Zone()).UTC()
 	wantSec := want.Add(45 * time.Second)
 	for in, exp := range map[string]time.Time{
 		"2026-09-13T10:30":    want,
@@ -198,6 +200,69 @@ func TestParseDueAcceptsEveryWallClockLayoutFurrowDoes(t *testing.T) {
 		}
 		if !got.Equal(exp) {
 			t.Errorf("ParseDue(%q) = %s, want %s", in, got.Format(time.RFC3339), exp.Format(time.RFC3339))
+		}
+	}
+}
+
+// Zone is the calendar the store declared (SetZone), and the process zone
+// only until one is declared — furrow's own fallback; a bare day binds at its
+// last second in the calendar in force, whatever the terminal's TZ (t-kt2h).
+// A test's SetClock pin outranks the declaration and its restore lifts only
+// the pin: a pin a later store construction could overwrite is not a pin.
+func TestZoneIsTheDeclaredCalendarAndAPinOutranksIt(t *testing.T) {
+	t.Cleanup(SetClock(nil, func() *time.Location { return nil }))
+	t.Cleanup(func() { SetZone(nil) })
+	SetZone(nil)
+	if Zone() != time.Local {
+		t.Fatalf("undeclared: Zone() = %v, want the process zone", Zone())
+	}
+	auckland := time.FixedZone("NZST", 12*3600)
+	SetZone(auckland)
+	if Zone() != auckland {
+		t.Fatalf("declared: Zone() = %v, want %v", Zone(), auckland)
+	}
+	got, err := ParseDue("2026-10-02")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := time.Date(2026, 10, 2, 11, 59, 59, 0, time.UTC); !got.Equal(want) {
+		t.Errorf("a bare day binds in the declared calendar: got %s, want %s", got.Format(time.RFC3339), want.Format(time.RFC3339))
+	}
+	restore := SetClock(nil, func() *time.Location { return time.UTC })
+	if Zone() != time.UTC {
+		t.Errorf("a pin must outrank the declaration, got %v", Zone())
+	}
+	restore()
+	if Zone() != auckland {
+		t.Errorf("restore must lift the pin and leave the declaration, got %v", Zone())
+	}
+	SetZone(nil)
+	if Zone() != time.Local {
+		t.Errorf("SetZone(nil) must return to the process zone, got %v", Zone())
+	}
+}
+
+// The bare day is a wall-clock 23:59:59, as furrow builds it: on a day whose
+// midnight does not exist (America/Santiago springs forward AT 00:00 on
+// 2026-09-06) the arithmetic form — midnight + 24h − 1s — lands an hour
+// early. furrow binds `--due 2026-09-06` there at 2026-09-07T02:59:59Z and
+// the 24-hour day before at 2026-09-06T03:59:59Z (measured on dev 0f7559d).
+func TestParseDueBareDayIsAWallClockLastSecondOnADSTDay(t *testing.T) {
+	santiago, err := time.LoadLocation("America/Santiago")
+	if err != nil {
+		t.Skipf("no tzdata for America/Santiago: %v", err)
+	}
+	t.Cleanup(SetClock(nil, func() *time.Location { return santiago }))
+	for day, want := range map[string]time.Time{
+		"2026-09-06": time.Date(2026, 9, 7, 2, 59, 59, 0, time.UTC),
+		"2026-09-05": time.Date(2026, 9, 6, 3, 59, 59, 0, time.UTC),
+	} {
+		got, err := ParseDue(day)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !got.Equal(want) {
+			t.Errorf("ParseDue(%s) in Santiago = %s, want %s (furrow's binding)", day, got.Format(time.RFC3339), want.Format(time.RFC3339))
 		}
 	}
 }

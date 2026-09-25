@@ -293,8 +293,9 @@ func (m *Model) renderTable() string {
 		}
 		due, overdue := "", false
 		if !t.Due.IsZero() {
-			// Local, not UTC: an evening-local due formatted in UTC reads one
-			// day early (the peek learnt this the hard way — t-qve3 rides it).
+			// The board's calendar (board.Zone), not UTC: an evening due
+			// formatted in UTC reads one day early (the peek learnt this the
+			// hard way — t-qve3 rides it).
 			due = t.Due.In(board.Zone()).Format("2006-01-02")
 			overdue = isOverdue(t)
 		}

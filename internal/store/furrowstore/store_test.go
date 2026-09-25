@@ -436,7 +436,10 @@ func TestContractPersistFieldsAndChecklistEdits(t *testing.T) {
 	if len(got.Labels) != 2 {
 		t.Errorf("labels = %v", got.Labels)
 	}
-	if got.Due.Format("2006-01-02") != "2026-09-01" {
+	// In the board's calendar: the lab declares none, so furrow bound the bare
+	// day in the process zone, and west of UTC that instant is the 2nd in UTC
+	// (found by review — it failed under TZ=America/New_York on main too).
+	if got.Due.In(board.Zone()).Format("2006-01-02") != "2026-09-01" {
 		t.Errorf("due = %v", got.Due)
 	}
 	if got.Title != "編集後のタイトル" {
@@ -986,5 +989,51 @@ func TestContractProgramClosesARepeatingTaskForReal(t *testing.T) {
 	}
 	if !announced {
 		t.Errorf("no status note named the successor %s; log:\n%s", inbox[0], log.String())
+	}
+}
+
+// zoneOf mirrors furrow's own reading of [due].timezone: a loadable IANA name
+// is the calendar; "" (none declared) and a name the host cannot load are the
+// process zone (config.go warns "using the process zone" for the latter).
+func TestZoneOfLoadsAnIANANameAndFallsBackToTheProcessZone(t *testing.T) {
+	if got := zoneOf(""); got != nil {
+		t.Errorf("zoneOf(\"\") = %v, want nil (the process zone)", got)
+	}
+	if got := zoneOf("Nowhere/Nope"); got != nil {
+		t.Errorf("zoneOf(unloadable) = %v, want nil (the process zone)", got)
+	}
+	if got := zoneOf("Asia/Tokyo"); got == nil || got.String() != "Asia/Tokyo" {
+		t.Errorf("zoneOf(Asia/Tokyo) = %v, want the loaded zone", got)
+	}
+}
+
+// The calendar chain against the real CLI (furrow #330): a board declaring
+// [due].timezone binds a bare --due at that calendar's last second, and the
+// reload declares that calendar (board.SetZone) — under no test pin, Zone()
+// IS it — so the day ridge renders is the day furrow prints.
+//
+// bite-exempt: execs a real furrow binary and always skips where furrow is not
+// on PATH — which is CI, so the gate can never judge it there
+func TestContractBoardCalendarComesFromDueTimezone(t *testing.T) {
+	p, dir := newLabProvider(t)
+	t.Cleanup(board.SetClock(nil, func() *time.Location { return nil }))
+	t.Cleanup(func() { board.SetZone(nil) })
+	lab(t, dir, "furrow", "config", "set", "due.timezone", "Asia/Tokyo")
+	id := labAdd(t, dir, "盤の暦で締切", "--due", "2026-10-02")
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	if got := board.Zone().String(); got != "Asia/Tokyo" {
+		t.Fatalf("Zone() = %s after the reload, want the board's Asia/Tokyo — the load must declare it", got)
+	}
+	tk := p.Board().Task(id)
+	if tk == nil {
+		t.Fatal("the added task must be on the reloaded board")
+	}
+	if want := time.Date(2026, 10, 2, 14, 59, 59, 0, time.UTC); !tk.Due.Equal(want) {
+		t.Errorf("furrow bound the bare day at %s, want %s (the last second of 2026-10-02 in Asia/Tokyo)", tk.Due.Format(time.RFC3339), want.Format(time.RFC3339))
+	}
+	if got := tk.Due.In(board.Zone()).Format("2006-01-02"); got != "2026-10-02" {
+		t.Errorf("rendered day = %s, want 2026-10-02 — in Auckland that instant is the 3rd", got)
 	}
 }

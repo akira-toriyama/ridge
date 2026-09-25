@@ -8,7 +8,7 @@ The contract that ridge never imports furrow's Go packages, and why, is in
 
 ```sh
 go run ./cmd/ridge            # start on the real furrow board (furrow v6.0.0+ on PATH — the contract job's pin in .github/workflows/build.yml is the floor)
-go run ./cmd/ridge -mock      # start on the built-in fixture (no furrow needed)
+go run ./cmd/ridge -mock      # start on the built-in fixture (no furrow needed; its calendar is JST)
 go run ./cmd/ridge -dump      # emit one frame with no TTY (the fixture; -live for the real board)
 go run ./cmd/ridge -benchload # measure the real board's load latency and exit (read-only)
 ```
@@ -286,6 +286,7 @@ go run ./cmd/ridge -dump -demo done          # a task just closed with d: "close
 go run ./cmd/ridge -dump -demo repeatdone    # a recurring task just closed: its successor's card and the "repeat: next due <day> (<id>)" line (-demo repeat: the rule in the peek)
 go run ./cmd/ridge -dump -live -plain -cols 320   # the REAL board (cwd, or FURROW_DIR) at rest — invariants and eyes, not golden: the frame carries the load time and today's dates
 go run ./cmd/ridge -dump -live -sweep        # any view on the real board: -table / -roadmap / -graph / -map / -boxes / -swim / -sweep (-demo is the fixture's; refused with -live)
+TZ=Pacific/Auckland go run ./cmd/ridge -dump -live -plain -table   # dates follow the board's calendar ([due].timezone), not TZ: for a board that declares one, identical to the same frame under TZ=Asia/Tokyo
 ```
 
 What `-dump` / `-demo` / `-live` / `-graphlr` / `-readonly` and the

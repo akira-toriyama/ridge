@@ -11,21 +11,22 @@ import (
 
 // fixedZone pins the one zone (board.Zone; never time.Local — see the
 // clock's declaration) for the duration of a test, so a due parsed through
-// board.ParseDue and rendered here agree on the day. A due is stored as a
-// UTC instant, so "which day is this?" is only a real question off UTC.
+// board.ParseDue and rendered here agree on the day; the pin outranks the
+// calendar a fixture store declares. A due is stored as a UTC instant, so
+// "which day is this?" is only a real question off UTC.
 func fixedZone(t *testing.T, name string, offsetHours int) {
 	t.Helper()
 	zone := time.FixedZone(name, offsetHours*3600)
 	t.Cleanup(board.SetClock(nil, func() *time.Location { return zone }))
 }
 
-// eveningDue builds the instant furrow stores for "2026-09-02 08:00 local" on a
-// UTC+9 box: 2026-09-01T23:00:00Z. Formatting that in UTC reads 2026-09-01 —
+// eveningDue builds the instant furrow stores for "2026-09-02 08:00" in a
+// UTC+9 calendar: 2026-09-01T23:00:00Z. Formatting that in UTC reads 2026-09-01 —
 // one day early, and it does NOT self-heal on reload, because the wrong day
 // comes straight off furrow's own JSON.
 func eveningDue() time.Time { return time.Date(2026, 9, 2, 8, 0, 0, 0, board.Zone()).UTC() }
 
-func TestPeekRendersDueOnItsLocalDay(t *testing.T) {
+func TestPeekRendersDueOnItsCalendarDay(t *testing.T) {
 	fixedZone(t, "TEST", 9)
 	b := board.NewBoard([]*board.Task{
 		{ID: "a", Status: "ready", Title: "promise", Due: eveningDue()},
@@ -37,21 +38,21 @@ func TestPeekRendersDueOnItsLocalDay(t *testing.T) {
 	out := ansiStrip(m.peekContent(60))
 
 	if !strings.Contains(out, "due 2026-09-02") {
-		t.Errorf("the peek must date a due by its LOCAL day:\n%s", out)
+		t.Errorf("the peek must date a due by its board-calendar day:\n%s", out)
 	}
 	if strings.Contains(out, "due 2026-09-01") {
-		t.Errorf("the peek dated the due a day early (UTC instant, local promise):\n%s", out)
+		t.Errorf("the peek dated the due a day early (UTC instant, calendar promise):\n%s", out)
 	}
 }
 
-func TestEditMenuRendersDueOnItsLocalDay(t *testing.T) {
+func TestEditMenuRendersDueOnItsCalendarDay(t *testing.T) {
 	fixedZone(t, "TEST", 9)
 	m := editModel(t, "t-9sa6")
 	m.b.Task("t-9sa6").Due = eveningDue()
 	out := frame(m)
 
 	if !strings.Contains(out, "2026-09-02") || strings.Contains(out, "2026-09-01") {
-		t.Errorf("the edit menu must show the due's LOCAL day:\n%s", out)
+		t.Errorf("the edit menu must show the due's board-calendar day:\n%s", out)
 	}
 }
 
@@ -78,10 +79,10 @@ func TestEditDueAcceptsFurrowsOffsetForms(t *testing.T) {
 }
 
 // The same instant, every stamp on the panel: created and the ago() fallback
-// date the LOCAL day exactly like due does. One instant, 2026-09-01T23:00Z, is
-// 09-02 at UTC+9; a panel that said "due 09-02" beside "created 09-01" for it
-// was measured before this test existed.
-func TestPeekDatesCreatedAndOldUpdatedOnTheLocalDay(t *testing.T) {
+// date the board-calendar day exactly like due does. One instant,
+// 2026-09-01T23:00Z, is 09-02 at UTC+9; a panel that said "due 09-02" beside
+// "created 09-01" for it was measured before this test existed.
+func TestPeekDatesCreatedAndOldUpdatedOnTheCalendarDay(t *testing.T) {
 	fixedZone(t, "TEST", 9)
 	// 200 days on, so ago() takes its date fallback instead of "Nd ago".
 	fixedNow(t, eveningDue().Add(200*24*time.Hour))
@@ -96,7 +97,7 @@ func TestPeekDatesCreatedAndOldUpdatedOnTheLocalDay(t *testing.T) {
 
 	for _, want := range []string{"created 2026-09-02", "updated 2026-09-02"} {
 		if !strings.Contains(out, want) {
-			t.Errorf("the peek must date %q by its LOCAL day:\n%s", want, out)
+			t.Errorf("the peek must date %q by its board-calendar day:\n%s", want, out)
 		}
 	}
 	if strings.Contains(out, "2026-09-01") {

@@ -58,9 +58,11 @@ type Store struct {
 	pruned   map[string]map[string]bool
 }
 
-// New serves the fixture snapshot.
+// New serves the fixture snapshot, and declares its calendar (fixtureZone)
+// the way the furrow adapter declares the board's on every load.
 func New() *Store {
 	f := func() *board.Board { return board.NewBoard(fixtureTasks(), fixtureEpics()...) }
+	board.SetZone(fixtureZone)
 	return &Store{b: f(), base: f}
 }
 
@@ -84,6 +86,7 @@ func NewGated(schema string) *Store {
 		b := board.NewBoard(fixtureTasks(), fixtureEpics()...)
 		return board.NewStoreBoard(b.Lanes(), b.Tasks(), b.EpicsAll(), false, schema)
 	}
+	board.SetZone(fixtureZone)
 	return &Store{
 		b:    f(),
 		base: f,

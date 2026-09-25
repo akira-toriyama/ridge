@@ -19,13 +19,13 @@ import (
 // roadmap grows bars exactly when a start field exists; this one may too, the
 // day furrow grows one.)
 //
-// Time is CALENDAR-LOCAL throughout. A due is stored as a UTC instant, but
-// the promise it records is a local day — board.ParseDue puts a bare day "at
-// its last local second" — so every cell boundary here is a local calendar
-// boundary: day, Monday-aligned week, month. Arithmetic on the instant
-// (Truncate, hours/24) would shear the axis by one cell exactly at the
-// timezone offset, the same bug class the peek's "due a day early" comment
-// records.
+// Time is the BOARD'S CALENDAR throughout (board.Zone). A due is stored as a
+// UTC instant, but the promise it records is a day of that calendar —
+// board.ParseDue puts a bare day at its last second there — so every cell
+// boundary here is a boundary of that calendar: day, Monday-aligned week,
+// month. Arithmetic on the instant (Truncate, hours/24) would shear the axis
+// by one cell exactly at the zone offset, the same bug class the peek's "due
+// a day early" comment records.
 
 // roadZoom is how much calendar one cell holds.
 type roadZoom int
@@ -65,9 +65,9 @@ type roadLayout struct {
 	start  int // unit index of cell 0 (dayNum/weekNum/monthNum per Zoom)
 }
 
-// dayNum is the local calendar day, counted in whole days from the epoch —
-// derived from the LOCAL y/m/d and nothing else, so two instants on the same
-// local day always share it and a DST-shortened day still counts as one.
+// dayNum is the board-calendar day, counted in whole days from the epoch —
+// derived from that calendar's y/m/d and nothing else, so two instants on
+// the same day always share it and a DST-shortened day still counts as one.
 func dayNum(t time.Time) int {
 	y, m, d := t.In(board.Zone()).Date()
 	return int(time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Unix() / 86400)
@@ -103,8 +103,8 @@ func unitOf(z roadZoom, t time.Time) int {
 	return dayNum(t)
 }
 
-// unitStart is the local midnight a unit begins at — unitOf's inverse, which
-// is what the axis labels are made of.
+// unitStart is the board-calendar midnight a unit begins at — unitOf's
+// inverse, which is what the axis labels are made of.
 func unitStart(z roadZoom, u int) time.Time {
 	switch z {
 	case zoomWeek:
@@ -115,7 +115,7 @@ func unitStart(z roadZoom, u int) time.Time {
 	return dayStart(u)
 }
 
-// dayStart is dayNum's inverse: that day's local midnight.
+// dayStart is dayNum's inverse: that day's midnight in the board's calendar.
 func dayStart(dn int) time.Time {
 	u := time.Unix(int64(dn)*86400, 0).UTC()
 	return time.Date(u.Year(), u.Month(), u.Day(), 0, 0, 0, 0, board.Zone())
