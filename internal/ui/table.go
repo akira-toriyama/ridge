@@ -129,10 +129,7 @@ func (m *Model) tableRows() []*board.Task {
 // sort that teleports the cursor to whatever now occupies row N is a
 // re-ordering of the user, not the rows.
 func (m *Model) setSort(k sortKey, asc bool) {
-	var keep string
-	if t := m.curTask(); t != nil {
-		keep = t.ID
-	}
+	keep := m.cursorID()
 	m.tableSort, m.tableSortAsc = k, asc
 	if keep != "" {
 		m.selectID(keep, false)

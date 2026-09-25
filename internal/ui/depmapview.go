@@ -360,6 +360,17 @@ func (m *Model) scrollMapToSel(l *mapLayout, total, canvasH int) int {
 // passed in because the caller knows which cursor it means: the board's, or the
 // graph's own selection.
 func (m *Model) openMap(seed string) {
+	if s := m.startMap(seed); s != "" {
+		m.note("%s", s)
+		return
+	}
+	m.note("dep map — every cluster at once · ⏎ opens the graph on a row · z cycles scope · esc returns")
+}
+
+// startMap is openMap minus the status line (the -map flag runs it inside
+// New — the startRoadmap precedent). It returns the fallback sentence for a
+// seed the map has no row for, "" otherwise.
+func (m *Model) startMap(seed string) string {
 	m.cancelDrag()
 	m.depmap.scroll = 0
 	m.depmap.moved = false
@@ -376,14 +387,12 @@ func (m *Model) openMap(seed string) {
 			// and saying so was a flat falsehood for every done task with deps
 			// and every open one whose deps are all done.
 			if len(was.Deps) > 0 || len(m.g.Blocks(was.ID)) > 0 {
-				m.note("dep map — %s has dependencies but none are open, so it is outside this scope · z includes done · ⏎ opens the graph · esc returns", was.ID)
-			} else {
-				m.note("dep map — %s has no dependencies, so the cursor went to the first cluster · ⏎ opens the graph · z scope · esc returns", was.ID)
+				return fmt.Sprintf("dep map — %s has dependencies but none are open, so it is outside this scope · z includes done · ⏎ opens the graph · esc returns", was.ID)
 			}
-			return
+			return fmt.Sprintf("dep map — %s has no dependencies, so the cursor went to the first cluster · ⏎ opens the graph · z scope · esc returns", was.ID)
 		}
 	}
-	m.note("dep map — every cluster at once · ⏎ opens the graph on a row · z cycles scope · esc returns")
+	return ""
 }
 
 // closeMap returns to the board, landing the board cursor on the row the map

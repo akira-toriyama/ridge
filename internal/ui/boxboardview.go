@@ -360,6 +360,13 @@ func (m *Model) scrollBoxesToSel(l *boxLayout, total, canvasH int) int {
 // look at. With several repos active it is simply the alphabetically first;
 // picking "the right one" would need a scope this view does not have.
 func (m *Model) openBoxes() {
+	m.startBoxes()
+	m.note("box overview — every box by repo · ⏎ slices the board to one · m manages it · z scope · esc returns")
+}
+
+// startBoxes is openBoxes minus the status line (the -boxes flag runs it
+// inside New — the startRoadmap precedent).
+func (m *Model) startBoxes() {
 	m.cancelDrag()
 	m.boxes.scroll = 0
 	m.view = viewBoxes
@@ -374,7 +381,6 @@ func (m *Model) openBoxes() {
 			}
 		}
 	}
-	m.note("box overview — every box by repo · ⏎ slices the board to one · m manages it · z scope · esc returns")
 }
 
 // closeBoxes returns to the board WITHOUT touching the card cursor. The dep

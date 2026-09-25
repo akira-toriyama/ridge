@@ -114,10 +114,10 @@ func TestRevisitOptionOpensWithTheLensOn(t *testing.T) {
 	p := newScriptedProvider(scriptedBoard)
 	p.qIDs = []string{"a"}
 	live := New(p, Options{Revisit: true})
-	if live.startupFilter == nil {
+	if live.startupCmd == nil {
 		t.Fatal("the lens must leave its verdict Cmd for Init on a live store")
 	}
-	live.Update(live.startupFilter())
+	live.Update(live.startupCmd())
 	if len(p.queries) != 1 || p.queries[0] != "revisit:" {
 		t.Fatalf("store reads = %v, want one revisit read with no query", p.queries)
 	}

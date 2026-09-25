@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -180,55 +181,180 @@ func TestBenchloadRefusesFlagsItCannotHonour(t *testing.T) {
 	}
 }
 
-// -roadmap is a view setting like -table: it must reach a -dump frame.
-func TestRoadmapFlagOpensTheTimelineHeadless(t *testing.T) {
-	code, out, errb := runArgs(t, "-dump", "-roadmap", "-plain")
-	if code != CodeOK {
-		t.Fatalf("-dump -roadmap exited %d, want %d; stderr=%q", code, CodeOK, errb)
+// fullScreenViews is every opening-view flag whose view has no side panel,
+// with the badge its title bar carries. -table is the one opening view that
+// keeps the board's chrome (its own tests below say so where it matters).
+var fullScreenViews = map[string]string{
+	"-roadmap": "⟨ROADMAP⟩", "-graph": "⟨GRAPH⟩", "-map": "⟨MAP⟩",
+	"-boxes": "⟨BOXES⟩", "-swim": "⟨SWIM⟩", "-sweep": "⟨SWEEP⟩",
+}
+
+func openingViews() []string {
+	views := []string{"-table"}
+	for v := range fullScreenViews {
+		views = append(views, v)
 	}
-	if !strings.Contains(out, "⟨ROADMAP⟩") {
-		t.Errorf("the frame does not carry the roadmap's badge:\n%s", out)
+	sort.Strings(views)
+	return views
+}
+
+// Each opening-view flag is a view setting like -table: it must reach a
+// -dump frame, carrying that view's own badge.
+func TestEveryOpeningViewFlagDumpsHeadless(t *testing.T) {
+	for view, badge := range fullScreenViews {
+		code, out, errb := runArgs(t, "-dump", view, "-plain")
+		if code != CodeOK {
+			t.Fatalf("-dump %s exited %d, want %d; stderr=%q", view, code, CodeOK, errb)
+		}
+		if !strings.Contains(out, badge) {
+			t.Errorf("-dump %s: the frame does not carry %s:\n%s", view, badge, out)
+		}
 	}
 }
 
 // Two flags that each name the opening view have no coherent composition —
-// last-flag-wins would make one of them a silent no-op.
-func TestTableAndRoadmapTogetherAreRefused(t *testing.T) {
-	code, _, errb := runArgs(t, "-table", "-roadmap")
-	if code != CodeUsage {
-		t.Errorf("-table -roadmap exited %d, want %d", code, CodeUsage)
-	}
-	if !strings.Contains(errb, "-table") || !strings.Contains(errb, "-roadmap") {
-		t.Errorf("the refusal did not name both flags: %q", errb)
-	}
-}
-
-// The peek is board/table chrome the roadmap never composites: honouring the
-// pair would ship a silent no-op (-table -peek, by contrast, works).
-func TestRoadmapWithPeekOrTreeIsRefused(t *testing.T) {
-	for _, arg := range []string{"-peek", "-tree"} {
-		code, _, errb := runArgs(t, "-roadmap", arg)
-		if code != CodeUsage {
-			t.Errorf("-roadmap %s exited %d, want %d", arg, code, CodeUsage)
-		}
-		if !strings.Contains(errb, "roadmap") {
-			t.Errorf("-roadmap %s refusal did not explain itself: %q", arg, errb)
+// last-flag-wins would make one of them a silent no-op. Every pair.
+func TestTwoOpeningViewsAreRefused(t *testing.T) {
+	views := openingViews()
+	for i, a := range views {
+		for _, b := range views[i+1:] {
+			code, _, errb := runArgs(t, a, b)
+			if code != CodeUsage {
+				t.Errorf("%s %s exited %d, want %d", a, b, code, CodeUsage)
+			}
+			if !strings.Contains(errb, a) || !strings.Contains(errb, b) {
+				t.Errorf("%s %s: the refusal did not name both flags: %q", a, b, errb)
+			}
 		}
 	}
 }
 
-// The read-only warning is set once per session and never restored, so a
-// view flag must not write status over it — the exact regression the repo
+// The peek is board/table chrome no full-screen view composites: honouring
+// the pair would ship a silent no-op (-table -peek, by contrast, works).
+func TestFullScreenViewsRefusePeekAndTree(t *testing.T) {
+	for view := range fullScreenViews {
+		for _, arg := range []string{"-peek", "-tree"} {
+			code, _, errb := runArgs(t, view, arg)
+			if code != CodeUsage {
+				t.Errorf("%s %s exited %d, want %d", view, arg, code, CodeUsage)
+			}
+			if !strings.Contains(errb, view) {
+				t.Errorf("%s %s refusal did not name the view: %q", view, arg, errb)
+			}
+		}
+	}
+	if code, _, errb := runArgs(t, "-dump", "-table", "-peek"); code != CodeOK {
+		t.Errorf("-dump -table -peek exited %d, want %d (the table composites the peek): %q", code, CodeOK, errb)
+	}
+}
+
+// The read-only warning is set once per session and never restored, so no
+// view flag may write status over it — the exact regression the repo
 // records shipping once, and the first cut of -roadmap shipped it again
 // (caught in review): openRoadmap's note landed where the load note
-// deliberately says nothing.
-func TestRoadmapFlagKeepsTheReadOnlyWarning(t *testing.T) {
-	code, out, errb := runArgs(t, "-dump", "-readonly", "-roadmap", "-plain")
-	if code != CodeOK {
-		t.Fatalf("-dump -readonly -roadmap exited %d, want %d; stderr=%q", code, CodeOK, errb)
+// deliberately says nothing. Every opening view, so the next flag cannot
+// ship it a third time.
+func TestEveryOpeningViewFlagKeepsTheReadOnlyWarning(t *testing.T) {
+	for _, view := range openingViews() {
+		code, out, errb := runArgs(t, "-dump", "-readonly", view, "-plain")
+		if code != CodeOK {
+			t.Fatalf("-dump -readonly %s exited %d, want %d; stderr=%q", view, code, CodeOK, errb)
+		}
+		if !strings.Contains(out, "read-only") {
+			t.Errorf("-dump -readonly %s: the read-only warning is gone from the frame:\n%s", view, out)
+		}
 	}
-	if !strings.Contains(out, "read-only") {
-		t.Errorf("the read-only warning is gone from the frame:\n%s", out)
+}
+
+// -live is a -dump modifier like -demo, and refused without it for the same
+// reason: the interactive session already reads the real store, so a bare
+// -live would be a silent no-op.
+func TestLiveNeedsDump(t *testing.T) {
+	code, _, errb := runArgs(t, "-live")
+	if code != CodeUsage {
+		t.Errorf("-live exited %d, want %d", code, CodeUsage)
+	}
+	if !strings.Contains(errb, "-dump") {
+		t.Errorf("-live did not explain that -dump is required: %q", errb)
+	}
+}
+
+// -live names the real store; -mock/-readonly name the fixture; -demo is the
+// fixture's harness (one of its states archives through the provider). None
+// of the three may be silently outvoted — and no store is read for a refused
+// invocation, which the FURROW_DIR pin below proves the cheap way: a read
+// would fail on it, and the exit is still usage, not run.
+func TestLiveRefusesTheFixtureFlags(t *testing.T) {
+	t.Setenv("FURROW_DIR", filepath.Join(t.TempDir(), "no-store-here"))
+	for _, extra := range [][]string{{"-mock"}, {"-readonly"}, {"-demo", "sweeprestore"}} {
+		args := append([]string{"-dump", "-live"}, extra...)
+		code, _, errb := runArgs(t, args...)
+		if code != CodeUsage {
+			t.Errorf("%v exited %d, want %d", args, code, CodeUsage)
+		}
+		if !strings.Contains(errb, extra[0]) {
+			t.Errorf("%v: the refusal did not name %s: %q", args, extra[0], errb)
+		}
+	}
+}
+
+// labStore seeds a throwaway furrow store under FURROW_DIR — which outranks
+// the working directory, so the dump under test reads THIS board and never
+// the developer's — and returns the one task's title. Skipped without a
+// furrow binary (the contract tests' rule).
+func labStore(t *testing.T) string {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("execs furrow; skipped in -short")
+	}
+	if _, err := exec.LookPath("furrow"); err != nil {
+		t.Skip("furrow binary not on PATH")
+	}
+	dir := t.TempDir()
+	t.Setenv("FURROW_DIR", filepath.Join(dir, ".furrow"))
+	t.Setenv("FURROW_BOARD", "")
+	// Short enough to sit on one card line at -cols 240 (a longer Japanese
+	// title wraps inside the card, and a substring match then misses it).
+	const title = "実盤の題名"
+	for _, args := range [][]string{
+		{"git", "init", "-q"},
+		{"furrow", "init"},
+		{"furrow", "add", title, "-r", "lab/lab"},
+	} {
+		cmd := exec.Command(args[0], args[1:]...) //nolint:gosec // seeding the throwaway store IS the test
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("%s: %v\n%s", strings.Join(args, " "), err, out)
+		}
+	}
+	return title
+}
+
+// -dump -live draws the store furrow resolves (FURROW_DIR here), at rest:
+// the real title, the live load note, and — like every other -dump — none of
+// this machine's views.toml. -perflog is honoured on this path, because the
+// three reads are furrow execs.
+func TestLiveDumpDrawsTheStoreFurrowResolves(t *testing.T) {
+	title := labStore(t)
+	setViewsToml(t, "[[view]]\nname = \"機械の癖\"\nlayout = \"table\"\n")
+	log := filepath.Join(t.TempDir(), "perf.tsv")
+
+	code, out, errb := runArgs(t, "-dump", "-live", "-plain", "-perflog", log)
+	if code != CodeOK {
+		t.Fatalf("-dump -live exited %d, want %d; stderr=%q", code, CodeOK, errb)
+	}
+	if !strings.Contains(out, title) {
+		t.Errorf("the live frame does not carry the store's task:\n%s", out)
+	}
+	if !strings.Contains(out, "loaded 1 tasks in") {
+		t.Errorf("the live frame does not carry the live load note:\n%s", out)
+	}
+	if strings.Contains(out, "機械の癖") {
+		t.Error("-dump -live rendered the machine's views.toml into the frame")
+	}
+	b, err := os.ReadFile(log) //nolint:gosec // G304: the test's own temp file
+	if err != nil || !strings.Contains(string(b), "\t") {
+		t.Errorf("-perflog on a live dump wrote nothing: err=%v content=%q", err, b)
 	}
 }
 
@@ -439,7 +565,8 @@ func flagSurface(t *testing.T) map[string]bool {
 }
 
 // -perflog measures furrow execs. On the fixture there are none, and perfHook
-// is not even consulted — so accepting it promised a log that never gets written.
+// is not even consulted — so accepting it promised a log that never gets
+// written. A -dump without -live is the fixture too.
 func TestPerflogIsRefusedOnTheFixture(t *testing.T) {
 	log := filepath.Join(t.TempDir(), "perf.tsv")
 	for _, arg := range []string{"-mock", "-dump", "-readonly"} {

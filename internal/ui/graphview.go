@@ -776,10 +776,21 @@ func (m *Model) scrollGraphToSel(l *egoLayout, f graphFrame, total, canvasH int)
 
 // openGraph roots the graph on the current selection and switches to it.
 func (m *Model) openGraph() {
+	if s := m.startGraph(); s != "" {
+		m.note("%s", s)
+		return
+	}
+	m.note("graph rooted on %s — ⏎ re-roots on the selected node · z cycles radius · o flips the axis · esc returns", m.graph.focus)
+}
+
+// startGraph is openGraph minus the status line (the -graph flag runs it
+// inside New, where a note would erase the read-only warning — the
+// startRoadmap precedent). It returns the sentence openGraph would have
+// noted when the graph did NOT open, "" when it did.
+func (m *Model) startGraph() string {
 	t := m.curTask()
 	if t == nil {
-		m.note("nothing selected — the graph is rooted on a task")
-		return
+		return "nothing selected — the graph is rooted on a task"
 	}
 	m.cancelDrag()
 	m.graph.focus, m.graph.sel = t.ID, t.ID
@@ -787,7 +798,7 @@ func (m *Model) openGraph() {
 	m.graph.stack = nil
 	m.graph.from = viewBoard
 	m.view = viewGraph
-	m.note("graph rooted on %s — ⏎ re-roots on the selected node · z cycles radius · o flips the axis · esc returns", t.ID)
+	return ""
 }
 
 // rerootGraph is the thing a static picture cannot do: walk the graph. The

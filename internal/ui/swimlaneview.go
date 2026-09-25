@@ -509,6 +509,13 @@ func (m *Model) swimMove(dx, dy int) {
 // rather than a screen you have to navigate back into. With no cursor the
 // frame opens fully folded, which is the histogram this view exists to give.
 func (m *Model) openSwim() {
+	m.startSwim()
+	m.noteSwim()
+}
+
+// startSwim is openSwim minus the status line (the -swim flag runs it inside
+// New — the startRoadmap precedent).
+func (m *Model) startSwim() {
 	m.cancelDrag()
 	m.swim.scroll = 0
 	m.swim.moved = false
@@ -544,7 +551,6 @@ func (m *Model) openSwim() {
 	}
 	m.swim.lay = l
 	m.clampSwimSel(l)
-	m.noteSwim()
 }
 
 func (m *Model) noteSwim() {

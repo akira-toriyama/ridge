@@ -131,7 +131,7 @@ func TestStartupFilterReachesTheLiveStore(t *testing.T) {
 	p := newScriptedProvider(scriptedBoard)
 	p.qIDs = []string{"a"}
 	m := New(p, Options{Filter: "lane:ready"})
-	if m.startupFilter == nil {
+	if m.startupCmd == nil {
 		t.Fatal("a startup filter on a live store must leave its verdict Cmd for Init")
 	}
 

@@ -266,33 +266,13 @@ func TestSweepDeferredReadArrivesWhenTheDrainEnds(t *testing.T) {
 	// Drive the loop the way the program does: every Cmd Update returns is
 	// run and its message fed back, so the deferred read the refusal branch
 	// batches in actually executes (drainPersists discards those Cmds).
-	pump(m, m.firePersist())
+	m.settle(m.firePersist())
 	if m.inflight || len(m.pending) > 0 {
 		t.Fatal("the queue did not drain")
 	}
 	if m.sweep.preview == nil || m.sweep.loading {
 		t.Errorf("the drain (a refused write, nothing unread) did not deliver the read: sweep=%v loading=%v", m.sweep.preview != nil, m.sweep.loading)
 	}
-}
-
-// pump runs cmd, feeds its message to Update and recurses on what comes back,
-// unwrapping batches — a synchronous stand-in for the program loop.
-func pump(m *Model, cmd tea.Cmd) {
-	if cmd == nil {
-		return
-	}
-	msg := cmd()
-	if msg == nil {
-		return
-	}
-	if batch, ok := msg.(tea.BatchMsg); ok {
-		for _, c := range batch {
-			pump(m, c)
-		}
-		return
-	}
-	_, next := m.Update(msg)
-	pump(m, next)
 }
 
 // A board re-read that FAILS under a deferred sweep read is the one drain end

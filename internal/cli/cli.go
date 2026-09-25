@@ -34,9 +34,10 @@ const (
 	CodeRun Code = 1
 	// CodeUsage is a malformed invocation — an unknown flag or -demo, a
 	// positional argument, an unopenable -perflog, or a flag combination with
-	// no coherent meaning (-demo without -dump, -benchload with anything that
-	// shapes a frame, -perflog with the fixture). Fix the arguments; retrying
-	// verbatim cannot succeed.
+	// no coherent meaning (-demo or -live without -dump, -live with a fixture
+	// flag, two opening views, -benchload with anything that shapes a frame,
+	// -perflog with the fixture). Fix the arguments; retrying verbatim cannot
+	// succeed.
 	CodeUsage Code = 2
 )
 
@@ -55,7 +56,12 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 	fs.SetOutput(stderr)
 
 	var (
-		dump = fs.Bool("dump", false, "render one frame to stdout at -cols x -rows and exit (no TTY needed; always the fixture)")
+		dump = fs.Bool("dump", false, "render one frame to stdout at -cols x -rows and exit (no TTY needed; the fixture unless -live)")
+		// The live frame is not golden material: it carries the load time and
+		// today's relative dates, and the board itself moves. Its job is the
+		// invariants (every line within -cols, no panic) and eyes on the real
+		// shape — the fixture is uniform where real boards are not (t-360e).
+		live = fs.Bool("live", false, "-dump the real furrow store (the cwd's board, or FURROW_DIR) instead of the fixture — for invariants and eyes, not golden diffs")
 		// -cols/-rows, not -w/-h: `-h` is the one flag name every CLI reserves
 		// for help, and binding it to a height made `ridge -h` fail with
 		// "flag needs an argument: -h" and exit 2.
@@ -69,13 +75,22 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 		// demos and it opens the interactive TUI on the timeline too.
 		roadmap = fs.Bool("roadmap", false, "open on the roadmap view: every open task that carries a due, on a time axis")
 		revisit = fs.Bool("revisit", false, "open with the revisit lens on: only what furrow revisit flags (the f key)")
+		// The other full-screen views, as opening settings like -roadmap: on
+		// the fixture their -demo states already draw them, but -demo is the
+		// fixture's instrument (refused with -live), so these are how a live
+		// dump reaches every view.
+		graph  = fs.Bool("graph", false, "open on the dependency graph, rooted on the opening cursor (the S key)")
+		depmap = fs.Bool("map", false, "open on the dependency map: every cluster at once (the T key)")
+		boxes  = fs.Bool("boxes", false, "open on the box overview: every epic by repo (the E key)")
+		swim   = fs.Bool("swim", false, "open on the swimlane view: lanes across, boxes down (the W key)")
+		sweep  = fs.Bool("sweep", false, "open on the sweep: furrow archive / tidy / unarchive previews (the X key)")
 		// No back quotes in this usage string: flag reads the first back-quoted
 		// word as the operand NAME, so "the graph's `o` key" rendered as
 		// `-graphlr o` — the one bool in -h that looks like it takes a value.
 		graphlr   = fs.Bool("graphlr", false, "draw the dependency graph left-to-right instead of top-down (the graph's o key)")
 		light     = fs.Bool("light", false, "light palette")
 		plain     = fs.Bool("plain", false, "-dump without ANSI styling (diffable)")
-		demo      = fs.String("demo", "", "-dump in a transient state: "+strings.Join(ui.DemoNames, "|")+" (requires -dump; always the fixture)")
+		demo      = fs.String("demo", "", "-dump in a transient state: "+strings.Join(ui.DemoNames, "|")+" (requires -dump; always the fixture, so refused with -live)")
 		mock      = fs.Bool("mock", false, "serve the built-in fixture instead of the real furrow store")
 		readonly  = fs.Bool("readonly", false, "serve the fixture as a schema-gated read-only board (implies -mock)")
 		perflog   = fs.String("perflog", "", "append one 'op\\tms' line per furrow command to this file")
@@ -121,8 +136,9 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 		// told the user to add -dump, and adding it produced a second, different
 		// refusal — two steps to learn the combination was never going to work.
 		for _, name := range []string{
-			"mock", "readonly", "dump", "demo", "plain", "cols", "rows",
+			"mock", "readonly", "dump", "live", "demo", "plain", "cols", "rows",
 			"filter", "peek", "tree", "table", "roadmap", "revisit", "light", "graphlr", "debuglog",
+			"graph", "map", "boxes", "swim", "sweep",
 		} {
 			if set[name] {
 				_, _ = fmt.Fprintf(stderr,
@@ -140,15 +156,24 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 
 	// Two flags that each name the OPENING VIEW have no coherent composition —
 	// last-flag-wins would make one of them a silent no-op.
-	if *table && *roadmap {
-		_, _ = fmt.Fprintln(stderr, "error: -table and -roadmap both name the opening view; pick one")
+	var opening []string
+	for _, v := range []struct {
+		name string
+		on   bool
+	}{{"table", *table}, {"roadmap", *roadmap}, {"graph", *graph}, {"map", *depmap}, {"boxes", *boxes}, {"swim", *swim}, {"sweep", *sweep}} {
+		if v.on {
+			opening = append(opening, "-"+v.name)
+		}
+	}
+	if len(opening) > 1 {
+		_, _ = fmt.Fprintf(stderr, "error: %s both name the opening view; pick one\n", strings.Join(opening, " and "))
 		return CodeUsage
 	}
-	// The peek is board/table chrome; the roadmap never composites it, so
+	// The peek is board/table chrome; no full-screen view composites it, so
 	// accepting the pair would ship exactly the silent no-op the refusal
 	// above exists to prevent (-table -peek, by contrast, is honoured).
-	if *roadmap && (*peek || *tree) {
-		_, _ = fmt.Fprintln(stderr, "error: -peek/-tree open the board's side panel; the roadmap view has none")
+	if (*peek || *tree) && len(opening) == 1 && opening[0] != "-table" {
+		_, _ = fmt.Fprintf(stderr, "error: -peek/-tree open the board's side panel; the %s view has none\n", opening[0])
 		return CodeUsage
 	}
 
@@ -161,18 +186,48 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 		return CodeUsage
 	}
 
+	// -live is a -dump modifier like -demo, and refused without it for the
+	// same reason: the interactive session already reads the real store, so
+	// a bare -live would be a silent no-op.
+	if *live && !*dump {
+		_, _ = fmt.Fprintln(stderr, "error: -live needs -dump (the interactive session already reads the real store)")
+		return CodeUsage
+	}
+	// -live names the real store; the two fixture flags name the fixture.
+	// Last-flag-wins would make one of them a silent no-op — and the -mock
+	// one would be the harmful direction (a "fixture" run reading the board).
+	for _, f := range []struct {
+		name string
+		on   bool
+	}{{"mock", *mock}, {"readonly", *readonly}} {
+		if *live && f.on {
+			_, _ = fmt.Fprintf(stderr, "error: -live draws the real store; -%s serves the fixture\n", f.name)
+			return CodeUsage
+		}
+	}
+	// The -demo harness is the fixture's instrument: its states are shaped
+	// around the fixture's synchronous answers, and one of them (sweeprestore)
+	// writes through the provider — on a real board that is an archive.
+	// ui.Dump refuses the pair too; this refusal comes first so no store is
+	// read for an invocation that cannot succeed.
+	if *live && *demo != "" {
+		_, _ = fmt.Fprintf(stderr, "error: -demo %s freezes a fixture state; -live dumps the real board at rest — open a view with -table/-roadmap/-graph/-map/-boxes/-swim/-sweep instead\n", *demo)
+		return CodeUsage
+	}
+
 	// -dump is the headless verification surface; it stays on the fixture so
-	// its frames are deterministic and diffable. -demo is not listed: it is
-	// refused above unless -dump is set, so it cannot force the fixture on
-	// its own.
-	useMock := *mock || *dump || *readonly
+	// its frames are deterministic and diffable, unless -live asks for the
+	// real store. -demo is not listed: it is refused above unless -dump is
+	// set, so it cannot force the fixture on its own.
+	useMock := *mock || *readonly || (*dump && !*live)
 
 	// -perflog records the latency of furrow execs. The fixture runs none, and
 	// perfHook is not even consulted on that path — so accepting it there
-	// promises a measurement that will never be written.
+	// promises a measurement that will never be written. A live dump execs
+	// the three reads, so it is a legitimate subject.
 	if set["perflog"] && useMock {
 		_, _ = fmt.Fprintln(stderr,
-			"error: -perflog records furrow exec latency; the fixture (-mock/-dump/-readonly) execs nothing")
+			"error: -perflog records furrow exec latency; the fixture (-mock/-readonly, and -dump without -live) execs nothing")
 		return CodeUsage
 	}
 
@@ -185,21 +240,22 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 		return CodeUsage
 	}
 
-	// The saved-view tabs load only for a REAL session. The fixture paths
-	// (-dump/-mock/-readonly) leave them empty on both sides: a -dump frame
-	// must not vary with whatever views.toml this machine carries (-demo
-	// views injects a fixture set instead), and a fixture session must not
-	// be able to WRITE the real file either. A file that cannot be read or
-	// parsed is fatal here, while semantic typos are clamped inside Load —
-	// the split the views package documents. Loaded at THIS point in the
-	// refusal order: it can still refuse the invocation, so it must precede
-	// the first file the invocation creates (-perflog, below).
+	// The saved-view tabs load only for a REAL SESSION. The fixture paths
+	// (-mock/-readonly) and every -dump, live included, leave them empty on
+	// both sides: a -dump frame must not vary with whatever views.toml this
+	// machine carries (-demo views injects a fixture set instead), and a
+	// fixture session must not be able to WRITE the real file either. A file
+	// that cannot be read or parsed is fatal here, while semantic typos are
+	// clamped inside Load — the split the views package documents. Loaded
+	// at THIS point in the refusal order: it can still refuse the
+	// invocation, so it must precede the first file the invocation creates
+	// (-perflog, below).
 	var (
 		savedViews   []views.View
 		saveViews    func([]views.View) error
 		viewWarnings []string
 	)
-	if !useMock {
+	if !useMock && !*dump {
 		vpath, err := views.DefaultPath()
 		if err == nil {
 			savedViews, viewWarnings, err = views.Load(vpath)
@@ -278,6 +334,11 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 		Table:        *table,
 		Roadmap:      *roadmap,
 		Revisit:      *revisit,
+		Graph:        *graph,
+		Map:          *depmap,
+		Boxes:        *boxes,
+		Swim:         *swim,
+		Sweep:        *sweep,
 		GraphLR:      *graphlr,
 		Peek:         *peek,
 		Tree:         *tree,
@@ -291,8 +352,9 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 	if *dump {
 		out, err := m.Dump(*cols, *rows, *demo, *plain)
 		if err != nil {
-			// The only failure Dump has is an unknown -demo name, which is a
-			// malformed invocation.
+			// Dump fails only on a -demo it cannot honour (an unknown name,
+			// or any name on a live store — refused above already), which is
+			// a malformed invocation.
 			_, _ = fmt.Fprintln(stderr, "error:", err)
 			return CodeUsage
 		}

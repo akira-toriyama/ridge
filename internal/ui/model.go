@@ -145,7 +145,11 @@ type Model struct {
 	viewIdx   int
 	saveViews func([]views.View) error
 
-	startupFilter tea.Cmd // pending verdict for Options.Filter, fired by Init
+	// startupCmd is what a live store answers as Cmds where the fixture
+	// answers inside New (the -filter / -revisit verdicts, the sweep's
+	// preview read). Init hands it to the program; Dump, which has no
+	// program, settles it itself.
+	startupCmd tea.Cmd
 
 	edit *editState // non-nil exactly while mode == modeEdit
 	add  *addState  // non-nil exactly while mode == modeAdd
@@ -316,8 +320,8 @@ func newModel(p board.Provider, dbg *DebugLog) *Model {
 // Init requests the terminal background so the palette can pick light or dark —
 // lipgloss v2 removed AdaptiveColor, so this is now the idiomatic route.
 func (m *Model) Init() tea.Cmd {
-	if m.startupFilter != nil {
-		return tea.Batch(tea.RequestBackgroundColor, m.startupFilter)
+	if m.startupCmd != nil {
+		return tea.Batch(tea.RequestBackgroundColor, m.startupCmd)
 	}
 	return tea.RequestBackgroundColor
 }
