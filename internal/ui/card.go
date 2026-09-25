@@ -116,9 +116,33 @@ func graphemes(s string) []grapheme {
 	return out
 }
 
+// The line-start and line-end prohibitions of JIS X 4051 (kinsoku): an
+// opportunity is not taken before a closing mark or a small kana, nor after
+// an opening bracket. Two closed sets rather than the Unicode line-break
+// tables (whose CL, CP, EX, IS, NS and OP classes these fall in, the small
+// kana under the strict Japanese tailoring): the marks the board writes plus
+// the ASCII pairs — a 66-cell body line once ended "…数字で1枚にする" with
+// "。" alone on the next line (t-wgrj). The rule governs opportunities only:
+// a run that offers none still hard-breaks where the width falls, and a
+// break at whitespace does not look past the space (`あ 。` may still open a
+// line with 。; the board writes no such pair). `/`, which the board does
+// write, is not in the set, so a line may open with it.
+const (
+	noLineStart = "、。，．・：；？！ー」』）｝］〕】〉》〟ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ々〜,.:;!?)]}"
+	noLineEnd   = "「『（｛［〔【〈《〝([{"
+)
+
+func kinsoku(g grapheme, set string) bool {
+	r, _ := utf8.DecodeRuneInString(g.text)
+	return strings.ContainsRune(set, r)
+}
+
 // wrapPara wraps one paragraph greedily: the line takes graphemes until the
 // next one would not fit, then breaks at the last opportunity it saw, or
-// hard-breaks when it saw none. Whitespace at a break is dropped on both
+// hard-breaks when it saw none. An opportunity is after whitespace or a
+// hyphen, or beside a wide grapheme — unless the break would strand a
+// closing mark at a line start or an opening bracket at a line end
+// (noLineStart / noLineEnd). Whitespace at a break is dropped on both
 // sides of it, and a line never breaks while it holds nothing but
 // whitespace (a leading indent stays on its line, never becomes a blank one).
 func wrapPara(s string, w int) []string {
@@ -137,7 +161,8 @@ func wrapPara(s string, w int) []string {
 		g := gs[i]
 		// Record the opportunity BEFORE testing the fit: the grapheme that
 		// overflows is often the one a break may fall before.
-		if text && (gs[i-1].space || gs[i-1].text == "-" || gs[i-1].width == 2 || g.width == 2) {
+		if text && (gs[i-1].space || gs[i-1].text == "-" || gs[i-1].width == 2 || g.width == 2) &&
+			!kinsoku(g, noLineStart) && !kinsoku(gs[i-1], noLineEnd) {
 			brk = i
 		}
 		if width > 0 && width+g.width > w {
