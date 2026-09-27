@@ -64,10 +64,16 @@ func cardMarker(t *board.Task, g *board.Graph) (glyph string, style func(*theme)
 }
 
 // isOverdue is the one overdue predicate: a promise in the past on a task
-// that is not closed — the same meaning as furrow's `is:overdue`. Spelled
-// once because three surfaces colour by it (the table's due column, the
-// peek's due line, the roadmap's ◆), and two copies had already grown before
-// the third reader arrived.
+// that is not closed. That is ridge's own set, between furrow's two: NARROWER
+// than `-q is:overdue`, which furrow answers for a closed task too (memstore's
+// query.go mirrors that, with the measurement), and WIDER than furrow's alarm
+// surfaces — `ls`'s `overdue` tag, `brief`'s due.overdue, `lint`'s due-overdue
+// — which also drop a parked lane (icebox; measured on dev 2026-09-28): a
+// closed promise is settled, a parked one is not, and the roadmap keeps the
+// parked (glossary, "Roadmap"). Spelled once because four surfaces read it —
+// the table's due column, the peek's due line, the roadmap's rows and its
+// header's `N overdue` (which for that reason can exceed brief's count) —
+// and two copies had already grown before the third reader arrived.
 func isOverdue(t *board.Task) bool {
 	return !t.Due.IsZero() && t.Due.Before(board.Now()) && t.Closed.IsZero()
 }

@@ -52,9 +52,9 @@ import (
 //
 //   - a bare word searches title+ID where furrow searches title+body. The ID
 //     leg is ridge's own affordance — pasting an id into the filter bar.
-//   - is:stale and is:overdue read the wall clock. furrow reads the board's
-//     [revisit].stale_days; the fixture has no config, so furrow's default of
-//     30 days is hard-coded here.
+//   - is:stale and is:overdue read the wall clock. is:stale's window is the
+//     board's [revisit].stale_days furrow-side; the fixture has no config,
+//     so furrow's default of 30 days is hard-coded here.
 //
 // Everything else REFUSES — loudly and all-or-nothing, like furrow's exit 2 —
 // rather than mis-evaluating it: the ordinal/date comparisons (value:>=4,
@@ -555,7 +555,11 @@ func (t term) matchIs(task *board.Task, g *board.Graph, v string) bool {
 	case "unfiled":
 		return task.Epic == ""
 	case "overdue":
-		return !task.Due.IsZero() && task.Due.Before(board.Now()) && task.Closed.IsZero()
+		// Measured (dev, 2026-09-27, the ridge-test board): furrow answers
+		// a CLOSED task too — 11 rows, 4 of them done — so is:overdue is the
+		// promise alone, as is:stale is the update window alone. The paint
+		// (ui.isOverdue) is its own narrower set; card.go places the three.
+		return !task.Due.IsZero() && task.Due.Before(board.Now())
 	case "stale":
 		// Measured: furrow flags a DONE task too — is:stale is the update
 		// window alone, not "open and forgotten".

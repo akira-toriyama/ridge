@@ -333,8 +333,8 @@ func (m *Model) renderTable() string {
 		} else {
 			dueStyle := th.muted
 			if overdue {
-				// The same meaning as `is:overdue`: a promise in the past on a
-				// task that is still open.
+				// isOverdue's meaning (card.go): ridge's own set, not -q's
+				// nor brief's.
 				dueStyle = th.danger
 			}
 			styled := make([]string, len(cols))
