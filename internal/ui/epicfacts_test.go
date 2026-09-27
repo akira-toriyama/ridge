@@ -268,6 +268,91 @@ func TestTheDepLineGatesDifferOnASettledBox(t *testing.T) {
 	})
 }
 
+// waitingBoard is one box furrow reports WAITING (#321) and the parked member
+// it waits on. The instant is 2027-03-30 in UTC and 2027-03-31 in the pinned
+// JST calendar, so a surface dating it in the wrong zone reads a day early.
+func waitingBoard(t *testing.T) *Model {
+	t.Helper()
+	t.Cleanup(board.SetClock(nil, func() *time.Location { return time.FixedZone("JST", 9*3600) }))
+	until := time.Date(2027, 3, 30, 15, 0, 0, 0, time.UTC)
+	b := board.NewBoard(
+		[]*board.Task{{ID: "t-cold", Title: "寝かせる一枚", Status: "icebox", Priority: 10, Epic: "e-wait", Due: until}},
+		board.EpicInfo{ID: "e-wait", Title: "熟成を待つ箱", Total: 1, Repos: []string{"tomo/a"},
+			WaitUntil: until, WaitTask: "t-cold"},
+	)
+	m := New(memstore.NewWith(b), Options{})
+	m.Update(tea.WindowSizeMsg{Width: 240, Height: 50})
+	return m
+}
+
+// Every surface that spells a box's STUCK spells furrow's waiting where it
+// would go, as `waiting until <day> (<task>)` with the day in the board's
+// calendar — one composition (boxWaiting), four sites, and the rows carry the
+// one-cell mark.
+func TestEverySurfaceSpellsWaitingUntilInTheBoardsCalendar(t *testing.T) {
+	const want = "waiting until 2027-03-31 (t-cold)"
+	t.Run("box strip", func(t *testing.T) {
+		m := waitingBoard(t)
+		m.openBoxes()
+		for _, r := range m.buildBoxes().Rows {
+			if r.ID == "e-wait" {
+				m.boxes.sel = r.Key
+			}
+		}
+		out := frame(m)
+		if !strings.Contains(out, "0/1 done · "+want+" · repos tomo/a") {
+			t.Errorf("the strip must carry %q:\n%s", want, out)
+		}
+		if !strings.Contains(out, "0/1 "+glyphWaiting) {
+			t.Errorf("the row must carry the %s mark:\n%s", glyphWaiting, out)
+		}
+		if !strings.Contains(out, "1 waiting until a due") || strings.Contains(out, "waiting on boxes") {
+			t.Errorf("the header must count the box as waiting until a due, and nothing as waiting on boxes:\n%s", out)
+		}
+	})
+	t.Run("slice readout", func(t *testing.T) {
+		m := waitingBoard(t)
+		m.toggleSlice()
+		m.sliceField = sliceEpic
+		for i, r := range m.sliceRows() {
+			if r.value == "e-wait" {
+				m.sliceIdx = i
+				if !strings.HasSuffix(r.text(), glyphWaiting) {
+					t.Errorf("the panel row must end in the %s mark: %q", glyphWaiting, r.text())
+				}
+			}
+		}
+		if out := frame(m); !strings.Contains(out, "0/1 done · "+want+" · repos tomo/a") {
+			t.Errorf("the readout must carry %q:\n%s", want, out)
+		}
+	})
+	t.Run("peek's epic line", func(t *testing.T) {
+		m := waitingBoard(t)
+		if !m.selectID("t-cold", false) {
+			t.Fatal("t-cold is not on the synthetic board")
+		}
+		press(m, "space")
+		// Its own part after the epic label (peek.go says why), so the two
+		// are asserted apart: on this one-box board there is nothing else
+		// the second string could belong to.
+		out := frame(m)
+		for _, s := range []string{"epic e-wait (0/1) 熟成を待つ箱", want} {
+			if !strings.Contains(out, s) {
+				t.Errorf("the peek's epic line must carry %q:\n%s", s, out)
+			}
+		}
+	})
+	t.Run("epic overlay's derived line", func(t *testing.T) {
+		m := waitingBoard(t)
+		m.toggleSlice()
+		m.sliceField = sliceEpic
+		m.enterEpic("e-wait")
+		if out := frame(m); !strings.Contains(out, "0/1 done · "+want) {
+			t.Errorf("the overlay's derived line must carry %q:\n%s", want, out)
+		}
+	})
+}
+
 // The peek's dep STUCK must be a MARKER, not body text — peek.go's own words.
 // frame() strips ANSI, so every other assertion in this file is blind to that:
 // replacing the warn style with a bare string passes the whole repo (found in

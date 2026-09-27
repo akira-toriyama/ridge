@@ -97,6 +97,17 @@ func epicDepLabel(id string, de *board.EpicInfo, mark string) string {
 	return fmt.Sprintf("%s (%d/%d) %s", id, de.Done, de.Total, de.Title)
 }
 
+// boxWaiting is furrow's `⏳ waiting until <due> (<task>)` for a box, minus
+// the emoji (glyphWaiting says why) and dated to the board-calendar day like
+// every other date here; "" unless furrow reports the box waiting. Not a
+// warning: it is the box's settled state, so it carries no style of its own.
+func boxWaiting(e *board.EpicInfo) string {
+	if e.WaitUntil.IsZero() {
+		return ""
+	}
+	return "waiting until " + e.WaitUntil.In(board.Zone()).Format("2006-01-02") + " (" + e.WaitTask + ")"
+}
+
 // boxHead is a box's first line: the id chip, the title, and the closing date
 // beside it when it has one.
 func (m *Model) boxHead(e *board.EpicInfo) string {
@@ -129,6 +140,9 @@ func (m *Model) boxMeta(e *board.EpicInfo, full bool) []string {
 	}
 	if e.Stuck {
 		meta = append(meta, th.warn.Render("STUCK"))
+	}
+	if w := boxWaiting(e); w != "" {
+		meta = append(meta, w)
 	}
 	if !full {
 		if n := len(e.OpenDeps); n > 0 {

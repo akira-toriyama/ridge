@@ -401,6 +401,52 @@ func TestEpicDoneEnvelopeKeepsNullAndEmptyOpenMembersApart(t *testing.T) {
 	}
 }
 
+// The waiting state against the real CLI (furrow #321, in the v6.0.0 pin):
+// `epic ls --json` carries waiting {until, task} once no member is open and a
+// member parked in a due-tracked lane has a due still ahead — the `waiting`
+// lane on the shipped config, where icebox sits in [due].ignore_lanes and
+// counts for nothing. ridge copies the pair and never re-derives it.
+//
+// bite-exempt: execs a real furrow binary and always skips where furrow is not
+// on PATH — which is CI, so the gate can never judge it there
+func TestContractEpicWaitingReachesTheSnapshot(t *testing.T) {
+	p, dir := newLabProvider(t)
+	waits := labEpic(t, dir, "熟成を待つ箱", "lab/lab")
+	fin := labAdd(t, dir, "仕込んだ一枚", "-e", waits)
+	lab(t, dir, "furrow", "done", fin)
+	parked := labAdd(t, dir, "天地返しの一枚", "-e", waits, "--due", "2027-03-31")
+	lab(t, dir, "furrow", "set", parked, "-s", "waiting")
+
+	iced := labEpic(t, dir, "icebox に due を置いた箱", "lab/lab")
+	cold := labAdd(t, dir, "凍った一枚", "-e", iced, "--due", "2027-03-31")
+	lab(t, dir, "furrow", "set", cold, "-s", "icebox")
+
+	busy := labEpic(t, dir, "まだ開いている箱", "lab/lab")
+	labAdd(t, dir, "残る一枚", "-e", busy, "-s", "backlog")
+	late := labAdd(t, dir, "待つ一枚", "-e", busy, "--due", "2027-03-31")
+	lab(t, dir, "furrow", "set", late, "-s", "waiting")
+
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	b := p.Board()
+	e := b.Epic(waits)
+	if e == nil || e.WaitTask != parked || e.WaitUntil.IsZero() {
+		t.Fatalf("%s must reach the snapshot waiting on %s: %+v", waits, parked, e)
+	}
+	if tk := b.Task(parked); tk == nil || !tk.Due.Equal(e.WaitUntil) {
+		t.Errorf("WaitUntil = %v, want the parked member's own due (%+v)", e.WaitUntil, tk)
+	}
+	if e.Stuck {
+		t.Errorf("%s is waiting and must not also be stuck", waits)
+	}
+	for _, id := range []string{iced, busy} {
+		if x := b.Epic(id); x == nil || !x.WaitUntil.IsZero() || x.WaitTask != "" {
+			t.Errorf("%s must not wait (%+v): icebox is due-ignored on the shipped config, and open work outranks a parked due", id, x)
+		}
+	}
+}
+
 // The disclosure against the real CLI (furrow #338): open_members is the
 // members in a NON-terminal lane — a parked (icebox / waiting) member and a
 // done one predate the close and are not left behind — in furrow's read order

@@ -231,6 +231,10 @@ func TestBoxOverviewDemoFramesCarryWhatTheyExistFor(t *testing.T) {
 		// The widened scope and the closed row, which has no other frame.
 		{"boxesall", []string{"scope open + closed", "2 closed",
 			glyphDone + " e-2b7h", "closed 2026-07-15"}},
+		// The waiting box (furrow #321): its row's mark, its strip's spelled
+		// form, and the header telling the two kinds of wait apart.
+		{"boxeswaiting", []string{"e-m8kd", "1/2 " + glyphWaiting,
+			"waiting until 2027-03-31 (t-w7ne)", "1 waiting until a due", "2 waiting on boxes"}},
 	} {
 		t.Run(tc.demo, func(t *testing.T) {
 			out := strings.Join(dumpFrame(t, 240, 44, tc.demo), "\n")

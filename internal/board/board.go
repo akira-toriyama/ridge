@@ -195,9 +195,10 @@ var boardLanes = []Lane{
 //     consumes a slot in each. furrow's to enforce, and it REFUSES a second
 //     box for a repo rather than stealing the slot, so ridge must never
 //     present the flag as a toggle that always lands.
-//   - Derived — Done, Total, Stuck, OpenDeps. furrow computes these and ridge
-//     consumes them verbatim; recomputing any of them here would be the
-//     front-end logic this repo exists to not have. Closed makes OpenDeps look
+//   - Derived — Done, Total, Stuck, OpenDeps, WaitUntil/WaitTask. furrow
+//     computes these and ridge consumes them verbatim; recomputing any of
+//     them here would be the front-end logic this repo exists to not have.
+//     Closed makes OpenDeps look
 //     re-derivable, and over this read it genuinely is — measured, a dep is in
 //     open_deps exactly when it resolves to a box that is not closed. Deriving
 //     it anyway would still be wrong: it would be a SECOND rule, kept in step
@@ -241,6 +242,12 @@ type EpicInfo struct {
 	Stuck    bool
 	Deps     []string
 	OpenDeps []string
+	// WaitUntil/WaitTask are furrow's `waiting {until, task}` (#321): the
+	// earliest due still ahead among members parked in a due-tracked
+	// terminal lane, reported only once no member is open. Zero/"" when the
+	// box is not waiting; exclusive with Stuck by furrow's own rule.
+	WaitUntil time.Time
+	WaitTask  string
 }
 
 // MetaKeys is the box's meta keys in sorted order. Map iteration is random, so

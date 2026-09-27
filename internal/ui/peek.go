@@ -101,6 +101,15 @@ func (m *Model) peekContent(w int) string {
 			}
 		}
 		meta2 = append(meta2, "epic "+label)
+		// A part of its own, not a suffix of the label: wrapJoin truncates an
+		// over-wide part, and the fixture's own waiting box (a 30-cell CJK
+		// title) is enough to push a suffix past the panel's width and into
+		// the ellipsis — a separate part wraps onto the next line instead.
+		if e := m.b.Epic(t.Epic); e != nil {
+			if w := boxWaiting(e); w != "" {
+				meta2 = append(meta2, w)
+			}
+		}
 	}
 	if len(t.Labels) > 0 {
 		meta2 = append(meta2, "labels "+strings.Join(t.Labels, ","))

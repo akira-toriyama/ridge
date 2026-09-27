@@ -600,6 +600,41 @@ func fixtureTasks() []*board.Task {
 			Body:     "# 燻製チャレンジ\n\nダッチオーブン（[[t-ecfm]]）で温燻ができるらしい。ただしベランダの煙は近所問題になるので、熱源と煙の少ないチップの組合せを調べてから。キャンプ場でやる案が先かもしれない。",
 		},
 		{
+			// The waiting box's done half (e-m8kd in fixtureEpics).
+			ID:       "t-8hsn",
+			Title:    "味噌を仕込む — 大豆 2kg・米麹 2kg・塩 1kg を樽に詰めて重石を載せる",
+			Status:   "done",
+			Priority: 1640,
+			Value:    3,
+			Effort:   2,
+			Repos:    []string{"tomo/joubisai"},
+			Epic:     "e-m8kd",
+			Created:  ts("2026-07-16T02:00:00Z"),
+			Updated:  ts("2026-07-16T05:30:00Z"),
+			Closed:   ts("2026-07-16T05:30:00Z"),
+			Body:     "# 味噌を仕込む\n\n大豆を一晩戻して 4 時間煮る。潰して麹と塩を混ぜ、空気を抜きながら樽に詰めた。表面に塩を振ってラップ、重石 2kg。天地返し（[[t-w7ne]]）まで冷暗所で寝かせる。",
+		},
+		{
+			// The waiting box's parked half: the member whose due the box
+			// waits for. Parked in icebox WITH a due — on furrow's shipped
+			// config icebox is in [due].ignore_lanes and only the `waiting`
+			// lane counts, but this fixture has no such lane (adding one
+			// re-cuts every board frame), so the box stands for a board whose
+			// ignore_lanes is empty: a shape furrow produces, not its default.
+			ID:       "t-w7ne",
+			Title:    "天地返し — 3 月末に上下を入れ替え、表面のカビを削って塩を振り直す",
+			Status:   "icebox",
+			Priority: 5030,
+			Value:    3,
+			Effort:   1,
+			Repos:    []string{"tomo/joubisai"},
+			Epic:     "e-m8kd",
+			Created:  ts("2026-07-16T05:35:00Z"),
+			Updated:  ts("2026-07-16T05:35:00Z"),
+			Due:      ts("2027-03-31T14:59:59Z"),
+			Body:     "# 天地返し\n\n仕込み（[[t-8hsn]]）から 2 か月で一度、上下を入れ替える。表面のカビは削って捨て、塩を振り直す。それまでは触らない。",
+		},
+		{
 			ID:       "t-dg7k",
 			Title:    "来季の装備メモ — ポータブル冷蔵庫か大型クーラー増設か（どの計画に載せるか未定）",
 			Status:   "icebox",
@@ -705,6 +740,22 @@ func fixtureEpics() []board.EpicInfo {
 			Total:    1,
 			Deps:     []string{"e-fw2m", "e-2b7h", "e-x0k9"},
 			OpenDeps: []string{"e-fw2m"},
+		},
+		{
+			// The WAITING box (furrow #321): no member open and its parked
+			// member's due still ahead, so furrow reports waiting {until,
+			// task} instead of nagging epic_all_done. WaitUntil/WaitTask are
+			// hand-written like Done/Total/Stuck, and fixture_test pins them
+			// to the member. Exclusive with stuck by furrow's rule, so this is
+			// the ⧗ marker's only fixture site as e-9wtv is the STUCK one's.
+			ID:        "e-m8kd",
+			Title:     "冬の味噌仕込み 2026 — 熟成待ち（天地返しまで触らない）",
+			Goal:      "秋に樽を開けて味見できている",
+			Repos:     []string{"tomo/joubisai"},
+			Done:      1,
+			Total:     2,
+			WaitUntil: ts("2027-03-31T14:59:59Z"),
+			WaitTask:  "t-w7ne",
 		},
 		{
 			// The board's DOMINANT row shape, which every other box here is

@@ -34,12 +34,15 @@ func roadModel(t *testing.T, w, h int) *Model {
 	return m
 }
 
-// The fixture's four dated open tasks, in due order, each row carrying its
-// board-calendar date — and no row at all for the dateless majority.
+// The fixture's five dated tasks not done, in due order, each row carrying
+// its board-calendar date — and no row at all for the dateless majority. The
+// fifth is the parked t-w7ne: the timeline draws every due furrow would still
+// show (a parked lane drops the alarm, not the date), which is also the due
+// its box waits until.
 func TestRoadmapRowsAreTheDatedOpenTasksInDueOrder(t *testing.T) {
 	m := roadModel(t, 240, 40)
 	l := m.road.lay
-	want := []string{"t-jv3j", "t-ehk7", "t-p7xw", "t-9sa6"}
+	want := []string{"t-jv3j", "t-ehk7", "t-p7xw", "t-9sa6", "t-w7ne"}
 	if len(l.Rows) != len(want) {
 		ids := make([]string, 0, len(l.Rows))
 		for _, r := range l.Rows {
@@ -294,8 +297,8 @@ func TestRoadmapPanClampsAtTheAxisEnds(t *testing.T) {
 func TestRoadmapPageSaysSoAtTheEnds(t *testing.T) {
 	m := roadModel(t, 240, 40)
 	m.Update(ctrlD())
-	if m.road.sel != "t-9sa6" {
-		t.Fatalf("^d landed on %q, want the last row t-9sa6", m.road.sel)
+	if m.road.sel != "t-w7ne" {
+		t.Fatalf("^d landed on %q, want the last row t-w7ne", m.road.sel)
 	}
 	m.Update(ctrlD())
 	if !strings.Contains(m.status, "already at the bottom") {

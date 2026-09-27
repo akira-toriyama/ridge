@@ -20,10 +20,10 @@ import (
 // are text throughout and there is no rune grid for a CJK title to shear.
 //
 // The row grammar is the slice panel's, widened: the SUFFIX is composed first
-// and the title gets whatever is left. Progress, the waiting count and the
-// stuck marker are the pieces a reader scans down a column, so they are the
-// ones that must survive a Japanese title's ellipsis — the exact failure
-// slicemode.go records having shipped once.
+// and the title gets whatever is left. Progress, the dep count and the
+// waiting and stuck markers are the pieces a reader scans down a column, so
+// they are the ones that must survive a Japanese title's ellipsis — the exact
+// failure slicemode.go records having shipped once.
 
 // boxesState is the box overview's whole state, held by value like sweepState:
 // a view has no closed state for nil to mean, and the zero value is the state
@@ -108,7 +108,7 @@ func (m *Model) boxHeader(l *boxLayout, clipped bool) string {
 	left := th.peekHdr.Render("boxes by repo") + th.dim.Render("  ·  scope ") +
 		th.chipAlt.Render(scope)
 
-	active, stuck, waiting, closed, done, total := 0, 0, 0, 0, 0, 0
+	active, stuck, waits, waiting, closed, done, total := 0, 0, 0, 0, 0, 0, 0
 	seen := map[string]bool{}
 	for _, g := range l.Groups {
 		for _, e := range g.Boxes {
@@ -123,6 +123,9 @@ func (m *Model) boxHeader(l *boxLayout, clipped bool) string {
 				stuck++
 			}
 			if len(e.OpenDeps) > 0 {
+				waits++
+			}
+			if !e.WaitUntil.IsZero() {
 				waiting++
 			}
 			if !e.Closed.IsZero() {
@@ -137,8 +140,14 @@ func (m *Model) boxHeader(l *boxLayout, clipped bool) string {
 		th.ok.Render(fmt.Sprintf("%d active", active)),
 		fmt.Sprintf("%d/%d tasks done", done, total),
 	}
+	// Two waits, told apart in words: a box waiting ON other boxes (furrow's
+	// open_deps, the row's →N) and a box waiting UNTIL a parked member's due
+	// (furrow's waiting {until, task}, the row's ⧗).
+	if waits > 0 {
+		bits = append(bits, fmt.Sprintf("%d waiting on boxes", waits))
+	}
 	if waiting > 0 {
-		bits = append(bits, fmt.Sprintf("%d waiting", waiting))
+		bits = append(bits, fmt.Sprintf("%d waiting until a due", waiting))
 	}
 	if stuck > 0 {
 		bits = append(bits, th.warn.Render(fmt.Sprintf("%d stuck", stuck)))
@@ -218,6 +227,9 @@ func (m *Model) boxRowLine(repo string, e board.EpicInfo, w int) string {
 	suffix := fmt.Sprintf(" %d/%d", e.Done, e.Total)
 	if n := len(e.OpenDeps); n > 0 {
 		suffix += fmt.Sprintf(" →%d", n)
+	}
+	if !e.WaitUntil.IsZero() {
+		suffix += " " + glyphWaiting
 	}
 	if e.Stuck {
 		suffix += " !"

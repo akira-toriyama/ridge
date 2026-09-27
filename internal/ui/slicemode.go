@@ -334,6 +334,11 @@ func (m *Model) sliceRows() []sliceRow {
 			if n := len(e.OpenDeps); n > 0 {
 				suffix += fmt.Sprintf(" →%d", n)
 			}
+			// furrow's waiting {until, task} as one cell; the readout under
+			// the cursor spells the day and the member (boxWaiting).
+			if !e.WaitUntil.IsZero() {
+				suffix += " " + glyphWaiting
+			}
 			if e.Stuck {
 				suffix += " !"
 			}

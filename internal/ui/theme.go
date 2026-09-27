@@ -41,6 +41,12 @@ const (
 	// one vocabulary. glyphEpicPinned likewise for the PERMANENT channel.
 	glyphEpicActive = "▶"
 	glyphEpicPinned = "◆"
+	// glyphWaiting marks a box furrow reports waiting {until, task} (#321):
+	// no member open, a parked member's due still ahead. furrow's own ⏳
+	// (U+23F3) is emoji-presentation and measures 2 cells (lipgloss.Width,
+	// 2026-09-27) — the shear the note above exists to avoid — so ridge draws
+	// the 1-cell neutral hourglass U+29D7 instead.
+	glyphWaiting = "⧗"
 
 	// The roadmap's two timeline glyphs. glyphDue shares glyphEpicPinned's
 	// character on the arrowheads' licence: a diamond on a DATE AXIS is the

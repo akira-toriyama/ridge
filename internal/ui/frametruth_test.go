@@ -3,6 +3,7 @@ package ui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	lg "charm.land/lipgloss/v2"
 
@@ -238,6 +239,10 @@ func TestSliceEpicRowsKeepTheirCountAndStuckMarker(t *testing.T) {
 		// and `11/11 !` gone whole) while every other case was green.
 		{ID: "e-5", Title: "chord: action-keys 完成", Done: 0, Total: 1},
 		{ID: "e-6", Title: "projects/CLAUDE.md の整理", Done: 11, Total: 11, Stuck: true},
+		// The waiting mark rides the same suffix, so the same budget must
+		// carry it (furrow #321; exclusive with stuck).
+		{ID: "e-7", Title: "冬の味噌仕込み 2026 — 熟成待ち（天地返しまで触らない）", Done: 1, Total: 2,
+			WaitUntil: time.Date(2027, 3, 31, 14, 59, 59, 0, time.UTC), WaitTask: "t-w7ne"},
 	}
 	lanes := []board.Lane{{Name: "backlog"}}
 	b := board.NewStoreBoard(lanes, nil, cases, true, "")
@@ -268,6 +273,9 @@ func TestSliceEpicRowsKeepTheirCountAndStuckMarker(t *testing.T) {
 		}
 		if e.Stuck && !strings.HasSuffix(r.text(), "!") {
 			t.Errorf("%s is stuck but the row does not say so: %q", e.ID, r.text())
+		}
+		if !e.WaitUntil.IsZero() && !strings.HasSuffix(r.text(), glyphWaiting) {
+			t.Errorf("%s is waiting but the row does not say so: %q", e.ID, r.text())
 		}
 	}
 }
