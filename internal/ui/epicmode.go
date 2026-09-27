@@ -839,12 +839,15 @@ func (m *Model) renderEpicMenu(box *board.EpicInfo, inner int) string {
 		{epicFieldName(epicFieldClosed), epicClosedCell(box)},
 	}
 
-	// The derived line first: progress and stuck are furrow's verdict on this
-	// box and nothing in the menu can change them, so they belong above the
-	// editable rows rather than pretending to be one.
+	// The derived line first: progress, stuck and waiting are furrow's
+	// verdict on this box and nothing in the menu can change them, so they
+	// belong above the editable rows rather than pretending to be one.
 	derived := fmt.Sprintf("%d/%d done", box.Done, box.Total)
 	if box.Stuck {
 		derived += " · " + th.warn.Render("STUCK")
+	}
+	if wait := boxWaiting(box); wait != "" {
+		derived += " · " + wait
 	}
 	return th.muted.Render(pad(derived, inner)) + "\n\n" +
 		m.renderOverlayMenu(rows, m.epic.menuIdx, inner)

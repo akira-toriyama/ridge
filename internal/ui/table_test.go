@@ -310,9 +310,9 @@ func TestOverdueDueRendersDanger(t *testing.T) {
 func TestTableColumnsAlignUnderCJKTitles(t *testing.T) {
 	fixedNow(t, day("2026-08-10T00:00:00Z")) // ago() must never emit a date here
 	for _, w := range []int{240, 241, 259, 320, 399, 400} {
-		m := tableModel(t, w, 40)
+		m := tableModel(t, w, 42)
 		m.setSort(sortDue, true) // the header arrow must not shift a boundary
-		out, err := m.Dump(w, 40, "", true)
+		out, err := m.Dump(w, 42, "", true)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -348,8 +348,8 @@ func TestTableColumnsAlignUnderCJKTitles(t *testing.T) {
 		}
 		rows := m.tableRows()
 		for i, task := range rows {
-			y := rowRule + i // 34 fixture rows fit h=40's 35-row budget (1 spare), so top is 0
-			if y >= len(lines) || y >= 40-footerH {
+			y := rowRule + i // 36 fixture rows fit h=42's 37-row budget (1 spare), so top is 0
+			if y >= len(lines) || y >= 42-footerH {
 				t.Fatalf("w=%d: row %d fell off the frame — the test premise broke", w, i)
 			}
 			if got := cell(lines[y], idCol); got != task.ID {

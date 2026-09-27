@@ -89,7 +89,7 @@ func TestSliceEpicRowsCarryProgressAndClickSelects(t *testing.T) {
 	press(m, "s")
 	m.sliceField = sliceEpic
 	rows := m.sliceRows()
-	if len(rows) != 5 || rows[0].value != "e-fw2m" {
+	if len(rows) != 6 || rows[0].value != "e-fw2m" {
 		t.Fatalf("epic rows = %+v", rows)
 	}
 	if !strings.Contains(rows[0].text(), "6/18") {

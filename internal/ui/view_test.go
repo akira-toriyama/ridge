@@ -478,8 +478,8 @@ func TestTableViewListsEveryVisibleTask(t *testing.T) {
 	m.view = viewTable
 	out := frame(m)
 	rows := m.tableRows()
-	if len(rows) != 34 {
-		t.Fatalf("expected all 34 tasks, got %d", len(rows))
+	if len(rows) != 36 {
+		t.Fatalf("expected all 36 tasks, got %d", len(rows))
 	}
 	// The cursor is a glyph, not only colour, so -plain can see it.
 	if !strings.Contains(out, "▌ "+rows[0].ID) {

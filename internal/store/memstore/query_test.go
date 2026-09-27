@@ -189,13 +189,13 @@ func TestQueryMatchesFixture(t *testing.T) {
 		{q: "id:t-jv3j", want: []string{"t-jv3j"}},
 		{q: "epic:e-fw2m", min: 18},
 		{q: "has:epic", min: 26},
-		{q: "is:unfiled", min: 8}, // 34 tasks - 26 filed under the four boxes; epics themselves are no tasks
+		{q: "is:unfiled", min: 8}, // 36 tasks - 28 filed under the five boxes; epics themselves are no tasks
 		{q: "repo:kyushu-trip", min: 27},
 		{q: "label:bbq", min: 9},
 		{q: "no:label", min: 1},
 		{q: "no:repo", want: []string{"t-dg7k"}}, // exactly the fixture's one draft
 		{q: "is:draft", want: []string{"t-dg7k"}},
-		// Of the fixture's five dues, two are past the pinned clock and only
+		// Of the fixture's six dues, two are past the pinned clock and only
 		// t-jv3j (2026-07-31) is still open — t-2qyb (07-17) is closed, and a
 		// closed task is never overdue.
 		{q: "is:overdue", want: []string{"t-jv3j"}},
@@ -237,10 +237,10 @@ func TestQueryIsBlockedNamesTheBlockedTasks(t *testing.T) {
 }
 
 func TestQueryIsClosedAndIsOpenNameTheirTasks(t *testing.T) {
-	// The nine done cards, spelled out. The earlier version asserted
+	// The ten done cards, spelled out. The earlier version asserted
 	// len(closed)+len(open) == len(tasks), which holds for ANY predicate —
 	// `return true` and `return false` both passed it.
-	wantClosed := ids("t-2qyb", "t-2tbn", "t-614w", "t-6etg", "t-ecfm",
+	wantClosed := ids("t-2qyb", "t-2tbn", "t-614w", "t-6etg", "t-8hsn", "t-ecfm",
 		"t-g8bn", "t-phgp", "t-t38k", "t-wf4p")
 	if got := strings.Join(matched(t, "is:closed"), ","); got != wantClosed {
 		t.Errorf("is:closed = %v, want %v", got, wantClosed)
@@ -398,8 +398,8 @@ func TestQueryRepoResolvesInsteadOfSubstringMatching(t *testing.T) {
 		}
 	}
 	// The other repo on the board is reachable the same two ways.
-	if got := matched(t, "repo:joubisai"); len(got) != 7 {
-		t.Errorf("repo:joubisai = %v, want the 7 joubisai-tagged cards", got)
+	if got := matched(t, "repo:joubisai"); len(got) != 9 {
+		t.Errorf("repo:joubisai = %v, want the 9 joubisai-tagged cards", got)
 	}
 }
 
@@ -433,22 +433,22 @@ func TestQueryPresenceVocabularyIsFurrows(t *testing.T) {
 		field    string
 		has, not int
 	}{
-		{"deps", 12, 22},
+		{"deps", 12, 24},
 		{"refs", 1, all - 1},   // t-9sa6 carries the two documented ref forms
-		{"due", 5, all - 5},    // four open promises and t-2qyb, the closed task that kept its due
+		{"due", 6, all - 6},    // four open promises, t-2qyb (closed, kept its due) and t-w7ne (parked, the waiting box's due)
 		{"repeat", 2, all - 2}, // t-9sa6 weekly, t-ehk7 monthly — the fixture's two rules
-		{"closed", 9, all - 9},
+		{"closed", 10, all - 10},
 		{"reviewed", 1, all - 1}, // t-jv3j, the fixture's one review stamp
-		{"label", 18, 16},
+		{"label", 18, 18},
 		{"repo", all - 1, 1}, // t-dg7k, the fixture's one draft
-		{"epic", 26, all - 26},
+		{"epic", 28, all - 28},
 		{"checklist", 8, all - 8},
 		// value/effort/body are presence fields too. They used to be "covered"
 		// by a `has + no == all` check below, which is the exact tautology this
 		// file condemns elsewhere: `no:` is the literal negation of `has:`, so
 		// it holds for any predicate at all, including a broken one.
-		{"value", 32, 2},
-		{"effort", 32, 2},
+		{"value", 34, 2},
+		{"effort", 34, 2},
 		{"body", all, 0},
 	}
 	for _, tc := range cases {

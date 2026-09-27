@@ -73,7 +73,7 @@ func run(argv []string, stdout, stderr io.Writer) Code {
 		table  = fs.Bool("table", false, "open on the table view")
 		// A view setting like -table, not a -demo name: it composes with the
 		// demos and it opens the interactive TUI on the timeline too.
-		roadmap = fs.Bool("roadmap", false, "open on the roadmap view: every open task that carries a due, on a time axis")
+		roadmap = fs.Bool("roadmap", false, "open on the roadmap view: every task not done that carries a due, on a time axis")
 		revisit = fs.Bool("revisit", false, "open with the revisit lens on: only what furrow revisit flags (the f key)")
 		// The other full-screen views, as opening settings like -roadmap: on
 		// the fixture their -demo states already draw them, but -demo is the

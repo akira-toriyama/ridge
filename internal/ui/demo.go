@@ -591,6 +591,18 @@ func (m *Model) demoState(kind string) error {
 			_ = c
 		}
 
+	case "epicwaiting":
+		// The overlay's derived line on the box furrow reports WAITING: the
+		// one line that says `waiting until` beside the numbers, which the
+		// `epic` demo (parked on the rich box) never shows.
+		box, err := m.demoWaitingBox("epicwaiting")
+		if err != nil {
+			return err
+		}
+		if err := m.demoEpicPanel("epicwaiting", box.ID); err != nil {
+			return err
+		}
+
 	case "synced":
 		// The sync's landing note. The fixture has no store to sync, so the
 		// report is canned — every branch of syncNote in one line, both id
@@ -721,6 +733,29 @@ func (m *Model) demoState(kind string) error {
 		key := boxKey(repo, closed.ID)
 		if l.Row(key) == nil {
 			return fmt.Errorf("demo boxesall: z did not widen the population")
+		}
+		m.boxes.sel = key
+
+	case "boxeswaiting":
+		// The overview with the cursor on the box furrow reports WAITING
+		// (#321): its row carries the ⧗ marker, its strip spells `waiting
+		// until <day> (<task>)`, and the header counts it apart from the
+		// boxes waiting on other boxes — none of which the bare `boxes` frame
+		// proves, where the cursor sits on the active box.
+		box, err := m.demoWaitingBox("boxeswaiting")
+		if err != nil {
+			return err
+		}
+		m.openBoxes()
+		l := m.buildBoxes()
+		m.boxes.lay = l
+		repo := boxNoRepo
+		if len(box.Repos) > 0 {
+			repo = box.Repos[0]
+		}
+		key := boxKey(repo, box.ID)
+		if l.Row(key) == nil {
+			return fmt.Errorf("demo boxeswaiting: %s is not on the overview", box.ID)
 		}
 		m.boxes.sel = key
 
@@ -1272,6 +1307,14 @@ func (m *Model) demoActiveBox(demo string) (board.EpicInfo, error) {
 func (m *Model) demoParkedBox(demo string) (board.EpicInfo, error) {
 	return m.demoBox(demo, "is an open box with a member parked in a terminal lane other than done", func(e board.EpicInfo) bool {
 		return e.Closed.IsZero() && len(m.b.ParkedMembers(e.ID)) > 0
+	})
+}
+
+// demoWaitingBox is the open box furrow reports waiting — no member open, a
+// parked member's due ahead — the ⧗ marker's subject.
+func (m *Model) demoWaitingBox(demo string) (board.EpicInfo, error) {
+	return m.demoBox(demo, "is an open box parked until a due (furrow's waiting)", func(e board.EpicInfo) bool {
+		return e.Closed.IsZero() && !e.WaitUntil.IsZero()
 	})
 }
 

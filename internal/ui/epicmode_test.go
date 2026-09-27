@@ -1047,7 +1047,8 @@ func TestEpicDemoFramesCarryWhatTheyExistFor(t *testing.T) {
 	}{
 		// The panel: the ▶/◆ lifecycle markers and the keys only its note can
 		// advertise (`?` cannot be typed inside a modal).
-		{"sliceepic", []string{glyphEpicActive, glyphEpicPinned, "manages the box", "new box"}},
+		// …and the waiting mark, on the fixture's one waiting box (furrow #321).
+		{"sliceepic", []string{glyphEpicActive, glyphEpicPinned, "1/2 " + glyphWaiting, "manages the box", "new box"}},
 		// The menu: the derived line furrow owns, and the activate precondition.
 		{"epic", []string{"box e-c4mt", "0/1 done", "no — slot held by e-fw2m",
 			"standing", "pinned", "meta", "origin,season"}},
@@ -1097,7 +1098,10 @@ func TestEpicDemoFramesCarryWhatTheyExistFor(t *testing.T) {
 		// counting what the narrow population leaves out, and the note saying
 		// which scope is in force.
 		{"sliceepicall", []string{"open + closed", "z scope",
-			glyphDone + " 夏キャンプ", "5 open · 2 closed"}},
+			glyphDone + " 夏キャンプ", "6 open · 2 closed"}},
+		// The derived line on the waiting box (furrow #321), which the `epic`
+		// demo's rich box cannot carry: stuck and waiting are exclusive.
+		{"epicwaiting", []string{"box e-m8kd", "1/2 done · waiting until 2027-03-31 (t-w7ne)"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.demo, func(t *testing.T) {

@@ -179,6 +179,51 @@ func TestGraphAgreesWithFixtureFacts(t *testing.T) {
 // table and the sweep each wrap or truncate on their own; this pins the
 // bands with no slack (the fixture holds exactly five at 150+) so a single
 // retitle cannot quietly shrink the fixture back under the real board.
+// WaitUntil/WaitTask are hand-written like Done/Total/Stuck, so the same rot
+// check applies, against furrow's rule (#321): the named member is the box's
+// own, parked (a terminal lane other than done), carries exactly that due,
+// the due is still ahead of the clock, and no member is open — which is also
+// what makes waiting exclusive with stuck. The clock is the wall clock on
+// purpose: the day the fixture's due arrives, furrow would stop reporting
+// the box waiting, and this is the test that says so. One such box must
+// exist: it is the ⧗ marker's only fixture site.
+func TestFixtureWaitingBoxAgreesWithItsMembers(t *testing.T) {
+	b := New().Board()
+	waiting := 0
+	for _, e := range b.EpicsAll() {
+		if e.WaitUntil.IsZero() != (e.WaitTask == "") {
+			t.Errorf("%s: WaitUntil %v and WaitTask %q must be set together", e.ID, e.WaitUntil, e.WaitTask)
+		}
+		if e.WaitTask == "" {
+			continue
+		}
+		waiting++
+		if e.Stuck {
+			t.Errorf("%s is both stuck and waiting; furrow reports one or the other", e.ID)
+		}
+		if n := len(b.OpenMembers(e.ID)); n != 0 {
+			t.Errorf("%s waits with %d member(s) still open; furrow reports waiting only once none is", e.ID, n)
+		}
+		tk := b.Task(e.WaitTask)
+		switch {
+		case tk == nil:
+			t.Errorf("%s waits on %s, which is not on the board", e.ID, e.WaitTask)
+		case tk.Epic != e.ID:
+			t.Errorf("%s waits on %s, a member of %q", e.ID, e.WaitTask, tk.Epic)
+		case !b.IsTerminal(tk.Status) || b.DoneLane() == tk.Status:
+			t.Errorf("%s waits on %s in lane %s; the member must be parked (terminal, not done)", e.ID, e.WaitTask, tk.Status)
+		case !tk.Due.Equal(e.WaitUntil):
+			t.Errorf("%s waits until %v but %s is due %v", e.ID, e.WaitUntil, e.WaitTask, tk.Due)
+		}
+		if !e.WaitUntil.After(board.Now()) {
+			t.Errorf("%s waits until %v, which has arrived: furrow reports waiting only while the due is ahead — move the fixture's due", e.ID, e.WaitUntil)
+		}
+	}
+	if waiting == 0 {
+		t.Error("the fixture must keep one waiting box — the ⧗ marker's only fixture site")
+	}
+}
+
 func TestFixtureTitlesReachTheRealBoardsBands(t *testing.T) {
 	b := New().Board()
 	lanesAt150 := map[string]bool{}

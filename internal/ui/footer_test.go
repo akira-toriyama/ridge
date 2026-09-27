@@ -164,7 +164,7 @@ func TestLastRowIsTheStatusLine(t *testing.T) {
 		t.Fatalf("frame is %d rows, want 50", len(lines))
 	}
 	last := strings.TrimSpace(lines[len(lines)-1])
-	if last != "fixture · 34 tasks" {
+	if last != "fixture · 36 tasks" {
 		t.Errorf("last row = %q, want the startup status line", last)
 	}
 
@@ -327,7 +327,7 @@ func TestTheUnlanedDemoShowsTheClause(t *testing.T) {
 	if !strings.Contains(out, "1 in no lane") {
 		t.Errorf("-demo unlaned draws no load-note clause:\n%s", out)
 	}
-	if !strings.Contains(out, "34 tasks") {
-		t.Errorf("-demo unlaned: the title bar should count the 34 laned tasks, not 35:\n%s", out)
+	if !strings.Contains(out, "36 tasks") {
+		t.Errorf("-demo unlaned: the title bar should count the 36 laned tasks, not 37:\n%s", out)
 	}
 }

@@ -287,11 +287,20 @@ type epicJSON struct {
 		Total int `json:"total"`
 	} `json:"progress"`
 	Stuck bool `json:"stuck"`
+	// waiting is furrow-derived like stuck (furrow #321, in the v6.0.0 pin):
+	// omitted unless no member is open and a parked member's due is ahead.
+	Waiting *epicWaitJSON `json:"waiting"`
+}
+
+// epicWaitJSON is the `waiting {until, task}` pair on an epic row.
+type epicWaitJSON struct {
+	Until time.Time `json:"until"`
+	Task  string    `json:"task"`
 }
 
 // toEpicInfo maps one row onto the port's entity.
 func (e epicJSON) toEpicInfo() board.EpicInfo {
-	return board.EpicInfo{
+	info := board.EpicInfo{
 		ID: e.ID, Title: e.Title, Goal: e.Goal,
 		Active: e.Active, Standing: e.Standing, Pinned: e.Pinned,
 		Labels: e.Labels, Repos: e.Repos, Meta: e.Meta,
@@ -299,6 +308,10 @@ func (e epicJSON) toEpicInfo() board.EpicInfo {
 		Done:   e.Progress.Done, Total: e.Progress.Total,
 		Stuck: e.Stuck, Deps: e.Deps, OpenDeps: e.OpenDeps,
 	}
+	if e.Waiting != nil {
+		info.WaitUntil, info.WaitTask = e.Waiting.Until, e.Waiting.Task
+	}
+	return info
 }
 
 // wipDefaults renders the WIP budget on the lanes that have one — Projects #5

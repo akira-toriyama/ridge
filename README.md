@@ -150,16 +150,21 @@ ridge does not read — an envelope key is asked of furrow (t-gf2e).
 task dependencies, this answers "which box is each repo working out of right
 now" (why it is not a graph: glossary, "box overview"). `⏎` slices the board
 to that box (an `epic:<id>` slice term), `m` opens the box's overlay, `z`
-includes closed boxes, `^u/^d` page.
+includes closed boxes, `^u/^d` page. A box furrow reports **waiting** (furrow
+#321: no member open, a parked member's due still ahead) carries `⧗` on its row
+where a stuck box carries `!`, and its strip spells `waiting until <day>
+(<task>)`; the header counts the boxes waiting on other boxes and the boxes
+waiting until a due apart.
 
 `ridge -boxes` opens the real board in this view. Headless: `-dump -boxes`;
-the fixture's states are `-demo boxes` / `boxesall`.
+the fixture's states are `-demo boxes` / `boxesall` / `boxeswaiting`.
 
 ### Roadmap — the due timeline
 
-`C`. **Open tasks with a due date, in due order, with `◆` placed on a time
-axis.** The view that answers "what expires when" — the timeline form of
-`furrow brief`'s due head and `-q is:overdue` (glossary: "Roadmap", "zoom").
+`C`. **Every task not done that carries a due date (a parked one included),
+in due order, with `◆` placed on a time axis.** The view that answers "what
+expires when" — the timeline form of `furrow brief`'s due head and
+`-q is:overdue` (glossary: "Roadmap", "zoom").
 `z` cycles day / week / month, `h`/`l` pan the window. Read-only.
 
 `ridge -roadmap` opens the real board in this view. Headless: `-dump -roadmap`

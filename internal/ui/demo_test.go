@@ -51,6 +51,7 @@ func TestDemoSubjectsAreTheFixtureRowsTheyWereWrittenFor(t *testing.T) {
 		{"demoRichBox", "e-c4mt", box(m.demoRichBox)},
 		{"demoActiveBox", "e-fw2m", box(m.demoActiveBox)},
 		{"demoClosedBox", "e-2b7h", box(m.demoClosedBox)},
+		{"demoWaitingBox", "e-m8kd", box(m.demoWaitingBox)},
 		{"demoLabel", "bbq", str(m.demoLabel)},
 		{"demoRepo", "tomo/kyushu-trip", str(m.demoRepo)},
 	} {
@@ -103,7 +104,7 @@ func TestEveryDemoIsProducibleWithoutTheFixtureIDs(t *testing.T) {
 			t.Errorf("-demo %s over a board without the fixture's ids: %v", d, err)
 			continue
 		}
-		for _, id := range []string{"t-9sa6", "t-jv3j", "t-t38k", "t-ehk7", "t-y4st", "e-c4mt", "e-fw2m", "e-2b7h"} {
+		for _, id := range []string{"t-9sa6", "t-jv3j", "t-t38k", "t-ehk7", "t-y4st", "t-w7ne", "e-c4mt", "e-fw2m", "e-2b7h", "e-m8kd"} {
 			if strings.Contains(out, id) {
 				t.Errorf("-demo %s printed the fixture id %s on a board that holds no such id", d, id)
 			}
@@ -128,6 +129,8 @@ func TestDemoRefusalNamesTheMissingShape(t *testing.T) {
 		{"epic", "inactive box"},
 		{"epicconfirm", "is active"},
 		{"epicdoneparked", "parked in a terminal lane"},
+		{"boxeswaiting", "parked until a due"},
+		{"epicwaiting", "parked until a due"},
 		{"epicshut", "is closed"},
 		{"boxesall", "is closed"},
 		{"slice", "carries a label"},
@@ -184,7 +187,7 @@ func renamedFixture(t *testing.T) *board.Board {
 	}
 	epics := make([]board.EpicInfo, 0, len(src.EpicsAll()))
 	for _, e := range src.EpicsAll() {
-		e.ID, e.Deps, e.OpenDeps = ren(e.ID), renAll(e.Deps), renAll(e.OpenDeps)
+		e.ID, e.Deps, e.OpenDeps, e.WaitTask = ren(e.ID), renAll(e.Deps), renAll(e.OpenDeps), ren(e.WaitTask)
 		epics = append(epics, e)
 	}
 	b := board.NewBoard(tasks, epics...)
