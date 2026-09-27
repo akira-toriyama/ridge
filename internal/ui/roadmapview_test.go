@@ -470,19 +470,29 @@ func TestRoadmapEnterEditsTheDueInPlace(t *testing.T) {
 	}
 	drainPersists(m, t)
 
-	// A date past the window's edge: the window pans to the ◆ it just
-	// placed, as it does when the cursor walks there.
-	press(m, "enter")
-	m.edit.input.SetValue("2026-12-24")
-	press(m, "enter")
-	r := m.road.lay.Row("t-9sa6")
-	if r == nil {
-		t.Fatal("t-9sa6 must still be on the timeline")
+	// A date outside the window: the window pans to the ◆ it just placed,
+	// as it does when the cursor walks there — past the right edge, then
+	// before the left one. The day axis at 240 columns shows ~189 days
+	// around today (2026-08-31), so both dates lie outside it and the pan
+	// is asserted as a CHANGE of offset (a December date sat inside the
+	// window and pinned nothing; found by review).
+	for _, date := range []string{"2027-05-01", "2026-03-01"} {
+		before := m.road.xOff
+		press(m, "enter")
+		m.edit.input.SetValue(date)
+		press(m, "enter")
+		r := m.road.lay.Row("t-9sa6")
+		if r == nil {
+			t.Fatalf("%s: t-9sa6 must still be on the timeline", date)
+		}
+		if tlW := m.roadTLW(); r.X < m.road.xOff || r.X >= m.road.xOff+tlW {
+			t.Errorf("%s: the window must pan to the moved ◆: x=%d window=[%d,%d)", date, r.X, m.road.xOff, m.road.xOff+tlW)
+		}
+		if m.road.xOff == before {
+			t.Errorf("%s: the window did not pan (xOff %d), yet the date lies outside it", date, before)
+		}
+		drainPersists(m, t)
 	}
-	if tlW := m.roadTLW(); r.X < m.road.xOff || r.X >= m.road.xOff+tlW {
-		t.Errorf("the window must pan to the moved ◆: x=%d window=[%d,%d)", r.X, m.road.xOff, m.road.xOff+tlW)
-	}
-	drainPersists(m, t)
 }
 
 // A cleared due takes the row off the timeline: the cursor lands on the row
@@ -520,6 +530,12 @@ func TestRoadmapClearingADueLandsTheCursorOnTheNeighbour(t *testing.T) {
 		t.Errorf("the note must say the row left and where the cursor is: %q", m.status)
 	}
 	drainPersists(m, t)
+	// The landing is where the cursor is: esc carries it to the board
+	// (closeRoadmap carries a MOVED cursor), not the task whose due went.
+	press(m, "esc")
+	if m.view != viewBoard || m.cursorID() != after {
+		t.Errorf("esc must land the board cursor on %s, got %q (view %d)", after, m.cursorID(), m.view)
+	}
 }
 
 // `m` is the other spelling; esc closes the overlay with the due kept; a

@@ -206,6 +206,8 @@ func (m *Model) applyDueDirect(t *board.Task, v string) tea.Cmd {
 		return e.input.Focus()
 	}
 	m.exitEdit()
+	// Defensive: the roadmap is enterDueDirect's one caller and the input
+	// consumes every key, so the view cannot have changed underneath.
 	if m.view == viewRoadmap {
 		m.roadAfterDue(t.ID)
 	}
@@ -648,12 +650,15 @@ func (m *Model) onEditInputCommit(k inputKind, v string, t *board.Task) tea.Cmd 
 		// the paragraph at the body's tail.
 		cmd := m.applyCheck("note", func() error { return m.b.AppendNote(t.ID, v) },
 			func() error { return m.prov.PersistNote(t.ID, v) })
-		if cmd == nil {
+		if m.statusErr {
 			// The LOCAL apply refused (the shell's rolling-back refusal never
 			// reaches applyCheck): the fail is on the status row and the
 			// typed text is still in the input — re-focus it (the shell
 			// blurred it before this) instead of closing over hand-typed
-			// prose.
+			// prose. The status row, not applyCheck's nil: a write queued
+			// behind an in-flight one is nil too, and reading that as a
+			// refusal kept the overlay open over an appended paragraph, so
+			// the next ⏎ appended it again (found by review).
 			return e.input.Focus()
 		}
 		m.exitEdit()

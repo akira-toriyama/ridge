@@ -904,6 +904,15 @@ func (m *Model) demoState(kind string) error {
 		if m.view != viewRoadmap {
 			return fmt.Errorf("demo roaddue: C did not open the roadmap")
 		}
+		// On a row whose due CAN be cleared — a task carrying no rule —
+		// so the frame documents the input's whole grammar; the opening
+		// cursor's row (t-ehk7 on the fixture) repeats.
+		for _, r := range m.road.lay.Rows {
+			if tk := m.b.Task(r.ID); tk != nil && tk.Repeat == "" {
+				m.road.sel = r.ID
+				break
+			}
+		}
 		if c := m.onRoadKey(tea.KeyPressMsg{Code: tea.KeyEnter}); c != nil {
 			_ = c
 		}

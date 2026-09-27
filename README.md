@@ -184,9 +184,11 @@ closes it on apply or `esc`. The forms are the menu's (`+1d` counts from now,
 not from the row's date); empty clears, unless the task repeats — furrow
 keeps a due under a rule, and the refusal stays beside the typed form in the
 input, as does a form the grammar rejects. After the apply the timeline
-re-lays with the row on its new date and the window panned to its `◆`; a
-cleared due takes the row off the timeline and the cursor lands on its
-neighbour. Headless: `-demo roaddue`.
+re-lays with the row on its new date, the window panning to its `◆` when the
+date lies outside it (a write furrow then refuses rolls the date back and
+leaves the window where the apply put it, the edge arrow pointing the way);
+a cleared due takes the row off the timeline and the cursor lands on the
+row that followed it. Headless: `-demo roaddue`.
 
 `ridge -roadmap` opens the real board in this view. Headless: `-dump -roadmap`
 (day) and `-demo roadmapweek` / `-demo roadmapmonth`.

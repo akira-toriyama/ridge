@@ -541,7 +541,10 @@ func (m *Model) roadAfterDue(id string) {
 		return
 	}
 	next := ""
-	if old != nil {
+	// Only a pack that held the row can name its neighbours: step on an id
+	// the pack lacks answers the first row for both directions — the top,
+	// which is the landing this function exists to avoid.
+	if old != nil && old.Row(id) != nil {
 		for _, dy := range []int{+1, -1} {
 			if n := old.step(id, dy); n != id && l.Row(n) != nil {
 				next = n
@@ -550,7 +553,11 @@ func (m *Model) roadAfterDue(id string) {
 		}
 	}
 	if next != "" {
-		m.road.sel = next
+		// A landing is a move the user did not walk, but it IS where the
+		// cursor now is: closeRoadmap carries a moved cursor back to the
+		// board, and an unmoved one would leave the board on the task
+		// whose due just went.
+		m.road.sel, m.road.moved = next, true
 	} else {
 		m.clampRoadSel(l)
 	}
