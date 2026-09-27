@@ -28,11 +28,12 @@ import (
 // re-reads, and the row shows the new value when furrow's own truth arrives.
 // Two consequences the overlay owes the user: it must not let an impatient
 // second keypress queue a duplicate write, and it must say what it is waiting
-// for. The one exception is the record half — the body's note and the
-// review stamp (epicApply) — which is Persist*-shaped: furrow's note and
-// review take a box id as they take a task's, nothing about them is
-// furrow's to decide, so the box shows the change now and the queue records
-// it, exactly as a task's does.
+// for. The one exception is the record half — the body's `a` (a note) and
+// `e` (the $EDITOR replacement, landing through applyEditorBody) and the
+// review stamp — which is Persist*-shaped: furrow's note, edit and review
+// take a box id as they take a task's, nothing about them is furrow's to
+// decide, so the box shows the change now (AppendEpicNote, SetEpicBody,
+// ReviewEpic) and the queue records it, exactly as a task's does.
 //
 // The lifecycle pair `epic done` / `epic reopen` is ONE row, not two, and it
 // reads the box's own state to decide which verb it is. Two rows would put a
@@ -289,7 +290,7 @@ func (m *Model) noteEpicStage() {
 	case e.stage == stageList:
 		switch e.field {
 		case epicFieldBody:
-			m.note("box %s · body — a append a paragraph · e $EDITOR · esc back", e.id)
+			m.note("box %s · body — a append a paragraph · e $EDITOR · g/G ^u/^d page · esc back", e.id)
 		case epicFieldDeps:
 			m.note("box %s · deps — ⏎/x remove · a add · esc back", e.id)
 		case epicFieldMeta:
@@ -634,8 +635,15 @@ func (m *Model) onEpicInputCommit(k epicInputKind, v string) tea.Cmd {
 			return nil
 		}
 		prov := m.prov
-		return m.epicApply("note", func() error { return m.b.AppendEpicNote(id, v) },
+		cmd := m.epicApply("note", func() error { return m.b.AppendEpicNote(id, v) },
 			func() error { return prov.PersistNote(id, v) })
+		// The paragraph lands at the record's tail; on a record longer than
+		// the window the cursor follows it there, or the append changes
+		// nothing on screen (found by review).
+		if box := m.b.Epic(id); !m.statusErr && box != nil {
+			e.listIdx = maxInt(0, len(epicBodyRows(box.Body, m.overlayInner()-2))-1)
+		}
+		return cmd
 	case epicInputNewMeta:
 		e.stage = stageList
 		if v == "" {
@@ -856,18 +864,19 @@ func recordLines(body string) []string {
 
 // epicBodyCell is the body row's value: how much record there is, and when
 // it last moved. A box furrow just added holds `# <title>` and nothing else
-// (measured on v6.0.0 and dev; the real board's median record is that one
-// line, 2026-09-27), which the cell calls out rather than counting as a
-// record; a box with no file at all reads the siblings' `—`.
+// (measured on dev: 21 bytes, one trailing newline; 18 of the real board's
+// 200 boxes still hold just that, 2026-09-27), which the cell calls out
+// rather than counting as a record; a box with no file at all reads the
+// siblings' `—`. The clock rides every non-empty form.
 func epicBodyCell(box *board.EpicInfo) string {
 	lines := recordLines(box.Body)
-	switch {
-	case len(lines) == 0:
+	if len(lines) == 0 {
 		return "—"
-	case len(lines) == 1 && strings.HasPrefix(lines[0], "# "):
-		return "— only the title line"
 	}
 	cell := fmt.Sprintf("%d line(s)", len(lines))
+	if len(lines) == 1 && strings.HasPrefix(lines[0], "# ") {
+		cell = "— only the title line"
+	}
 	if !box.Updated.IsZero() {
 		cell += " · updated " + ago(box.Updated)
 	}
@@ -1133,7 +1142,7 @@ func (m *Model) renderEpicList(box *board.EpicInfo, inner, budget int) string {
 		foot = "⏎/x remove · a add k=v · esc back"
 	case epicFieldBody:
 		hdr = "body — the box's own record"
-		foot = "a append a paragraph · e $EDITOR · esc back"
+		foot = "a append a paragraph · e $EDITOR · g/G ^u/^d page · esc back"
 	}
 	return m.renderOverlayList(hdr, foot, rows, e.listIdx, inner, budget, mark)
 }

@@ -673,13 +673,15 @@ func (m *Model) demoState(kind string) error {
 			return fmt.Errorf("demo epicrm: the fixture's preview did not land: %s", m.epic.rm.err)
 		}
 
-	case "epicbody", "epicnote", "epicreview":
+	case "epicbody", "epicnote", "epicreview", "epicbodybusy":
 		// The overlay's record half: the body stage on the box that carries
 		// a record (`epicbody`), the note input over it holding a typed
-		// paragraph (`epicnote`), and the reviewed row's gate (`epicreview`,
-		// on the same box so the gate states a real clock). None is
-		// reachable from a bare flag: each sits between two keystrokes of
-		// a live overlay.
+		// paragraph (`epicnote`), the reviewed row's gate (`epicreview`,
+		// on the same box so the gate states a real clock), and `e` refused
+		// inside a store-first write's unread window (`epicbodybusy`, the
+		// flag canned onto the fixture the way rmrefused cans its read).
+		// None is reachable from a bare flag: each sits between two
+		// keystrokes of a live overlay.
 		box, err := m.demoRecordBox(kind)
 		if err != nil {
 			return err
@@ -698,7 +700,8 @@ func (m *Model) demoState(kind string) error {
 		if c := m.openEpicField(epicFieldBody, m.b.Epic(box.ID)); c != nil {
 			_ = c
 		}
-		if kind == "epicnote" {
+		switch kind {
+		case "epicnote":
 			if c := m.onEpicBodyKey(tea.KeyPressMsg{Code: 'a', Text: "a"}, m.b.Epic(box.ID)); c != nil {
 				_ = c
 			}
@@ -706,6 +709,11 @@ func (m *Model) demoState(kind string) error {
 				return fmt.Errorf("demo epicnote: a did not open the note input")
 			}
 			m.epic.input.SetValue("予約 3 件確定。次は装備の積載図から。")
+		case "epicbodybusy":
+			m.storeFirstUnread = true
+			if c := m.onEpicBodyKey(tea.KeyPressMsg{Code: 'e', Text: "e"}, m.b.Epic(box.ID)); c != nil {
+				return fmt.Errorf("demo epicbodybusy: e was not refused inside the unread window")
+			}
 		}
 
 	case "synced":

@@ -34,7 +34,7 @@ func TestEpicBodyStageShowsTheRecordAndAppendsANote(t *testing.T) {
 		t.Fatalf("the body row must open a list stage: %+v", m.epic)
 	}
 	out := frame(m)
-	for _, want := range []string{"body — the box's own record", "2026-07-16 09:12 activated", "a append a paragraph · e $EDITOR · esc back"} {
+	for _, want := range []string{"body — the box's own record", "2026-07-16 09:12 activated", "a append a paragraph · e $EDITOR · g/G ^u/^d page · esc back"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the body stage lost %q:\n%s", want, out)
 		}
@@ -100,6 +100,7 @@ func TestEpicReviewedRowStampsTheReviewClock(t *testing.T) {
 // `e` in the body stage hands the record to $EDITOR, and the result lands
 // through the same path a task's does — on the box.
 func TestEpicBodyEditorResultLandsOnTheBox(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir()) // editBodyCmd's temp file; only $EDITOR's exit removes it
 	m := boxOverlay(t, "e-fw2m")
 	m.epic.menuIdx = int(epicFieldBody)
 	press(m, "enter")
@@ -125,19 +126,38 @@ func TestEpicBodyEditorResultLandsOnTheBox(t *testing.T) {
 // $EDITOR round trip started on the pre-activation Body would hand
 // PersistBody a replacement without that line (found by review).
 func TestEpicBodyEditorIsRefusedInsideAStoreFirstWindow(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir()) // editBodyCmd's temp file; only $EDITOR's exit removes it
 	m := boxOverlay(t, "e-fw2m")
+	// A real store-first write of this overlay, IN FLIGHT: the standing
+	// gate's ⏎, undrained.
+	m.epic.menuIdx = int(epicFieldStanding)
+	press(m, "enter", "enter")
+	if !m.storeFirstInflight() {
+		t.Fatal("setup: the standing write must be in flight")
+	}
 	m.epic.menuIdx = int(epicFieldBody)
 	press(m, "enter")
-	m.storeFirstUnread = true
-	if c := m.onEpicBodyKey(tea.KeyPressMsg{Code: 'e', Text: "e"}, m.b.Epic("e-fw2m")); c != nil {
-		t.Error("e must be refused while a store-first write is unread")
+	e := tea.KeyPressMsg{Code: 'e', Text: "e"}
+	if c := m.onEpicBodyKey(e, m.b.Epic("e-fw2m")); c != nil || !m.statusErr || !strings.Contains(m.status, "in flight") {
+		t.Errorf("e must be refused while a box write is in flight: cmd=%v status=%q", c != nil, m.status)
 	}
-	if !m.statusErr || !strings.Contains(m.status, "edit body e-fw2m") || !strings.Contains(m.status, "re-read") {
-		t.Errorf("the refusal must name the write and the way out: %q", m.status)
+	// …and LANDED UNREAD (the fixture re-reads on the drain, so the flag is
+	// armed by hand for the second arm).
+	drainPersists(m, t)
+	m.storeFirstUnread = true
+	if c := m.onEpicBodyKey(e, m.b.Epic("e-fw2m")); c != nil || !m.statusErr || !strings.Contains(m.status, "esc out, then r") {
+		t.Errorf("e must be refused while the write is unread, naming the way out: cmd=%v status=%q", c != nil, m.status)
 	}
 	// `a` needs no gate: PersistNote appends furrow-side.
-	if c := m.onEpicBodyKey(tea.KeyPressMsg{Code: 'a', Text: "a"}, m.b.Epic("e-fw2m")); m.epic.stage != stageInput {
-		t.Errorf("a must still open the note input (cmd=%v stage=%d)", c != nil, m.epic.stage)
+	m.onEpicBodyKey(tea.KeyPressMsg{Code: 'a', Text: "a"}, m.b.Epic("e-fw2m"))
+	if m.epic.stage != stageInput {
+		t.Errorf("a must still open the note input (stage=%d)", m.epic.stage)
+	}
+	press(m, "esc")
+	// Once the re-read has applied, e hands the record to $EDITOR.
+	m.clearUnread()
+	if c := m.onEpicBodyKey(e, m.b.Epic("e-fw2m")); c == nil {
+		t.Error("e must be accepted once the window has closed")
 	}
 }
 
@@ -186,6 +206,16 @@ func TestEpicBodyStagePagesAndWrapsCJK(t *testing.T) {
 	if out := frame(m); !strings.Contains(out, "below") {
 		t.Errorf("the windowed stage must say how many rows are below")
 	}
+	// An append on a long record lands at the tail, and the cursor follows
+	// it there — or the gesture changes nothing on screen (found by review).
+	press(m, "g", "a")
+	m.epic.input.SetValue("末尾に追記した一段落")
+	press(m, "enter")
+	rows = m.epicListRows(m.b.Epic("e-fw2m"))
+	if m.epic.listIdx != len(rows)-1 || !strings.Contains(frame(m), "末尾に追記した一段落") {
+		t.Errorf("the cursor must follow the append to the tail (idx %d of %d)", m.epic.listIdx, len(rows))
+	}
+	drainPersists(m, t)
 }
 
 // The body cell tells a real record from the `# <title>` line every fresh box

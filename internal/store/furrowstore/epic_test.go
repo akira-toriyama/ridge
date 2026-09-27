@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/akira-toriyama/ridge/internal/board"
 )
@@ -562,6 +563,10 @@ func TestContractEpicBodyNoteAndReviewRoundTrip(t *testing.T) {
 		t.Errorf("the re-read must carry the replacement: %q", e.Body)
 	}
 	updated := e.Updated
+	// updated has second precision and the edit above landed ~100ms ago: a
+	// review that DID bump it would stamp the same second and pass the
+	// equality below (found by review), so the check waits the second out.
+	time.Sleep(1100 * time.Millisecond)
 	if err := p.PersistReview(box); err != nil {
 		t.Fatalf("review on a box: %v", err)
 	}

@@ -166,11 +166,14 @@ to that box (an `epic:<id>` slice term), `m` opens the box's overlay, `z`
 includes closed boxes, `^u/^d` page. The overlay's **body** row is the box's
 own record — the goal context and the activation log `furrow epic activate
 --reason` appends, which ridge writes and could not read (t-qqnn): a read
-stage where `a` appends a paragraph (`furrow note` on the box) and `e` opens
-it in `$EDITOR` (`furrow edit`); its **reviewed** row stamps furrow's review
+stage over the raw lines (paged with `g`/`G` and `^u`/`^d`; a record runs to
+hundreds of rows) where `a` appends a paragraph (`furrow note` on the box)
+and `e` opens it in `$EDITOR` (`furrow edit` — refused while a store-first
+write of the overlay is in flight or unread, since `activate --reason` appends
+to this very record furrow-side); its **reviewed** row stamps furrow's review
 clock (`furrow review`, the one revisit's `epic_review_due` reads on a
-standing box). Both apply optimistically, like a task's. Headless: `-demo
-epicbody` / `epicnote` / `epicreview`. A box furrow reports **waiting** (furrow
+standing box). All three apply optimistically, like a task's. Headless:
+`-demo epicbody` / `epicnote` / `epicreview` / `epicbodybusy`. A box furrow reports **waiting** (furrow
 #321: no member open, a parked member's due still ahead) carries `⧗` on its row
 where a stuck box carries `!`, and its strip spells `waiting until <day>
 (<task>)`; the header counts the boxes waiting on other boxes and the boxes

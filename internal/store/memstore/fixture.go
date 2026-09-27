@@ -711,7 +711,7 @@ func fixtureEpics() []board.EpicInfo {
 			// The one box with a RECORD — the goal context and the activation
 			// log furrow appends on `epic activate --reason` — and the one
 			// reviewed, so the overlay's body stage and reviewed row have a
-			// fixture site each (the other boxes read `— none` / `never`).
+			// fixture site each (the other boxes read `—` / `never`).
 			Updated:  ts("2026-08-09T09:30:00Z"),
 			Reviewed: ts("2026-08-01T00:00:00Z"),
 			Body: "# 九州キャンプ旅 2026\n\n2026-06 の家族会議で決定。阿蘇→高千穂の 3 泊、雨天代替を先に押さえる。\n\n" +

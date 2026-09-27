@@ -137,6 +137,7 @@ func TestDemoRefusalNamesTheMissingShape(t *testing.T) {
 		{"epicbody", "carries a record"},
 		{"epicnote", "carries a record"},
 		{"epicreview", "carries a record"},
+		{"epicbodybusy", "carries a record"},
 		{"rmreferenced", "something references"},
 		{"rmrepeat", "repeat rule"},
 		{"roaddue", "dated task"},
