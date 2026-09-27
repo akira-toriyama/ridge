@@ -342,6 +342,7 @@ go run ./cmd/ridge -dump -demo sweepconfirm  # the sweep with the archive gate o
 go run ./cmd/ridge -dump -demo done          # a task just closed with d: "closed <id> — unblocked N task(s)" counts what the close freed, not what depends on it
 go run ./cmd/ridge -dump -demo repeatdone    # a recurring task just closed: its successor's card and the "repeat: next due <day> (<id>)" line (-demo repeat: the rule in the peek)
 go run ./cmd/ridge -dump -demo editduetime   # the edit menu's due input on a timed due: the seed carries the wall clock (⏎ on it keeps the promise)
+go run ./cmd/ridge -dump -demo slicecut      # the slice readout over budget: repos yields, the title is cut behind …, the counts and the wait stay whole
 go run ./cmd/ridge -dump -demo editrepeat    # the edit menu's repeat input, seeded with the stored rule (-demo addrepeat: quick add's repeat: token echoed as a chip beside its due)
 go run ./cmd/ridge -dump -demo editclosed    # the edit menu on a closed task: the repeat row states its precondition before the press (-demo editnodue: the same row on a task with no due)
 go run ./cmd/ridge -dump -demo epicdoneleft  # a box close's landing note: what it left open (all recurring, folded), then the previous-active chip

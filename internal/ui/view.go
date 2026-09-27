@@ -359,11 +359,11 @@ func (m *Model) statusLine() string {
 	// the cursor in full, with the note pushed to the right end. joinEnds
 	// truncates the LEFT, so the note — a refusal included — never yields.
 	if m.mode == modeSlice && !m.fullScreen() {
-		if read := m.sliceReadout(); read != "" {
-			note := th.status.Render(m.status)
-			if m.statusErr {
-				note = th.errText.Render("⚠ " + m.status)
-			}
+		note := th.status.Render(m.status)
+		if m.statusErr {
+			note = th.errText.Render("⚠ " + m.status)
+		}
+		if read := m.sliceReadout(m.w - lg.Width(note) - 1); read != "" {
 			return joinEnds(read, note, m.w)
 		}
 	}

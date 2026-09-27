@@ -111,11 +111,19 @@ func boxWaiting(e *board.EpicInfo) string {
 // boxHead is a box's first line: the id chip, the title, and the closing date
 // beside it when it has one.
 func (m *Model) boxHead(e *board.EpicInfo) string {
-	head := m.th.chipAlt.Render(e.ID) + " " + m.th.base.Render(e.Title)
+	chip, title, closed := m.boxHeadParts(e)
+	return chip + " " + title + closed
+}
+
+// boxHeadParts is boxHead unjoined — the id chip, the title, the closing
+// date ("" for an open box) — for the slice readout, which yields the
+// title's tail alone and keeps the other two whole.
+func (m *Model) boxHeadParts(e *board.EpicInfo) (chip, title, closed string) {
+	chip, title = m.th.chipAlt.Render(e.ID), m.th.base.Render(e.Title)
 	if !e.Closed.IsZero() {
-		head += m.th.dim.Render("  closed " + e.Closed.In(board.Zone()).Format("2006-01-02"))
+		closed = m.th.dim.Render("  closed " + e.Closed.In(board.Zone()).Format("2006-01-02"))
 	}
-	return head
+	return chip, title, closed
 }
 
 // boxMeta is furrow's own words for a box, in the order both surfaces state

@@ -635,23 +635,34 @@ func (m *Model) sliceScope(rowCount int) string {
 // strip.go argues for under the full-screen views ("a box or a row can only
 // ever show a truncated title; the strip is the answer").
 //
-// Budget, measured 2026-09-11 against the real board's 178 boxes (longest
-// title 139 cells): the epic axis' opening note is 115 cells, which leaves the
-// readout 124 at the 240-column floor — 10 of the 133 open boxes are still cut
-// there. They are not cut at the 400-column target (284), nor at 240 once a
-// slice is issued and the note becomes `sliced to …`. A waiting box's readout
-// (boxMeta's `waiting until <day> (<id>)`) is 36 cells wider: the fixture's
-// own reads 129 and is cut at 240 under the note, losing the tail of `repos`
-// — boxMeta's last chip — and never the wait (measured 2026-09-27). The note
-// keeps the row
-// because the panel is modal: it is the only place its keys can be advertised,
-// so the caller hands this to joinEnds, which truncates the LEFT.
+// budget is what joinEnds allows the left: the row's width less the panel's
+// note and one gap — the note keeps the row because the panel is modal, the
+// only place its keys can be advertised, so joinEnds truncates the LEFT.
+// Measured: the epic axis' opening note (`open only`) is 115 cells, which
+// leaves the readout 124 at the 240-column floor and 284 at the 400-column
+// target; under `z` (`open + closed`) the note is 119 and the readout 120 —
+// none is cut at 400, none at 240 once a slice is issued and the note
+// becomes `sliced to …`. A waiting box's readout carries boxMeta's `waiting
+// until <day> (<id>)`, 34 cells the row itself reduces to one ⧗ — the
+// readout is the only place the day and the member are named — and a head
+// of 97 cells put that chip under the cut (t-jknk; the earlier claim here
+// that only `repos` ever yielded was measured on the fixture's one waiting
+// box). So a line over budget yields in this order: `repos`, boxMeta's last
+// chip, first; then the title's tail, cut with an ellipsis to what the rest
+// leaves — the id chip and a closed box's `closed <day>` stay whole, the
+// readout being the panel's one place for the date too (a cut through the
+// head once left `closed 2026-…`), and the title goes entirely before the
+// date yields; a line whose meta alone exceeds the budget goes to joinEnds
+// whole. Measured 2026-09-28 on the real board (201 boxes, 52 closed): at
+// 240 columns 7 of the 149 open boxes have their title cut, 16 of 201 with
+// the closed ones in scope, every closed date whole, no line over budget;
+// at 400 none is cut.
 //
 // It rebuilds the row list (measured 2026-09-11: 0.3-1.0ms for 178 boxes,
 // against the five rebuilds the panel's own paths already do per event, in a
 // 4.4ms frame). modeSlice has no ticker — a frame is drawn per message — so
 // this is not the thing to cache.
-func (m *Model) sliceReadout() string {
+func (m *Model) sliceReadout(budget int) string {
 	rows := m.sliceRows()
 	if m.sliceIdx >= len(rows) {
 		return ""
@@ -668,7 +679,34 @@ func (m *Model) sliceReadout() string {
 	// both) — this line must not invent a second vocabulary for the same
 	// facts. Joined UNWRAPPED: the readout is one status line, where the strip
 	// has a panel's width to wrap into.
-	return m.boxHead(e) + th.muted.Render("  "+strings.Join(m.boxMeta(e, false), " · "))
+	chip, title, closed := m.boxHeadParts(e)
+	meta := m.boxMeta(e, false)
+	line := func(title string, meta []string) string {
+		head := chip
+		if title != "" {
+			head += " " + title
+		}
+		return head + closed + th.muted.Render("  "+strings.Join(meta, " · "))
+	}
+	if lg.Width(line(title, meta)) <= budget {
+		return line(title, meta)
+	}
+	if last := len(meta) - 1; strings.HasPrefix(meta[last], "repos ") {
+		meta = meta[:last]
+		if lg.Width(line(title, meta)) <= budget {
+			return line(title, meta)
+		}
+	}
+	// What the title may keep: the budget less everything that stays whole
+	// and the space that joins it to the chip.
+	room := budget - lg.Width(line("", meta)) - 1
+	switch {
+	case room >= 2:
+		return line(ansi.Truncate(title, room, "…"), meta)
+	case room >= -1:
+		return line("", meta)
+	}
+	return line(title, meta)
 }
 
 // sliceRowBody styles one row's segments. The row's TEXT is composed once, in

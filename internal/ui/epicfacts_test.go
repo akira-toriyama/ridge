@@ -6,6 +6,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	lg "charm.land/lipgloss/v2"
 
 	"github.com/akira-toriyama/ridge/internal/board"
 	"github.com/akira-toriyama/ridge/internal/store/memstore"
@@ -327,6 +328,63 @@ func TestEverySurfaceSpellsWaitingUntilInTheBoardsCalendar(t *testing.T) {
 			t.Errorf("the readout must carry %q:\n%s", want, out)
 		}
 	})
+	// At the 240-column floor the readout has 124 cells beside the epic
+	// axis' opening note (115 cells); a 111-cell head (the chip and a
+	// 104-cell title) plus the meta is 172, and the cut once fell inside the
+	// wait chip — the one place the day and the member are named (t-jknk).
+	// `repos` yields first, then the title's tail; the wait stays, and so
+	// does a closed box's date, whole.
+	t.Run("slice readout at the floor keeps the wait", func(t *testing.T) {
+		m := waitingBoard(t)
+		long := strings.Repeat("会場側の最終回答を待つ", 4) + "非常に長い箱の題" // 52 chars, 104 cells
+		if w := lg.Width(long); w != 104 {
+			t.Fatalf("the title is %d cells, the comment says 104", w)
+		}
+		box := m.b.Epic("e-wait")
+		box.Title = long
+		m.toggleSlice()
+		m.sliceField = sliceEpic
+		m.noteSliceAxis()
+		if w := lg.Width(m.status); w != 115 {
+			t.Fatalf("the epic axis' opening note is %d cells, the comment says 115", w)
+		}
+		for i, r := range m.sliceRows() {
+			if r.value == "e-wait" {
+				m.sliceIdx = i
+			}
+		}
+		line := ansiStrip(m.statusLine())
+		if lg.Width(line) > 240 {
+			t.Fatalf("the status row overflows the floor: %d cells", lg.Width(line))
+		}
+		if !strings.Contains(line, "0/1 done · "+want) {
+			t.Errorf("the readout must keep the counts and the wait at 240 cells: %q", line)
+		}
+		if strings.Contains(line, "repos tomo/a") || !strings.Contains(line, "…  0/1 done") || !strings.HasPrefix(line, "e-wait ") {
+			t.Errorf("repos must yield first, then the title's tail behind an ellipsis, the id kept: %q", line)
+		}
+		if !strings.Contains(line, "esc leaves") {
+			t.Errorf("the panel's note must keep the row's right end: %q", line)
+		}
+		// A closed box keeps its date whole: the title yields around it.
+		box.Closed = time.Date(2027, 4, 1, 0, 0, 0, 0, time.UTC)
+		m.sliceEpicAll = true
+		m.noteSliceAxis()
+		for i, r := range m.sliceRows() {
+			if r.value == "e-wait" {
+				m.sliceIdx = i
+			}
+		}
+		if line := ansiStrip(m.statusLine()); !strings.Contains(line, "…  closed 2027-04-01  0/1 done · "+want) {
+			t.Errorf("the closed date must stay whole beside the cut title: %q", line)
+		}
+		box.Closed = time.Time{}
+		m.sliceEpicAll = false
+		m.Update(tea.WindowSizeMsg{Width: 400, Height: 50})
+		if line := ansiStrip(m.statusLine()); !strings.Contains(line, long+"  0/1 done · "+want+" · repos tomo/a") {
+			t.Errorf("at 400 cells the whole line fits: %q", line)
+		}
+	})
 	t.Run("peek's epic line", func(t *testing.T) {
 		m := waitingBoard(t)
 		if !m.selectID("t-cold", false) {
@@ -382,5 +440,23 @@ func TestTheStuckDepMarkerIsStyled(t *testing.T) {
 	}
 	if !strings.Contains(styled, m.th.warn.Render("STUCK")) {
 		t.Error("the dep line's STUCK must carry the warn style — dim body text is the one thing it must not be")
+	}
+}
+
+// The over-budget readout has a headless frame: the fixture's longest head
+// is 59 cells, so the demo gives a box a 104-cell title and a waiting member.
+func TestSliceCutDemoShowsTheYieldOrderAtTheFloor(t *testing.T) {
+	out, err := New(memstore.New(), Options{}).Dump(240, 40, "slicecut", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := ""
+	for _, l := range strings.Split(out, "\n") {
+		if strings.Contains(l, "waiting until 2027-03-31 (t-cold)") {
+			row = l
+		}
+	}
+	if row == "" || strings.Contains(row, "repos ") || !strings.Contains(row, "…  ") || !strings.Contains(row, "slice by epic") {
+		t.Errorf("-demo slicecut must show the cut title, the whole wait and the panel's note on one row:\n%s", out)
 	}
 }

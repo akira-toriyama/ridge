@@ -808,6 +808,29 @@ func (m *Model) demoState(kind string) error {
 			_ = c
 		}
 
+	case "slicecut":
+		// The slice readout over budget (t-jknk): the cursor row's box given
+		// a title no fixture box has — 104 cells — and a waiting member, so
+		// the one frame shows the yield order at the floor: `repos` gone,
+		// the title cut behind an ellipsis, the counts and the wait whole.
+		// The fixture's longest head is 59 cells, so no other frame can.
+		boxes := m.b.Epics()
+		if len(boxes) == 0 {
+			return fmt.Errorf("demo slicecut: no box on the board")
+		}
+		box := m.b.Epic(boxes[0].ID)
+		box.Title = strings.Repeat("会場側の最終回答を待つ", 4) + "非常に長い箱の題"
+		box.WaitUntil = time.Date(2027, 3, 30, 15, 0, 0, 0, time.UTC)
+		box.WaitTask = "t-cold"
+		m.toggleSlice()
+		m.sliceField = sliceEpic
+		m.noteSliceAxis()
+		for i, r := range m.sliceRows() {
+			if r.value == box.ID {
+				m.sliceIdx = i
+			}
+		}
+
 	case "sliceepicall":
 		// The epic axis widened to the closed boxes. Driven through the panel's
 		// own key handler rather than the field, so the frame also proves `z`
