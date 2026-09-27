@@ -161,8 +161,9 @@ the fixture's states are `-demo boxes` / `boxesall` / `boxeswaiting`.
 
 ### Roadmap — the due timeline
 
-`C`. **Open tasks with a due date, in due order, with `◆` placed on a time
-axis.** The view that answers "what expires when" — the timeline form of
+`C`. **Every task not done that carries a due date (a parked one included),
+in due order, with `◆` placed on a time axis.** The view that answers "what
+expires when" — the timeline form of
 `furrow brief`'s due head and `-q is:overdue` (glossary: "Roadmap", "zoom").
 `z` cycles day / week / month, `h`/`l` pan the window. Read-only.
 

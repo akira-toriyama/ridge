@@ -32,6 +32,10 @@ func TestGlyphsAreSingleWidth(t *testing.T) {
 		// Both lead the slice panel's fixed lifecycle column, where one extra
 		// cell shears every row's right edge.
 		"epicActive": glyphEpicActive, "epicPinned": glyphEpicPinned,
+		// Rides the row suffix beside the progress numbers a reader scans
+		// down a column; a 2-cell glyph (furrow's ⏳) shifts those numbers one
+		// cell left on exactly the waiting rows (measured in the box overview).
+		"waiting": glyphWaiting,
 	}
 	for name, g := range glyphs {
 		if w := lg.Width(g); w != 1 {

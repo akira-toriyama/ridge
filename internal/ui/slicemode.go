@@ -639,7 +639,10 @@ func (m *Model) sliceScope(rowCount int) string {
 // title 139 cells): the epic axis' opening note is 115 cells, which leaves the
 // readout 124 at the 240-column floor — 10 of the 133 open boxes are still cut
 // there. They are not cut at the 400-column target (284), nor at 240 once a
-// slice is issued and the note becomes `sliced to …`. The note keeps the row
+// slice is issued and the note becomes `sliced to …`. A waiting box's readout
+// (boxMeta's `waiting until <day> (<id>)`) is 36 cells wider: the fixture's
+// own reads 129 and is cut at 240 under the note, losing `repos` — boxMeta's
+// last chip — and never the wait (measured 2026-09-27). The note keeps the row
 // because the panel is modal: it is the only place its keys can be advertised,
 // so the caller hands this to joinEnds, which truncates the LEFT.
 //

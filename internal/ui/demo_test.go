@@ -104,7 +104,7 @@ func TestEveryDemoIsProducibleWithoutTheFixtureIDs(t *testing.T) {
 			t.Errorf("-demo %s over a board without the fixture's ids: %v", d, err)
 			continue
 		}
-		for _, id := range []string{"t-9sa6", "t-jv3j", "t-t38k", "t-ehk7", "t-y4st", "e-c4mt", "e-fw2m", "e-2b7h"} {
+		for _, id := range []string{"t-9sa6", "t-jv3j", "t-t38k", "t-ehk7", "t-y4st", "t-w7ne", "e-c4mt", "e-fw2m", "e-2b7h", "e-m8kd"} {
 			if strings.Contains(out, id) {
 				t.Errorf("-demo %s printed the fixture id %s on a board that holds no such id", d, id)
 			}
@@ -130,6 +130,7 @@ func TestDemoRefusalNamesTheMissingShape(t *testing.T) {
 		{"epicconfirm", "is active"},
 		{"epicdoneparked", "parked in a terminal lane"},
 		{"boxeswaiting", "parked until a due"},
+		{"epicwaiting", "parked until a due"},
 		{"epicshut", "is closed"},
 		{"boxesall", "is closed"},
 		{"slice", "carries a label"},

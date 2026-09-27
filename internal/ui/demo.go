@@ -591,6 +591,18 @@ func (m *Model) demoState(kind string) error {
 			_ = c
 		}
 
+	case "epicwaiting":
+		// The overlay's derived line on the box furrow reports WAITING: the
+		// one line that says `waiting until` beside the numbers, which the
+		// `epic` demo (parked on the rich box) never shows.
+		box, err := m.demoWaitingBox("epicwaiting")
+		if err != nil {
+			return err
+		}
+		if err := m.demoEpicPanel("epicwaiting", box.ID); err != nil {
+			return err
+		}
+
 	case "synced":
 		// The sync's landing note. The fixture has no store to sync, so the
 		// report is canned — every branch of syncNote in one line, both id

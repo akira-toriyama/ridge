@@ -1,4 +1,4 @@
-// A synthetic 34-task board: a family's Kyushu camping trip (an 18-member
+// A synthetic 36-task board: a family's Kyushu camping trip (an 18-member
 // epic), three smaller boxes wired to it by epic deps (t-vfm9), and unfiled
 // kitchen and trip-support tasks. It began as a
 // snapshot of a real work board; t-862b re-themed the SURFACE (titles,
@@ -620,7 +620,9 @@ func fixtureTasks() []*board.Task {
 			// config icebox is in [due].ignore_lanes and only the `waiting`
 			// lane counts, but this fixture has no such lane (adding one
 			// re-cuts every board frame), so the box stands for a board whose
-			// ignore_lanes is empty: a shape furrow produces, not its default.
+			// ignore_lanes is empty: a shape furrow produces, not its default,
+			// and not the real board's (measured 2026-09-27: 0 of its 198
+			// icebox tasks carry a due; all 5 of its waiting-lane tasks do).
 			ID:       "t-w7ne",
 			Title:    "天地返し — 3 月末に上下を入れ替え、表面のカビを削って塩を振り直す",
 			Status:   "icebox",

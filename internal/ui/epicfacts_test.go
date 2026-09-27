@@ -285,10 +285,11 @@ func waitingBoard(t *testing.T) *Model {
 	return m
 }
 
-// Every surface that spells a box's STUCK spells furrow's waiting where it
+// The four sites that spell a box's OWN STUCK spell furrow's waiting where it
 // would go, as `waiting until <day> (<task>)` with the day in the board's
-// calendar — one composition (boxWaiting), four sites, and the rows carry the
-// one-cell mark.
+// calendar — one composition (boxWaiting) — and the rows carry the one-cell
+// mark. The peek's dep ladder spells a DEP's STUCK and gains nothing: a dep on
+// a waiting box reads as open, and that box's own row carries the mark.
 func TestEverySurfaceSpellsWaitingUntilInTheBoardsCalendar(t *testing.T) {
 	const want = "waiting until 2027-03-31 (t-cold)"
 	t.Run("box strip", func(t *testing.T) {
@@ -336,7 +337,7 @@ func TestEverySurfaceSpellsWaitingUntilInTheBoardsCalendar(t *testing.T) {
 		// are asserted apart: on this one-box board there is nothing else
 		// the second string could belong to.
 		out := frame(m)
-		for _, s := range []string{"epic e-wait (0/1) 熟成を待つ箱", want} {
+		for _, s := range []string{"epic e-wait (0/1) 熟成を待つ箱", "epic " + want} {
 			if !strings.Contains(out, s) {
 				t.Errorf("the peek's epic line must carry %q:\n%s", s, out)
 			}

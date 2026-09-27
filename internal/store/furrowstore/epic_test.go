@@ -308,7 +308,7 @@ func TestContractEpicDepAddAndRm(t *testing.T) {
 // test move together.
 //
 // bite-exempt: execs a real furrow binary and always skips where furrow is not
-// on PATH — which is CI, so the gate can never judge it there
+// on PATH (the contract job installs the pinned release, so CI runs it there)
 func TestContractEpicDoneAndReopenRoundTrip(t *testing.T) {
 	p, dir := newLabProvider(t)
 	labAdd(t, dir, "既存のタスク") // seeds lab/lab as a known repo
@@ -408,7 +408,7 @@ func TestEpicDoneEnvelopeKeepsNullAndEmptyOpenMembersApart(t *testing.T) {
 // counts for nothing. ridge copies the pair and never re-derives it.
 //
 // bite-exempt: execs a real furrow binary and always skips where furrow is not
-// on PATH — which is CI, so the gate can never judge it there
+// on PATH (the contract job installs the pinned release, so CI runs it there)
 func TestContractEpicWaitingReachesTheSnapshot(t *testing.T) {
 	p, dir := newLabProvider(t)
 	waits := labEpic(t, dir, "熟成を待つ箱", "lab/lab")
@@ -456,7 +456,7 @@ func TestContractEpicWaitingReachesTheSnapshot(t *testing.T) {
 // answers [], not null.
 //
 // bite-exempt: execs a real furrow binary and always skips where furrow is not
-// on PATH — which is CI, so the gate can never judge it there
+// on PATH (the contract job installs the pinned release, so CI runs it there)
 func TestContractEpicDoneDisclosesTheMembersLeftOpen(t *testing.T) {
 	p, dir := newLabProvider(t)
 	id := labEpic(t, dir, "開いたまま閉じる箱", "lab/lab")

@@ -74,8 +74,10 @@ func roadPan(z roadZoom) int {
 	return 7
 }
 
-// roadPopulation is what the roadmap shows: every OPEN task that carries a
-// due. Dateless tasks are absent — GH's roadmap draws nothing for an item
+// roadPopulation is what the roadmap shows: every task NOT DONE that carries
+// a due, a parked one included — furrow's due policy drops the alarm on a
+// parked lane, not the date, and a parked due is what a box waits until.
+// Dateless tasks are absent — GH's roadmap draws nothing for an item
 // with no date either — and so are done ones: a kept promise is not a
 // promise, and the real board's done lane holds months of them. The filter
 // deliberately does not shrink this population: like the graph and the map,

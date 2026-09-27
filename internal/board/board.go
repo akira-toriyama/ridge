@@ -198,9 +198,9 @@ var boardLanes = []Lane{
 //   - Derived — Done, Total, Stuck, OpenDeps, WaitUntil/WaitTask. furrow
 //     computes these and ridge consumes them verbatim; recomputing any of
 //     them here would be the front-end logic this repo exists to not have.
-//     Closed makes OpenDeps look
-//     re-derivable, and over this read it genuinely is — measured, a dep is in
-//     open_deps exactly when it resolves to a box that is not closed. Deriving
+//     Closed makes OpenDeps look re-derivable, and over this read it genuinely
+//     is — measured, a dep is in open_deps exactly when it resolves to a box
+//     that is not closed. Deriving
 //     it anyway would still be wrong: it would be a SECOND rule, kept in step
 //     with `furrow epic dep --list` by nothing but attention. The fixture
 //     tests assert the equivalence; the code does not implement it.

@@ -44,8 +44,10 @@ const (
 	// glyphWaiting marks a box furrow reports waiting {until, task} (#321):
 	// no member open, a parked member's due still ahead. furrow's own ⏳
 	// (U+23F3) is emoji-presentation and measures 2 cells (lipgloss.Width,
-	// 2026-09-27) — the shear the note above exists to avoid — so ridge draws
-	// the 1-cell neutral hourglass U+29D7 instead.
+	// 2026-09-27): the row stays width-exact, but the progress numbers a
+	// reader scans down a column land one cell left on exactly the waiting
+	// rows (measured in the box overview), so ridge draws the 1-cell neutral
+	// hourglass U+29D7 instead. layout_test pins the width.
 	glyphWaiting = "⧗"
 
 	// The roadmap's two timeline glyphs. glyphDue shares glyphEpicPinned's

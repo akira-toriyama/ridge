@@ -108,7 +108,7 @@ func (m *Model) boxHeader(l *boxLayout, clipped bool) string {
 	left := th.peekHdr.Render("boxes by repo") + th.dim.Render("  ·  scope ") +
 		th.chipAlt.Render(scope)
 
-	active, stuck, waits, waiting, closed, done, total := 0, 0, 0, 0, 0, 0, 0
+	active, stuck, waitDeps, waitDue, closed, done, total := 0, 0, 0, 0, 0, 0, 0
 	seen := map[string]bool{}
 	for _, g := range l.Groups {
 		for _, e := range g.Boxes {
@@ -123,10 +123,10 @@ func (m *Model) boxHeader(l *boxLayout, clipped bool) string {
 				stuck++
 			}
 			if len(e.OpenDeps) > 0 {
-				waits++
+				waitDeps++
 			}
 			if !e.WaitUntil.IsZero() {
-				waiting++
+				waitDue++
 			}
 			if !e.Closed.IsZero() {
 				closed++
@@ -143,11 +143,11 @@ func (m *Model) boxHeader(l *boxLayout, clipped bool) string {
 	// Two waits, told apart in words: a box waiting ON other boxes (furrow's
 	// open_deps, the row's →N) and a box waiting UNTIL a parked member's due
 	// (furrow's waiting {until, task}, the row's ⧗).
-	if waits > 0 {
-		bits = append(bits, fmt.Sprintf("%d waiting on boxes", waits))
+	if waitDeps > 0 {
+		bits = append(bits, fmt.Sprintf("%d waiting on boxes", waitDeps))
 	}
-	if waiting > 0 {
-		bits = append(bits, fmt.Sprintf("%d waiting until a due", waiting))
+	if waitDue > 0 {
+		bits = append(bits, fmt.Sprintf("%d waiting until a due", waitDue))
 	}
 	if stuck > 0 {
 		bits = append(bits, th.warn.Render(fmt.Sprintf("%d stuck", stuck)))

@@ -182,8 +182,11 @@ func TestGraphAgreesWithFixtureFacts(t *testing.T) {
 // WaitUntil/WaitTask are hand-written like Done/Total/Stuck, so the same rot
 // check applies, against furrow's rule (#321): the named member is the box's
 // own, parked (a terminal lane other than done), carries exactly that due,
-// and no member is open — which is also what makes waiting exclusive with
-// stuck. One such box must exist: it is the ⧗ marker's only fixture site.
+// the due is still ahead of the clock, and no member is open — which is also
+// what makes waiting exclusive with stuck. The clock is the wall clock on
+// purpose: the day the fixture's due arrives, furrow would stop reporting
+// the box waiting, and this is the test that says so. One such box must
+// exist: it is the ⧗ marker's only fixture site.
 func TestFixtureWaitingBoxAgreesWithItsMembers(t *testing.T) {
 	b := New().Board()
 	waiting := 0
@@ -211,6 +214,9 @@ func TestFixtureWaitingBoxAgreesWithItsMembers(t *testing.T) {
 			t.Errorf("%s waits on %s in lane %s; the member must be parked (terminal, not done)", e.ID, e.WaitTask, tk.Status)
 		case !tk.Due.Equal(e.WaitUntil):
 			t.Errorf("%s waits until %v but %s is due %v", e.ID, e.WaitUntil, e.WaitTask, tk.Due)
+		}
+		if !e.WaitUntil.After(board.Now()) {
+			t.Errorf("%s waits until %v, which has arrived: furrow reports waiting only while the due is ahead — move the fixture's due", e.ID, e.WaitUntil)
 		}
 	}
 	if waiting == 0 {

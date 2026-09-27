@@ -1099,6 +1099,9 @@ func TestEpicDemoFramesCarryWhatTheyExistFor(t *testing.T) {
 		// which scope is in force.
 		{"sliceepicall", []string{"open + closed", "z scope",
 			glyphDone + " 夏キャンプ", "6 open · 2 closed"}},
+		// The derived line on the waiting box (furrow #321), which the `epic`
+		// demo's rich box cannot carry: stuck and waiting are exclusive.
+		{"epicwaiting", []string{"box e-m8kd", "1/2 done · waiting until 2027-03-31 (t-w7ne)"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.demo, func(t *testing.T) {
