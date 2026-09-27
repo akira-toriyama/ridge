@@ -65,7 +65,10 @@ type Provider interface {
 	// PersistBody records id's already-applied body replacement. body is
 	// non-empty after trimming: furrow refuses an empty replacement (a body
 	// is never cleared, exit 2), and Board.SetBody mirrors that refusal
-	// before anything queues.
+	// before anything queues. id may name a BOX: furrow's edit takes either
+	// entity ("both entities' prose lives in the one bodies/ directory"),
+	// and Board.SetEpicBody is that half — PersistNote and PersistReview
+	// take a box id the same way (AppendEpicNote, ReviewEpic).
 	PersistBody(id, body string) error
 
 	// PersistFields records id's already-applied metadata edit. Everything

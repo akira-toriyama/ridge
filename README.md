@@ -163,7 +163,14 @@ v6.0.0 pin, whose report has no `assets` key). Headless: `-demo rm` /
 task dependencies, this answers "which box is each repo working out of right
 now" (why it is not a graph: glossary, "box overview"). `⏎` slices the board
 to that box (an `epic:<id>` slice term), `m` opens the box's overlay, `z`
-includes closed boxes, `^u/^d` page. A box furrow reports **waiting** (furrow
+includes closed boxes, `^u/^d` page. The overlay's **body** row is the box's
+own record — the goal context and the activation log `furrow epic activate
+--reason` appends, which ridge writes and could not read (t-qqnn): a read
+stage where `a` appends a paragraph (`furrow note` on the box) and `e` opens
+it in `$EDITOR` (`furrow edit`); its **reviewed** row stamps furrow's review
+clock (`furrow review`, the one revisit's `epic_review_due` reads on a
+standing box). Both apply optimistically, like a task's. Headless: `-demo
+epicbody` / `epicnote` / `epicreview`. A box furrow reports **waiting** (furrow
 #321: no member open, a parked member's due still ahead) carries `⧗` on its row
 where a stuck box carries `!`, and its strip spells `waiting until <day>
 (<task>)`; the header counts the boxes waiting on other boxes and the boxes

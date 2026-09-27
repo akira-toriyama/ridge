@@ -134,6 +134,9 @@ func TestDemoRefusalNamesTheMissingShape(t *testing.T) {
 		{"epicdoneparked", "parked in a terminal lane"},
 		{"boxeswaiting", "parked until a due"},
 		{"epicwaiting", "parked until a due"},
+		{"epicbody", "carries a record"},
+		{"epicnote", "carries a record"},
+		{"epicreview", "carries a record"},
 		{"rmreferenced", "something references"},
 		{"rmrepeat", "repeat rule"},
 		{"roaddue", "dated task"},
@@ -195,6 +198,9 @@ func renamedFixture(t *testing.T) *board.Board {
 	epics := make([]board.EpicInfo, 0, len(src.EpicsAll()))
 	for _, e := range src.EpicsAll() {
 		e.ID, e.Deps, e.OpenDeps, e.WaitTask = ren(e.ID), renAll(e.Deps), renAll(e.OpenDeps), ren(e.WaitTask)
+		for from, to := range rename {
+			e.Body = strings.ReplaceAll(e.Body, from, to)
+		}
 		epics = append(epics, e)
 	}
 	b := board.NewBoard(tasks, epics...)

@@ -16,9 +16,14 @@ type editorDoneMsg struct {
 
 // applyEditorBody lands a $EDITOR result: the optimistic local apply plus
 // the queued store write. Split out so a body held through the rollback
-// window (model.go: heldBody) replays through the same path.
+// window (model.go: heldBody) replays through the same path. The id names a
+// task or a box (furrow's edit takes either); the box's half is SetEpicBody.
 func (m *Model) applyEditorBody(msg editorDoneMsg) tea.Cmd {
-	if err := m.b.SetBody(msg.id, msg.body); err != nil {
+	set := m.b.SetBody
+	if m.b.Epic(msg.id) != nil {
+		set = m.b.SetEpicBody
+	}
+	if err := set(msg.id, msg.body); err != nil {
 		// The refusal is terminal for a flush the way a failed write is
 		// (quitOrFlush cancels on those): a quit armed on THIS body as the
 		// held write must not stay armed once the refusal removes it from
@@ -37,14 +42,19 @@ func (m *Model) applyEditorBody(msg editorDoneMsg) tea.Cmd {
 	})
 }
 
-// editCmd suspends the TUI for $EDITOR, the way furrow's `edit` does.
-func (m *Model) editCmd(t *board.Task) tea.Cmd {
-	f, err := os.CreateTemp("", "furrow-poc-"+t.ID+"-*.md")
+// editCmd suspends the TUI for $EDITOR on a task, the way furrow's `edit`
+// does.
+func (m *Model) editCmd(t *board.Task) tea.Cmd { return m.editBodyCmd(t.ID, t.Body) }
+
+// editBodyCmd is editCmd over any body — a task's or a box's (the epic
+// overlay's body stage); the result lands through applyEditorBody either way.
+func (m *Model) editBodyCmd(id, body string) tea.Cmd {
+	f, err := os.CreateTemp("", "furrow-poc-"+id+"-*.md")
 	if err != nil {
 		return func() tea.Msg { return editorDoneMsg{err: err} }
 	}
 	path := f.Name()
-	if _, err := f.WriteString(t.Body); err != nil {
+	if _, err := f.WriteString(body); err != nil {
 		_ = f.Close()
 		return func() tea.Msg { return editorDoneMsg{err: err} }
 	}
@@ -59,7 +69,6 @@ func (m *Model) editCmd(t *board.Task) tea.Cmd {
 	if ed == "" {
 		ed = "vi"
 	}
-	id := t.ID
 	return tea.ExecProcess(exec.Command(ed, path), func(runErr error) tea.Msg { //nolint:gosec // G204: launching $EDITOR on our own temp file IS the feature
 		defer func() { _ = os.Remove(path) }()
 		if runErr != nil {

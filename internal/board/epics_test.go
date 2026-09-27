@@ -128,3 +128,48 @@ func TestOpenMembersIsTheNonTerminalSetAndParkedIsTheRest(t *testing.T) {
 		}
 	}
 }
+
+// The box's record and review clock, the optimistic halves of the three
+// Persist* a box id rides (furrow's edit / note / review take either
+// entity): the same refusals as a task's, Updated advanced by the two prose
+// writes and not by the stamp, and Epics() — a COPY — kept in step.
+func TestEpicBodyNoteAndReviewApplyAndKeepTheOpenCopyInStep(t *testing.T) {
+	b := epicBoard()
+	if err := b.SetEpicBody("e-open1", " \n"); err == nil {
+		t.Error("an empty replacement must be refused — a body is never cleared")
+	}
+	if err := b.AppendEpicNote("e-open1", "  "); err == nil {
+		t.Error("an empty note must be refused")
+	}
+	if err := b.AppendEpicNote("e-open1", "-"); err == nil {
+		t.Error("a note of `-` is furrow's stdin marker and must be refused")
+	}
+	if err := b.SetEpicBody("e-nope", "x"); err == nil {
+		t.Error("an unknown box must be refused")
+	}
+	if err := b.SetEpicBody("e-open1", "# 箱\n\n最初の段落"); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.AppendEpicNote("e-open1", "進捗を一段落"); err != nil {
+		t.Fatal(err)
+	}
+	e := b.Epic("e-open1")
+	if want := "# 箱\n\n最初の段落\n\n進捗を一段落\n"; e.Body != want {
+		t.Errorf("body = %q, want %q", e.Body, want)
+	}
+	if e.Updated.IsZero() {
+		t.Error("the prose writes must stamp Updated")
+	}
+	updated := e.Updated
+	if err := b.ReviewEpic("e-open1"); err != nil {
+		t.Fatal(err)
+	}
+	if e = b.Epic("e-open1"); e.Reviewed.IsZero() || !e.Updated.Equal(updated) {
+		t.Errorf("review stamps Reviewed alone: reviewed=%v updated %v → %v", e.Reviewed, updated, e.Updated)
+	}
+	for _, open := range b.Epics() {
+		if open.ID == "e-open1" && (open.Body != e.Body || !open.Reviewed.Equal(e.Reviewed)) {
+			t.Errorf("Epics() is a copy and must be re-indexed after a box write: %+v", open)
+		}
+	}
+}
