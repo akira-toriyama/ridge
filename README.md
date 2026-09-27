@@ -179,6 +179,10 @@ where a stuck box carries `!`, and its strip spells `waiting until <day>
 (<task>)`; the header counts the boxes waiting on other boxes and the boxes
 waiting until a due apart.
 
+A filter, a slice or the revisit lens is not applied in this view — there
+are no task rows to mute — and the header names which is on. Headless:
+`-dump -boxes -filter 'label:bbq'` / `-dump -boxes -revisit`.
+
 `ridge -boxes` opens the real board in this view. Headless: `-dump -boxes`;
 the fixture's states are `-demo boxes` / `boxesall` / `boxeswaiting`.
 
