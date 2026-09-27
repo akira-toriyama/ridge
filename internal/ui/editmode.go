@@ -41,7 +41,8 @@ const (
 	fieldChecklist
 	// Last on purpose, as the epic overlay's closed row is: its write is a
 	// withdrawal, so it must not sit where the cursor lands or where a
-	// mistyped ↓ reaches.
+	// mistyped ↓ reaches (↑ from the top wraps to it — the row opens a
+	// preview, never a write).
 	fieldDelete
 	fieldCount // one past the last menu row
 )

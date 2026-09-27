@@ -147,8 +147,31 @@ func TestEpicDeleteRowUnfilesMembersUnderForce(t *testing.T) {
 	}
 }
 
-// The four frames carry what they exist to show (footer_test proves only
-// that each differs from the bare board).
+// A stale preview must never land on a later gate for the same id: the
+// counter is the Model's, not the gate's, because the gate is recreated
+// with its overlay and a per-gate counter restarted at 1 on every reopen
+// (found by review — a read from the first opening rewrote the second's
+// report and status).
+func TestAStalePreviewDoesNotLandOnAReopenedGate(t *testing.T) {
+	m := rmModel(t, "t-t38k")
+	first := m.edit.rm.seq
+	press(m, "esc")
+	press(m, "enter")
+	if m.edit.rm.seq == first {
+		t.Fatalf("reopening the row must number a new read, got %d twice", first)
+	}
+	stale := rmPreviewMsg{target: rmTarget{id: "t-t38k"}, seq: first}
+	m.onRmPreview(stale)
+	if rep := m.edit.rm.report; rep == nil || rep.References.Empty() {
+		t.Errorf("the stale read landed: report = %+v", rep)
+	}
+	if strings.Contains(m.status, "nothing points at it") {
+		t.Errorf("the stale read rewrote the status: %q", m.status)
+	}
+}
+
+// The frames carry what they exist to show (footer_test proves only that
+// each differs from the bare board).
 func TestDeleteDemoFramesCarryWhatTheyExistFor(t *testing.T) {
 	for _, tc := range []struct {
 		demo string
@@ -157,7 +180,11 @@ func TestDeleteDemoFramesCarryWhatTheyExistFor(t *testing.T) {
 		{"rm", []string{"delete this task", "nothing points at it", "⏎ deletes"}},
 		{"rmreferenced", []string{"delete this task", "still referenced —", "dep      ", "link     ", "⏎ arms --force"}},
 		{"rmforce", []string{"--force armed", "reference(s) and deletes"}},
-		{"epicrm", []string{"delete this box", "member(s):", "member   ", "⏎ arms --force"}},
+		// The line wraps at 72 cells; each want sits inside one line of it.
+		{"rmrepeat", []string{"repeat: carries a series (FREQ=WEEKLY", "no successor is minted"}},
+		{"rmwait", []string{"reading what points at it…", "⏎ waits for the read"}},
+		{"rmrefused", []string{"no preview: a write is still in flight", "esc backs out"}},
+		{"epicrm", []string{"delete this box", "member(s):", "member   ", "⏎ arms --force (severs all", "This is the ACTIVE box"}},
 	} {
 		t.Run(tc.demo, func(t *testing.T) {
 			out := strings.Join(dumpFrame(t, 240, 44, tc.demo), "\n")

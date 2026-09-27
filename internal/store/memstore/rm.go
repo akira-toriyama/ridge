@@ -22,7 +22,10 @@ import (
 // referencesTo is what still points at the targets, in board order: the
 // task-side edges and links first, then the boxes' dep edges. References
 // among the targets themselves never count (furrow: a chain removes in one
-// call).
+// call). Two limits, both unobservable on the fixture: furrow walks the
+// boxes' bodies for [[links]] too (board.EpicInfo carries no body), and it
+// reads a link out of the prose (core.ExtractLinks) where this counts a
+// `[[id]]` inside a code span as well.
 func referencesTo(b *board.Board, targets map[string]bool) board.References {
 	var r board.References
 	ids := slices.Sorted(maps.Keys(targets))

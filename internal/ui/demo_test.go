@@ -135,6 +135,7 @@ func TestDemoRefusalNamesTheMissingShape(t *testing.T) {
 		{"boxeswaiting", "parked until a due"},
 		{"epicwaiting", "parked until a due"},
 		{"rmreferenced", "something references"},
+		{"rmrepeat", "repeat rule"},
 		{"epicrm", "something references"},
 		{"epicshut", "is closed"},
 		{"boxesall", "is closed"},

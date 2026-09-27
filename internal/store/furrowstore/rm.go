@@ -9,9 +9,14 @@ import (
 )
 
 // rmJSON is `furrow rm --json` and `furrow epic rm --json`: one report each,
-// preview and apply alike (v6.0.0's help, re-read on furrow dev). tasks are
-// `ls` rows as the targets were, epic is the box, references and assets are
-// furrow's reference and asset-transfer shapes.
+// preview and apply alike. tasks are `ls` rows as the targets were, epic is
+// the box, references is furrow's reference shape (all in v6.0.0, CI's pin).
+// assets is furrow #345 (2026-09-15, after the tag): the pinned release's
+// report carries no such key (measured on a v6.0.0 build, 2026-09-27) and
+// decodes to the empty transfer, so the gate's asset line and the landing
+// note's asset words appear only against a newer furrow; the shape is pinned
+// by a canned reply (rm_unit_test.go) and, where the binary has it, by the
+// attach contract test.
 type rmJSON struct {
 	DryRun     bool       `json:"dry_run"`
 	Force      bool       `json:"force"`
@@ -83,6 +88,29 @@ func rmFlags(o board.RemoveOptions) []string {
 	return args
 }
 
+// rmArgs is `rm`'s argv: the flags, then the ids fenced by `--` so an id can
+// never be read as a flag. Duplicates collapse here, in order, because they
+// collapse furrow-side too (app.RemoveTasks) and the report names each
+// target once — the count check below holds only over the unique list.
+func rmArgs(ids []string, o board.RemoveOptions) (args []string, unique []string) {
+	seen := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		if !seen[id] {
+			seen[id] = true
+			unique = append(unique, id)
+		}
+	}
+	args = append([]string{"rm"}, rmFlags(o)...)
+	args = append(append(args, "--"), unique...)
+	return args, unique
+}
+
+// epicRmArgs is `epic rm`'s argv, fenced the same way.
+func epicRmArgs(id string, o board.RemoveOptions) []string {
+	args := append([]string{"epic", "rm"}, rmFlags(o)...)
+	return append(args, "--", id)
+}
+
 // checkRmReply holds the reply to the call: a preview that says it applied,
 // or an apply that says it did not, is a contract break worth refusing over —
 // the gate would otherwise show one and the board the other.
@@ -94,17 +122,15 @@ func checkRmReply(verb string, reply rmJSON, o board.RemoveOptions) error {
 	return nil
 }
 
-// Remove is `furrow rm <ids>` (board.Provider). The ids are positionals
-// fenced by `--` so an id can never be read as a flag; the empty list is
-// refused before exec (ValidateSweepIDs). A refusal — a miss (exit 1), a
-// reference still standing (exit 2, kind referenced) — comes back as furrow's
-// own envelope, message and kind.
+// Remove is `furrow rm <ids>` (board.Provider). The argv is rmArgs's; the
+// empty list is refused before exec (ValidateSweepIDs). A refusal — a miss
+// (exit 1), a reference still standing (exit 2, kind referenced) — comes back
+// as furrow's own envelope, message and kind.
 func (p *Store) Remove(ids []string, o board.RemoveOptions) (board.RemoveReport, error) {
 	if err := board.ValidateSweepIDs("rm", ids); err != nil {
 		return board.RemoveReport{}, err
 	}
-	args := append([]string{"rm"}, rmFlags(o)...)
-	args = append(append(args, "--"), ids...)
+	args, unique := rmArgs(ids, o)
 	out, err := p.c.run("rm", args...)
 	if err != nil {
 		return board.RemoveReport{}, err
@@ -116,8 +142,8 @@ func (p *Store) Remove(ids []string, o board.RemoveOptions) (board.RemoveReport,
 	if err := checkRmReply("rm", reply, o); err != nil {
 		return board.RemoveReport{}, err
 	}
-	if len(reply.Tasks) != len(ids) {
-		return board.RemoveReport{}, fmt.Errorf("furrow rm: the report names %d of %d targets", len(reply.Tasks), len(ids))
+	if len(reply.Tasks) != len(unique) {
+		return board.RemoveReport{}, fmt.Errorf("furrow rm: the report names %d of %d targets", len(reply.Tasks), len(unique))
 	}
 	return reply.toReport(), nil
 }
@@ -128,8 +154,7 @@ func (p *Store) EpicRemove(id string, o board.RemoveOptions) (board.RemoveReport
 	if err := board.ValidateSweepIDs("epic rm", []string{id}); err != nil {
 		return board.RemoveReport{}, err
 	}
-	args := append([]string{"epic", "rm", id}, rmFlags(o)...)
-	out, err := p.c.run("epic-rm", args...)
+	out, err := p.c.run("epic-rm", epicRmArgs(id, o)...)
 	if err != nil {
 		return board.RemoveReport{}, err
 	}

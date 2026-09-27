@@ -153,8 +153,9 @@ deletes; while anything references the target the first `⏎` only arms
 `--force` — the list of what it will sever is on screen — and a second `⏎`
 severs and deletes. Store-first: the card stays until the write lands, and
 the landing note says what was severed, whether a series ended and which
-assets another body kept. Headless: `-demo rm` / `rmreferenced` / `rmforce`
-/ `epicrm`.
+assets another body kept (the asset words need a furrow newer than the
+v6.0.0 pin, whose report has no `assets` key). Headless: `-demo rm` /
+`rmreferenced` / `rmforce` / `rmrepeat` / `rmwait` / `rmrefused` / `epicrm`.
 
 ### Boxes — the box overview
 

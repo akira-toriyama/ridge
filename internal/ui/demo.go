@@ -603,13 +603,24 @@ func (m *Model) demoState(kind string) error {
 			return err
 		}
 
-	case "rm", "rmreferenced", "rmforce":
+	case "rm", "rmreferenced", "rmforce", "rmrepeat", "rmwait", "rmrefused":
 		// The delete gate over the fixture's preview: on a task nothing
 		// points at (`rm`: ⏎ deletes), on the most-referenced one
-		// (`rmreferenced`: the summary, the edges, and ⏎ only arming), and
-		// with --force armed (`rmforce`: the second ⏎'s wording). The stage
-		// exists only between two keystrokes of a live overlay.
-		subj, err := m.demoRmTask(kind, kind != "rm")
+		// (`rmreferenced`: the summary, the edges, and ⏎ only arming), with
+		// --force armed (`rmforce`: the second ⏎'s wording), on a recurring
+		// task (`rmrepeat`: the series the removal ends), and the two
+		// states only a live store reaches, canned onto the fixture's read
+		// the way `synced` cans its report: the read in flight (`rmwait`)
+		// and a refused read (`rmrefused`). Each exists only between two
+		// keystrokes of a live overlay.
+		var subj *board.Task
+		var err error
+		switch kind {
+		case "rmrepeat":
+			subj, err = m.demoRepeatTask(kind)
+		default:
+			subj, err = m.demoRmTask(kind, kind == "rmreferenced" || kind == "rmforce")
+		}
 		if err != nil {
 			return err
 		}
@@ -627,9 +638,18 @@ func (m *Model) demoState(kind string) error {
 		if m.edit.rm.report == nil {
 			return fmt.Errorf("demo %s: the fixture's preview did not land: %s", kind, m.edit.rm.err)
 		}
-		if kind == "rmforce" {
+		switch kind {
+		case "rmforce":
 			m.edit.rm.armed = true
 			m.noteRmGate(&m.edit.rm)
+		case "rmwait":
+			st := &m.edit.rm
+			*st = rmState{target: st.target, seq: st.seq, loading: true}
+			m.noteRmGate(st)
+		case "rmrefused":
+			st := &m.edit.rm
+			*st = rmState{target: st.target, seq: st.seq, err: "a write is still in flight — esc out, let it land, then reopen the row"}
+			m.noteRmGate(st)
 		}
 
 	case "epicrm":

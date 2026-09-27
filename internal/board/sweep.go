@@ -91,7 +91,7 @@ func (c TidyClass) Flag() string {
 // was on screen, not what aged in between.
 func ValidateSweepIDs(verb string, ids []string) error {
 	if len(ids) == 0 {
-		return fmt.Errorf("%s: no task named — an empty id list is refused before it reaches furrow", verb)
+		return fmt.Errorf("%s: no id named — an empty id list is refused before it reaches furrow", verb)
 	}
 	for _, id := range ids {
 		if id == "" {

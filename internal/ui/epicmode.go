@@ -54,7 +54,8 @@ const (
 	epicFieldMeta
 	// Last two on purpose: their writes are a lifecycle decision and a
 	// withdrawal, so neither sits where the cursor lands or where a mistyped
-	// ↓ reaches.
+	// ↓ reaches (↑ from the top wraps to delete, which opens a preview,
+	// never a write).
 	epicFieldClosed
 	epicFieldDelete
 	epicFieldCount

@@ -25,8 +25,15 @@ import (
 // the card or row stays until the write lands and the board re-reads, and the
 // landing note carries what the apply reported — references severed, a series
 // ended, assets kept. A refusal after the preview (a reference that appeared
-// in between) is furrow's own message on the status line; the preview is
+// in between) is furrow's own message on the status line — which names a
+// body by its file path where the gate named it by id — and the preview is
 // re-read by reopening the row.
+//
+// The gate's states and their headless frames (-demo): nothing points at it
+// (rm), referenced and disarmed (rmreferenced), armed (rmforce), a series
+// the removal ends (rmrepeat), a box (epicrm), and the two a live store alone
+// reaches — the read in flight (rmwait) and a refused read (rmrefused) —
+// which the demos can on the fixture's synchronous read.
 
 // rmTarget names what a gate is about: one task, or one box.
 type rmTarget struct {
@@ -56,7 +63,7 @@ type rmState struct {
 	report  *board.RemoveReport // the preview; nil until read
 	err     string              // a refused read; "" otherwise
 	loading bool
-	seq     int  // fences a stale read, as the sweep's does
+	seq     int  // Model.rmSeq at the read: fences a stale one, as the sweep's does
 	armed   bool // --force: the second ⏎ on a referenced target
 }
 
@@ -82,7 +89,8 @@ type rmPreviewMsg struct {
 // nothing: --force there only means "list what --force would sever", which
 // is exactly the list the arm step puts in front of the second ⏎.
 func (m *Model) openRmGate(st *rmState, target rmTarget) tea.Cmd {
-	seq := st.seq + 1
+	m.rmSeq++
+	seq := m.rmSeq
 	*st = rmState{target: target, seq: seq, loading: true}
 	if m.queueBusy() {
 		st.loading = false
@@ -152,7 +160,7 @@ func (m *Model) noteRmGate(st *rmState) {
 	case st.loading:
 		m.note("%s — reading what points at it…", l)
 	case st.err != "":
-		m.note("%s — no preview: %s · esc backs out", l, st.err)
+		m.fail("%s — no preview: %s · esc backs out", l, st.err)
 	case st.report == nil:
 		m.note("%s — esc backs out", l)
 	case st.report.References.Empty():
@@ -260,9 +268,11 @@ func assetHolders(kept []board.KeptAsset) []string {
 }
 
 // rmReferenceLines is the reference list under the summary, one edge per
-// line in furrow's own `rm` output order and words (cmd_rm.go
-// printReferences): dep, member, epic dep, link. Capped: a box of eighteen
-// members is a summary plus a count, not a scroll.
+// line in furrow's own `rm` output order (cmd_rm.go printReferences: dep,
+// member, epic dep, link) and near its words — `→` for its `->`, and a body
+// named by its owner's id where it prints the file path. Capped: a box of
+// eighteen members is a summary plus a count, not a scroll, and the
+// summary above still counts every one (the footer counts them too).
 const rmReferenceCap = 6
 
 func rmReferenceLines(r board.References) []string {
@@ -325,10 +335,23 @@ func (m *Model) renderRmGate(st *rmState, title string, inner int) string {
 		if rep.References.Empty() {
 			line("nothing points at it", th.muted.Render)
 		} else {
-			line("still referenced — "+rep.References.Summary(), th.warn.Render)
+			// wrapJoin over the summary's `; ` parts, not wrapLines: an id
+			// list breaks after its hyphens under wrapLines (t-7wdg, t-
+			// 9m2q), and an id split across lines cannot be read or copied.
+			parts := strings.Split("still referenced — "+rep.References.Summary(), "; ")
+			for _, l := range strings.Split(wrapJoin(parts, "; ", inner), "\n") {
+				b.WriteString(th.warn.Render(pad(l, inner)) + "\n")
+			}
 			for _, l := range rmReferenceLines(rep.References) {
 				line(l, th.muted.Render)
 			}
+		}
+		if box := m.b.Epic(st.target.id); st.target.epic && box != nil && box.Active {
+			// furrow withdraws the active box at exit 0 with no word about
+			// the slot (measured on dev 2026-09-27), so this line is the
+			// whole warning — the overlay's rule that a precondition is
+			// stated before the press, not after.
+			line("This is the ACTIVE box: withdrawing it vacates its repo slot, and furrow says nothing about that.", th.warn.Render)
 		}
 		if n, k := len(rep.Assets.Deleted), len(rep.Assets.Kept); n > 0 || k > 0 {
 			s := fmt.Sprintf("assets: %d deleted", n)
@@ -353,7 +376,7 @@ func rmFooter(st *rmState) string {
 	case st.report.References.Empty():
 		return "⏎ deletes · esc backs out"
 	case !st.armed:
-		return "⏎ arms --force (severs what is listed) · esc backs out"
+		return fmt.Sprintf("⏎ arms --force (severs all %d) · esc backs out", st.report.References.Count())
 	}
 	return fmt.Sprintf("⏎ severs %d reference(s) and deletes · esc backs out", st.report.References.Count())
 }

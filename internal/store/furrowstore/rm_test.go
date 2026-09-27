@@ -1,6 +1,8 @@
 package furrowstore
 
 import (
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -77,6 +79,10 @@ func TestContractRemovePreviewsRefusesAndSevers(t *testing.T) {
 		t.Errorf("--force must de-link [[%s]] to the bare id, keeping the words: %+v", target, l)
 	}
 
+	// Duplicates collapse (furrow's rule and the adapter's): one target, once.
+	if rep, err := p.Remove([]string{alone, alone}, board.RemoveOptions{}); err != nil || len(rep.Tasks) != 1 {
+		t.Errorf("a duplicated id must preview as one target: %v %+v", err, rep)
+	}
 	rep, err = p.Remove([]string{alone}, board.RemoveOptions{Apply: true})
 	if err != nil || !rep.References.Empty() {
 		t.Fatalf("an unreferenced target deletes without --force: %v %+v", err, rep)
@@ -139,5 +145,36 @@ func TestContractEpicRemoveUnfilesMembersUnderForce(t *testing.T) {
 	}
 	if o := b.Epic(other); o == nil || slices.Contains(o.Deps, box) {
 		t.Errorf("--force must drop the other box's dep on it: %+v", o)
+	}
+}
+
+// The asset transfer against a furrow that has it (furrow #345 — newer than
+// the v6.0.0 pin, whose `rm -h` names no assets, so this skips there): an
+// attached image goes with its task, and one another body still shows is
+// kept and says who holds it.
+//
+// bite-exempt: execs a real furrow binary and always skips where furrow is not
+// on PATH — which is CI's bite job, so the gate can never judge it there
+func TestContractRemoveReportsTheAssetTransfer(t *testing.T) {
+	p, dir := newLabProvider(t)
+	if !strings.Contains(string(lab(t, dir, "furrow", "rm", "-h")), "assets") {
+		t.Skip("this furrow's rm report carries no asset transfer (#345 is newer than v6.0.0)")
+	}
+	png := filepath.Join(t.TempDir(), "shot.png")
+	if err := os.WriteFile(png, []byte("\x89PNG\r\n\x1a\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	owner := labAdd(t, dir, "画像つきの一枚")
+	lab(t, dir, "furrow", "attach", owner, png)
+	rep, err := p.Remove([]string{owner}, board.RemoveOptions{Force: true})
+	if err != nil {
+		t.Fatalf("preview: %v", err)
+	}
+	if len(rep.Assets.Deleted) != 1 || len(rep.Assets.Kept) != 0 {
+		t.Errorf("an asset only its owner shows goes with it: %+v", rep.Assets)
+	}
+	rep, err = p.Remove([]string{owner}, board.RemoveOptions{Force: true, Apply: true})
+	if err != nil || len(rep.Assets.Deleted) != 1 {
+		t.Errorf("the apply reports the same transfer: %v %+v", err, rep.Assets)
 	}
 }
