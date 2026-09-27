@@ -45,14 +45,17 @@ func TestPeekRendersDueOnItsCalendarDay(t *testing.T) {
 	}
 }
 
-func TestEditMenuRendersDueOnItsCalendarDay(t *testing.T) {
+// The edit menu's due row spells the due as its input reads it back — the
+// board-calendar day, and the wall clock when the due carries one (t-4ag4):
+// 2026-09-01T23:00Z is 09-02 08:00 in the +9 calendar.
+func TestEditMenuRendersDueInTheSpellingItsInputReadsBack(t *testing.T) {
 	fixedZone(t, "TEST", 9)
 	m := editModel(t, "t-9sa6")
 	m.b.Task("t-9sa6").Due = eveningDue()
 	out := frame(m)
 
-	if !strings.Contains(out, "2026-09-02") || strings.Contains(out, "2026-09-01") {
-		t.Errorf("the edit menu must show the due's board-calendar day:\n%s", out)
+	if !strings.Contains(out, "2026-09-02T08:00") || strings.Contains(out, "2026-09-01") {
+		t.Errorf("the edit menu must show the due's board-calendar day and time:\n%s", out)
 	}
 }
 

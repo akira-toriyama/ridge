@@ -178,17 +178,17 @@ func (m *Model) exitEdit() {
 	m.edit = nil
 }
 
-// dueHint is the due input's placeholder: the forms ParseDue takes.
-const dueHint = "2026-08-04 · +1d · +2h · empty clears"
+// dueHint is the due input's placeholder — seen on a task with no due, so
+// it is the one place the forms ParseDue takes are listed: a day, a day
+// with its wall clock, the offsets.
+const dueHint = "2026-08-04 · 2026-08-04T21:30 · +1d · +2h · empty clears"
 
-// dueSeed is the due input's opening value: the task's due as a
-// board-calendar day, "" when it carries none.
-func dueSeed(t *board.Task) string {
-	if t.Due.IsZero() {
-		return ""
-	}
-	return t.Due.In(board.Zone()).Format("2006-01-02")
-}
+// dueSeed is the due input's opening value and the menu's due cell: the
+// stored due in the spelling ParseDue reads back to the same instant, ""
+// when it carries none — so ⏎ on the seed re-commits the promise as it
+// stands, and the row reads what its input opens on. A day-only seed once
+// bound a timed due to its day's last second on that ⏎ (t-4ag4).
+func dueSeed(t *board.Task) string { return board.DueSpelling(t.Due) }
 
 // applyDueDirect is the direct input's apply (enterDueDirect): the same
 // funnel as the menu's due row, then the overlay closes — except on the
@@ -836,10 +836,7 @@ func (m *Model) renderEditMenu(t *board.Task, inner int) string {
 			}
 		}
 	}
-	due := "—"
-	if !t.Due.IsZero() {
-		due = t.Due.In(board.Zone()).Format("2006-01-02")
-	}
+	due := dueSeed(t) // "" reads as the siblings' — (renderOverlayMenu)
 	repeat, _ := repeatCell(t)
 	cd, ct := t.CheckProgress()
 	rows := []menuRow{

@@ -204,6 +204,72 @@ func TestParseDueAcceptsEveryWallClockLayoutFurrowDoes(t *testing.T) {
 	}
 }
 
+// DueSpelling is ParseDue's inverse: for every stored instant the seed it
+// hands an input reads back to that instant — a whole-day due as its day,
+// a timed one with its wall clock (seconds only when set), and, in the
+// repeated hour of a DST fall-back where a wall clock names two instants,
+// an RFC3339 instant. The property is asserted for both instants of that
+// hour rather than pinning which spelling each one takes.
+func TestDueSpellingReadsBackToTheSameInstant(t *testing.T) {
+	fixedZone(t, "TEST", 9)
+	day := func(y int, mo time.Month, d, h, mi, s int) time.Time {
+		return time.Date(y, mo, d, h, mi, s, 0, Zone()).UTC()
+	}
+	tests := []struct {
+		due  time.Time
+		want string
+	}{
+		{time.Time{}, ""},
+		{day(2026, 11, 21, 23, 59, 59), "2026-11-21"},
+		{day(2026, 11, 21, 21, 30, 0), "2026-11-21T21:30"},
+		{day(2026, 10, 4, 23, 16, 58), "2026-10-04T23:16:58"},
+		{day(2026, 11, 21, 0, 0, 0), "2026-11-21T00:00"},
+		{day(2026, 11, 21, 23, 59, 0), "2026-11-21T23:59"},
+	}
+	for _, tc := range tests {
+		got := DueSpelling(tc.due)
+		if got != tc.want {
+			t.Errorf("DueSpelling(%s) = %q, want %q", tc.due, got, tc.want)
+		}
+		if tc.due.IsZero() {
+			continue
+		}
+		back, err := ParseDue(got)
+		if err != nil || !back.Equal(tc.due) {
+			t.Errorf("ParseDue(%q) = %s, %v; want %s", got, back, err, tc.due)
+		}
+	}
+
+	// The wall-clock forms carry no fraction of a second, and a zone whose
+	// offset carries seconds is one RFC3339 cannot spell (its form reads
+	// back 30s off): such an instant is spelled in UTC, which always reads
+	// back. Not a shape furrow stores (it truncates to the second), but the
+	// contract is unconditional and the fallback is what makes it so.
+	odd := time.FixedZone("ODD", 9*3600+30)
+	t.Cleanup(SetClock(nil, func() *time.Location { return odd }))
+	due := time.Date(2026, 6, 1, 3, 0, 0, 7, time.UTC)
+	if s := DueSpelling(due); s != "2026-06-01T03:00:00.000000007Z" || !readsBack(s, due) {
+		t.Errorf("an unspellable offset must fall to the UTC instant, got %q", s)
+	}
+
+	ny, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Skip("no tzdata for America/New_York")
+	}
+	t.Cleanup(SetClock(nil, func() *time.Location { return ny }))
+	// 2026-11-01 01:30 happens twice in New York: 05:30Z (EDT) and 06:30Z (EST).
+	for _, due := range []time.Time{
+		time.Date(2026, 11, 1, 5, 30, 0, 0, time.UTC),
+		time.Date(2026, 11, 1, 6, 30, 0, 0, time.UTC),
+	} {
+		s := DueSpelling(due)
+		back, err := ParseDue(s)
+		if err != nil || !back.Equal(due) {
+			t.Errorf("fall-back hour: DueSpelling(%s) = %q reads back as %s, %v", due, s, back, err)
+		}
+	}
+}
+
 // Zone is the calendar the store declared (SetZone), and the process zone
 // only until one is declared — furrow's own fallback; a bare day binds at its
 // last second in the calendar in force, whatever the terminal's TZ (t-kt2h).
