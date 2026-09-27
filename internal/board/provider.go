@@ -80,7 +80,8 @@ type Provider interface {
 
 	// PersistNote records an already-applied note append: one paragraph added
 	// to the body with Updated stamped, `furrow note`'s contract. The local
-	// half is Board.AppendNote, which already refused an empty text.
+	// half is Board.AppendNote, which already refused an empty text — or
+	// Board.AppendEpicNote: id may name a box (PersistBody says why).
 	PersistNote(id, text string) error
 
 	// PersistCheckAdd records an already-appended checklist item.
@@ -102,7 +103,8 @@ type Provider interface {
 
 	// PersistReview records id's already-applied review stamp — `furrow
 	// review <id>`, which sets `reviewed` and touches nothing else (a review
-	// changes no content, so Updated stays; the local half is Board.Review).
+	// changes no content, so Updated stays; the local half is Board.Review,
+	// or Board.ReviewEpic when id names a box — PersistBody says why).
 	PersistReview(id string) error
 
 	// Revisit is `furrow revisit -q <q>`: the open tasks worth a fresh

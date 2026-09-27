@@ -277,8 +277,10 @@ type epicJSON struct {
 	// is on the wire whether or not --all is passed, so it needs no scope of
 	// its own.
 	Closed *time.Time `json:"closed"`
-	// updated is on every row; reviewed is omitted (not null) on a box never
-	// reviewed — furrow's omitempty, as on a task row.
+	// updated is on every row; reviewed is OMITTED on a box never reviewed
+	// (furrow's omitempty on the epic — a task row prints an explicit null
+	// instead; measured on v6.0.0 and dev, 2026-09-27), and fromPtr reads
+	// both as the zero time.
 	Updated  *time.Time `json:"updated"`
 	Reviewed *time.Time `json:"reviewed"`
 	// body is the STORE-RELATIVE PATH of the box's prose ("bodies/<e-id>.md"),

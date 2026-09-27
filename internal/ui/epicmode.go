@@ -28,7 +28,11 @@ import (
 // re-reads, and the row shows the new value when furrow's own truth arrives.
 // Two consequences the overlay owes the user: it must not let an impatient
 // second keypress queue a duplicate write, and it must say what it is waiting
-// for.
+// for. The one exception is the record half — the body's note and the
+// review stamp (epicApply) — which is Persist*-shaped: furrow's note and
+// review take a box id as they take a task's, nothing about them is
+// furrow's to decide, so the box shows the change now and the queue records
+// it, exactly as a task's does.
 //
 // The lifecycle pair `epic done` / `epic reopen` is ONE row, not two, and it
 // reads the box's own state to decide which verb it is. Two rows would put a
@@ -461,15 +465,40 @@ func (m *Model) onEpicListKey(msg tea.KeyPressMsg, box *board.EpicInfo) tea.Cmd 
 
 // onEpicBodyKey is the body stage's own keys: `a` appends a paragraph
 // (`furrow note` on the box, the light path), `e` opens the whole record in
-// $EDITOR (`furrow edit`) — the task's two body keys, on the box. The rest
-// of the stage is a read: ⏎ and x do nothing, esc backs out.
+// $EDITOR (`furrow edit`) — the task's two body keys, on the box — and the
+// paging the shell's list stage lacks (g/G, ^u/^d), because a record runs
+// to hundreds of rows where every other list here holds a handful (the real
+// board's longest is 487 lines, 740 rows wrapped; measured 2026-09-27). The
+// rest of the stage is a read: ⏎ and x do nothing, esc backs out.
+//
+// `e` is refused while a store-first write of this overlay is in flight or
+// landed unread (refuseWhileWriting): `epic activate --reason` APPENDS to
+// this very record furrow-side, so until the re-read the board's Body lacks
+// the activation line, and a $EDITOR round trip started then would hand
+// PersistBody — a whole-record replacement — the record without it (found
+// by review, measured on v6.0.0). `a` needs no such gate: PersistNote
+// appends furrow-side, and the re-read shows both paragraphs.
 func (m *Model) onEpicBodyKey(msg tea.KeyPressMsg, box *board.EpicInfo) tea.Cmd {
 	e, h := m.epic, epicHooks{m, box}
-	switch msg.String() {
-	case "a":
+	switch {
+	case msg.String() == "a":
 		return e.startInput(h, epicInputNote, "", "progress in one paragraph — appended to the box's record")
-	case "e":
+	case msg.String() == "e":
+		if m.refuseWhileWriting("edit body "+box.ID, "a box write") {
+			return nil
+		}
 		return m.editBodyCmd(box.ID, box.Body)
+	case key.Matches(msg, m.keys.Top):
+		e.listIdx = 0
+	case key.Matches(msg, m.keys.Bottom):
+		e.listIdx = maxInt(0, len(m.epicListRows(box))-1)
+	case key.Matches(msg, m.keys.PeekScroll):
+		rows := len(m.epicListRows(box))
+		page := maxInt(1, (m.h-overlayListChrome)/2)
+		if msg.String() == "ctrl+u" {
+			page = -page
+		}
+		e.listIdx = clamp(e.listIdx+page, 0, maxInt(0, rows-1))
 	}
 	return nil
 }
@@ -796,6 +825,9 @@ func (m *Model) epicListRows(box *board.EpicInfo) []string {
 // epicBodyRows is the box's record as list rows: every line wrapped to the
 // list's width (wrapLines, the CJK rule), a blank line kept as a blank row so
 // paragraphs read as paragraphs, and one line saying so when there is none.
+// RAW, as the file holds it — `# ` headings, `- ` bullets, fences — where the
+// task peek styles them (renderProse): this stage is where `e` hands the
+// record to $EDITOR, so what it shows is what the editor opens.
 func epicBodyRows(body string, w int) []string {
 	if strings.TrimSpace(body) == "" {
 		return []string{"— no record yet · a appends a paragraph · e opens $EDITOR"}
@@ -806,19 +838,36 @@ func epicBodyRows(body string, w int) []string {
 			rows = append(rows, "")
 			continue
 		}
-		rows = append(rows, wrapLines(line, maxInt(8, w))...)
+		rows = append(rows, wrapLines(line, w)...)
 	}
 	return rows
 }
 
-// epicBodyCell is the body row's value: how much record there is, and when
-// it last moved.
-func epicBodyCell(box *board.EpicInfo) string {
-	if strings.TrimSpace(box.Body) == "" {
-		return "— none"
+// recordLines is the record's non-blank lines: what a count of it means.
+func recordLines(body string) []string {
+	var lines []string
+	for _, line := range strings.Split(body, "\n") {
+		if strings.TrimSpace(line) != "" {
+			lines = append(lines, line)
+		}
 	}
-	n := len(strings.Split(strings.TrimRight(box.Body, "\n"), "\n"))
-	cell := fmt.Sprintf("%d line(s)", n)
+	return lines
+}
+
+// epicBodyCell is the body row's value: how much record there is, and when
+// it last moved. A box furrow just added holds `# <title>` and nothing else
+// (measured on v6.0.0 and dev; the real board's median record is that one
+// line, 2026-09-27), which the cell calls out rather than counting as a
+// record; a box with no file at all reads the siblings' `—`.
+func epicBodyCell(box *board.EpicInfo) string {
+	lines := recordLines(box.Body)
+	switch {
+	case len(lines) == 0:
+		return "—"
+	case len(lines) == 1 && strings.HasPrefix(lines[0], "# "):
+		return "— only the title line"
+	}
+	cell := fmt.Sprintf("%d line(s)", len(lines))
 	if !box.Updated.IsZero() {
 		cell += " · updated " + ago(box.Updated)
 	}
@@ -826,13 +875,8 @@ func epicBodyCell(box *board.EpicInfo) string {
 }
 
 // epicReviewedCell is the reviewed row's value: furrow's review clock, or
-// never.
-func epicReviewedCell(box *board.EpicInfo) string {
-	if box.Reviewed.IsZero() {
-		return "never"
-	}
-	return ago(box.Reviewed)
-}
+// ago's own "never".
+func epicReviewedCell(box *board.EpicInfo) string { return ago(box.Reviewed) }
 
 func metaKeyOf(row string) string {
 	k, _, _ := strings.Cut(row, "=")

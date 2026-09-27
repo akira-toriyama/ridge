@@ -344,9 +344,11 @@ func (b *Board) indexEpics() {
 // id after it. Surfaces that must see a closed box — resolving a dep, reopening
 // one — ask for EpicsAll.
 //
-// It is a precomputed COPY, so it does not alias Epic(id). Nothing in the app
-// writes through that pointer (the store swaps a fresh board in for every epic
-// write), but a test that does will not see its edit here.
+// It is a precomputed COPY, so it does not alias Epic(id). The store swaps a
+// fresh board in for every store-first epic write; the three optimistic box
+// writes (SetEpicBody, AppendEpicNote, ReviewEpic) DO write through that
+// pointer, and each re-indexes so this copy follows — a test that writes
+// through it without re-indexing will not see its edit here.
 func (b *Board) Epics() []EpicInfo { return b.epicsOpen }
 
 // EpicsAll is every box the read served, open and closed, in furrow's order

@@ -5,6 +5,9 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	lg "charm.land/lipgloss/v2"
+
+	"github.com/akira-toriyama/ridge/internal/board"
 )
 
 // boxOverlay opens the epic overlay on id from the slice panel's epic axis.
@@ -61,7 +64,6 @@ func TestEpicBodyStageShowsTheRecordAndAppendsANote(t *testing.T) {
 	}
 	// An empty ⏎ backs out to the stage without a write.
 	press(m, "a")
-	m.edit = nil
 	press(m, "enter")
 	if m.epic.stage != stageList || len(m.pending) != 0 {
 		t.Error("an empty note is a back-out")
@@ -118,6 +120,89 @@ func TestEpicBodyEditorResultLandsOnTheBox(t *testing.T) {
 	drainPersists(m, t)
 }
 
+// `e` is refused while a store-first write of this overlay has landed
+// unread: `epic activate --reason` appends to the record furrow-side, and a
+// $EDITOR round trip started on the pre-activation Body would hand
+// PersistBody a replacement without that line (found by review).
+func TestEpicBodyEditorIsRefusedInsideAStoreFirstWindow(t *testing.T) {
+	m := boxOverlay(t, "e-fw2m")
+	m.epic.menuIdx = int(epicFieldBody)
+	press(m, "enter")
+	m.storeFirstUnread = true
+	if c := m.onEpicBodyKey(tea.KeyPressMsg{Code: 'e', Text: "e"}, m.b.Epic("e-fw2m")); c != nil {
+		t.Error("e must be refused while a store-first write is unread")
+	}
+	if !m.statusErr || !strings.Contains(m.status, "edit body e-fw2m") || !strings.Contains(m.status, "re-read") {
+		t.Errorf("the refusal must name the write and the way out: %q", m.status)
+	}
+	// `a` needs no gate: PersistNote appends furrow-side.
+	if c := m.onEpicBodyKey(tea.KeyPressMsg{Code: 'a', Text: "a"}, m.b.Epic("e-fw2m")); m.epic.stage != stageInput {
+		t.Errorf("a must still open the note input (cmd=%v stage=%d)", c != nil, m.epic.stage)
+	}
+}
+
+// A long record pages: g/G and ^u/^d move the cursor over hundreds of rows,
+// and a CJK line with no whitespace wraps to the list's width, never over
+// it (CLAUDE.md's width rule; a sabotage of wrapLines had no shipped guard).
+func TestEpicBodyStagePagesAndWrapsCJK(t *testing.T) {
+	m := boxOverlay(t, "e-fw2m")
+	var sb strings.Builder
+	sb.WriteString("# 長い記録\n")
+	for i := 0; i < 120; i++ {
+		sb.WriteString("\n二〇二六年の秋に阿蘇から高千穂へ抜ける三泊四日の行程を家族会議で固め直した記録の一行目がここに続く\n")
+	}
+	if err := m.b.SetEpicBody("e-fw2m", sb.String()); err != nil {
+		t.Fatal(err)
+	}
+	m.epic.menuIdx = int(epicFieldBody)
+	press(m, "enter")
+	rows := m.epicListRows(m.b.Epic("e-fw2m"))
+	if len(rows) < 240 {
+		t.Fatalf("setup: %d rows, want the record wrapped to hundreds", len(rows))
+	}
+	w := m.overlayInner() - 2
+	for i, r := range rows {
+		if lg.Width(r) > w {
+			t.Fatalf("row %d is %d cells wide, over the list's %d: %q", i, lg.Width(r), w, r)
+		}
+	}
+	press(m, "G")
+	if m.epic.listIdx != len(rows)-1 {
+		t.Errorf("G must land on the last row, got %d of %d", m.epic.listIdx, len(rows))
+	}
+	press(m, "g")
+	if m.epic.listIdx != 0 {
+		t.Errorf("g must land on the first row, got %d", m.epic.listIdx)
+	}
+	press(m, "ctrl+d")
+	if m.epic.listIdx == 0 {
+		t.Error("^d must page down")
+	}
+	at := m.epic.listIdx
+	press(m, "ctrl+u")
+	if m.epic.listIdx >= at {
+		t.Error("^u must page back up")
+	}
+	if out := frame(m); !strings.Contains(out, "below") {
+		t.Errorf("the windowed stage must say how many rows are below")
+	}
+}
+
+// The body cell tells a real record from the `# <title>` line every fresh box
+// holds, and from no record at all.
+func TestEpicBodyCellReadsTheRecordsShape(t *testing.T) {
+	for _, tc := range []struct{ body, want string }{
+		{"", "—"},
+		{"# 箱\n", "— only the title line"},
+		{"# 箱\n\n一段落\n", "2 line(s)"},
+	} {
+		got := epicBodyCell(&board.EpicInfo{Body: tc.body})
+		if !strings.HasPrefix(got, tc.want) {
+			t.Errorf("cell(%q) = %q, want %q…", tc.body, got, tc.want)
+		}
+	}
+}
+
 // The strip states the record and the review clock, the two facts the rows
 // edit.
 func TestBoxStripNamesTheRecordAndTheReviewClock(t *testing.T) {
@@ -129,7 +214,7 @@ func TestBoxStripNamesTheRecordAndTheReviewClock(t *testing.T) {
 		}
 	}
 	out := frame(m)
-	for _, want := range []string{"body 7 line(s)", "reviewed "} {
+	for _, want := range []string{"body 4 line(s)", "reviewed "} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the strip lost %q", want)
 		}

@@ -160,6 +160,11 @@ func TestEpicBodyNoteAndReviewApplyAndKeepTheOpenCopyInStep(t *testing.T) {
 	if e.Updated.IsZero() {
 		t.Error("the prose writes must stamp Updated")
 	}
+	// Seeded back, not read: the note above and the review below land in
+	// the same wall-clock second, and both truncate to it — an Updated
+	// captured from the note could not tell a review that bumps it from one
+	// that does not (found by review; refs_test seeds for the same reason).
+	e.Updated = time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 	updated := e.Updated
 	if err := b.ReviewEpic("e-open1"); err != nil {
 		t.Fatal(err)
