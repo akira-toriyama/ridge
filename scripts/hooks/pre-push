@@ -19,4 +19,13 @@
 # checked-out branch predates scripts/hooks/ has no hook at all and pushes
 # silently. Pushing old branches from worktrees is rare here; an absolute
 # hooksPath would fix it but breaks the moment the clone moves.
-exec "$(git rev-parse --show-toplevel)/scripts/check.sh"
+#
+# git exports GIT_DIR (and friends) to a hook. From the main checkout it is
+# the relative ".git" and harmless; from a linked worktree it is ABSOLUTE,
+# and every git the mirror's tests spawn in their own lab repos — and the
+# furrow source-build wrapper's `git archive` — then acts on THIS repo
+# instead ("remote origin already exists" from a contract test's lab,
+# 2026-09-28). The mirror wants the plain environment a shell has.
+top="$(git rev-parse --show-toplevel)"
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX
+exec "$top/scripts/check.sh"
