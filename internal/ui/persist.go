@@ -510,6 +510,40 @@ func repeatLine(r *board.RepeatReport) string {
 	return line
 }
 
+// reloadKey is `r`, from the board and from every full-screen view
+// (fullScreenKey): the store keys are the board's, not a view's, and a
+// body edited from the overview once had no way to re-read or publish
+// until the board was back (t-mznb).
+func (m *Model) reloadKey() tea.Cmd {
+	if m.queueBusy() {
+		// The reload would race the queue's own furrow process, land
+		// behind the guard in onReloadDone and be dropped — leaving
+		// "reloading…" on screen forever. The drain reconciles anyway.
+		m.note("writes in flight — the board re-reads itself once they land")
+		return nil
+	}
+	label := "reloaded"
+	if !m.prov.Live() {
+		label = "reloaded from the fixture — session edits discarded"
+	}
+	m.note("reloading…")
+	return m.reloadCmd(label)
+}
+
+// syncKey is `R` (reloadKey says where from).
+func (m *Model) syncKey() tea.Cmd {
+	if !m.prov.Live() {
+		m.note("the fixture has no store to sync")
+		return nil
+	}
+	if m.queueBusy() {
+		m.note("writes in flight — sync once they land")
+		return nil
+	}
+	m.note("syncing…")
+	return m.syncCmd()
+}
+
 func (m *Model) reloadCmd(label string) tea.Cmd {
 	return m.reloadCmdOpts(label, false)
 }

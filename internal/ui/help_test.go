@@ -151,22 +151,27 @@ func TestHelpListsEveryKeyItsSectionsModesHandle(t *testing.T) {
 			k.MoveTop, k.MoveBottom, k.MoveFirst, k.MoveLast},
 		// onGraphKey (graphview.go)
 		"graph": {k.Up, k.Down, k.Left, k.Right, k.GraphRoot, k.GraphRadius,
-			k.GraphOrient, k.JumpBack, k.PeekScroll, k.Map, k.View, k.Cancel},
+			k.GraphOrient, k.JumpBack, k.PeekScroll, k.Map, k.Reload, k.Sync, k.View, k.Cancel},
 		// onMapKey (depmapview.go)
 		"dep map": {k.Up, k.Down, k.Left, k.Right, k.MapGraph, k.MapScope,
-			k.PeekScroll, k.Map, k.View, k.Cancel},
+			k.PeekScroll, k.Reload, k.Sync, k.Map, k.View, k.Cancel},
 		// onBoxesKey (boxboardview.go)
 		"box overview": {k.Up, k.Down, k.Left, k.Right, k.BoxSlice, k.EpicEdit,
-			k.MapScope, k.Top, k.Bottom, k.PeekScroll, k.Boxes, k.View, k.Cancel},
+			k.MapScope, k.Top, k.Bottom, k.PeekScroll, k.Reload, k.Sync, k.Boxes, k.View, k.Cancel},
 		// onRoadKey (roadmapview.go). Absent since the roadmap shipped: the
 		// map is hand-written, so a full-screen view whose section nobody
 		// added here was never checked against its own handler.
 		"roadmap": {k.Up, k.Down, k.Left, k.Right, k.RoadDue, k.RoadZoom, k.Top, k.Bottom,
-			k.PeekScroll, k.ViewTab, k.ViewSave, k.Roadmap, k.View, k.Cancel},
+			k.PeekScroll, k.ViewTab, k.ViewSave, k.Reload, k.Sync, k.Roadmap, k.View, k.Cancel},
 		// onSwimKey (swimlaneview.go)
 		"swimlane": {k.Up, k.Down, k.Left, k.Right, k.SwimFold, k.SwimSlice,
-			k.SwimAxis, k.MapScope, k.Top, k.Bottom, k.PeekScroll, k.Swim,
+			k.SwimAxis, k.MapScope, k.Top, k.Bottom, k.PeekScroll, k.Reload, k.Sync, k.Swim,
 			k.View, k.Cancel},
+		// onSweepKey (sweepview.go). Absent from this map since the sweep
+		// shipped — the same hole the roadmap's entry names; `r` there is
+		// the sweep's own (the previews' re-read), `R` the shared closer's.
+		"sweep": {k.Up, k.Down, k.Top, k.Bottom, k.PeekScroll, k.Commit, k.SweepSkip,
+			k.Reload, k.Sync, k.Sweep, k.View, k.Cancel},
 	}
 	for title, bindings := range want {
 		sec, ok := byTitle[title]

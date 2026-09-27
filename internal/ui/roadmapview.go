@@ -607,7 +607,8 @@ func (m *Model) cycleRoadZoom() {
 }
 
 // onRoadKey is the roadmap's whole keyboard surface. Like the map it is a
-// reading tool, with one write: RoadDue hands the row to the edit overlay's
+// reading tool (the store keys `r` / `R` come with the shared closer), with
+// one write of its own: RoadDue hands the row to the edit overlay's
 // due input (enterRoadDue), and the overlay owns the write from there. The
 // due-editing drag stays deferred until the view has proven its worth
 // (t-7t28).
