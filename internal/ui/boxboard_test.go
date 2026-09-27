@@ -373,6 +373,58 @@ func TestLeavingTheOverlayInTheOverviewDoesNotWakeTheHiddenPanel(t *testing.T) {
 // The header's counts are per BOX, not per placement: a box in two repos is
 // drawn twice and must be counted once, or every aggregate on a fleet board
 // reads high.
+// No lens is applied to the overview — it has no task rows to mute — and
+// the header says which one is on, in the board's own words (filter, slice,
+// revisit lens); the frame was once byte-identical with and without -filter,
+// the silent no-op the CLI's refusals exist to prevent (t-sb23). Said even
+// for a query the store refused: the claim is true regardless, and the
+// refusal reaches this view's status line only on the -filter path. The
+// header's left end (the view's title) survives the widest bit set at the
+// floor.
+func TestTheOverviewSaysWhichLensIsNotApplied(t *testing.T) {
+	for _, tc := range []struct {
+		name, filter string
+		revisit      bool
+		want         string // "" = no claim
+		wantRefusal  bool
+	}{
+		{"no lens", "", false, "", false},
+		{"a filter", "label:bbq", false, "filter not applied here — the counts are unfiltered", false},
+		{"a refused filter", "bogus:zzz", false, "filter not applied here", true},
+		{"the revisit lens", "", true, "revisit lens not applied here", false},
+		{"both", "label:bbq", true, "filter and revisit lens not applied here", false},
+	} {
+		m := New(memstore.New(), Options{Boxes: true, Filter: tc.filter, Revisit: tc.revisit})
+		out, err := m.Dump(240, 40, "", true)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		if tc.want == "" {
+			if strings.Contains(out, "not applied here") {
+				t.Errorf("%s: no lens, no claim:\n%s", tc.name, out)
+			}
+		} else if !strings.Contains(out, tc.want) {
+			t.Errorf("%s: the header must claim %q:\n%s", tc.name, tc.want, out)
+		}
+		if tc.wantRefusal && !strings.Contains(out, "-filter refused") {
+			t.Errorf("%s: the refusal must stay on the status line:\n%s", tc.name, out)
+		}
+		if !strings.Contains(out, "boxes by repo  ·  scope open") {
+			t.Errorf("%s: the header's left end must survive the claim at the floor:\n%s", tc.name, out)
+		}
+	}
+	// The panel's slice is a lens too, and is named as the board names it.
+	m := boardModel(t, 240, 50)
+	press(m, "E")
+	if c := m.drillIntoBox(m.boxes.lay); c != nil {
+		m.Update(c())
+	}
+	press(m, "E")
+	if out := frame(m); !strings.Contains(out, "slice not applied here") {
+		t.Errorf("a slice must be named as the slice, not a filter:\n%s", out)
+	}
+}
+
 func TestHeaderCountsABoxOnceHoweverManyReposItNames(t *testing.T) {
 	b := board.NewBoard(nil,
 		board.EpicInfo{ID: "e-both", Title: "二重", Repos: []string{"a/a", "b/b"},
