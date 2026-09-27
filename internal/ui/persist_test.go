@@ -96,6 +96,7 @@ func (p *scriptedProvider) PersistCheckReword(_ string, _ int, _ string) error {
 func (p *scriptedProvider) PersistDepAdd(_, _ string) error                    { return nil }
 func (p *scriptedProvider) PersistDepRm(_, _ string) error                     { return nil }
 func (p *scriptedProvider) Live() bool                                         { return true }
+func (p *scriptedProvider) ReadBody(string) (string, error)                    { return "", nil }
 
 func (p *scriptedProvider) PersistCheckRm(id string, i int) error {
 	p.mu.Lock()

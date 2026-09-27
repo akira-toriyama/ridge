@@ -133,6 +133,11 @@ type epicState struct {
 	// rather than re-derived at commit so the chip the user read and the write
 	// they confirmed cannot disagree.
 	newRepo string
+	// closeFresh says the close row's gate counts from a board re-read, not
+	// the loaded snapshot (openCloseGate); closeNote is the gate's line while
+	// it is not — the read under way, or why none was fired.
+	closeFresh bool
+	closeNote  string
 }
 
 // epicHooks is the epic overlay's half of the stage machine: the shell walks
@@ -317,10 +322,14 @@ func (m *Model) noteEpicStage() {
 			// re-activate, and a note that implied it would promise something
 			// the next frame contradicts.
 			m.note("reopen %s — it comes back OPEN and INACTIVE · ⏎ confirms · esc backs out", e.id)
+		case !e.closeFresh:
+			m.note("close %s — %s · esc backs out", e.id, e.closeNote)
 		default:
 			// furrow closes a box with open members at exit 0, so this line is
 			// the ONLY thing standing between one keystroke and a box closed
-			// over live work.
+			// over live work — counted from a re-read (openCloseGate): the
+			// snapshot's once read "0 still open" for three members another
+			// session had just moved back into work (t-2wa3).
 			m.note("close %s — %d/%d done, %s · ⏎ confirms · esc backs out",
 				e.id, box.Done, box.Total, stillOpen(len(m.b.OpenMembers(e.id)), len(m.b.ParkedMembers(e.id))))
 		}
@@ -426,7 +435,10 @@ func (m *Model) openEpicField(f epicField, box *board.EpicInfo) tea.Cmd {
 		// own body as the activation record: the input IS the confirmation, and
 		// it collects the thing that keeps the switch visible next session.
 		return e.startInput(h, epicInputReason, "", "who asked for this switch · empty omits it")
-	case epicFieldStanding, epicFieldPinned, epicFieldClosed, epicFieldReviewed:
+	case epicFieldClosed:
+		e.stage = stageGate
+		return m.openCloseGate(e)
+	case epicFieldStanding, epicFieldPinned, epicFieldReviewed:
 		e.stage = stageGate
 		m.noteEpicStage()
 		return nil
@@ -491,7 +503,7 @@ func (m *Model) onEpicBodyKey(msg tea.KeyPressMsg, box *board.EpicInfo) tea.Cmd 
 		if m.refuseWhileWriting("edit body "+box.ID, "a box write") {
 			return nil
 		}
-		return m.editBodyCmd(box.ID, box.Body)
+		return m.editBodyCmd(box.ID)
 	case key.Matches(msg, m.keys.Top):
 		e.listIdx = 0
 	case key.Matches(msg, m.keys.Bottom):
@@ -700,6 +712,16 @@ func (m *Model) commitEpicConfirm(box *board.EpicInfo) tea.Cmd {
 				return p.EpicReopen(id)
 			})
 		}
+		if !e.closeFresh {
+			// The gate is still reading, or could not: its count is not the
+			// store's yet, and the stage stays put for the re-read. A note,
+			// not a refusal, as the rm gate's (noteRmGate): a refusal would
+			// stand on the line past the read's landing, which noteEpicStage
+			// never overwrites.
+			e.stage = stageGate
+			m.note("close %s — %s", id, e.closeNote)
+			return nil
+		}
 		// Same suggestion pointer `deactivate` uses — but only when this box
 		// actually held the slot. furrow answers `previous` either way
 		// (measured: closing an INACTIVE box still names one), and "where to
@@ -729,6 +751,59 @@ func (m *Model) commitEpicConfirm(box *board.EpicInfo) tea.Cmd {
 		})
 	}
 	return nil
+}
+
+// The close gate's three lines while it is not fresh (openCloseGate), spelled
+// once for the gate and the demos that freeze each (-demo epicclosereading /
+// epicclosebusy / epicclosefailed).
+const (
+	closeGateReading = "re-reading the board before its count is shown"
+	closeGateBusy    = "a write is still in flight — esc out, let it land, then reopen the row"
+	closeGateFailed  = "the re-read failed — esc out, r, then reopen the row"
+)
+
+// openCloseGate opens the close row's gate on a board re-read rather than the
+// loaded snapshot. Its count is the whole warning between one ⏎ and a box
+// closed over live work, and the snapshot's once read "0 still open" for
+// three members another session had just moved back into work (t-2wa3).
+// Store-first like the rm preview: the fixture's snapshot IS the store, so it
+// is fresh at once; a live store re-reads, the gate saying so and refusing ⏎
+// until the read lands (closeGateRead). While a write is in flight no read is
+// fired — the board's own rule for `r` — and the gate says that instead.
+// Reopening (a closed box) reads the row's own state and needs no re-read.
+func (m *Model) openCloseGate(e *epicState) tea.Cmd {
+	e.closeFresh, e.closeNote = true, ""
+	box := m.b.Epic(e.id)
+	if box == nil || !box.Closed.IsZero() || !m.prov.Live() {
+		m.noteEpicStage()
+		return nil
+	}
+	e.closeFresh = false
+	if m.queueBusy() {
+		e.closeNote = closeGateBusy
+		m.noteEpicStage()
+		return nil
+	}
+	e.closeNote = closeGateReading
+	m.noteEpicStage()
+	return m.reloadCmd("")
+}
+
+// closeGateRead marks the close gate fresh once a re-read applied — any
+// re-read, an `r` included: the count it draws is the store's now.
+func (m *Model) closeGateRead() {
+	if e := m.epic; e != nil && e.stage == stageGate && e.field == epicFieldClosed && !e.closeFresh {
+		e.closeFresh, e.closeNote = true, ""
+		m.noteEpicStage()
+	}
+}
+
+// closeGateReadFailed keeps the gate shut when its re-read failed, naming the
+// way out; the reload's own failure line leads.
+func (m *Model) closeGateReadFailed() {
+	if e := m.epic; e != nil && e.stage == stageGate && e.field == epicFieldClosed && !e.closeFresh {
+		e.closeNote = closeGateFailed
+	}
 }
 
 // stillOpen words the close gate's count: the members furrow will disclose
@@ -830,7 +905,11 @@ func (m *Model) epicWriteNoting(label string, note *string, run func(board.Provi
 	prov := m.prov
 	return m.epicWriteOp(persistOp{
 		label: label, noLocal: true, note: note,
-		run: func() ([]string, error) { return nil, run(prov) },
+		// A refusal says the board under the overlay is not the store's (a
+		// box withdrawn elsewhere: epic-not-found), so the re-read that would
+		// otherwise wait for `r` is owed now (t-2wa3).
+		reloadOnFail: true,
+		run:          func() ([]string, error) { return nil, run(prov) },
 	})
 }
 
@@ -897,8 +976,9 @@ func recordLines(body string) []string {
 // it last moved. A box furrow just added holds `# <title>` and nothing else
 // (measured on dev: 21 bytes, one trailing newline; 18 of the real board's
 // 200 boxes still hold just that, 2026-09-27), which the cell calls out
-// rather than counting as a record; a box with no file at all reads the
-// siblings' `—`. The clock rides every non-empty form.
+// rather than counting as a record; a box whose JSON names no file reads
+// the siblings' `—` (a named file that is missing fails the load instead:
+// readBodies). The clock rides every non-empty form.
 func epicBodyCell(box *board.EpicInfo) string {
 	lines := recordLines(box.Body)
 	if len(lines) == 0 {
@@ -1098,6 +1178,10 @@ func (m *Model) renderEpicConfirm(box *board.EpicInfo, inner int) string {
 			break
 		}
 		hdr = "close this box"
+		if !m.epic.closeFresh {
+			detail = m.epic.closeNote
+			break
+		}
 		// furrow closes a box with open members at exit 0 (measured on
 		// v5.0.0), so this count is the entire warning that exists, and it is
 		// furrow's own set (Board.OpenMembers), not Total − Done. Saying the

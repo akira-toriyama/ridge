@@ -201,7 +201,10 @@ func (m *Model) onRmGateKey(msg tea.KeyPressMsg, st *rmState) tea.Cmd {
 	target, force := st.target, st.armed
 	prov := m.prov
 	note := new(string)
-	op := persistOp{label: target.label(), noLocal: true, note: note, run: func() ([]string, error) {
+	// reloadOnFail: a refusal says the board under the gate is not the
+	// store's (the target withdrawn elsewhere: not-found), so the re-read is
+	// owed now, as for every store-first box write (t-2wa3).
+	op := persistOp{label: target.label(), noLocal: true, note: note, reloadOnFail: true, run: func() ([]string, error) {
 		var rep board.RemoveReport
 		var err error
 		if target.epic {

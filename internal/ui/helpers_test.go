@@ -62,6 +62,7 @@ func (p *emptyProvider) PersistMove(_, _, _, _ string) (board.MoveReport, error)
 func (p *emptyProvider) PersistDone(_ string) (*board.RepeatReport, error)  { return nil, nil }
 func (p *emptyProvider) PersistCheck(_ string, _ int, _ bool) error         { return nil }
 func (p *emptyProvider) PersistBody(_, _ string) error                      { return nil }
+func (p *emptyProvider) ReadBody(string) (string, error)                    { return "", nil }
 func (p *emptyProvider) PersistNote(_, _ string) error                      { return nil }
 func (p *emptyProvider) PersistReview(_ string) error                       { return nil }
 func (p *emptyProvider) Revisit(string) ([]board.Revisit, error)            { return nil, nil }

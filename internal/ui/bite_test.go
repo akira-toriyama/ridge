@@ -21,7 +21,8 @@ type syncProvider struct {
 
 func newSyncProvider() *syncProvider { return &syncProvider{Store: memstore.New()} }
 
-func (p *syncProvider) Live() bool { return true }
+func (p *syncProvider) Live() bool                      { return true }
+func (p *syncProvider) ReadBody(string) (string, error) { return "", nil }
 
 func (p *syncProvider) Sync() (board.SyncReport, error) {
 	p.syncs++

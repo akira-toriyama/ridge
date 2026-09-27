@@ -1,17 +1,23 @@
 package ui
 
 import (
-	"github.com/akira-toriyama/ridge/internal/board"
 	"os"
 	"os/exec"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/akira-toriyama/ridge/internal/board"
 )
 
+// editorDoneMsg is a $EDITOR exit, the buffer read back. A stale result is
+// one the record moved under (editorResult): body is not applied, and kept
+// names the file the typed text was left in.
 type editorDoneMsg struct {
-	id   string
-	body string
-	err  error
+	id    string
+	body  string
+	err   error
+	stale bool
+	kept  string
 }
 
 // applyEditorBody lands a $EDITOR result: the optimistic local apply plus
@@ -19,6 +25,15 @@ type editorDoneMsg struct {
 // window (model.go: heldBody) replays through the same path. The id names a
 // task or a box (furrow's edit takes either); the box's half is SetEpicBody.
 func (m *Model) applyEditorBody(msg editorDoneMsg) tea.Cmd {
+	if msg.stale {
+		// Terminal for a flush the way the refusal below is. The re-read is
+		// owed now, as after any refusal that says the board is not the
+		// store's: the record moved, and the stage under the user shows the
+		// text the editor was handed.
+		m.quitting = false
+		m.fail("%s: the record changed while the editor was open — nothing written; your text is kept at %s (the board re-reads; e again to edit the moved record)", msg.id, msg.kept)
+		return m.reloadCmd("")
+	}
 	set := m.b.SetBody
 	if m.b.Epic(msg.id) != nil {
 		set = m.b.SetEpicBody
@@ -44,17 +59,36 @@ func (m *Model) applyEditorBody(msg editorDoneMsg) tea.Cmd {
 
 // editCmd suspends the TUI for $EDITOR on a task, the way furrow's `edit`
 // does.
-func (m *Model) editCmd(t *board.Task) tea.Cmd { return m.editBodyCmd(t.ID, t.Body) }
+func (m *Model) editCmd(t *board.Task) tea.Cmd { return m.editBodyCmd(t.ID) }
 
-// editBodyCmd is editCmd over any body — a task's or a box's (the epic
-// overlay's body stage); the result lands through applyEditorBody either way.
-func (m *Model) editBodyCmd(id, body string) tea.Cmd {
+// editBodyCmd is editCmd over any record — a task's or a box's (the epic
+// overlay's body stage); the result lands through applyEditorBody either
+// way. The text handed to $EDITOR is the store's NOW (Provider.ReadBody),
+// not the loaded snapshot: a `furrow note` from another session between the
+// load and this key was otherwise replaced wholesale by the save, with no
+// word said (t-2wa3). The same read fences the save (editorResult). While
+// a write is in flight no read is fired — the board's rule for `r` and the
+// rm gate's: ridge's own queued note or body write leaves the file behind
+// the screen until it lands, so the editor opened without the paragraph
+// just typed and the save was then refused as stale (review finding, on
+// the real board: an `a` followed by `e` inside the write's ~80ms).
+func (m *Model) editBodyCmd(id string) tea.Cmd {
+	if m.queueBusy() {
+		m.fail("%s: a write is still in flight — let it land, then e again", id)
+		return nil
+	}
+	prov := m.prov
+	base, err := prov.ReadBody(id)
+	if err != nil {
+		m.fail("%s: %v", id, err)
+		return nil
+	}
 	f, err := os.CreateTemp("", "furrow-poc-"+id+"-*.md")
 	if err != nil {
 		return func() tea.Msg { return editorDoneMsg{err: err} }
 	}
 	path := f.Name()
-	if _, err := f.WriteString(body); err != nil {
+	if _, err := f.WriteString(base); err != nil {
 		_ = f.Close()
 		return func() tea.Msg { return editorDoneMsg{err: err} }
 	}
@@ -70,11 +104,28 @@ func (m *Model) editBodyCmd(id, body string) tea.Cmd {
 		ed = "vi"
 	}
 	return tea.ExecProcess(exec.Command(ed, path), func(runErr error) tea.Msg { //nolint:gosec // G204: launching $EDITOR on our own temp file IS the feature
-		defer func() { _ = os.Remove(path) }()
-		if runErr != nil {
-			return editorDoneMsg{id: id, err: runErr}
-		}
-		b, err := os.ReadFile(path) //nolint:gosec // path is the CreateTemp file made above
-		return editorDoneMsg{id: id, body: string(b), err: err}
+		return editorResult(prov, id, base, path, runErr)
 	})
+}
+
+// editorResult is the $EDITOR exit: the buffer read back, fenced against a
+// record that moved while the editor held it — the store's record no longer
+// reads as base, or is gone. The temp file is removed except on that
+// refusal, where it is the only copy of the typed text. Runs on the process
+// callback, off the UI thread: prov is the Provider, never the model.
+func editorResult(prov board.Provider, id, base, path string, runErr error) editorDoneMsg {
+	if runErr != nil {
+		_ = os.Remove(path)
+		return editorDoneMsg{id: id, err: runErr}
+	}
+	b, err := os.ReadFile(path) //nolint:gosec // path is the CreateTemp file made above
+	if err != nil {
+		_ = os.Remove(path)
+		return editorDoneMsg{id: id, err: err}
+	}
+	if cur, err := prov.ReadBody(id); err != nil || cur != base {
+		return editorDoneMsg{id: id, body: string(b), stale: true, kept: path}
+	}
+	_ = os.Remove(path)
+	return editorDoneMsg{id: id, body: string(b)}
 }
