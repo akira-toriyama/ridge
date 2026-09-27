@@ -523,6 +523,45 @@ func (m *Model) enterRoadDue() tea.Cmd {
 	return m.enterDueDirect(t)
 }
 
+// roadAfterDue re-lays the timeline around a due the direct input just wrote
+// (applyDueDirect) — eagerly, as cycleRoadZoom does, because the next frame's
+// pack would otherwise be walked as the old one. A task still dated keeps the
+// cursor, and the window pans to its ◆ (roadEnsureX: a date moved is the
+// selection's X moved, the same event the moving keys raise). A due cleared
+// takes the row off the timeline: the cursor lands on the row that followed
+// it — or preceded it at the end — never on the top, which reads as an
+// unasked-for scroll (glossary, "band"), and the note says the row left.
+func (m *Model) roadAfterDue(id string) {
+	old := m.road.lay
+	l := m.buildRoad()
+	m.road.lay = l
+	if l.Row(id) != nil {
+		m.road.sel = id
+		m.roadEnsureX()
+		return
+	}
+	next := ""
+	if old != nil {
+		for _, dy := range []int{+1, -1} {
+			if n := old.step(id, dy); n != id && l.Row(n) != nil {
+				next = n
+				break
+			}
+		}
+	}
+	if next != "" {
+		m.road.sel = next
+	} else {
+		m.clampRoadSel(l)
+	}
+	m.roadEnsureX()
+	if m.road.sel == "" {
+		m.note("due %s cleared — the row left the timeline, and no dated task is left", id)
+		return
+	}
+	m.note("due %s cleared — the row left the timeline; the cursor is on %s", id, m.road.sel)
+}
+
 // cycleRoadZoom flips day → week → month → day. Unlike a scope toggle it
 // rebuilds the layout EAGERLY: the axis changes units under the window, so
 // the old offset means nothing and the new one must be derived from the new
@@ -561,8 +600,10 @@ func (m *Model) cycleRoadZoom() {
 }
 
 // onRoadKey is the roadmap's whole keyboard surface. Like the map it is a
-// reading tool: nothing here writes to the board — the task defers the
-// due-editing drag until the read-only form has proven its worth.
+// reading tool, with one write: RoadDue hands the row to the edit overlay's
+// due input (enterRoadDue), and the overlay owns the write from there. The
+// due-editing drag stays deferred until the view has proven its worth
+// (t-7t28).
 func (m *Model) onRoadKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
 	case key.Matches(msg, m.keys.RoadDue):

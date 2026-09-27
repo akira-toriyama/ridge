@@ -179,9 +179,14 @@ in due order, with `◆` placed on a time axis.** The view that answers "what
 expires when" — the timeline form of `furrow brief`'s due head and
 `-q is:overdue` (glossary: "Roadmap", "zoom").
 `z` cycles day / week / month, `h`/`l` pan the window. `⏎`/`m` on a row opens
-the field edit menu's due input directly — seeded with the row's date, the
-same `+1d` forms, empty clears — and closes it on apply or `esc`; the row
-moves to its new date under the cursor. Headless: `-demo roaddue`.
+the field edit menu's due input directly, seeded with the row's date, and
+closes it on apply or `esc`. The forms are the menu's (`+1d` counts from now,
+not from the row's date); empty clears, unless the task repeats — furrow
+keeps a due under a rule, and the refusal stays beside the typed form in the
+input, as does a form the grammar rejects. After the apply the timeline
+re-lays with the row on its new date and the window panned to its `◆`; a
+cleared due takes the row off the timeline and the cursor lands on its
+neighbour. Headless: `-demo roaddue`.
 
 `ridge -roadmap` opens the real board in this view. Headless: `-dump -roadmap`
 (day) and `-demo roadmapweek` / `-demo roadmapmonth`.

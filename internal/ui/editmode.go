@@ -104,11 +104,8 @@ type editState struct {
 	editShell
 	// rm is the delete row's gate (rmgate.go), reset each time the row opens.
 	rm rmState
-	// direct marks an overlay opened straight onto a text input with no
-	// menu behind it (enterDueDirect, from the roadmap): the apply and esc
-	// close the overlay instead of landing in a menu the user never saw —
-	// the note input's own rule (enterNote), which predates the flag and
-	// keeps its case.
+	// direct: opened straight onto a text input, no menu behind it
+	// (enterNote, enterDueDirect) — the apply and esc close the overlay.
 	direct bool
 }
 
@@ -169,7 +166,7 @@ func (m *Model) enterNote() tea.Cmd {
 		return nil
 	}
 	m.cancelDrag()
-	m.edit = &editState{editShell: editShell{id: t.ID, stage: stageInput, input: newOverlayInput()}}
+	m.edit = &editState{editShell: editShell{id: t.ID, stage: stageInput, input: newOverlayInput()}, direct: true}
 	m.mode = modeEdit
 	m.peekOpen = true
 	m.syncPeek()
@@ -191,6 +188,28 @@ func dueSeed(t *board.Task) string {
 		return ""
 	}
 	return t.Due.In(board.Zone()).Format("2006-01-02")
+}
+
+// applyDueDirect is the direct input's apply (enterDueDirect): the same
+// funnel as the menu's due row, then the overlay closes — except on the
+// LOCAL refusal (a form ParseDue rejects, a due a rule must keep), where the
+// typed text stays in the re-focused input beside the refusal, the note
+// input's rule — and the roadmap, when it is the view, re-lays around the
+// new date (roadAfterDue).
+func (m *Model) applyDueDirect(t *board.Task, v string) tea.Cmd {
+	e := m.edit
+	cmd := m.applyPatch("due", board.FieldPatch{Due: &v})
+	if m.statusErr {
+		// applyPatch's nil is ambiguous (a write queued behind an in-flight
+		// one is nil too); the refusal is the status row's state.
+		e.stage = stageInput
+		return e.input.Focus()
+	}
+	m.exitEdit()
+	if m.view == viewRoadmap {
+		m.roadAfterDue(t.ID)
+	}
+	return cmd
 }
 
 // enterDueDirect opens the overlay straight onto the due input for t — the
@@ -241,8 +260,6 @@ func (m *Model) noteEditStage() {
 		}
 	case stageInput:
 		if e.direct {
-			// No menu behind the input: esc closes, and "back" would
-			// promise a stage the overlay does not have.
 			m.note("edit %s · %s — ⏎ apply · esc closes", e.id, inputTitleFor(e.inputFor))
 			return
 		}
@@ -533,11 +550,8 @@ func (m *Model) onEditInputCancel(k inputKind) {
 		return
 	case inputTitle, inputDue, inputRepeat:
 		if e.direct {
-			// Opened straight onto the input (enterDueDirect): no menu
-			// behind it to land in, so esc closes the overlay, as the
-			// note's does.
 			m.exitEdit()
-			m.note("%s unchanged", inputTitleFor(k))
+			m.note("edit %s · %s unchanged", e.id, inputTitleFor(k))
 			return
 		}
 		e.stage = stageMenu
@@ -562,14 +576,10 @@ func (m *Model) onEditInputCommit(k inputKind, v string, t *board.Task) tea.Cmd 
 		return m.applyPatch("retitle", board.FieldPatch{Title: &v})
 	case inputDue:
 		e.stage = stageMenu
-		cmd := m.applyPatch("due", board.FieldPatch{Due: &v})
 		if e.direct {
-			// No menu behind the input (enterDueDirect): the apply closes
-			// the overlay like the note's does — a refusal too, whose line
-			// stays on the status row, and ⏎ on the row reopens the input.
-			m.exitEdit()
+			return m.applyDueDirect(t, v)
 		}
-		return cmd
+		return m.applyPatch("due", board.FieldPatch{Due: &v})
 	case inputRepeat:
 		e.stage = stageMenu
 		return m.applyPatch("repeat", board.FieldPatch{Repeat: &v})
@@ -749,9 +759,7 @@ func (m *Model) editLayer() *lg.Layer {
 		body = m.renderEditList(t, inner, maxInt(1, m.h-overlayListChrome))
 	case stageInput:
 		foot := "⏎ apply · esc back"
-		if m.edit.direct || m.edit.inputFor == inputNote {
-			// No stage behind this input: esc closes the overlay
-			// (onEditInputCancel), and the key line must say so.
+		if m.edit.direct {
 			foot = "⏎ apply · esc closes"
 		}
 		body = m.renderOverlayInputFoot(inputTitleFor(m.edit.inputFor), m.edit.input, inner, foot)
