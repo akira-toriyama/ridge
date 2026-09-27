@@ -230,6 +230,12 @@ func (p *liveQueryProvider) SweepPreview() (board.Sweep, error) { return board.S
 func (p *liveQueryProvider) Archive([]string) error             { return nil }
 func (p *liveQueryProvider) Unarchive([]string) error           { return nil }
 func (p *liveQueryProvider) Tidy(board.TidyClass) error         { return nil }
+func (p *liveQueryProvider) Remove([]string, board.RemoveOptions) (board.RemoveReport, error) {
+	return board.RemoveReport{}, nil
+}
+func (p *liveQueryProvider) EpicRemove(string, board.RemoveOptions) (board.RemoveReport, error) {
+	return board.RemoveReport{}, nil
+}
 
 // The `b` (blocked-only) toggle does a raw string ReplaceAll on the query, so a
 // NEGATED is:blocked term leaves a stray "-" token behind.

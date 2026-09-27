@@ -603,6 +603,54 @@ func (m *Model) demoState(kind string) error {
 			return err
 		}
 
+	case "rm", "rmreferenced", "rmforce":
+		// The delete gate over the fixture's preview: on a task nothing
+		// points at (`rm`: ⏎ deletes), on the most-referenced one
+		// (`rmreferenced`: the summary, the edges, and ⏎ only arming), and
+		// with --force armed (`rmforce`: the second ⏎'s wording). The stage
+		// exists only between two keystrokes of a live overlay.
+		subj, err := m.demoRmTask(kind, kind != "rm")
+		if err != nil {
+			return err
+		}
+		if !m.selectID(subj.ID, false) {
+			return fmt.Errorf("demo %s: %s is on the board but not in view", kind, subj.ID)
+		}
+		m.enterEdit()
+		if m.edit == nil {
+			return fmt.Errorf("demo %s: the edit menu did not open", kind)
+		}
+		m.edit.menuIdx = int(fieldDelete)
+		if c := m.openField(fieldDelete, subj); c != nil {
+			_ = c
+		}
+		if m.edit.rm.report == nil {
+			return fmt.Errorf("demo %s: the fixture's preview did not land: %s", kind, m.edit.rm.err)
+		}
+		if kind == "rmforce" {
+			m.edit.rm.armed = true
+			m.noteRmGate(&m.edit.rm)
+		}
+
+	case "epicrm":
+		// The box's delete gate on a box something references — members,
+		// on the fixture — so the frame carries furrow's member list and the
+		// arm step, which an unreferenced box would never show.
+		box, err := m.demoRmBox("epicrm")
+		if err != nil {
+			return err
+		}
+		if err := m.demoEpicPanel("epicrm", box.ID); err != nil {
+			return err
+		}
+		m.epic.menuIdx = int(epicFieldDelete)
+		if c := m.openEpicField(epicFieldDelete, m.b.Epic(box.ID)); c != nil {
+			_ = c
+		}
+		if m.epic.rm.report == nil {
+			return fmt.Errorf("demo epicrm: the fixture's preview did not land: %s", m.epic.rm.err)
+		}
+
 	case "synced":
 		// The sync's landing note. The fixture has no store to sync, so the
 		// report is canned — every branch of syncNote in one line, both id
@@ -1316,6 +1364,49 @@ func (m *Model) demoWaitingBox(demo string) (board.EpicInfo, error) {
 	return m.demoBox(demo, "is an open box parked until a due (furrow's waiting)", func(e board.EpicInfo) bool {
 		return e.Closed.IsZero() && !e.WaitUntil.IsZero()
 	})
+}
+
+// demoRmTask is the delete gate's subject: the first task the store's own
+// preview says nothing references, or the task it says the most things do.
+// The preview (the --force dry run, the gate's own read) is asked rather
+// than deps and bodies scanned here: what counts as a reference is furrow's,
+// and the fixture's preview mirrors it.
+func (m *Model) demoRmTask(demo string, referenced bool) (*board.Task, error) {
+	var best *board.Task
+	bestN := 0
+	for _, t := range m.b.Tasks() {
+		rep, err := m.prov.Remove([]string{t.ID}, board.RemoveOptions{Force: true})
+		if err != nil {
+			continue
+		}
+		n := rep.References.Count()
+		switch {
+		case !referenced && n == 0:
+			return t, nil
+		case referenced && n > bestN:
+			best, bestN = t, n
+		}
+	}
+	if best != nil {
+		return best, nil
+	}
+	if referenced {
+		return nil, fmt.Errorf("demo %s: no task on this board that something references (a dep edge or a [[link]])", demo)
+	}
+	return nil, fmt.Errorf("demo %s: no task on this board that nothing references", demo)
+}
+
+// demoRmBox is the first open box the store's preview says something
+// references — a member, a box's dep, a [[link]] — the shape on which the
+// box's delete gate has an arm step to show.
+func (m *Model) demoRmBox(demo string) (board.EpicInfo, error) {
+	for _, e := range m.b.Epics() {
+		rep, err := m.prov.EpicRemove(e.ID, board.RemoveOptions{Force: true})
+		if err == nil && !rep.References.Empty() {
+			return e, nil
+		}
+	}
+	return board.EpicInfo{}, fmt.Errorf("demo %s: no open box on this board that something references (a member, a box dep or a [[link]])", demo)
 }
 
 // demoClosedBox is the closed box the overlay has the most to show on — the

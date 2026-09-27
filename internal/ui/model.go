@@ -518,6 +518,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case sweepResultMsg:
 		m.onSweepResult(msg)
 
+	case rmPreviewMsg:
+		m.onRmPreview(msg)
+
 	case filterResultMsg:
 		m.onFilterResult(msg)
 

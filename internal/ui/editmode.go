@@ -39,6 +39,10 @@ const (
 	fieldRepos
 	fieldRefs
 	fieldChecklist
+	// Last on purpose, as the epic overlay's closed row is: its write is a
+	// withdrawal, so it must not sit where the cursor lands or where a
+	// mistyped ↓ reaches.
+	fieldDelete
 	fieldCount // one past the last menu row
 )
 
@@ -68,6 +72,8 @@ func editFieldName(f editField) string {
 		return "refs"
 	case fieldChecklist:
 		return "checklist"
+	case fieldDelete:
+		return "delete"
 	}
 	return ""
 }
@@ -91,7 +97,13 @@ const (
 	inputNote
 )
 
-type editState = overlayShell[editField, inputKind]
+type editShell = overlayShell[editField, inputKind]
+
+type editState struct {
+	editShell
+	// rm is the delete row's gate (rmgate.go), reset each time the row opens.
+	rm rmState
+}
 
 // editHooks is the task overlay's half of the stage machine: the shell walks
 // the stages, these say what each one does to the task under edit.
@@ -109,8 +121,13 @@ func (h editHooks) listRows() []string { return h.m.editListRows(h.t) }
 func (h editHooks) openField(f editField) tea.Cmd       { return h.m.openField(f, h.t) }
 func (h editHooks) listSelect(rows []string) tea.Cmd    { return h.m.editListSelect(h.t, rows) }
 func (h editHooks) listKey(msg tea.KeyPressMsg) tea.Cmd { return h.m.onEditListKey(msg, h.t) }
-func (h editHooks) gateKey(msg tea.KeyPressMsg) tea.Cmd { return h.m.onEditPickKey(msg) }
-func (h editHooks) inputCancel(k inputKind)             { h.m.onEditInputCancel(k) }
+func (h editHooks) gateKey(msg tea.KeyPressMsg) tea.Cmd {
+	if h.m.edit.field == fieldDelete {
+		return h.m.onRmGateKey(msg, &h.m.edit.rm)
+	}
+	return h.m.onEditPickKey(msg)
+}
+func (h editHooks) inputCancel(k inputKind) { h.m.onEditInputCancel(k) }
 func (h editHooks) inputCommit(k inputKind, v string) tea.Cmd {
 	return h.m.onEditInputCommit(k, v, h.t)
 }
@@ -124,7 +141,7 @@ func (m *Model) enterEdit() {
 		return
 	}
 	m.cancelDrag()
-	m.edit = &editState{id: t.ID, stage: stageMenu, input: newOverlayInput()}
+	m.edit = &editState{editShell: editShell{id: t.ID, stage: stageMenu, input: newOverlayInput()}}
 	m.mode = modeEdit
 	m.peekOpen = true
 	m.syncPeek()
@@ -145,7 +162,7 @@ func (m *Model) enterNote() tea.Cmd {
 		return nil
 	}
 	m.cancelDrag()
-	m.edit = &editState{id: t.ID, stage: stageInput, input: newOverlayInput()}
+	m.edit = &editState{editShell: editShell{id: t.ID, stage: stageInput, input: newOverlayInput()}}
 	m.mode = modeEdit
 	m.peekOpen = true
 	m.syncPeek()
@@ -178,6 +195,10 @@ func (m *Model) noteEditStage() {
 	}
 	switch e.stage {
 	case stageGate:
+		if e.field == fieldDelete {
+			m.noteRmGate(&e.rm)
+			return
+		}
 		m.note("edit %s · %s — 1-5 sets · 0 clears · esc back", e.id, editFieldName(e.field))
 	case stageList:
 		if e.field == fieldDeps || e.field == fieldRefs {
@@ -234,6 +255,9 @@ func (m *Model) openField(f editField, t *board.Task) tea.Cmd {
 	case fieldValue, fieldEffort:
 		e.stage = stageGate
 		m.noteEditStage()
+	case fieldDelete:
+		e.stage = stageGate
+		return m.openRmGate(&e.rm, rmTarget{id: t.ID})
 	case fieldDue:
 		cur := ""
 		if !t.Due.IsZero() {
@@ -668,6 +692,10 @@ func (m *Model) editLayer() *lg.Layer {
 	case stageMenu:
 		body = m.renderEditMenu(t, inner)
 	case stageGate:
+		if m.edit.field == fieldDelete {
+			body = m.renderRmGate(&m.edit.rm, t.Title, inner)
+			break
+		}
 		body = th.peekHdr.Render("set "+editFieldName(m.edit.field)) + "\n\n" +
 			pad("press 1-5 · 0 clears · esc back", inner)
 	case stageList:
@@ -762,6 +790,7 @@ func (m *Model) renderEditMenu(t *board.Task, inner int) string {
 		// summary joins on a middle dot — a comma here would read as a split.
 		{editFieldName(fieldRefs), strings.Join(t.Refs, " · ")},
 		{editFieldName(fieldChecklist), fmt.Sprintf("%d/%d", cd, ct)},
+		{editFieldName(fieldDelete), "furrow rm — withdraw the record"},
 	}
 	return m.renderOverlayMenu(rows, m.edit.menuIdx, inner)
 }

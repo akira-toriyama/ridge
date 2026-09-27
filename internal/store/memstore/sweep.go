@@ -28,8 +28,9 @@ func (p *Store) shape(b *board.Board) *board.Board {
 	p.mu.Lock()
 	archived := p.archived
 	pruned := p.pruned
+	removed := p.removed
 	p.mu.Unlock()
-	return shapeWith(b, archived, pruned)
+	return removeWith(shapeWith(b, archived, pruned), removed)
 }
 
 func shapeWith(b *board.Board, archived map[string]bool, pruned map[string]map[string]bool) *board.Board {

@@ -52,6 +52,9 @@ func TestDemoSubjectsAreTheFixtureRowsTheyWereWrittenFor(t *testing.T) {
 		{"demoActiveBox", "e-fw2m", box(m.demoActiveBox)},
 		{"demoClosedBox", "e-2b7h", box(m.demoClosedBox)},
 		{"demoWaitingBox", "e-m8kd", box(m.demoWaitingBox)},
+		{"demoRmTask unreferenced", "t-7wdg", task(func(d string) (*board.Task, error) { return m.demoRmTask(d, false) })},
+		{"demoRmTask referenced", "t-t38k", task(func(d string) (*board.Task, error) { return m.demoRmTask(d, true) })},
+		{"demoRmBox", "e-fw2m", box(m.demoRmBox)},
 		{"demoLabel", "bbq", str(m.demoLabel)},
 		{"demoRepo", "tomo/kyushu-trip", str(m.demoRepo)},
 	} {
@@ -131,6 +134,8 @@ func TestDemoRefusalNamesTheMissingShape(t *testing.T) {
 		{"epicdoneparked", "parked in a terminal lane"},
 		{"boxeswaiting", "parked until a due"},
 		{"epicwaiting", "parked until a due"},
+		{"rmreferenced", "something references"},
+		{"epicrm", "something references"},
 		{"epicshut", "is closed"},
 		{"boxesall", "is closed"},
 		{"slice", "carries a label"},

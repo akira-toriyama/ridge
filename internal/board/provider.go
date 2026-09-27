@@ -123,9 +123,10 @@ type Provider interface {
 	// epic writes: store-first, NOT the Persist* contract
 	//
 	// The store-first members are exactly: Add, the eight Epic* methods
-	// below, and the three sweep writes (Archive, Unarchive, Tidy). Every
-	// other write is Persist*-shaped. (glossary.md points here for the list —
-	// a copy of it there once omitted two of the eight.)
+	// below, the three sweep writes (Archive, Unarchive, Tidy) and the two
+	// withdrawals (Remove, EpicRemove). Every other write is
+	// Persist*-shaped. (glossary.md points here for the list — a copy of it
+	// there once omitted two of the eight.)
 	//
 	// The Persist* family records a change the model already applied to the
 	// board on the UI thread. The epic family deliberately does not join it:
@@ -213,6 +214,25 @@ type Provider interface {
 	// whole class goes — furrow has no per-edge form — so the caller owes the
 	// user the count before the keystroke.
 	Tidy(class TidyClass) error
+
+	// the withdrawals: `furrow rm` / `furrow epic rm` (remove.go)
+	//
+	// Remove is `furrow rm <ids>`. Apply=false reads the preview — the dry
+	// run: the targets as they are, what still points at them, what happens
+	// to their assets. Apply=true deletes (`--yes`). Force is `--force`:
+	// on the apply it severs the references instead of furrow refusing over
+	// them; on the dry run it is what makes a referenced target answer at
+	// all — furrow refuses the plain dry run of one exactly as it refuses
+	// the plain apply (kind `referenced`, exit 2; measured on furrow dev
+	// 2026-09-27), so the gate reads its preview with Force set. Store-
+	// first. Never empty (ValidateSweepIDs). The report is furrow's, preview
+	// and apply alike; ridge re-derives none of it.
+	Remove(ids []string, o RemoveOptions) (RemoveReport, error)
+
+	// EpicRemove is `furrow epic rm <id>`, the same contract over one box:
+	// its references are its members, the boxes whose deps name it and the
+	// live [[e-…]] links in other bodies; Force unfiles, drops and de-links.
+	EpicRemove(id string, o RemoveOptions) (RemoveReport, error)
 }
 
 // RepeatReport is furrow's series report on a close — the `repeat` key of a
