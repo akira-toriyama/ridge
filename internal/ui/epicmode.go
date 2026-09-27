@@ -846,8 +846,8 @@ func (m *Model) renderEpicMenu(box *board.EpicInfo, inner int) string {
 	if box.Stuck {
 		derived += " · " + th.warn.Render("STUCK")
 	}
-	if w := boxWaiting(box); w != "" {
-		derived += " · " + w
+	if wait := boxWaiting(box); wait != "" {
+		derived += " · " + wait
 	}
 	return th.muted.Render(pad(derived, inner)) + "\n\n" +
 		m.renderOverlayMenu(rows, m.epic.menuIdx, inner)

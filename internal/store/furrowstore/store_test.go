@@ -249,7 +249,7 @@ func TestContractPersistDoneCheckBody(t *testing.T) {
 // machines' newness checks missed body edits (t-t9ac).
 //
 // bite-exempt: execs a real furrow binary and always skips where furrow is not
-// on PATH — which is CI, so the gate can never judge it there
+// on PATH — which is CI's bite job, so the gate can never judge it there
 func TestContractPersistBodyAdvancesUpdated(t *testing.T) {
 	p, dir := newLabProvider(t)
 	id := labAdd(t, dir, "本文の対象")
@@ -295,7 +295,7 @@ func TestContractPersistBodyAdvancesUpdated(t *testing.T) {
 // the reconcile re-read lands.
 //
 // bite-exempt: execs a real furrow binary and always skips where furrow is not
-// on PATH — which is CI, so the gate can never judge it there
+// on PATH — which is CI's bite job, so the gate can never judge it there
 func TestContractProgramMovesForReal(t *testing.T) {
 	p, dir := newLabProvider(t)
 	id := labAdd(t, dir, "動かす対象")
@@ -540,7 +540,7 @@ func TestContractAddMapsTheContext(t *testing.T) {
 // id it has to shrug about.
 //
 // bite-exempt: execs a real furrow binary and always skips where furrow is
-// not on PATH — which is CI, so the gate can never judge it there
+// not on PATH — which is CI's bite job, so the gate can never judge it there
 func TestContractEpicDepsReachTheSnapshot(t *testing.T) {
 	p, dir := newLabProvider(t)
 	labAdd(t, dir, "既存のタスク") // seeds lab/lab as a known repo
@@ -859,7 +859,7 @@ func TestLanesFromDropsTerminalLanesFromNext(t *testing.T) {
 // successor's id: it exists nowhere else until the re-read.
 //
 // bite-exempt: execs a real furrow binary and always skips where furrow is not
-// on PATH — which is CI's build job, so the gate can never judge it there
+// on PATH — which is CI's bite job, so the gate can never judge it there
 func TestContractRepeatRidesTheLoadAndBothCloses(t *testing.T) {
 	p, dir := newLabProvider(t)
 	id := labAdd(t, dir, "週次の締め", "--due", "2026-10-01", "--repeat", "weekly")
@@ -945,7 +945,7 @@ func TestContractRepeatRidesTheLoadAndBothCloses(t *testing.T) {
 // status is not reachable from this package, and the log is the same funnel.
 //
 // bite-exempt: execs a real furrow binary and always skips where furrow is not
-// on PATH — which is CI's build job, so the gate can never judge it there
+// on PATH — which is CI's bite job, so the gate can never judge it there
 func TestContractProgramClosesARepeatingTaskForReal(t *testing.T) {
 	p, dir := newLabProvider(t)
 	id := labAdd(t, dir, "閉じる対象", "--due", "2026-10-01", "--repeat", "weekly")
@@ -1013,7 +1013,7 @@ func TestZoneOfLoadsAnIANANameAndFallsBackToTheProcessZone(t *testing.T) {
 // IS it — so the day ridge renders is the day furrow prints.
 //
 // bite-exempt: execs a real furrow binary and always skips where furrow is not
-// on PATH — which is CI, so the gate can never judge it there
+// on PATH — which is CI's bite job, so the gate can never judge it there
 func TestContractBoardCalendarComesFromDueTimezone(t *testing.T) {
 	p, dir := newLabProvider(t)
 	t.Cleanup(board.SetClock(nil, func() *time.Location { return nil }))
@@ -1067,7 +1067,7 @@ func TestSyncProgressDecodesIntoTheReport(t *testing.T) {
 // pending instead.
 //
 // bite-exempt: execs a real furrow binary and always skips where furrow is not
-// on PATH — which is CI, so the gate can never judge it there
+// on PATH — which is CI's bite job, so the gate can never judge it there
 func TestContractSyncPublishesTheBodiesRidgeWrote(t *testing.T) {
 	p, dir := newLabProvider(t)
 	remote := t.TempDir()
@@ -1175,7 +1175,7 @@ func sp(s string) *string { return &s }
 // as kind validation, which is how the UI's rollback names them.
 //
 // bite-exempt: execs a real furrow binary and always skips where furrow is not
-// on PATH — which is CI's build job, so the gate can never judge it there
+// on PATH — which is CI's bite job, so the gate can never judge it there
 func TestContractRepeatEditsAreSetRepeatAndClearRepeat(t *testing.T) {
 	p, dir := newLabProvider(t)
 	id := labAdd(t, dir, "締めの確認", "--due", "2026-10-02")

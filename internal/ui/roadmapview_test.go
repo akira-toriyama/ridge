@@ -39,7 +39,7 @@ func roadModel(t *testing.T, w, h int) *Model {
 // fifth is the parked t-w7ne: the timeline draws every due furrow would still
 // show (a parked lane drops the alarm, not the date), which is also the due
 // its box waits until.
-func TestRoadmapRowsAreTheDatedOpenTasksInDueOrder(t *testing.T) {
+func TestRoadmapRowsAreTheDatedTasksNotDoneInDueOrder(t *testing.T) {
 	m := roadModel(t, 240, 40)
 	l := m.road.lay
 	want := []string{"t-jv3j", "t-ehk7", "t-p7xw", "t-9sa6", "t-w7ne"}

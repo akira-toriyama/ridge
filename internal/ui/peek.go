@@ -87,17 +87,17 @@ func (m *Model) peekContent(w int) string {
 	box := m.b.Epic(t.Epic) // nil for an unfiled task, or a membership no read resolves
 	if t.Epic != "" {
 		label := t.Epic
-		if e := box; e != nil {
+		if box != nil {
 			// Progress before the title, like the dep lines below: the
 			// numbers must survive a CJK title's ellipsis.
-			label = fmt.Sprintf("%s (%d/%d) %s", t.Epic, e.Done, e.Total, e.Title)
-			if e.Stuck {
+			label = fmt.Sprintf("%s (%d/%d) %s", t.Epic, box.Done, box.Total, box.Title)
+			if box.Stuck {
 				label += " " + th.warn.Render("STUCK")
 			}
 			// furrow lints an open task under a closed box (epic-closed), and
 			// the --all read is what lets ridge say so instead of rendering it
 			// as an ordinary membership.
-			if !e.Closed.IsZero() {
+			if !box.Closed.IsZero() {
 				label += " " + th.dim.Render("(closed)")
 			}
 		}
@@ -111,8 +111,8 @@ func (m *Model) peekContent(w int) string {
 		// fact about the task under peek — on the carrier's own peek it sits
 		// directly above that task's due line.
 		if box != nil {
-			if w := boxWaiting(box); w != "" {
-				meta2 = append(meta2, "epic "+w)
+			if wait := boxWaiting(box); wait != "" {
+				meta2 = append(meta2, "epic "+wait)
 			}
 		}
 	}
@@ -129,13 +129,13 @@ func (m *Model) peekContent(w int) string {
 	// instead — so it stays here rather than moving into the classifier.
 	//
 	// The words, and why each is the one furrow uses, are in epicfacts.go.
-	if e := box; e != nil && len(e.OpenDeps) > 0 {
-		open := make(map[string]bool, len(e.OpenDeps))
-		for _, d := range e.OpenDeps {
+	if box != nil && len(box.OpenDeps) > 0 {
+		open := make(map[string]bool, len(box.OpenDeps))
+		for _, d := range box.OpenDeps {
 			open[d] = true
 		}
 		parts := []string{"epic waits on"}
-		for _, d := range e.Deps {
+		for _, d := range box.Deps {
 			de := m.b.Epic(d)
 			switch epicDepStateOf(de, open[d]) {
 			case epicDepMissing:

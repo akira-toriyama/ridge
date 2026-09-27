@@ -141,8 +141,8 @@ func (m *Model) boxMeta(e *board.EpicInfo, full bool) []string {
 	if e.Stuck {
 		meta = append(meta, th.warn.Render("STUCK"))
 	}
-	if w := boxWaiting(e); w != "" {
-		meta = append(meta, w)
+	if wait := boxWaiting(e); wait != "" {
+		meta = append(meta, wait)
 	}
 	if !full {
 		if n := len(e.OpenDeps); n > 0 {

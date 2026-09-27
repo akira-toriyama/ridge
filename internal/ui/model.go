@@ -67,7 +67,7 @@ const (
 	// rows are epics rather than tasks. The other three answer questions about
 	// work; this one answers "what is each repo working out of".
 	viewBoxes
-	// viewRoadmap is the ROADMAP — full-screen, the open tasks that carry a
+	// viewRoadmap is the ROADMAP — full-screen, the tasks not done that carry a
 	// due placed on one time axis. The others answer "what and in which
 	// order"; this one answers "by when".
 	viewRoadmap
@@ -355,7 +355,7 @@ func (m *Model) reload() {
 // recompute rebuilds the derived graph and the filtered columns, then clamps
 // every cursor — and cancels a drag whose card left the lane it was grabbed
 // in (dropDragIfCardLeftLane), the least obvious of its jobs. Called after
-// any mutation: with 34 tasks it is free, and it removes a whole class of
+// any mutation: with 36 tasks it is free, and it removes a whole class of
 // stale-index bugs.
 func (m *Model) recompute() {
 	m.g = board.NewGraph(m.b)

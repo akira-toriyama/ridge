@@ -12,7 +12,7 @@ import (
 	"github.com/akira-toriyama/ridge/internal/board"
 )
 
-// The ROADMAP view: every open promise on one time axis. roadmap.go decided
+// The ROADMAP view: every due not done on one time axis. roadmap.go decided
 // the geometry; this file paints it.
 //
 // The identity pane on the left is fixed and the TIMELINE is the negotiated
@@ -482,7 +482,7 @@ func (m *Model) startRoadmapFrom(seed string) string {
 			if was.Due.IsZero() {
 				return fmt.Sprintf("roadmap — %s carries no due, so the cursor went to the first promise · z zoom · esc returns", was.ID)
 			}
-			return fmt.Sprintf("roadmap — %s is done, so the cursor went to the first open promise · z zoom · esc returns", was.ID)
+			return fmt.Sprintf("roadmap — %s is done, so the cursor went to the first due not done · z zoom · esc returns", was.ID)
 		}
 	}
 	return ""
@@ -493,7 +493,7 @@ func (m *Model) openRoadmap() {
 		m.note("%s", s)
 		return
 	}
-	m.note("roadmap — every open task with a due, on one time axis · z zoom · h/l pan · esc returns")
+	m.note("roadmap — every due not done, on one time axis · z zoom · h/l pan · esc returns")
 }
 
 // closeRoadmap returns to the board, landing the board cursor on the row the

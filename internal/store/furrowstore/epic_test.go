@@ -308,7 +308,7 @@ func TestContractEpicDepAddAndRm(t *testing.T) {
 // test move together.
 //
 // bite-exempt: execs a real furrow binary and always skips where furrow is not
-// on PATH (the contract job installs the pinned release, so CI runs it there)
+// on PATH — which is CI's bite job, so the gate can never judge it there
 func TestContractEpicDoneAndReopenRoundTrip(t *testing.T) {
 	p, dir := newLabProvider(t)
 	labAdd(t, dir, "既存のタスク") // seeds lab/lab as a known repo
@@ -405,10 +405,11 @@ func TestEpicDoneEnvelopeKeepsNullAndEmptyOpenMembersApart(t *testing.T) {
 // `epic ls --json` carries waiting {until, task} once no member is open and a
 // member parked in a due-tracked lane has a due still ahead — the `waiting`
 // lane on the shipped config, where icebox sits in [due].ignore_lanes and
-// counts for nothing. ridge copies the pair and never re-derives it.
+// counts for nothing, and "ahead" is the instant, not the day. ridge copies
+// the pair and never re-derives it; the four boxes seed the rule's every part.
 //
 // bite-exempt: execs a real furrow binary and always skips where furrow is not
-// on PATH (the contract job installs the pinned release, so CI runs it there)
+// on PATH — which is CI's bite job, so the gate can never judge it there
 func TestContractEpicWaitingReachesTheSnapshot(t *testing.T) {
 	p, dir := newLabProvider(t)
 	waits := labEpic(t, dir, "熟成を待つ箱", "lab/lab")
@@ -426,6 +427,10 @@ func TestContractEpicWaitingReachesTheSnapshot(t *testing.T) {
 	late := labAdd(t, dir, "待つ一枚", "-e", busy, "--due", "2027-03-31")
 	lab(t, dir, "furrow", "set", late, "-s", "waiting")
 
+	past := labEpic(t, dir, "due が過ぎた箱", "lab/lab")
+	gone := labAdd(t, dir, "過ぎた一枚", "-e", past, "--due", "2020-01-31")
+	lab(t, dir, "furrow", "set", gone, "-s", "waiting")
+
 	if err := p.Reload(); err != nil {
 		t.Fatal(err)
 	}
@@ -440,9 +445,9 @@ func TestContractEpicWaitingReachesTheSnapshot(t *testing.T) {
 	if e.Stuck {
 		t.Errorf("%s is waiting and must not also be stuck", waits)
 	}
-	for _, id := range []string{iced, busy} {
+	for _, id := range []string{iced, busy, past} {
 		if x := b.Epic(id); x == nil || !x.WaitUntil.IsZero() || x.WaitTask != "" {
-			t.Errorf("%s must not wait (%+v): icebox is due-ignored on the shipped config, and open work outranks a parked due", id, x)
+			t.Errorf("%s must not wait (%+v): icebox is due-ignored on the shipped config, open work outranks a parked due, and an arrived due is nothing to wait for", id, x)
 		}
 	}
 }
@@ -456,7 +461,7 @@ func TestContractEpicWaitingReachesTheSnapshot(t *testing.T) {
 // answers [], not null.
 //
 // bite-exempt: execs a real furrow binary and always skips where furrow is not
-// on PATH (the contract job installs the pinned release, so CI runs it there)
+// on PATH — which is CI's bite job, so the gate can never judge it there
 func TestContractEpicDoneDisclosesTheMembersLeftOpen(t *testing.T) {
 	p, dir := newLabProvider(t)
 	id := labEpic(t, dir, "開いたまま閉じる箱", "lab/lab")
