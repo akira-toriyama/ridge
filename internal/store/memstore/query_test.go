@@ -195,10 +195,10 @@ func TestQueryMatchesFixture(t *testing.T) {
 		{q: "no:label", min: 1},
 		{q: "no:repo", want: []string{"t-dg7k"}}, // exactly the fixture's one draft
 		{q: "is:draft", want: []string{"t-dg7k"}},
-		// Of the fixture's six dues, two are past the pinned clock and only
-		// t-jv3j (2026-07-31) is still open — t-2qyb (07-17) is closed, and a
-		// closed task is never overdue.
-		{q: "is:overdue", want: []string{"t-jv3j"}},
+		// Of the fixture's six dues, two are past the pinned clock: t-jv3j
+		// (2026-07-31), open, and t-2qyb (07-17), closed — furrow answers
+		// both (query.go says where that was measured).
+		{q: "is:overdue", want: []string{"t-2qyb", "t-jv3j"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.q, func(t *testing.T) {
@@ -731,11 +731,14 @@ func TestFlagKeysTakeOneValueLikeFurrow(t *testing.T) {
 	}
 }
 
-// is:overdue is "due in the past AND not closed" (furrow's meaning, the same
-// as ui's isOverdue). The fixture has no closed task with a due date, so the
-// closed clause was unpinned: dropping it failed nothing. A synthetic board,
-// not a fixture task — one added task breaks 21 tests elsewhere.
-func TestQueryIsOverdueExcludesAClosedTask(t *testing.T) {
+// is:overdue is the promise alone — "due in the past", closed or not —
+// which is what furrow answers (measured on dev 2026-09-27: 11 rows, 4 of
+// them closed). The mirror once excluded closed tasks, sharing ui's paint
+// predicate's meaning (furrow brief's due.overdue) instead of -q's, so a
+// fixture `-filter is:overdue` showed fewer rows than the real board would
+// (t-bkrw). A synthetic board, not a fixture task — one added task breaks
+// 21 tests elsewhere.
+func TestQueryIsOverdueIncludesAClosedTask(t *testing.T) {
 	at := time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)
 	t.Cleanup(board.SetClock(func() time.Time { return at }, nil))
 	past, future := at.Add(-24*time.Hour), at.Add(24*time.Hour)
@@ -750,7 +753,7 @@ func TestQueryIsOverdueExcludesAClosedTask(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Query refused: %v", err)
 	}
-	if ids(got...) != ids("t-late") {
-		t.Errorf("is:overdue = %v, want t-late alone — a closed task is not overdue", got)
+	if ids(got...) != ids("t-late", "t-shut") {
+		t.Errorf("is:overdue = %v, want t-late and t-shut — furrow answers the closed task too", got)
 	}
 }
