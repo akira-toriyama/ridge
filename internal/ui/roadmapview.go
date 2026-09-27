@@ -493,7 +493,7 @@ func (m *Model) openRoadmap() {
 		m.note("%s", s)
 		return
 	}
-	m.note("roadmap — every due not done, on one time axis · z zoom · h/l pan · esc returns")
+	m.note("roadmap — every due not done, on one time axis · ⏎ edits the due · z zoom · h/l pan · esc returns")
 }
 
 // closeRoadmap returns to the board, landing the board cursor on the row the
@@ -503,6 +503,24 @@ func (m *Model) closeRoadmap() {
 	m.view = viewBoard
 	m.carryCursorBack(m.road.moved, m.road.sel)
 	m.note("board view — the cursor followed the roadmap")
+}
+
+// enterRoadDue is ⏎/m on a row: the edit overlay opened straight onto the
+// due input for that task, the way enterNote opens it onto the note — the
+// roadmap is the due axis, so changing a date must not mean leaving it for
+// the board's menu (t-m5d5). The row is addressed by id, never through the
+// board cursor: the roadmap mutes what the filter hides rather than dropping
+// it, so its cursor is routinely on a task the board cols do not contain
+// (startRoadmapFrom). The apply and esc close the overlay (editState.direct),
+// and the next frame re-lays the timeline with the row on its new date, the
+// cursor still on it.
+func (m *Model) enterRoadDue() tea.Cmd {
+	t := m.b.Task(m.road.sel)
+	if t == nil {
+		m.note("roadmap — no dated task under the cursor to edit")
+		return nil
+	}
+	return m.enterDueDirect(t)
 }
 
 // cycleRoadZoom flips day → week → month → day. Unlike a scope toggle it
@@ -547,6 +565,8 @@ func (m *Model) cycleRoadZoom() {
 // due-editing drag until the read-only form has proven its worth.
 func (m *Model) onRoadKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
+	case key.Matches(msg, m.keys.RoadDue):
+		return m.enterRoadDue()
 	case key.Matches(msg, m.keys.RoadZoom):
 		m.cycleRoadZoom()
 

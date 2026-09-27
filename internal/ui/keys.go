@@ -114,6 +114,12 @@ type keyMap struct {
 	// in the graph, population in the map and the overview, calendar per
 	// cell here.
 	RoadZoom key.Binding
+	// RoadDue is ⏎/m on a roadmap row: the edit overlay opened straight
+	// onto the due input (enterRoadDue). keys.Move's pair, bound apart from
+	// it for the reason BoxSlice is bound apart from Commit: the help text
+	// is read as a claim about what the key does here, and "move mode" is
+	// not it.
+	RoadDue key.Binding
 
 	// The SWIMLANE's four keys. `W` is the opener — uppercase like every
 	// full-screen opener, and chosen by the same test `C` passed: `w` is unbound, so a missed shift does
@@ -257,6 +263,7 @@ func defaultKeys() keyMap {
 
 		Roadmap:  key.NewBinding(key.WithKeys("C"), key.WithHelp("C", "roadmap")),
 		RoadZoom: key.NewBinding(key.WithKeys("z"), key.WithHelp("z", "zoom day/week/month")),
+		RoadDue:  key.NewBinding(key.WithKeys("enter", "m"), key.WithHelp("⏎/m", "edit the due")),
 
 		Swim:      key.NewBinding(key.WithKeys("W"), key.WithHelp("W", "swimlane")),
 		SwimFold:  key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "fold/unfold band")),
@@ -346,7 +353,7 @@ func (k keyMap) HelpSections(enterEdits bool) []helpSection {
 		// view can BE — its title row carries the tabs, so its keys must too.
 		{"roadmap", [][]key.Binding{
 			{k.Up, k.Down, k.Left, k.Right},
-			{k.RoadZoom, k.Top, k.Bottom, k.PeekScroll},
+			{k.RoadDue, k.RoadZoom, k.Top, k.Bottom, k.PeekScroll},
 			{k.ViewTab, k.ViewSave},
 			{k.Roadmap, k.View, k.Cancel},
 		}},

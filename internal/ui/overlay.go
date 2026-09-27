@@ -250,9 +250,15 @@ func (m *Model) renderOverlayMenu(rows []menuRow, idx, inner int) string {
 // renderOverlayInput draws the input stage: the input's title, the input, and
 // its two keys.
 func (m *Model) renderOverlayInput(title string, input textinput.Model, inner int) string {
+	return m.renderOverlayInputFoot(title, input, inner, "⏎ apply · esc back")
+}
+
+// renderOverlayInputFoot is renderOverlayInput with the key line spelled by
+// the caller — an input with no stage behind it says "esc closes".
+func (m *Model) renderOverlayInputFoot(title string, input textinput.Model, inner int, foot string) string {
 	th := m.th
 	return th.peekHdr.Render(title) + "\n\n" +
-		input.View() + "\n" + th.dim.Render(pad("⏎ apply · esc back", inner))
+		input.View() + "\n" + th.dim.Render(pad(foot, inner))
 }
 
 // overlayListChrome is every line of the list stage that is NOT a row: the

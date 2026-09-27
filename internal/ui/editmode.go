@@ -104,6 +104,12 @@ type editState struct {
 	editShell
 	// rm is the delete row's gate (rmgate.go), reset each time the row opens.
 	rm rmState
+	// direct marks an overlay opened straight onto a text input with no
+	// menu behind it (enterDueDirect, from the roadmap): the apply and esc
+	// close the overlay instead of landing in a menu the user never saw —
+	// the note input's own rule (enterNote), which predates the flag and
+	// keeps its case.
+	direct bool
 }
 
 // editHooks is the task overlay's half of the stage machine: the shell walks
@@ -175,6 +181,29 @@ func (m *Model) exitEdit() {
 	m.edit = nil
 }
 
+// dueHint is the due input's placeholder: the forms ParseDue takes.
+const dueHint = "2026-08-04 · +1d · +2h · empty clears"
+
+// dueSeed is the due input's opening value: the task's due as a
+// board-calendar day, "" when it carries none.
+func dueSeed(t *board.Task) string {
+	if t.Due.IsZero() {
+		return ""
+	}
+	return t.Due.In(board.Zone()).Format("2006-01-02")
+}
+
+// enterDueDirect opens the overlay straight onto the due input for t — the
+// roadmap's ⏎ (enterRoadDue). No menu is behind the input, so the apply and
+// esc close the overlay (editState.direct).
+func (m *Model) enterDueDirect(t *board.Task) tea.Cmd {
+	m.fullHelp = false // a modal never inherits the `?` overlay (enterEpic)
+	m.cancelDrag()
+	m.edit = &editState{editShell: editShell{id: t.ID, stage: stageInput, input: newOverlayInput()}, direct: true}
+	m.mode = modeEdit
+	return m.edit.startInput(editHooks{m, t}, inputDue, dueSeed(t), dueHint)
+}
+
 // noteEditStage keeps the bottom row true as the overlay moves between stages.
 // enterEdit wrote it once and nothing re-wrote it, so every sub-editor still
 // advertised "⏎ pick a field · esc closes" — while in stageList ⏎ was toggling
@@ -211,6 +240,12 @@ func (m *Model) noteEditStage() {
 			m.note("edit %s · %s — ⏎/x toggle · esc back", e.id, editFieldName(e.field))
 		}
 	case stageInput:
+		if e.direct {
+			// No menu behind the input: esc closes, and "back" would
+			// promise a stage the overlay does not have.
+			m.note("edit %s · %s — ⏎ apply · esc closes", e.id, inputTitleFor(e.inputFor))
+			return
+		}
 		m.note("edit %s · %s — ⏎ apply · esc back", e.id, inputTitleFor(e.inputFor))
 	default:
 		m.note("edit %s — ⏎ pick a field · esc closes", e.id)
@@ -260,11 +295,7 @@ func (m *Model) openField(f editField, t *board.Task) tea.Cmd {
 		e.stage = stageGate
 		return m.openRmGate(&e.rm, rmTarget{id: t.ID})
 	case fieldDue:
-		cur := ""
-		if !t.Due.IsZero() {
-			cur = t.Due.In(board.Zone()).Format("2006-01-02")
-		}
-		return e.startInput(h, inputDue, cur, "2026-08-04 · +1d · +2h · empty clears")
+		return e.startInput(h, inputDue, dueSeed(t), dueHint)
 	case fieldRepeat:
 		if _, reason := repeatCell(t); reason != "" {
 			// The row already says so; an input that cannot land would only
@@ -501,6 +532,14 @@ func (m *Model) onEditInputCancel(k inputKind) {
 		m.note("note cancelled — nothing appended")
 		return
 	case inputTitle, inputDue, inputRepeat:
+		if e.direct {
+			// Opened straight onto the input (enterDueDirect): no menu
+			// behind it to land in, so esc closes the overlay, as the
+			// note's does.
+			m.exitEdit()
+			m.note("%s unchanged", inputTitleFor(k))
+			return
+		}
 		e.stage = stageMenu
 	default:
 		e.stage = stageList
@@ -523,7 +562,14 @@ func (m *Model) onEditInputCommit(k inputKind, v string, t *board.Task) tea.Cmd 
 		return m.applyPatch("retitle", board.FieldPatch{Title: &v})
 	case inputDue:
 		e.stage = stageMenu
-		return m.applyPatch("due", board.FieldPatch{Due: &v})
+		cmd := m.applyPatch("due", board.FieldPatch{Due: &v})
+		if e.direct {
+			// No menu behind the input (enterDueDirect): the apply closes
+			// the overlay like the note's does — a refusal too, whose line
+			// stays on the status row, and ⏎ on the row reopens the input.
+			m.exitEdit()
+		}
+		return cmd
 	case inputRepeat:
 		e.stage = stageMenu
 		return m.applyPatch("repeat", board.FieldPatch{Repeat: &v})
@@ -702,7 +748,13 @@ func (m *Model) editLayer() *lg.Layer {
 	case stageList:
 		body = m.renderEditList(t, inner, maxInt(1, m.h-overlayListChrome))
 	case stageInput:
-		body = m.renderOverlayInput(inputTitleFor(m.edit.inputFor), m.edit.input, inner)
+		foot := "⏎ apply · esc back"
+		if m.edit.direct || m.edit.inputFor == inputNote {
+			// No stage behind this input: esc closes the overlay
+			// (onEditInputCancel), and the key line must say so.
+			foot = "⏎ apply · esc closes"
+		}
+		body = m.renderOverlayInputFoot(inputTitleFor(m.edit.inputFor), m.edit.input, inner, foot)
 	}
 	return m.overlayLayer("edit", "edit "+t.ID, body)
 }
