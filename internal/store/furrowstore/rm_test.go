@@ -161,7 +161,8 @@ func TestContractEpicRemoveUnfilesMembersUnderForce(t *testing.T) {
 // on PATH — which is CI's bite job, so the gate can never judge it there
 func TestContractRemoveReportsTheAssetTransfer(t *testing.T) {
 	p, dir := newLabProvider(t)
-	if !strings.Contains(string(lab(t, dir, "furrow", "rm", "-h")), "references, assets}") {
+	help := strings.Join(strings.Fields(string(lab(t, dir, "furrow", "rm", "-h"))), " ")
+	if !strings.Contains(help, "references, assets}") {
 		t.Skip("this furrow's rm report carries no asset transfer (#345 is newer than v6.0.0)")
 	}
 	png := filepath.Join(t.TempDir(), "shot.png")

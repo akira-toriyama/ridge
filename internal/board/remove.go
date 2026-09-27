@@ -37,10 +37,15 @@ type RemovedTask struct {
 	Due    time.Time
 }
 
-// RemovedEpic is `epic rm`'s target as it was.
+// RemovedEpic is `epic rm`'s target as it was — Active as furrow reported
+// it at the read, because withdrawing the active box vacates its repo slot
+// and furrow says nothing about that (exit 0, empty stderr; measured on dev
+// 2026-09-27): the gate's one warning reads this, never the board, which
+// may be minutes staler than the report.
 type RemovedEpic struct {
-	ID    string
-	Title string
+	ID     string
+	Title  string
+	Active bool
 }
 
 // References is everything that still points at a target — what furrow

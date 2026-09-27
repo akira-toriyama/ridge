@@ -54,7 +54,7 @@ func (r rmJSON) toReport() board.RemoveReport {
 		rep.Tasks = append(rep.Tasks, board.RemovedTask{ID: t.ID, Title: t.Title, Repeat: t.Repeat, Due: fromPtr(t.Due)})
 	}
 	if r.Epic != nil {
-		rep.Epic = &board.RemovedEpic{ID: r.Epic.ID, Title: r.Epic.Title}
+		rep.Epic = &board.RemovedEpic{ID: r.Epic.ID, Title: r.Epic.Title, Active: r.Epic.Active}
 	}
 	for _, d := range r.References.Deps {
 		rep.References.Deps = append(rep.References.Deps, board.RefEdge{From: d.From, To: d.To})

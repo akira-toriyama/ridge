@@ -155,10 +155,19 @@ func TestEpicDeleteRowUnfilesMembersUnderForce(t *testing.T) {
 func TestAStalePreviewDoesNotLandOnAReopenedGate(t *testing.T) {
 	m := rmModel(t, "t-t38k")
 	first := m.edit.rm.seq
-	press(m, "esc")
+	// Out of the gate, out of the OVERLAY, and back in: the overlay's state
+	// (the gate's with it) is rebuilt by enterEdit, which is the reopen a
+	// per-gate counter survived at 1. esc to the menu alone kept the state
+	// and never reproduced the bug (found by the second review pass).
+	press(m, "esc", "esc")
+	if m.edit != nil {
+		t.Fatal("setup: two escs must close the overlay")
+	}
+	m.enterEdit()
+	m.edit.menuIdx = int(fieldDelete)
 	press(m, "enter")
-	if m.edit.rm.seq == first {
-		t.Fatalf("reopening the row must number a new read, got %d twice", first)
+	if m.edit == nil || m.edit.stage != stageGate || m.edit.rm.seq == first {
+		t.Fatalf("reopening the row must number a new read: first %d, now %+v", first, m.edit)
 	}
 	stale := rmPreviewMsg{target: rmTarget{id: "t-t38k"}, seq: first}
 	m.onRmPreview(stale)

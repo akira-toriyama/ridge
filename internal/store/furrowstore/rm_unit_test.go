@@ -103,3 +103,14 @@ func TestRmReplyIsHeldToTheCall(t *testing.T) {
 		t.Errorf("a box report naming another box: err = %v", err)
 	}
 }
+
+// The box's active flag rides the report (measured on dev 2026-09-27:
+// `epic.active: true` on the withdrawal of the active box), and the gate's
+// slot warning reads it from there.
+func TestEpicRmReplyCarriesTheActiveFlag(t *testing.T) {
+	p := cannedFurrow(t, `{"dry_run":true,"force":true,"epic":{"id":"e-x","title":"箱","active":true},"references":{"deps":[],"links":[],"members":[],"epic_deps":[]}}`)
+	rep, err := p.EpicRemove("e-x", board.RemoveOptions{Force: true})
+	if err != nil || rep.Epic == nil || !rep.Epic.Active || rep.Epic.Title != "箱" {
+		t.Errorf("report = %+v, %v — want the active box as furrow reported it", rep, err)
+	}
+}

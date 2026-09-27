@@ -155,7 +155,7 @@ func (p *Store) EpicRemove(id string, o board.RemoveOptions) (board.RemoveReport
 	if e == nil {
 		return board.RemoveReport{}, fmt.Errorf("unknown epic %q", id)
 	}
-	rep := board.RemoveReport{DryRun: !o.Apply, Force: o.Force, Epic: &board.RemovedEpic{ID: e.ID, Title: e.Title}}
+	rep := board.RemoveReport{DryRun: !o.Apply, Force: o.Force, Epic: &board.RemovedEpic{ID: e.ID, Title: e.Title, Active: e.Active}}
 	rep.References = referencesTo(b, map[string]bool{id: true})
 	if !rep.References.Empty() && !o.Force {
 		return board.RemoveReport{}, referencedErr(id, rep.References)

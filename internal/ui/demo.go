@@ -608,7 +608,9 @@ func (m *Model) demoState(kind string) error {
 		// points at (`rm`: ⏎ deletes), on the most-referenced one
 		// (`rmreferenced`: the summary, the edges, and ⏎ only arming), with
 		// --force armed (`rmforce`: the second ⏎'s wording), on a recurring
-		// task (`rmrepeat`: the series the removal ends), and the two
+		// task (`rmrepeat`: the series the removal ends — the fixture's two
+		// recurring tasks are both linked from a body, so this frame arms
+		// too; the series line and `⏎ deletes` never share a frame), and the two
 		// states only a live store reaches, canned onto the fixture's read
 		// the way `synced` cans its report: the read in flight (`rmwait`)
 		// and a refused read (`rmrefused`). Each exists only between two
@@ -1416,15 +1418,27 @@ func (m *Model) demoRmTask(demo string, referenced bool) (*board.Task, error) {
 	return nil, fmt.Errorf("demo %s: no task on this board that nothing references", demo)
 }
 
-// demoRmBox is the first open box the store's preview says something
-// references — a member, a box's dep, a [[link]] — the shape on which the
-// box's delete gate has an arm step to show.
+// demoRmBox is an open box the store's preview says something references —
+// a member, a box's dep, a [[link]] — the shape on which the box's delete
+// gate has an arm step to show; the ACTIVE one among those when there is
+// one, because its gate also carries the slot warning, so one frame proves
+// both lines.
 func (m *Model) demoRmBox(demo string) (board.EpicInfo, error) {
+	var first *board.EpicInfo
 	for _, e := range m.b.Epics() {
 		rep, err := m.prov.EpicRemove(e.ID, board.RemoveOptions{Force: true})
-		if err == nil && !rep.References.Empty() {
+		if err != nil || rep.References.Empty() {
+			continue
+		}
+		if e.Active {
 			return e, nil
 		}
+		if first == nil {
+			first = &e
+		}
+	}
+	if first != nil {
+		return *first, nil
 	}
 	return board.EpicInfo{}, fmt.Errorf("demo %s: no open box on this board that something references (a member, a box dep or a [[link]])", demo)
 }

@@ -24,10 +24,12 @@ import (
 // The write is store-first (glossary): the overlay closes on the keystroke,
 // the card or row stays until the write lands and the board re-reads, and the
 // landing note carries what the apply reported — references severed, a series
-// ended, assets kept. A refusal after the preview (a reference that appeared
-// in between) is furrow's own message on the status line — which names a
-// body by its file path where the gate named it by id — and the preview is
-// re-read by reopening the row.
+// ended, assets kept. A refusal after the preview — a reference that
+// appeared in between, or a target another writer dropped (a miss, exit 1)
+// — is furrow's own message on the status line, which names a body by its
+// file path where the gate named it by id; the preview is re-read by
+// reopening the row, and a dropped target closes the overlay at the next
+// re-read (editTask).
 //
 // The gate's states and their headless frames (-demo): nothing points at it
 // (rm), referenced and disarmed (rmreferenced), armed (rmforce), a series
@@ -346,11 +348,12 @@ func (m *Model) renderRmGate(st *rmState, title string, inner int) string {
 				line(l, th.muted.Render)
 			}
 		}
-		if box := m.b.Epic(st.target.id); st.target.epic && box != nil && box.Active {
+		if rep.Epic != nil && rep.Epic.Active {
 			// furrow withdraws the active box at exit 0 with no word about
 			// the slot (measured on dev 2026-09-27), so this line is the
 			// whole warning — the overlay's rule that a precondition is
-			// stated before the press, not after.
+			// stated before the press, not after. Off the report, not the
+			// board: the board may be minutes staler than the read.
 			line("This is the ACTIVE box: withdrawing it vacates its repo slot, and furrow says nothing about that.", th.warn.Render)
 		}
 		if n, k := len(rep.Assets.Deleted), len(rep.Assets.Kept); n > 0 || k > 0 {
@@ -376,7 +379,10 @@ func rmFooter(st *rmState) string {
 	case st.report.References.Empty():
 		return "⏎ deletes · esc backs out"
 	case !st.armed:
-		return fmt.Sprintf("⏎ arms --force (severs all %d) · esc backs out", st.report.References.Count())
+		if n := st.report.References.Count(); n > 1 {
+			return fmt.Sprintf("⏎ arms --force (severs all %d) · esc backs out", n)
+		}
+		return "⏎ arms --force (severs the one reference) · esc backs out"
 	}
 	return fmt.Sprintf("⏎ severs %d reference(s) and deletes · esc backs out", st.report.References.Count())
 }
