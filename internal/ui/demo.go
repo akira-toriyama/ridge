@@ -893,6 +893,33 @@ func (m *Model) demoState(kind string) error {
 			return fmt.Errorf("demo swimall: z did not widen the scope")
 		}
 
+	case "roaddue":
+		// The edit overlay's due input opened from a roadmap row (⏎): the
+		// one write the timeline has, drawn over the timeline. Driven
+		// through the real key handlers so the frame also proves ⏎ is
+		// bound there (the epicnew trap).
+		if c := m.onNormalKey(tea.KeyPressMsg{Code: 'C', Text: "C"}); c != nil {
+			_ = c
+		}
+		if m.view != viewRoadmap {
+			return fmt.Errorf("demo roaddue: C did not open the roadmap")
+		}
+		// On a row whose due CAN be cleared — a task carrying no rule —
+		// so the frame documents the input's whole grammar; the opening
+		// cursor's row (t-ehk7 on the fixture) repeats.
+		for _, r := range m.road.lay.Rows {
+			if tk := m.b.Task(r.ID); tk != nil && tk.Repeat == "" {
+				m.road.sel = r.ID
+				break
+			}
+		}
+		if c := m.onRoadKey(tea.KeyPressMsg{Code: tea.KeyEnter}); c != nil {
+			_ = c
+		}
+		if m.edit == nil || m.edit.stage != stageInput || m.edit.inputFor != inputDue {
+			return fmt.Errorf("demo roaddue: no dated task under the roadmap's cursor to open the due input on")
+		}
+
 	case "roadmapweek":
 		// The week axis: a month compresses to ~4 cells, so this frame proves
 		// the sparse labels and ◆s sharing cells they did not share at day

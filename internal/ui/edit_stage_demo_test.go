@@ -131,7 +131,7 @@ func TestNoteDemoSeedsTheFocusedInput(t *testing.T) {
 	if !strings.Contains(promptLines[0], "2案目から。") {
 		t.Errorf("the input line lost the seeded tail: %q", promptLines[0])
 	}
-	for _, want := range []string{"edit t-9sa6", "append note — one paragraph onto the body", "⏎ apply · esc back"} {
+	for _, want := range []string{"edit t-9sa6", "append note — one paragraph onto the body", "⏎ apply · esc closes"} {
 		if !strings.Contains(frame, want) {
 			t.Errorf("-demo note: %q is missing from the frame", want)
 		}

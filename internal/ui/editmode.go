@@ -104,6 +104,9 @@ type editState struct {
 	editShell
 	// rm is the delete row's gate (rmgate.go), reset each time the row opens.
 	rm rmState
+	// direct: opened straight onto a text input, no menu behind it
+	// (enterNote, enterDueDirect) — the apply and esc close the overlay.
+	direct bool
 }
 
 // editHooks is the task overlay's half of the stage machine: the shell walks
@@ -163,7 +166,7 @@ func (m *Model) enterNote() tea.Cmd {
 		return nil
 	}
 	m.cancelDrag()
-	m.edit = &editState{editShell: editShell{id: t.ID, stage: stageInput, input: newOverlayInput()}}
+	m.edit = &editState{editShell: editShell{id: t.ID, stage: stageInput, input: newOverlayInput()}, direct: true}
 	m.mode = modeEdit
 	m.peekOpen = true
 	m.syncPeek()
@@ -173,6 +176,53 @@ func (m *Model) enterNote() tea.Cmd {
 func (m *Model) exitEdit() {
 	m.mode = modeNormal
 	m.edit = nil
+}
+
+// dueHint is the due input's placeholder: the forms ParseDue takes.
+const dueHint = "2026-08-04 · +1d · +2h · empty clears"
+
+// dueSeed is the due input's opening value: the task's due as a
+// board-calendar day, "" when it carries none.
+func dueSeed(t *board.Task) string {
+	if t.Due.IsZero() {
+		return ""
+	}
+	return t.Due.In(board.Zone()).Format("2006-01-02")
+}
+
+// applyDueDirect is the direct input's apply (enterDueDirect): the same
+// funnel as the menu's due row, then the overlay closes — except on the
+// LOCAL refusal (a form ParseDue rejects, a due a rule must keep), where the
+// typed text stays in the re-focused input beside the refusal, the note
+// input's rule — and the roadmap, when it is the view, re-lays around the
+// new date (roadAfterDue).
+func (m *Model) applyDueDirect(t *board.Task, v string) tea.Cmd {
+	e := m.edit
+	cmd := m.applyPatch("due", board.FieldPatch{Due: &v})
+	if m.statusErr {
+		// applyPatch's nil is ambiguous (a write queued behind an in-flight
+		// one is nil too); the refusal is the status row's state.
+		e.stage = stageInput
+		return e.input.Focus()
+	}
+	m.exitEdit()
+	// Defensive: the roadmap is enterDueDirect's one caller and the input
+	// consumes every key, so the view cannot have changed underneath.
+	if m.view == viewRoadmap {
+		m.roadAfterDue(t.ID)
+	}
+	return cmd
+}
+
+// enterDueDirect opens the overlay straight onto the due input for t — the
+// roadmap's ⏎ (enterRoadDue). No menu is behind the input, so the apply and
+// esc close the overlay (editState.direct).
+func (m *Model) enterDueDirect(t *board.Task) tea.Cmd {
+	m.fullHelp = false // a modal never inherits the `?` overlay (enterEpic)
+	m.cancelDrag()
+	m.edit = &editState{editShell: editShell{id: t.ID, stage: stageInput, input: newOverlayInput()}, direct: true}
+	m.mode = modeEdit
+	return m.edit.startInput(editHooks{m, t}, inputDue, dueSeed(t), dueHint)
 }
 
 // noteEditStage keeps the bottom row true as the overlay moves between stages.
@@ -211,6 +261,10 @@ func (m *Model) noteEditStage() {
 			m.note("edit %s · %s — ⏎/x toggle · esc back", e.id, editFieldName(e.field))
 		}
 	case stageInput:
+		if e.direct {
+			m.note("edit %s · %s — ⏎ apply · esc closes", e.id, inputTitleFor(e.inputFor))
+			return
+		}
 		m.note("edit %s · %s — ⏎ apply · esc back", e.id, inputTitleFor(e.inputFor))
 	default:
 		m.note("edit %s — ⏎ pick a field · esc closes", e.id)
@@ -260,11 +314,7 @@ func (m *Model) openField(f editField, t *board.Task) tea.Cmd {
 		e.stage = stageGate
 		return m.openRmGate(&e.rm, rmTarget{id: t.ID})
 	case fieldDue:
-		cur := ""
-		if !t.Due.IsZero() {
-			cur = t.Due.In(board.Zone()).Format("2006-01-02")
-		}
-		return e.startInput(h, inputDue, cur, "2026-08-04 · +1d · +2h · empty clears")
+		return e.startInput(h, inputDue, dueSeed(t), dueHint)
 	case fieldRepeat:
 		if _, reason := repeatCell(t); reason != "" {
 			// The row already says so; an input that cannot land would only
@@ -501,6 +551,11 @@ func (m *Model) onEditInputCancel(k inputKind) {
 		m.note("note cancelled — nothing appended")
 		return
 	case inputTitle, inputDue, inputRepeat:
+		if e.direct {
+			m.exitEdit()
+			m.note("edit %s · %s unchanged", e.id, inputTitleFor(k))
+			return
+		}
 		e.stage = stageMenu
 	default:
 		e.stage = stageList
@@ -523,6 +578,9 @@ func (m *Model) onEditInputCommit(k inputKind, v string, t *board.Task) tea.Cmd 
 		return m.applyPatch("retitle", board.FieldPatch{Title: &v})
 	case inputDue:
 		e.stage = stageMenu
+		if e.direct {
+			return m.applyDueDirect(t, v)
+		}
 		return m.applyPatch("due", board.FieldPatch{Due: &v})
 	case inputRepeat:
 		e.stage = stageMenu
@@ -592,12 +650,15 @@ func (m *Model) onEditInputCommit(k inputKind, v string, t *board.Task) tea.Cmd 
 		// the paragraph at the body's tail.
 		cmd := m.applyCheck("note", func() error { return m.b.AppendNote(t.ID, v) },
 			func() error { return m.prov.PersistNote(t.ID, v) })
-		if cmd == nil {
+		if m.statusErr {
 			// The LOCAL apply refused (the shell's rolling-back refusal never
 			// reaches applyCheck): the fail is on the status row and the
 			// typed text is still in the input — re-focus it (the shell
 			// blurred it before this) instead of closing over hand-typed
-			// prose.
+			// prose. The status row, not applyCheck's nil: a write queued
+			// behind an in-flight one is nil too, and reading that as a
+			// refusal kept the overlay open over an appended paragraph, so
+			// the next ⏎ appended it again (found by review).
 			return e.input.Focus()
 		}
 		m.exitEdit()
@@ -702,7 +763,11 @@ func (m *Model) editLayer() *lg.Layer {
 	case stageList:
 		body = m.renderEditList(t, inner, maxInt(1, m.h-overlayListChrome))
 	case stageInput:
-		body = m.renderOverlayInput(inputTitleFor(m.edit.inputFor), m.edit.input, inner)
+		foot := "⏎ apply · esc back"
+		if m.edit.direct {
+			foot = "⏎ apply · esc closes"
+		}
+		body = m.renderOverlayInputFoot(inputTitleFor(m.edit.inputFor), m.edit.input, inner, foot)
 	}
 	return m.overlayLayer("edit", "edit "+t.ID, body)
 }

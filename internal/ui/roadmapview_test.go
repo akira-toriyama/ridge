@@ -423,3 +423,189 @@ func TestFullTabsListEveryViewEverywhere(t *testing.T) {
 		}
 	}
 }
+
+// ⏎ on a row opens the edit overlay straight onto the due input, seeded with
+// the row's date; the apply lands in place and closes the overlay, with the
+// row on its new date under a cursor that followed it, and the view still
+// the roadmap (t-m5d5).
+func TestRoadmapEnterEditsTheDueInPlace(t *testing.T) {
+	m := roadModel(t, 240, 40)
+	m.road.sel = "t-9sa6"
+	press(m, "enter")
+	if m.mode != modeEdit || m.edit == nil || m.edit.stage != stageInput || m.edit.inputFor != inputDue || !m.edit.direct {
+		t.Fatalf("⏎ on a row must open the due input directly: mode=%d edit=%+v", m.mode, m.edit)
+	}
+	if got := m.edit.input.Value(); got != "2026-09-30" {
+		t.Errorf("the input must open on the row's date, got %q", got)
+	}
+	out := frame(m)
+	// The frame's own key line and the status row are asserted apart: an
+	// OR over the two let either go silent (found by review).
+	for _, want := range []string{"due date", "dated task", "⏎ apply · esc closes"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the overlay over the roadmap lost %q", want)
+		}
+	}
+	if !strings.Contains(m.status, "esc closes") {
+		t.Errorf("status = %q, want the direct input's key claim", m.status)
+	}
+	m.edit.input.SetValue("2026-08-15")
+	press(m, "enter")
+	if m.edit != nil || m.mode != modeNormal || m.view != viewRoadmap {
+		t.Errorf("the apply must close the overlay and stay on the roadmap: edit=%v mode=%d view=%d", m.edit != nil, m.mode, m.view)
+	}
+	if got := m.b.Task("t-9sa6").Due.In(board.Zone()).Format("2006-01-02"); got != "2026-08-15" {
+		t.Errorf("due = %s, want 2026-08-15", got)
+	}
+	// Re-laid eagerly: the walk after the apply must step the NEW pack.
+	ids := make([]string, 0, len(m.road.lay.Rows))
+	for _, r := range m.road.lay.Rows {
+		ids = append(ids, r.ID)
+	}
+	if len(ids) < 2 || ids[1] != "t-9sa6" {
+		t.Errorf("the row must move to its new date (second, after 07-31): %q", ids)
+	}
+	if m.road.sel != "t-9sa6" {
+		t.Errorf("the cursor must follow the task to its new date, sits on %q", m.road.sel)
+	}
+	drainPersists(m, t)
+
+	// A date outside the window: the window pans to the ◆ it just placed,
+	// as it does when the cursor walks there — past the right edge, then
+	// before the left one. The day axis at 240 columns shows ~189 days
+	// around today (2026-08-31), so both dates lie outside it and the pan
+	// is asserted as a CHANGE of offset (a December date sat inside the
+	// window and pinned nothing; found by review).
+	for _, date := range []string{"2027-05-01", "2026-03-01"} {
+		before := m.road.xOff
+		press(m, "enter")
+		m.edit.input.SetValue(date)
+		press(m, "enter")
+		r := m.road.lay.Row("t-9sa6")
+		if r == nil {
+			t.Fatalf("%s: t-9sa6 must still be on the timeline", date)
+		}
+		if tlW := m.roadTLW(); r.X < m.road.xOff || r.X >= m.road.xOff+tlW {
+			t.Errorf("%s: the window must pan to the moved ◆: x=%d window=[%d,%d)", date, r.X, m.road.xOff, m.road.xOff+tlW)
+		}
+		if m.road.xOff == before {
+			t.Errorf("%s: the window did not pan (xOff %d), yet the date lies outside it", date, before)
+		}
+		drainPersists(m, t)
+	}
+}
+
+// A cleared due takes the row off the timeline: the cursor lands on the row
+// that followed it, the window does not jump to the top, and the note says
+// the row left.
+func TestRoadmapClearingADueLandsTheCursorOnTheNeighbour(t *testing.T) {
+	m := roadModel(t, 240, 40)
+	m.road.sel = "t-p7xw" // no rule, so the clear lands; t-9sa6 follows it
+	var after string
+	for i, r := range m.road.lay.Rows {
+		if r.ID == "t-p7xw" && i+1 < len(m.road.lay.Rows) {
+			after = m.road.lay.Rows[i+1].ID
+		}
+	}
+	if after == "" {
+		t.Fatal("setup: t-p7xw must have a row after it")
+	}
+	scroll := m.road.scroll
+	press(m, "enter")
+	m.edit.input.SetValue("")
+	press(m, "enter")
+	if m.edit != nil || !m.b.Task("t-p7xw").Due.IsZero() {
+		t.Fatalf("an empty ⏎ must clear the due and close the overlay: edit=%v due=%v", m.edit != nil, m.b.Task("t-p7xw").Due)
+	}
+	if m.road.lay.Row("t-p7xw") != nil {
+		t.Error("a task without a due must leave the timeline")
+	}
+	if m.road.sel != after {
+		t.Errorf("the cursor must land on the row that followed (%s), sits on %q", after, m.road.sel)
+	}
+	if m.road.scroll != scroll {
+		t.Errorf("the window must not scroll on its own: %d → %d", scroll, m.road.scroll)
+	}
+	if !strings.Contains(m.status, "left the timeline") || !strings.Contains(m.status, after) {
+		t.Errorf("the note must say the row left and where the cursor is: %q", m.status)
+	}
+	drainPersists(m, t)
+	// The landing is where the cursor is: esc carries it to the board
+	// (closeRoadmap carries a MOVED cursor), not the task whose due went.
+	press(m, "esc")
+	if m.view != viewBoard || m.cursorID() != after {
+		t.Errorf("esc must land the board cursor on %s, got %q (view %d)", after, m.cursorID(), m.view)
+	}
+}
+
+// `m` is the other spelling; esc closes the overlay with the due kept; a
+// refused form stays in the input beside its refusal (the note input's
+// rule) — a garbage form, and the empty form on a task that repeats, which
+// furrow answers with "must keep a due" — and esc then closes.
+func TestRoadmapDueInputEscClosesAndARefusalKeepsTheInput(t *testing.T) {
+	m := roadModel(t, 240, 40)
+	m.road.sel = "t-9sa6"
+	before := m.b.Task("t-9sa6").Due
+	press(m, "m")
+	if m.edit == nil || m.edit.inputFor != inputDue {
+		t.Fatal("m must open the due input like ⏎")
+	}
+	press(m, "esc")
+	if m.edit != nil || m.view != viewRoadmap || !strings.Contains(m.status, "edit t-9sa6 · due date unchanged") {
+		t.Errorf("esc must close the overlay on the roadmap with the due kept: edit=%v view=%d status=%q", m.edit != nil, m.view, m.status)
+	}
+	for _, form := range []string{"someday", ""} {
+		press(m, "enter")
+		m.edit.input.SetValue(form)
+		press(m, "enter")
+		if m.edit == nil || m.edit.stage != stageInput || m.edit.input.Value() != form || !m.statusErr {
+			t.Fatalf("form %q: a refused form must stay in the input beside its refusal: edit=%+v err=%v status=%q", form, m.edit, m.statusErr, m.status)
+		}
+		if !m.b.Task("t-9sa6").Due.Equal(before) {
+			t.Errorf("form %q: the due must be kept", form)
+		}
+		press(m, "esc")
+		if m.edit != nil || m.mode != modeNormal || m.view != viewRoadmap {
+			t.Errorf("form %q: esc must close the overlay: edit=%v mode=%d view=%d", form, m.edit != nil, m.mode, m.view)
+		}
+	}
+}
+
+// The note input has the same rule, and both of its key lines say so —
+// the overlay's foot and the status row (one said "esc back" while
+// closing; found by review).
+func TestNoteInputSaysEscClosesOnBothLines(t *testing.T) {
+	lines := dumpFrame(t, 240, 40, "note")
+	body, status := strings.Join(lines[:len(lines)-1], "\n"), lines[len(lines)-1]
+	if !strings.Contains(body, "⏎ apply · esc closes") {
+		t.Error("the note input's foot must say esc closes")
+	}
+	if !strings.Contains(status, "esc closes") || strings.Contains(status, "esc back") {
+		t.Errorf("the status row must agree: %q", status)
+	}
+}
+
+// With no row under the cursor the key says so rather than opening an input
+// on nothing — the board with no dues is the shape.
+func TestRoadmapEnterOnNoRowSaysSo(t *testing.T) {
+	m := advSmallModel(t, 240, 50)
+	press(m, "C")
+	if m.view != viewRoadmap {
+		t.Fatal("C did not open the roadmap")
+	}
+	press(m, "enter")
+	if m.edit != nil || !strings.Contains(m.status, "no dated task") {
+		t.Errorf("⏎ with no row must refuse in words: edit=%v status=%q", m.edit != nil, m.status)
+	}
+}
+
+// The frame carries what the demo exists to show: the due input over the
+// timeline's own header.
+func TestRoadDueDemoCarriesTheInputOverTheTimeline(t *testing.T) {
+	out := strings.Join(dumpFrame(t, 240, 40, "roaddue"), "\n")
+	for _, want := range []string{"due date", "dated task", "⏎ apply · esc closes"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("-demo roaddue lost %q", want)
+		}
+	}
+}

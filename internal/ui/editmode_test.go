@@ -168,6 +168,35 @@ func TestEditEpicFileAndUnfile(t *testing.T) {
 	drainPersists(m, t)
 }
 
+// A note applied while an earlier write is still in flight lands once: the
+// queue answers nil for a write it merely queued, and reading that nil as a
+// refusal kept the overlay open over an appended paragraph, so the next ⏎
+// appended it again (found by review — the status row is the refusal).
+func TestNoteBehindAnInFlightWriteClosesAndAppendsOnce(t *testing.T) {
+	m := editModel(t, "t-9sa6")
+	m.edit.menuIdx = int(fieldValue)
+	press(m, "enter", "3") // a write now in flight, undrained
+	press(m, "esc")
+	if m.edit != nil || !m.inflight {
+		t.Fatalf("setup: a write must be in flight with the overlay closed (edit=%v inflight=%v)", m.edit != nil, m.inflight)
+	}
+	if c := m.enterNote(); c != nil {
+		_ = c
+	}
+	m.edit.input.SetValue("進捗を一段落")
+	press(m, "enter")
+	if m.edit != nil {
+		t.Error("the note's apply must close the overlay even when the write is queued behind another")
+	}
+	if got := strings.Count(m.b.Task("t-9sa6").Body, "進捗を一段落"); got != 1 {
+		t.Errorf("the paragraph was appended %d times, want once", got)
+	}
+	if !strings.Contains(m.status, "note appended") {
+		t.Errorf("status = %q", m.status)
+	}
+	drainPersists(m, t)
+}
+
 func TestEditDueRefusesGarbageAndAcceptsForms(t *testing.T) {
 	m := editModel(t, "t-9sa6")
 	m.edit.menuIdx = int(fieldDue)

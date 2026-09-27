@@ -161,7 +161,7 @@ func TestHelpListsEveryKeyItsSectionsModesHandle(t *testing.T) {
 		// onRoadKey (roadmapview.go). Absent since the roadmap shipped: the
 		// map is hand-written, so a full-screen view whose section nobody
 		// added here was never checked against its own handler.
-		"roadmap": {k.Up, k.Down, k.Left, k.Right, k.RoadZoom, k.Top, k.Bottom,
+		"roadmap": {k.Up, k.Down, k.Left, k.Right, k.RoadDue, k.RoadZoom, k.Top, k.Bottom,
 			k.PeekScroll, k.ViewTab, k.ViewSave, k.Roadmap, k.View, k.Cancel},
 		// onSwimKey (swimlaneview.go)
 		"swimlane": {k.Up, k.Down, k.Left, k.Right, k.SwimFold, k.SwimSlice,
