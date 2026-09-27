@@ -533,3 +533,18 @@ func TestSyncedDemoShowsTheWholeNoteAt240(t *testing.T) {
 		t.Errorf("a two-task board must refuse the demo by shape, got %v", err)
 	}
 }
+
+// A sync refused with a conflict lands with its conflicted paths INSIDE the
+// 240-cell status row: the adapter leads its error with them because the
+// row is cut at the right and furrow's prose alone fills it (t-36k0). The
+// demo carries the adapter's shape; the frame proves the paths survive.
+func TestSyncConflictPathsSurviveTheStatusRowsFloor(t *testing.T) {
+	m := New(memstore.New(), Options{})
+	out, err := m.Dump(240, 40, "syncfail", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "⚠ synced: conflicted paths: .furrow/tasks/t-3fq4e.json, .furrow/epics/e-fmzj4.json, .furrow/bodies/t-3fq4e.md +1 more —") {
+		t.Errorf("-demo syncfail must show every named path at 240 cells:\n%s", out)
+	}
+}
