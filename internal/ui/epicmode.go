@@ -52,9 +52,12 @@ const (
 	epicFieldRepos
 	epicFieldDeps
 	epicFieldMeta
-	// Last on purpose: it is the row whose write is a lifecycle decision, so
-	// it must not sit where the cursor lands or where a mistyped ↓ reaches.
+	// Last two on purpose: their writes are a lifecycle decision and a
+	// withdrawal, so neither sits where the cursor lands or where a mistyped
+	// ↓ reaches (↑ from the top wraps to delete, which opens a preview,
+	// never a write).
 	epicFieldClosed
+	epicFieldDelete
 	epicFieldCount
 )
 
@@ -80,6 +83,8 @@ func epicFieldName(f epicField) string {
 		return "meta"
 	case epicFieldClosed:
 		return "closed"
+	case epicFieldDelete:
+		return "delete"
 	}
 	return ""
 }
@@ -102,6 +107,8 @@ type epicShell = overlayShell[epicField, epicInputKind]
 
 type epicState struct {
 	epicShell
+	// rm is the delete row's gate (rmgate.go), reset each time the row opens.
+	rm rmState
 	// creating is the new-box modal: there is no id yet, so the overlay is one
 	// title input and nothing else until the store answers. The shell's walk
 	// never sees it — onEpicKey answers the modal before the shell.
@@ -131,6 +138,9 @@ func (h epicHooks) listSelect(rows []string) tea.Cmd {
 }
 func (h epicHooks) listKey(msg tea.KeyPressMsg) tea.Cmd { return h.m.onEpicListKey(msg, h.box) }
 func (h epicHooks) gateKey(msg tea.KeyPressMsg) tea.Cmd {
+	if h.m.epic.field == epicFieldDelete {
+		return h.m.onRmGateKey(msg, &h.m.epic.rm)
+	}
 	if key.Matches(msg, h.m.keys.Commit) {
 		return h.m.commitEpicConfirm(h.box)
 	}
@@ -272,6 +282,8 @@ func (m *Model) noteEpicStage() {
 		}
 	case e.stage == stageInput:
 		m.note("box %s · %s — ⏎ apply · esc back", e.id, epicInputTitleFor(e.inputFor))
+	case e.stage == stageGate && e.field == epicFieldDelete:
+		m.noteRmGate(&e.rm)
 	case e.stage == stageGate && e.field == epicFieldClosed:
 		box := m.b.Epic(e.id)
 		switch {
@@ -395,6 +407,9 @@ func (m *Model) openEpicField(f epicField, box *board.EpicInfo) tea.Cmd {
 		e.stage = stageGate
 		m.noteEpicStage()
 		return nil
+	case epicFieldDelete:
+		e.stage = stageGate
+		return m.openRmGate(&e.rm, rmTarget{id: box.ID, epic: true})
 	case epicFieldLabels, epicFieldRepos, epicFieldDeps, epicFieldMeta:
 		e.stage = stageList
 		m.noteEpicStage()
@@ -805,6 +820,10 @@ func (m *Model) epicLayer() *lg.Layer {
 		case stageInput:
 			body = m.renderOverlayInput(epicInputTitleFor(e.inputFor), e.input, inner)
 		case stageGate:
+			if e.field == epicFieldDelete {
+				body = m.renderRmGate(&e.rm, box.Title, inner)
+				break
+			}
 			body = m.renderEpicConfirm(box, inner)
 		case stageList:
 			body = m.renderEpicList(box, inner, maxInt(1, m.h-overlayListChrome))
@@ -837,6 +856,7 @@ func (m *Model) renderEpicMenu(box *board.EpicInfo, inner int) string {
 		{epicFieldName(epicFieldDeps), depCell},
 		{epicFieldName(epicFieldMeta), metaCell},
 		{epicFieldName(epicFieldClosed), epicClosedCell(box)},
+		{epicFieldName(epicFieldDelete), "furrow epic rm — withdraw the record"},
 	}
 
 	// The derived line first: progress, stuck and waiting are furrow's

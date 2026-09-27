@@ -150,8 +150,8 @@ type keyMap struct {
 	// obvious letter and is deliberately left alone — it means $EDITOR, and
 	// `furrow edit` takes an epic id, so that is the key epic body editing will
 	// want. EpicNew is uppercase for the same reason R/K/J/H/L are: the
-	// lowercase sibling (`a`) creates a TASK, and furrow has no `epic rm` to
-	// undo a slip with.
+	// lowercase sibling (`a`) creates a TASK; a slip is withdrawn from the
+	// overlay's delete row (`epic rm`, rmgate.go), never from a bare key.
 	EpicEdit key.Binding
 	EpicNew  key.Binding
 

@@ -56,6 +56,10 @@ type Store struct {
 	// removed, per task.
 	archived map[string]bool
 	pruned   map[string]map[string]bool
+	// removed is the ids `rm` / `epic rm` withdrew this session (rm.go),
+	// applied after the sweep's shape and kept across Reload for the same
+	// reason.
+	removed map[string]bool
 }
 
 // New serves the fixture snapshot, and declares its calendar (fixtureZone)

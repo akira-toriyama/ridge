@@ -158,6 +158,12 @@ type Model struct {
 
 	selectAfterReload string // id to select once the next re-read lands
 
+	// rmSeq numbers the delete gate's preview reads for the whole process
+	// (rmgate.go): the gate's state is recreated with its overlay, so a
+	// counter kept there restarted at 1 on every reopen and a stale read
+	// landed on the next gate for the same id (found by review).
+	rmSeq int
+
 	sliceOpen  bool       // the slice panel is visible (board inset left)
 	sliceField sliceField // the panel's axis
 	sliceVal   string     // selected value; "" = not slicing
@@ -517,6 +523,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case sweepResultMsg:
 		m.onSweepResult(msg)
+
+	case rmPreviewMsg:
+		m.onRmPreview(msg)
 
 	case filterResultMsg:
 		m.onFilterResult(msg)

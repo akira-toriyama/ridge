@@ -95,6 +95,12 @@ func (p *emptyProvider) SweepPreview() (board.Sweep, error) { return board.Sweep
 func (p *emptyProvider) Archive([]string) error             { return nil }
 func (p *emptyProvider) Unarchive([]string) error           { return nil }
 func (p *emptyProvider) Tidy(board.TidyClass) error         { return nil }
+func (p *emptyProvider) Remove([]string, board.RemoveOptions) (board.RemoveReport, error) {
+	return board.RemoveReport{}, nil
+}
+func (p *emptyProvider) EpicRemove(string, board.RemoveOptions) (board.RemoveReport, error) {
+	return board.RemoveReport{}, nil
+}
 
 // advModel serves a synthetic board through memstore, so the filter answers
 // on it (emptyProvider's Query answers nothing).

@@ -417,6 +417,12 @@ func (p *scriptedProvider) Unarchive(ids []string) error {
 	return p.epicCall("unarchive " + strings.Join(ids, ","))
 }
 func (p *scriptedProvider) Tidy(c board.TidyClass) error { return p.epicCall("tidy " + c.Flag()) }
+func (p *scriptedProvider) Remove([]string, board.RemoveOptions) (board.RemoveReport, error) {
+	return board.RemoveReport{}, nil
+}
+func (p *scriptedProvider) EpicRemove(string, board.RemoveOptions) (board.RemoveReport, error) {
+	return board.RemoveReport{}, nil
+}
 
 // The sync's landing note says what was published and what was not: a
 // pending body is a modified one furrow left uncommitted, which reaches no

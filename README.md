@@ -133,7 +133,7 @@ rule and its series start (`⟳ repeats FREQ=… (since <day>)` — the two fact
 of `furrow show`'s `repeat:` line, the start as a day). `t` shows the
 transitive tree. `Enter` opens the **field edit
 menu** (glossary: "edit menu"): title / value / effort / labels / epic / due /
-repeat / deps / repos / refs / checklist. The repeat row is `furrow set
+repeat / deps / repos / refs / checklist / delete. The repeat row is `furrow set
 --repeat` / `--clear-repeat` (an empty input clears): it opens on the stored
 rule, the spelling is furrow's to judge (`weekly`, `every 2 weeks on mon,thu`,
 a raw RRULE — a refusal rolls back), it needs a due and an open task (the row
@@ -143,6 +143,19 @@ CLI's `--repeat` alone does. Quick add takes the same rule as the `repeat:`
 token beside its `due:`. Not shown: furrow's bind-time advisories (an anchor
 the rule does not land on, a February 29) are stderr prose on exit 0, which
 ridge does not read — an envelope key is asked of furrow (t-gf2e).
+
+The **delete** row is `furrow rm` (the epic overlay's is `furrow epic rm`):
+it withdraws the record — shard, body, assets — which is not `archive`'s
+round trip. Opening the row reads furrow's preview and shows it: the target,
+the series it would end if it recurs, what still points at it (dep edges,
+live `[[id]]` links, members, box deps) and what happens to its assets. `⏎`
+deletes; while anything references the target the first `⏎` only arms
+`--force` — furrow's summary of what it will sever is on screen, with the
+first six edges listed under it — and a second `⏎` severs and deletes. Store-first: the card stays until the write lands, and
+the landing note says what was severed, whether a series ended and which
+assets another body kept (the asset words need a furrow newer than the
+v6.0.0 pin, whose report has no `assets` key). Headless: `-demo rm` /
+`rmreferenced` / `rmforce` / `rmrepeat` / `rmwait` / `rmrefused` / `epicrm`.
 
 ### Boxes — the box overview
 
