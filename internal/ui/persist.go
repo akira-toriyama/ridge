@@ -643,6 +643,7 @@ func (m *Model) onReloadDone(msg reloadDoneMsg) tea.Cmd {
 			return heldBody
 		}
 		m.sweepReadStalled()
+		m.closeGateReadFailed()
 		if msg.note != "" {
 			// The re-read failed, not the sync: its verdict still stands, is
 			// said nowhere else, and leads — the line is truncated at the
@@ -695,6 +696,7 @@ func (m *Model) onReloadDone(msg reloadDoneMsg) tea.Cmd {
 			m.note("%s · %dms", msg.label, msg.ms)
 		}
 	}
+	m.closeGateRead()
 	if id := m.selectAfterReload; id != "" {
 		// Pin past any active filter: a card you just created must be under
 		// the cursor even when the filter would hide it. Cleared only once

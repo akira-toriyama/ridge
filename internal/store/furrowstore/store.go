@@ -35,6 +35,9 @@ type Store struct {
 	// Sync's doc says why the adapter names them. Guarded by mu.
 	dirty map[string]uint64
 	gen   uint64
+	// bodyPaths is the file each record was read from at the last load, by
+	// id — ReadBody's target. Swapped together with b.
+	bodyPaths map[string]string
 }
 
 // New probes the store and performs the initial load, so a
@@ -63,14 +66,37 @@ func (p *Store) Live() bool { return true }
 // Reload re-reads the store into a fresh board and swaps it in
 // (board.Provider).
 func (p *Store) Reload() error {
-	b, err := p.load()
+	b, paths, err := p.load()
 	if err != nil {
 		return err
 	}
 	p.mu.Lock()
-	p.b = b
+	p.b, p.bodyPaths = b, paths
 	p.mu.Unlock()
 	return nil
+}
+
+// ReadBody re-reads id's record from the file the last load read it from
+// (board.Provider): one file, no furrow process. An id that load did not
+// see is an error, spelled as memstore's — a record added since arrives
+// with the next Reload, as its metadata does. An id whose JSON named no
+// file reads empty, as the load read it (the editor then opens on nothing,
+// as before).
+func (p *Store) ReadBody(id string) (string, error) {
+	p.mu.Lock()
+	path, ok := p.bodyPaths[id]
+	p.mu.Unlock()
+	if !ok {
+		return "", fmt.Errorf("unknown id %q", id)
+	}
+	if path == "" {
+		return "", nil
+	}
+	raw, err := os.ReadFile(path) //nolint:gosec // the path the load itself read
+	if err != nil {
+		return "", fmt.Errorf("reading %s's record: %w", id, err)
+	}
+	return string(raw), nil
 }
 
 // Sync is furrow's thin git wrapper: commit the board, pull --rebase, push
@@ -338,7 +364,7 @@ var wipDefaults = map[string]int{"ready": 2, "in-progress": 1}
 // than one) — and assembles a
 // Board. Measured on the real 914-task store: 63-77ms wall warm, 181ms cold,
 // bodies included.
-func (p *Store) load() (*board.Board, error) {
+func (p *Store) load() (*board.Board, map[string]string, error) {
 	var (
 		cfg   boardJSON
 		rows  []taskJSON
@@ -374,7 +400,7 @@ func (p *Store) load() (*board.Board, error) {
 	wg.Wait()
 	for _, err := range errs {
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
@@ -407,22 +433,23 @@ func (p *Store) load() (*board.Board, error) {
 		}
 		tasks = append(tasks, t)
 	}
-	if err := readBodies(cfg.Store, rows, tasks); err != nil {
-		return nil, err
+	paths := make(map[string]string, len(rows)+len(boxes))
+	if err := readBodies(cfg.Store, rows, tasks, paths); err != nil {
+		return nil, nil, err
 	}
 
 	epics := make([]board.EpicInfo, 0, len(boxes))
 	for _, e := range boxes {
 		epics = append(epics, e.toEpicInfo())
 	}
-	if err := readEpicBodies(cfg.Store, boxes, epics); err != nil {
-		return nil, err
+	if err := readEpicBodies(cfg.Store, boxes, epics, paths); err != nil {
+		return nil, nil, err
 	}
 
 	// Declared with the snapshot it belongs to, on every load: a frame is a
 	// function of the board's calendar, not the terminal's TZ (t-kt2h).
 	board.SetZone(zoneOf(cfg.Timezone))
-	return board.NewStoreBoard(lanes, tasks, epics, cfg.Writable, cfg.SchemaState), nil
+	return board.NewStoreBoard(lanes, tasks, epics, cfg.Writable, cfg.SchemaState), paths, nil
 }
 
 // readBodies loads every task's prose eagerly. furrow's JSON carries only the
@@ -430,12 +457,16 @@ func (p *Store) load() (*board.Board, error) {
 // per-open stall — measured on the real 906-task store this is a handful of
 // milliseconds, folded into the load that already runs off the UI thread.
 // A missing file is a loud error, not an empty peek: furrow's own reads never
-// narrow silently, and neither should ours.
-func readBodies(store string, rows []taskJSON, tasks []*board.Task) error {
+// narrow silently, and neither should ours. paths records each id's file
+// for ReadBody.
+func readBodies(store string, rows []taskJSON, tasks []*board.Task, paths map[string]string) error {
 	jobs := make([]bodyJob, 0, len(rows))
 	for i, r := range rows {
+		paths[r.ID] = ""
 		if r.Body != "" {
-			jobs = append(jobs, bodyJob{path: filepath.Join(store, r.Body), dst: &tasks[i].Body})
+			path := filepath.Join(store, r.Body)
+			paths[r.ID] = path
+			jobs = append(jobs, bodyJob{path: path, dst: &tasks[i].Body})
 		}
 	}
 	return readBodyFiles(jobs, "a task body")
@@ -443,11 +474,14 @@ func readBodies(store string, rows []taskJSON, tasks []*board.Task) error {
 
 // readEpicBodies is readBodies for the boxes: the same pointer in the same
 // directory ("the two share the bodies/ directory"), read the same way.
-func readEpicBodies(store string, boxes []epicJSON, epics []board.EpicInfo) error {
+func readEpicBodies(store string, boxes []epicJSON, epics []board.EpicInfo, paths map[string]string) error {
 	jobs := make([]bodyJob, 0, len(boxes))
 	for i, e := range boxes {
+		paths[e.ID] = ""
 		if e.Body != "" {
-			jobs = append(jobs, bodyJob{path: filepath.Join(store, e.Body), dst: &epics[i].Body})
+			path := filepath.Join(store, e.Body)
+			paths[e.ID] = path
+			jobs = append(jobs, bodyJob{path: path, dst: &epics[i].Body})
 		}
 	}
 	return readBodyFiles(jobs, "a box body")

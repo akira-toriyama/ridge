@@ -653,8 +653,10 @@ func TestEachEpicGestureReachesItsOwnProviderCall(t *testing.T) {
 		// verb. Both go through the confirm stage, like standing/pinned.
 		{"close", "", "epicdone e-one", func(m *Model) {
 			m.epic.menuIdx = int(epicFieldClosed)
+			// A live store's gate opens on a re-read (openCloseGate) and
+			// refuses ⏎ until it lands: land it, then confirm.
 			if c := m.openEpicField(epicFieldClosed, m.b.Epic(m.epic.id)); c != nil {
-				_ = c
+				m.Update(c())
 			}
 			m.onEpicKey(keyMsg("enter"))
 		}},
@@ -1220,11 +1222,13 @@ func TestEpicCloseNotePutsThePreviousChipAfterTheDisclosure(t *testing.T) {
 	p.epicPrev = board.EpicPrevious{ID: "e-prev", Title: strings.Repeat("前の箱", 30)}
 	sliceOnEpicAxis(t, m, "e-one")
 	press(m, "m")
-	m.b.Epic("e-one").Active = true
 	m.epic.menuIdx = int(epicFieldClosed)
+	// A live store's gate opens on a re-read (openCloseGate), which swaps
+	// the board: the flag goes on the board the ⏎ then reads.
 	if c := m.openEpicField(epicFieldClosed, m.b.Epic(m.epic.id)); c != nil {
 		m.Update(c())
 	}
+	m.b.Epic("e-one").Active = true
 	cmd := m.onEpicKey(keyMsg("enter"))
 	if cmd == nil {
 		t.Fatal("the close queued no write")
@@ -1245,8 +1249,10 @@ func TestEpicCloseNoteCarriesWhatTheStoreLeftOpen(t *testing.T) {
 	sliceOnEpicAxis(t, m, "e-one")
 	press(m, "m")
 	m.epic.menuIdx = int(epicFieldClosed)
+	// A live store's gate opens on a re-read (openCloseGate); it lands here,
+	// so the ⏎ below is on a fresh gate.
 	if c := m.openEpicField(epicFieldClosed, m.b.Epic(m.epic.id)); c != nil {
-		_ = c
+		m.Update(c())
 	}
 	cmd := m.onEpicKey(keyMsg("enter"))
 	if cmd == nil {

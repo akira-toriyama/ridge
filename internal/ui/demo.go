@@ -599,6 +599,31 @@ func (m *Model) demoState(kind string) error {
 			_ = c
 		}
 
+	case "epicclosereading", "epicclosebusy", "epicclosefailed":
+		// The close gate before its re-read lands (openCloseGate, a live
+		// store's shape): reading, refused under a write in flight, or the
+		// re-read failed. The fixture's snapshot IS its store, so the gate
+		// is fresh at once there — the demo un-freshens it by hand with the
+		// gate's own line, the way epicbodybusy arms its window.
+		active, err := m.demoActiveBox(kind)
+		if err != nil {
+			return err
+		}
+		if err := m.demoEpicPanel(kind, active.ID); err != nil {
+			return err
+		}
+		m.epic.menuIdx = int(epicFieldClosed)
+		if c := m.openEpicField(epicFieldClosed, m.b.Epic(m.epic.id)); c != nil {
+			_ = c
+		}
+		m.epic.closeFresh = false
+		m.epic.closeNote = map[string]string{
+			"epicclosereading": closeGateReading,
+			"epicclosebusy":    closeGateBusy,
+			"epicclosefailed":  closeGateFailed,
+		}[kind]
+		m.noteEpicStage()
+
 	case "epicdoneparked":
 		// The close gate on a box with a PARKED member — one in a terminal
 		// lane other than done. Total − Done counted it as open; furrow's

@@ -28,6 +28,7 @@ func (p *liveQueryProvider) Board() *board.Board             { return p.b }
 func (p *liveQueryProvider) Reload() error                   { return nil }
 func (p *liveQueryProvider) Sync() (board.SyncReport, error) { return board.SyncReport{}, nil }
 func (p *liveQueryProvider) Live() bool                      { return true }
+func (p *liveQueryProvider) ReadBody(string) (string, error) { return "", nil }
 func (p *liveQueryProvider) Query(q string) ([]string, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()

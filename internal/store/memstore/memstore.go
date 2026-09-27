@@ -278,6 +278,20 @@ func (p *Store) PersistBody(id, _ string) error {
 	return p.knownEntity(id)
 }
 
+// ReadBody is the served snapshot's record (board.Provider): the fixture's
+// store IS the board the model mutates, so nothing can move under it — a
+// test that needs drift wraps the provider.
+func (p *Store) ReadBody(id string) (string, error) {
+	b := p.snapshot()
+	if t := b.Task(id); t != nil {
+		return t.Body, nil
+	}
+	if e := b.Epic(id); e != nil {
+		return e.Body, nil
+	}
+	return "", fmt.Errorf("unknown id %q", id)
+}
+
 // knownEntity is the id check the body, note and review persists share: a
 // task or a box on the served board, else furrow's not-found.
 func (p *Store) knownEntity(id string) error {

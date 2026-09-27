@@ -62,6 +62,15 @@ type Provider interface {
 	// the state AFTER the local toggle, so the write is idempotent.
 	PersistCheck(id string, i int, done bool) error
 
+	// ReadBody is id's record as the store holds it NOW — a task's or a
+	// box's, the two sharing bodies/ — for the one gesture that must not
+	// start from the loaded snapshot: `e` hands $EDITOR this text and fences
+	// its save on it, since a `furrow note` from another session between the
+	// load and the save was otherwise replaced wholesale (t-2wa3). A local
+	// file read on the real store, no furrow process, so it may run on the
+	// UI thread. An id the store does not hold is furrow's not-found.
+	ReadBody(id string) (string, error)
+
 	// PersistBody records id's already-applied body replacement. body is
 	// non-empty after trimming: furrow refuses an empty replacement (a body
 	// is never cleared, exit 2), and Board.SetBody mirrors that refusal
