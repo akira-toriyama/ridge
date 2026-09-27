@@ -654,8 +654,9 @@ func (m *Model) onSwimKey(msg tea.KeyPressMsg) tea.Cmd {
 	// `space` is also keys.Peek: a case matching either, placed above these,
 	// would take the view's own gestures.
 	// Nothing below claims either key — the shared closer in the default arm
-	// answers q / ctrl+c / ? / esc / W / v and nothing else. The dep map's and
-	// the box overview's handlers live by the same rule.
+	// answers q / ctrl+c / ? / esc / W / v and the store keys r / R, nothing
+	// else. The dep map's and the box overview's handlers live by the same
+	// rule.
 	case key.Matches(msg, m.keys.SwimSlice):
 		return m.sliceToSwimBand(l)
 

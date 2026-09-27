@@ -425,6 +425,49 @@ func TestTheOverviewSaysWhichLensIsNotApplied(t *testing.T) {
 	}
 }
 
+// `R` and `r` reach the store from the overview as they do from the board:
+// the overview is where the box overlay is opened from, and a record edited
+// there once had no sync or reload key until the board was back (t-mznb).
+// On the fixture both answer — sync says there is no store, reload re-reads
+// — and the view stays.
+func TestTheOverviewRoutesSyncAndReload(t *testing.T) {
+	m := boardModel(t, 240, 50)
+	press(m, "E")
+	if _, c := m.Update(keyMsg("R")); c != nil || !strings.Contains(m.status, "no store to sync") {
+		t.Errorf("R must reach the sync key: cmd=%v status=%q", c != nil, m.status)
+	}
+	_, c := m.Update(keyMsg("r"))
+	if c == nil || m.status != "reloading…" {
+		t.Fatalf("r must reach the reload key: cmd=%v status=%q", c != nil, m.status)
+	}
+	m.Update(c())
+	if !strings.Contains(m.status, "reloaded") || m.view != viewBoxes {
+		t.Errorf("the re-read must land with the overview kept: status=%q view=%d", m.status, m.view)
+	}
+}
+
+// esc out of the box overlay leaves the overview's own key claim on the
+// status line, not the overlay's: there ⏎ slices, and a stale "⏎ pick a
+// field" once sent the next ⏎ to a different box's slice (t-mznb).
+func TestLeavingTheOverlayRestoresTheOverviewNote(t *testing.T) {
+	m := boardModel(t, 240, 50)
+	press(m, "E", "m")
+	if m.epic == nil {
+		t.Fatal("m must open the overlay on the selected box")
+	}
+	press(m, "esc")
+	if m.epic != nil || m.view != viewBoxes || m.status != boxesNote {
+		t.Errorf("esc must hand the overview back with its own note: epic=%v view=%d status=%q", m.epic != nil, m.view, m.status)
+	}
+	// A refusal nobody has read yet survives the hand-back.
+	press(m, "m")
+	m.fail("nope")
+	press(m, "esc")
+	if !m.statusErr || m.status != "nope" {
+		t.Errorf("the note must not overwrite an unread refusal: %q", m.status)
+	}
+}
+
 func TestHeaderCountsABoxOnceHoweverManyReposItNames(t *testing.T) {
 	b := board.NewBoard(nil,
 		board.EpicInfo{ID: "e-both", Title: "二重", Repos: []string{"a/a", "b/b"},

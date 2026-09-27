@@ -907,9 +907,10 @@ func (m *Model) closeGraph() {
 }
 
 // onGraphKey is the graph view's whole keyboard surface. Everything the board
-// does to the BOARD is deliberately absent — the graph is a reading and walking
+// does to a TASK is deliberately absent — the graph is a reading and walking
 // tool, and a stray `d` closing a task you were only looking at would be a
-// nasty surprise.
+// nasty surprise; the store keys `r` / `R` the shared closer answers change
+// no task (a re-read, a sync).
 func (m *Model) onGraphKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
 	case key.Matches(msg, m.keys.GraphRoot):

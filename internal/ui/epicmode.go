@@ -252,6 +252,9 @@ func (m *Model) exitEpic() {
 		return
 	}
 	m.mode = modeNormal
+	if m.view == viewBoxes {
+		m.noteBoxes() // the same false key claim, the overview's version
+	}
 }
 
 // epicBox resolves the box under edit, closing the overlay when a reload has

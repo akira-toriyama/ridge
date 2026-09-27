@@ -436,7 +436,8 @@ func (m *Model) graphFromMap() {
 }
 
 // onMapKey is the map's whole keyboard surface. Like the graph it is a reading
-// and walking tool: nothing here writes to the board.
+// and walking tool: nothing here writes to a task — the store keys `r` / `R`
+// the shared closer answers re-read and sync the board, as on the board.
 func (m *Model) onMapKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
 	case key.Matches(msg, m.keys.MapGraph):

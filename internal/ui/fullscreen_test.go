@@ -308,3 +308,50 @@ func TestWindowBandsNeverSlicesOutsideWhatItClamped(t *testing.T) {
 		}
 	}
 }
+
+// The store keys reach every full-screen view through the shared closer —
+// `R` answers (the fixture has no store to sync), `r` re-reads the board with
+// the view kept — except where a view binds the key itself: the sweep's `r`
+// re-reads its previews, and its case sitting above the closer is what makes
+// that so. Deleting that case once left the whole suite green; now it would
+// turn the sweep's `r` into a board reload without a word (t-mznb).
+func TestEveryFullScreenViewAnswersTheStoreKeys(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		open func(*Model)
+		kind viewKind
+		own  bool // the view's own `r`
+	}{
+		{"graph", func(m *Model) { m.openGraph() }, viewGraph, false},
+		{"map", func(m *Model) { m.openMap("") }, viewMap, false},
+		{"boxes", func(m *Model) { m.openBoxes() }, viewBoxes, false},
+		{"roadmap", func(m *Model) { m.openRoadmap() }, viewRoadmap, false},
+		{"swim", func(m *Model) { m.openSwim() }, viewSwim, false},
+		{"sweep", func(m *Model) { _ = m.openSweep() }, viewSweep, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := boardModel(t, 240, 50)
+			tc.open(m)
+			if m.view != tc.kind {
+				t.Fatalf("%s did not open (view %v)", tc.name, m.view)
+			}
+			if c := m.onKey(keyMsg("R")); c != nil || !strings.Contains(m.status, "no store to sync") {
+				t.Errorf("R must reach the sync key: cmd=%v status=%q", c != nil, m.status)
+			}
+			c := m.onKey(keyMsg("r"))
+			switch {
+			case tc.own:
+				if !strings.Contains(m.status, "re-reading the sweep previews") {
+					t.Errorf("the sweep's own r must win: status=%q", m.status)
+				}
+			case c == nil || m.status != "reloading…":
+				t.Fatalf("r must reach the reload key: cmd=%v status=%q", c != nil, m.status)
+			default:
+				m.Update(c())
+				if !strings.Contains(m.status, "reloaded") || m.view != tc.kind {
+					t.Errorf("the re-read must land with the view kept: status=%q view=%v", m.status, m.view)
+				}
+			}
+		})
+	}
+}

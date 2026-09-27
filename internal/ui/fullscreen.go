@@ -11,7 +11,7 @@ import (
 
 // What every full-screen view shares: the frame skeleton and title line
 // above, and below it the cursor-pinned scroll, the half-page key, the
-// filter's status-line claim, the four keys every view answers alike, and the
+// filter's status-line claim, the six keys every view answers alike, and the
 // cursor carried back to the board on close. Each view keeps its own layout,
 // keys and words; these hold the invariants once, so the copies cannot drift
 // apart (a roster of the views used to sit here, and it was one view short
@@ -150,9 +150,11 @@ func (m *Model) composeFullScreen(titleBar, header string, canvas []string, stri
 	return frame
 }
 
-// fullScreenKey is the four keys every full-screen view answers the same way:
-// quit, the help overlay, esc, and the pair that closes the view — its own
-// opener pressed again, or `v`. It reports whether the key was one of them.
+// fullScreenKey is the six keys every full-screen view answers the same way:
+// quit, the help overlay, esc, the pair that closes the view — its own opener
+// pressed again, or `v` — and the board's two store keys, `r` and `R`
+// (reloadKey, syncKey: the store is the board's, not a view's, t-mznb). It
+// reports whether the key was one of them.
 //
 // Views call it from their switch's DEFAULT arm, not before the switch, so a
 // view's own bindings are tested first and a shared closer can never shadow a
@@ -191,6 +193,13 @@ func (m *Model) fullScreenKey(msg tea.KeyPressMsg, own key.Binding, closeView fu
 
 	case key.Matches(msg, own, m.keys.View):
 		closeView()
+
+	case key.Matches(msg, m.keys.Reload):
+		// The store keys, as on the board: a view's own binding of the same
+		// key wins, since every handler's own cases sit above this closer.
+		return m.reloadKey(), true
+	case key.Matches(msg, m.keys.Sync):
+		return m.syncKey(), true
 
 	default:
 		return nil, false

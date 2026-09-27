@@ -183,6 +183,10 @@ A filter, a slice or the revisit lens is not applied in this view — there
 are no task rows to mute — and the header names which is on. Headless:
 `-dump -boxes -filter 'label:bbq'` / `-dump -boxes -revisit`.
 
+`r` (reload) and `R` (sync) work here, and in every full-screen view, as on
+the board — except where a view binds the key itself: the sweep's `r`
+re-reads its previews.
+
 `ridge -boxes` opens the real board in this view. Headless: `-dump -boxes`;
 the fixture's states are `-demo boxes` / `boxesall` / `boxeswaiting`.
 

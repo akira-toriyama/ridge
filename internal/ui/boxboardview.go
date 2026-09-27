@@ -384,7 +384,23 @@ func (m *Model) scrollBoxesToSel(l *boxLayout, total, canvasH int) int {
 // picking "the right one" would need a scope this view does not have.
 func (m *Model) openBoxes() {
 	m.startBoxes()
-	m.note("box overview — every box by repo · ⏎ slices the board to one · m manages it · z scope · esc returns")
+	m.note("%s", boxesNote)
+}
+
+// boxesNote is the overview's key claim, spelled once for its two writers.
+const boxesNote = "box overview — every box by repo · ⏎ slices the board to one · m manages it · z scope · esc returns"
+
+// noteBoxes re-states the overview's keys once it has the keyboard back from
+// the box overlay (exitEpic): the overlay's "⏎ pick a field · esc closes" is a
+// false key claim there — ⏎ slices — and it once stayed on the line (t-mznb).
+// Never over a refusal nobody has read yet (the panel's rule, noteSliceAxis),
+// nor over a store-first write's "waiting for furrow", which is said nowhere
+// else.
+func (m *Model) noteBoxes() {
+	if m.statusErr || m.storeFirstInflight() {
+		return
+	}
+	m.note("%s", boxesNote)
 }
 
 // startBoxes is openBoxes minus the status line (the -boxes flag runs it
@@ -460,8 +476,8 @@ func (m *Model) onBoxesKey(msg tea.KeyPressMsg) tea.Cmd {
 	// and `m`: a case matching it, placed above these, would take the view's
 	// own gestures.
 	// Nothing below claims either key — the shared closer in the default arm
-	// answers q / ctrl+c / ? / esc / E / v and nothing else. The dep map's and
-	// the swimlane's handlers live by the same rule.
+	// answers q / ctrl+c / ? / esc / E / v and the store keys r / R, nothing
+	// else. The dep map's and the swimlane's handlers live by the same rule.
 	case key.Matches(msg, m.keys.BoxSlice):
 		return m.drillIntoBox(l)
 

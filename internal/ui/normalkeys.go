@@ -220,31 +220,10 @@ func (m *Model) onNormalKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.jumpBack()
 
 	case key.Matches(msg, m.keys.Reload):
-		if m.queueBusy() {
-			// The reload would race the queue's own furrow process, land
-			// behind the guard in onReloadDone and be dropped — leaving
-			// "reloading…" on screen forever. The drain reconciles anyway.
-			m.note("writes in flight — the board re-reads itself once they land")
-			return nil
-		}
-		label := "reloaded"
-		if !m.prov.Live() {
-			label = "reloaded from the fixture — session edits discarded"
-		}
-		m.note("reloading…")
-		return m.reloadCmd(label)
+		return m.reloadKey()
 
 	case key.Matches(msg, m.keys.Sync):
-		if !m.prov.Live() {
-			m.note("the fixture has no store to sync")
-			return nil
-		}
-		if m.queueBusy() {
-			m.note("writes in flight — sync once they land")
-			return nil
-		}
-		m.note("syncing…")
-		return m.syncCmd()
+		return m.syncKey()
 
 	case key.Matches(msg, m.keys.Add):
 		return m.enterAdd()

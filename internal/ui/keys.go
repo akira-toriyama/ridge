@@ -336,7 +336,8 @@ func (k keyMap) HelpSections(enterEdits bool) []helpSection {
 		{"dep map", [][]key.Binding{
 			{k.Up, k.Down, k.Left, k.Right},
 			{k.MapGraph, k.MapScope},
-			{k.PeekScroll, k.Map, k.View, k.Cancel},
+			{k.PeekScroll, k.Reload, k.Sync},
+			{k.Map, k.View, k.Cancel},
 		}},
 		// The box overview's surface. Same rule as every full-screen
 		// section: every key onBoxesKey acts on, because the section is read
@@ -344,7 +345,7 @@ func (k keyMap) HelpSections(enterEdits bool) []helpSection {
 		{"box overview", [][]key.Binding{
 			{k.Up, k.Down, k.Left, k.Right},
 			{k.BoxSlice, k.EpicEdit, k.MapScope},
-			{k.Top, k.Bottom, k.PeekScroll},
+			{k.Top, k.Bottom, k.PeekScroll, k.Reload, k.Sync},
 			{k.Boxes, k.View, k.Cancel},
 		}},
 		// The roadmap's surface. Same rule again: every key onRoadKey acts on.
@@ -354,7 +355,7 @@ func (k keyMap) HelpSections(enterEdits bool) []helpSection {
 		{"roadmap", [][]key.Binding{
 			{k.Up, k.Down, k.Left, k.Right},
 			{k.RoadDue, k.RoadZoom, k.Top, k.Bottom, k.PeekScroll},
-			{k.ViewTab, k.ViewSave},
+			{k.ViewTab, k.ViewSave, k.Reload, k.Sync},
 			{k.Roadmap, k.View, k.Cancel},
 		}},
 		// The swimlane's surface. Same rule as the other full-screen sections:
@@ -363,15 +364,17 @@ func (k keyMap) HelpSections(enterEdits bool) []helpSection {
 		{"swimlane", [][]key.Binding{
 			{k.Up, k.Down, k.Left, k.Right},
 			{k.SwimFold, k.SwimSlice, k.SwimAxis, k.MapScope},
-			{k.Top, k.Bottom, k.PeekScroll},
+			{k.Top, k.Bottom, k.PeekScroll, k.Reload, k.Sync},
 			{k.Swim, k.View, k.Cancel},
 		}},
 		// The sweep's surface. Same rule: every key onSweepKey acts on. The
 		// gate's "any other key cancels" is not a binding, so it is not listed
 		// — the header line says it while a gate is open.
+		// `r` is the sweep's own: it re-reads the previews, not the board
+		// (its case sits above the shared closer); `R` is the closer's.
 		{"sweep", [][]key.Binding{
 			{k.Up, k.Down, k.Top, k.Bottom, k.PeekScroll},
-			{k.Commit, k.SweepSkip, k.Reload},
+			{k.Commit, k.SweepSkip, k.Reload, k.Sync},
 			{k.Sweep, k.View, k.Cancel},
 		}},
 		{"graph", [][]key.Binding{
@@ -381,7 +384,7 @@ func (k keyMap) HelpSections(enterEdits bool) []helpSection {
 			{k.Up, k.Down, k.Left, k.Right},
 			{k.GraphRoot, k.GraphRadius, k.GraphOrient},
 			{k.JumpBack, k.PeekScroll, k.Map},
-			{k.View, k.Cancel},
+			{k.Reload, k.Sync, k.View, k.Cancel},
 		}},
 	}
 }
