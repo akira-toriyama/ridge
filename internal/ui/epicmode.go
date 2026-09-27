@@ -710,11 +710,18 @@ func (m *Model) commitEpicConfirm(box *board.EpicInfo) tea.Cmd {
 			if err != nil {
 				return err
 			}
-			var parts []string
+			// The disclosure LEADS and the previous-active chip follows: the
+			// status row is cut at its right end, and the chip carries a
+			// title of any width (the real board's run to 145 cells), so put
+			// after the disclosure it can only cost the chip's title, where
+			// put before it took the recur clause — the warning that does
+			// not clear on its own — for 43% of the real board's boxes (the
+			// share whose title is 16 cells or more, measured 2026-09-28).
+			parts := []string{leftOpenLine(res.LeftOpen)}
 			if wasActive && res.Previous.ID != "" {
 				parts = append(parts, "previous: "+res.Previous.ID+" "+res.Previous.Title)
 			}
-			*note = strings.Join(append(parts, leftOpenLine(res.LeftOpen)), " · ")
+			*note = strings.Join(parts, " · ")
 			return nil
 		})
 	}
@@ -738,11 +745,18 @@ func stillOpen(open, parked int) string {
 // leftOpenLine is the landing note's disclosure, from furrow's open_members
 // (board.EpicClose.LeftOpen — nil is its "could not read", never rendered as
 // none); a recurring member is named because its epic-closed warning does
-// not clear on its own. Both id lists are capped so a box closed over a long
-// tail stays legible; the status line's own width truncation is the hard
-// limit.
+// not clear on its own. Both id lists are budgeted in CELLS, not ids — 52
+// for the open list and 16 for the recurring one, six and two of furrow's
+// default 7-cell ids — so a box closed over a long tail stays legible AND
+// the line stays inside the 240-column floor behind its `epic done <id> · `
+// lead whatever the board's ids.width (pinned by test, as syncNote's is,
+// with 10-cell ids and a four-digit count); no recurring list at all when
+// every member left open recurs (it would repeat the open list). A six-id
+// cap on both lists once let eight recurring members push the line to 241
+// cells, and the floor cut its tail (t-y4m3). The chip a close of the
+// ACTIVE box adds follows this line (commitEpicConfirm says why).
 func leftOpenLine(left []board.EpicOpenMember) string {
-	const shown = 6
+	const cells, cellsRecur = 52, 16
 	switch {
 	case left == nil:
 		return "left open: unknown — furrow could not read the board after the close"
@@ -756,12 +770,26 @@ func leftOpenLine(left []board.EpicOpenMember) string {
 			recur = append(recur, mbr.ID)
 		}
 	}
-	s := fmt.Sprintf("left open %d: %s", len(left), firstIDs(ids, shown))
-	if len(recur) > 0 {
+	s := fmt.Sprintf("left open %d: %s", len(left), namedWithin(ids, cells))
+	switch {
+	case len(recur) == len(left):
+		s += fmt.Sprintf(" — all %d recur: each close mints the successor under this closed box until it is re-filed", len(recur))
+	case len(recur) > 0:
 		s += fmt.Sprintf(" — %d recur (%s): each close mints the successor under this closed box until it is re-filed",
-			len(recur), firstIDs(recur, shown))
+			len(recur), namedWithin(recur, cellsRecur))
 	}
 	return s
+}
+
+// namedWithin names the ids whose `, `-joined width stays inside cells —
+// the first one always — and counts the rest, so a line built from it has
+// a width bound that does not depend on the board's ids.width.
+func namedWithin(ids []string, cells int) string {
+	shown := 1
+	for shown < len(ids) && lg.Width(strings.Join(ids[:shown+1], ", ")) <= cells {
+		shown++
+	}
+	return firstIDs(ids, shown)
 }
 
 func firstIDs(ids []string, shown int) string {

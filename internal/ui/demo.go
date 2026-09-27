@@ -762,6 +762,35 @@ func (m *Model) demoState(kind string) error {
 			Committed: ids[:5], Pending: ids[5:], Stash: 1,
 		}))
 
+	case "epicdoneleft":
+		// The close's landing note — the disclosure of what the close left
+		// open, then the previous-active chip (commitEpicConfirm's order,
+		// so a long chip title is what the floor costs). The fixture's
+		// close cannot land it (the store answers nothing), so the note is
+		// canned from the board's own ids, every member recurring — the
+		// folded `all N recur` form — behind a chip with a 90-cell title,
+		// for the width sweep and the eye.
+		ids := make([]string, 0, 8)
+		for _, tk := range m.b.Tasks() {
+			ids = append(ids, tk.ID)
+			if len(ids) == 8 {
+				break
+			}
+		}
+		if len(ids) < 8 {
+			return fmt.Errorf("demo epicdoneleft: no board with eight tasks to name")
+		}
+		left := make([]board.EpicOpenMember, len(ids))
+		for i, id := range ids {
+			left[i] = board.EpicOpenMember{ID: id, Status: "backlog", Repeat: "FREQ=WEEKLY"}
+		}
+		boxes := m.b.Epics()
+		if len(boxes) < 2 {
+			return fmt.Errorf("demo epicdoneleft: no board with two boxes")
+		}
+		m.lastPersist = "epic done " + boxes[0].ID + " 143ms"
+		m.note("epic done %s · %s · previous: %s %s", boxes[0].ID, leftOpenLine(left), boxes[1].ID, strings.Repeat("前の箱", 30))
+
 	case "epicreopen":
 		// The same row on the CLOSED box, which is the other verb and the
 		// other wording. Reaching it needs the widened scope, which is the

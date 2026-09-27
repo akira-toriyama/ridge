@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	lg "charm.land/lipgloss/v2"
+
 	"github.com/akira-toriyama/ridge/internal/board"
 	"github.com/akira-toriyama/ridge/internal/store/memstore"
 )
@@ -1142,14 +1144,16 @@ func scriptedEpicBoard() *board.Board {
 // (could not read) is never rendered as "none" — names the recurring member,
 // and caps the id list so a long tail still fits one status line.
 func TestLeftOpenLineKeepsUnknownNoneAndSomeApart(t *testing.T) {
+	// furrow's default ids (7 cells): the lists' cell budgets name six open
+	// members and two recurring ones of that width.
 	long := make([]board.EpicOpenMember, 8)
 	for i := range long {
-		long[i] = board.EpicOpenMember{ID: fmt.Sprintf("t-%d", i), Status: "backlog"}
+		long[i] = board.EpicOpenMember{ID: fmt.Sprintf("t-%05d", i), Status: "backlog"}
 	}
 	long[7].Repeat = "FREQ=WEEKLY"
 	allRecur := make([]board.EpicOpenMember, 8)
 	for i := range allRecur {
-		allRecur[i] = board.EpicOpenMember{ID: fmt.Sprintf("t-%d", i), Status: "inbox", Repeat: "FREQ=WEEKLY"}
+		allRecur[i] = board.EpicOpenMember{ID: fmt.Sprintf("t-%05d", i), Status: "inbox", Repeat: "FREQ=WEEKLY"}
 	}
 	cases := []struct {
 		name string
@@ -1161,12 +1165,44 @@ func TestLeftOpenLineKeepsUnknownNoneAndSomeApart(t *testing.T) {
 		{"some, one recurring", []board.EpicOpenMember{
 			{ID: "t-a", Status: "backlog"}, {ID: "t-b", Status: "inbox", Repeat: "FREQ=WEEKLY"},
 		}, "left open 2: t-a, t-b — 1 recur (t-b): each close mints the successor under this closed box until it is re-filed"},
-		{"capped", long, "left open 8: t-0, t-1, t-2, t-3, t-4, t-5 +2 more — 1 recur (t-7): each close mints the successor under this closed box until it is re-filed"},
-		{"capped recur", allRecur, "left open 8: t-0, t-1, t-2, t-3, t-4, t-5 +2 more — 8 recur (t-0, t-1, t-2, t-3, t-4, t-5 +2 more): each close mints the successor under this closed box until it is re-filed"},
+		{"capped", long, "left open 8: t-00000, t-00001, t-00002, t-00003, t-00004, t-00005 +2 more — 1 recur (t-00007): each close mints the successor under this closed box until it is re-filed"},
+		{"all recur", allRecur, "left open 8: t-00000, t-00001, t-00002, t-00003, t-00004, t-00005 +2 more — all 8 recur: each close mints the successor under this closed box until it is re-filed"},
+		{"capped recur", append(append([]board.EpicOpenMember{}, allRecur[:3]...), board.EpicOpenMember{ID: "t-0000x", Status: "inbox"}),
+			"left open 4: t-00000, t-00001, t-00002, t-0000x — 3 recur (t-00000, t-00001 +1 more): each close mints the successor under this closed box until it is re-filed"},
 	}
 	for _, tc := range cases {
 		if got := leftOpenLine(tc.left); got != tc.want {
 			t.Errorf("%s:\n got %q\nwant %q", tc.name, got, tc.want)
+		}
+	}
+	// The floor. furrow's ids are `t-` + ids.width, 5 by default (7 cells)
+	// and the board's to raise, and the member count has no cap: the pin
+	// takes ids of 10 cells (width 8) and a four-digit count, wider than
+	// any board seen (projects: width 4; ridge-test: 5), so the line stays
+	// inside 240 columns behind its lead with room for the next word. The
+	// widest shape is every member recurring but one (both lists named);
+	// all recurring folds the second list.
+	for _, shape := range []struct {
+		name string
+		mk   func(i int) board.EpicOpenMember
+	}{
+		{"all but one recur", func(i int) board.EpicOpenMember {
+			r := "FREQ=WEEKLY"
+			if i == 0 {
+				r = ""
+			}
+			return board.EpicOpenMember{ID: fmt.Sprintf("t-%08d", i), Status: "inbox", Repeat: r}
+		}},
+		{"all recur", func(i int) board.EpicOpenMember {
+			return board.EpicOpenMember{ID: fmt.Sprintf("t-%08d", i), Status: "inbox", Repeat: "FREQ=WEEKLY"}
+		}},
+	} {
+		wide := make([]board.EpicOpenMember, 9999)
+		for i := range wide {
+			wide[i] = shape.mk(i)
+		}
+		if line := "epic done e-00000000 · " + leftOpenLine(wide); lg.Width(line) > 240 {
+			t.Errorf("%s: the landing note overflows the floor: %d cells: %q", shape.name, lg.Width(line), line)
 		}
 	}
 }
@@ -1174,6 +1210,35 @@ func TestLeftOpenLineKeepsUnknownNoneAndSomeApart(t *testing.T) {
 // The disclosure reaches the status line when the close LANDS — after the
 // label, beside the previous-active suggestion when the box held the slot —
 // so what furrow answered is on screen, not only in the debug log.
+// Closing the ACTIVE box adds furrow's previous-active chip AFTER the
+// disclosure: the row is cut at its right, and the chip's title is of any
+// width, so the order decides whether the recur clause or the chip's title
+// is what a long title costs (t-y4m3).
+func TestEpicCloseNotePutsThePreviousChipAfterTheDisclosure(t *testing.T) {
+	m, p := storeFirstModel(t)
+	p.epicLeft = []board.EpicOpenMember{{ID: "t-a", Status: "ready", Repeat: "FREQ=WEEKLY"}}
+	p.epicPrev = board.EpicPrevious{ID: "e-prev", Title: strings.Repeat("前の箱", 30)}
+	sliceOnEpicAxis(t, m, "e-one")
+	press(m, "m")
+	m.b.Epic("e-one").Active = true
+	m.epic.menuIdx = int(epicFieldClosed)
+	if c := m.openEpicField(epicFieldClosed, m.b.Epic(m.epic.id)); c != nil {
+		m.Update(c())
+	}
+	cmd := m.onEpicKey(keyMsg("enter"))
+	if cmd == nil {
+		t.Fatal("the close queued no write")
+	}
+	m.onPersistDone(cmd().(persistDoneMsg))
+	want := "epic done e-one · left open 1: t-a — all 1 recur: each close mints the successor under this closed box until it is re-filed · previous: e-prev " + strings.Repeat("前の箱", 30)
+	if m.status != want {
+		t.Errorf("status = %q, want %q", m.status, want)
+	}
+	if row := ansiStrip(m.statusLine()); !strings.Contains(row, "all 1 recur") || !strings.Contains(row, "previous: e-prev") {
+		t.Errorf("the row must keep the recur clause and the chip's id, losing only the chip's title: %q", row)
+	}
+}
+
 func TestEpicCloseNoteCarriesWhatTheStoreLeftOpen(t *testing.T) {
 	m, p := storeFirstModel(t)
 	p.epicLeft = []board.EpicOpenMember{{ID: "t-a", Title: "a", Status: "ready"}}
@@ -1190,5 +1255,17 @@ func TestEpicCloseNoteCarriesWhatTheStoreLeftOpen(t *testing.T) {
 	m.onPersistDone(cmd().(persistDoneMsg))
 	if want := "epic done e-one · left open 1: t-a"; m.status != want {
 		t.Errorf("status = %q, want %q", m.status, want)
+	}
+}
+
+// The close's landing note has a headless frame: the disclosure leads and
+// the previous-active chip's long title is what the 240-cell row loses.
+func TestEpicDoneLeftDemoKeepsTheDisclosureOnTheRow(t *testing.T) {
+	out, err := New(memstore.New(), Options{}).Dump(240, 40, "epicdoneleft", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "left open 8:") || !strings.Contains(out, "all 8 recur: each close mints the successor") || !strings.Contains(out, "· previous: e-") {
+		t.Errorf("-demo epicdoneleft must keep the disclosure and the chip's id on the row:\n%s", out)
 	}
 }
