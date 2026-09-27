@@ -149,15 +149,19 @@ func TestContractEpicRemoveUnfilesMembersUnderForce(t *testing.T) {
 }
 
 // The asset transfer against a furrow that has it (furrow #345 — newer than
-// the v6.0.0 pin, whose `rm -h` names no assets, so this skips there): an
-// attached image goes with its task, and one another body still shows is
-// kept and says who holds it.
+// the v6.0.0 pin, so this skips there): an attached image goes with its
+// task, and one another body still shows is kept and says who holds it. The
+// binary is told apart by the report shape its `rm -h` prints — v6.0.0's is
+// `{dry_run, force, tasks, references}`, dev's ends in `references, assets}`
+// — because the report itself cannot: an absent key and an empty transfer
+// decode alike (CI ran this once against the pin, unskipped, on the word
+// "assets" alone, which the prose of both helps carries).
 //
 // bite-exempt: execs a real furrow binary and always skips where furrow is not
 // on PATH — which is CI's bite job, so the gate can never judge it there
 func TestContractRemoveReportsTheAssetTransfer(t *testing.T) {
 	p, dir := newLabProvider(t)
-	if !strings.Contains(string(lab(t, dir, "furrow", "rm", "-h")), "assets") {
+	if !strings.Contains(string(lab(t, dir, "furrow", "rm", "-h")), "references, assets}") {
 		t.Skip("this furrow's rm report carries no asset transfer (#345 is newer than v6.0.0)")
 	}
 	png := filepath.Join(t.TempDir(), "shot.png")
