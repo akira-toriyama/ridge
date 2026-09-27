@@ -152,10 +152,10 @@ type keyMap struct {
 
 	// The slice panel's two epic-management keys (epicmode.go). EpicEdit is
 	// `m`-only on purpose: keys.Move is ("enter","m") and the panel's ⏎ SLICES,
-	// so reusing Move here would shadow the panel's own commit key. `e` was the
-	// obvious letter and is deliberately left alone — it means $EDITOR, and
-	// `furrow edit` takes an epic id, so that is the key epic body editing will
-	// want. EpicNew is uppercase for the same reason R/K/J/H/L are: the
+	// so reusing Move here would shadow the panel's own commit key. `e` is
+	// left alone on the panel — it means $EDITOR, and it IS that inside the
+	// overlay's body stage (onEpicBodyKey: `furrow edit` on the box id).
+	// EpicNew is uppercase for the same reason R/K/J/H/L are: the
 	// lowercase sibling (`a`) creates a TASK; a slip is withdrawn from the
 	// overlay's delete row (`epic rm`, rmgate.go), never from a bare key.
 	EpicEdit key.Binding

@@ -269,13 +269,21 @@ func (p *Store) PersistCheck(id string, i int, _ bool) error {
 	return nil
 }
 
-// PersistBody validates the id and records nothing (board.Provider).
+// PersistBody validates the id — a task's or a box's, as furrow's edit takes
+// either — and records nothing (board.Provider).
 func (p *Store) PersistBody(id, _ string) error {
 	if err := p.gate(); err != nil {
 		return err
 	}
-	if p.snapshot().Task(id) == nil {
-		return fmt.Errorf("unknown task %q", id)
+	return p.knownEntity(id)
+}
+
+// knownEntity is the id check the body, note and review persists share: a
+// task or a box on the served board, else furrow's not-found.
+func (p *Store) knownEntity(id string) error {
+	b := p.snapshot()
+	if b.Task(id) == nil && b.Epic(id) == nil {
+		return fmt.Errorf("unknown id %q", id)
 	}
 	return nil
 }
@@ -318,29 +326,24 @@ func (p *Store) PersistFields(id string, _ board.FieldPatch) error {
 	return nil
 }
 
-// PersistNote validates the id and records nothing (board.Provider) — the
-// local apply (Board.AppendNote) already refused an empty text against the
-// same board.
+// PersistNote validates the id — a task's or a box's — and records nothing
+// (board.Provider): the local apply (Board.AppendNote / AppendEpicNote)
+// already refused an empty text against the same board.
 func (p *Store) PersistNote(id, _ string) error {
 	if err := p.gate(); err != nil {
 		return err
 	}
-	if p.snapshot().Task(id) == nil {
-		return fmt.Errorf("unknown task %q", id)
-	}
-	return nil
+	return p.knownEntity(id)
 }
 
-// PersistReview validates the id and records nothing (board.Provider) — the
-// local apply (Board.Review) already stamped the same board.
+// PersistReview validates the id — a task's or a box's — and records nothing
+// (board.Provider): the local apply (Board.Review / ReviewEpic) already
+// stamped the same board.
 func (p *Store) PersistReview(id string) error {
 	if err := p.gate(); err != nil {
 		return err
 	}
-	if p.snapshot().Task(id) == nil {
-		return fmt.Errorf("unknown task %q", id)
-	}
-	return nil
+	return p.knownEntity(id)
 }
 
 // terminalLanes is furrow's default terminal set (config DefaultTerminal:

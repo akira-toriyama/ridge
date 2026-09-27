@@ -277,7 +277,18 @@ type epicJSON struct {
 	// is on the wire whether or not --all is passed, so it needs no scope of
 	// its own.
 	Closed *time.Time `json:"closed"`
-	Deps   []string   `json:"deps"`
+	// updated is on every row; reviewed is OMITTED on a box never reviewed
+	// (furrow's omitempty on the epic — a task row prints an explicit null
+	// instead; measured on v6.0.0 and dev, 2026-09-27), and fromPtr reads
+	// both as the zero time.
+	Updated  *time.Time `json:"updated"`
+	Reviewed *time.Time `json:"reviewed"`
+	// body is the STORE-RELATIVE PATH of the box's prose ("bodies/<e-id>.md"),
+	// never content — the task row's contract, in the same directory; every
+	// box has the file (measured on the real board's 200 boxes and on a
+	// freshly added one, 2026-09-27), so a miss is the loud error a task's is.
+	Body string   `json:"body"`
+	Deps []string `json:"deps"`
 	// open_deps is furrow-derived, like progress and stuck: the deps still
 	// waiting, with deps on closed epics already resolved away (omitted
 	// entirely when none remain). ridge never recomputes it.
@@ -304,8 +315,9 @@ func (e epicJSON) toEpicInfo() board.EpicInfo {
 		ID: e.ID, Title: e.Title, Goal: e.Goal,
 		Active: e.Active, Standing: e.Standing, Pinned: e.Pinned,
 		Labels: e.Labels, Repos: e.Repos, Meta: e.Meta,
-		Closed: fromPtr(e.Closed),
-		Done:   e.Progress.Done, Total: e.Progress.Total,
+		Closed:  fromPtr(e.Closed),
+		Updated: fromPtr(e.Updated), Reviewed: fromPtr(e.Reviewed),
+		Done: e.Progress.Done, Total: e.Progress.Total,
 		Stuck: e.Stuck, Deps: e.Deps, OpenDeps: e.OpenDeps,
 	}
 	if e.Waiting != nil {
@@ -403,6 +415,9 @@ func (p *Store) load() (*board.Board, error) {
 	for _, e := range boxes {
 		epics = append(epics, e.toEpicInfo())
 	}
+	if err := readEpicBodies(cfg.Store, boxes, epics); err != nil {
+		return nil, err
+	}
 
 	// Declared with the snapshot it belongs to, on every load: a frame is a
 	// function of the board's calendar, not the terminal's TZ (t-kt2h).
@@ -417,18 +432,42 @@ func (p *Store) load() (*board.Board, error) {
 // A missing file is a loud error, not an empty peek: furrow's own reads never
 // narrow silently, and neither should ours.
 func readBodies(store string, rows []taskJSON, tasks []*board.Task) error {
-	type job struct {
-		path string
-		dst  *board.Task
+	jobs := make([]bodyJob, 0, len(rows))
+	for i, r := range rows {
+		if r.Body != "" {
+			jobs = append(jobs, bodyJob{path: filepath.Join(store, r.Body), dst: &tasks[i].Body})
+		}
 	}
-	jobs := make(chan job)
+	return readBodyFiles(jobs, "a task body")
+}
+
+// readEpicBodies is readBodies for the boxes: the same pointer in the same
+// directory ("the two share the bodies/ directory"), read the same way.
+func readEpicBodies(store string, boxes []epicJSON, epics []board.EpicInfo) error {
+	jobs := make([]bodyJob, 0, len(boxes))
+	for i, e := range boxes {
+		if e.Body != "" {
+			jobs = append(jobs, bodyJob{path: filepath.Join(store, e.Body), dst: &epics[i].Body})
+		}
+	}
+	return readBodyFiles(jobs, "a box body")
+}
+
+// bodyJob is one prose file and the field it lands in.
+type bodyJob struct {
+	path string
+	dst  *string
+}
+
+func readBodyFiles(jobs []bodyJob, what string) error {
+	queue := make(chan bodyJob)
 	errCh := make(chan error, 1)
 	var wg sync.WaitGroup
 	for w := 0; w < 8; w++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for j := range jobs {
+			for j := range queue {
 				raw, err := os.ReadFile(j.path)
 				if err != nil {
 					select {
@@ -437,21 +476,18 @@ func readBodies(store string, rows []taskJSON, tasks []*board.Task) error {
 					}
 					continue
 				}
-				j.dst.Body = string(raw)
+				*j.dst = string(raw)
 			}
 		}()
 	}
-	for i, r := range rows {
-		if r.Body == "" {
-			continue
-		}
-		jobs <- job{path: filepath.Join(store, r.Body), dst: tasks[i]}
+	for _, j := range jobs {
+		queue <- j
 	}
-	close(jobs)
+	close(queue)
 	wg.Wait()
 	select {
 	case err := <-errCh:
-		return fmt.Errorf("reading a task body: %w", err)
+		return fmt.Errorf("reading %s: %w", what, err)
 	default:
 		return nil
 	}

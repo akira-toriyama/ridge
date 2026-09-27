@@ -406,6 +406,11 @@ func runBenchload(stdout, stderr io.Writer, extra func(op string, d time.Duratio
 			bodies++
 		}
 	}
+	for _, e := range b.EpicsAll() {
+		if e.Body != "" {
+			bodies++ // the boxes' records ride the same read (readEpicBodies)
+		}
+	}
 	for _, s := range samples {
 		_, _ = fmt.Fprintf(stdout, "%-8s %4dms (concurrent)\n", s.op, s.ms)
 	}

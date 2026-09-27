@@ -708,6 +708,15 @@ func fixtureEpics() []board.EpicInfo {
 			Total:    18,
 			Deps:     []string{"e-p3dx"},
 			OpenDeps: []string{"e-p3dx"},
+			// The one box with a RECORD — the goal context and the activation
+			// log furrow appends on `epic activate --reason` — and the one
+			// reviewed, so the overlay's body stage and reviewed row have a
+			// fixture site each (the other boxes read `—` / `never`).
+			Updated:  ts("2026-08-09T09:30:00Z"),
+			Reviewed: ts("2026-08-01T00:00:00Z"),
+			Body: "# 九州キャンプ旅 2026\n\n2026-06 の家族会議で決定。阿蘇→高千穂の 3 泊、雨天代替を先に押さえる。\n\n" +
+				"2026-07-16 09:12 activated — 家族会議の翌週。予約の締切が先に来るので装備より行程を先に。\n\n" +
+				"2026-08-09 追記: 予約 3 件確定。装備は積載図（[[t-9sa6]]）待ち。次の一手は車載レイアウト案の 2 案目から。",
 		},
 		{
 			ID:       "e-p3dx",

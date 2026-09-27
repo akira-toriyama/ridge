@@ -65,7 +65,10 @@ type Provider interface {
 	// PersistBody records id's already-applied body replacement. body is
 	// non-empty after trimming: furrow refuses an empty replacement (a body
 	// is never cleared, exit 2), and Board.SetBody mirrors that refusal
-	// before anything queues.
+	// before anything queues. id may name a BOX: furrow's edit takes either
+	// entity ("both entities' prose lives in the one bodies/ directory"),
+	// and Board.SetEpicBody is that half — PersistNote and PersistReview
+	// take a box id the same way (AppendEpicNote, ReviewEpic).
 	PersistBody(id, body string) error
 
 	// PersistFields records id's already-applied metadata edit. Everything
@@ -77,7 +80,8 @@ type Provider interface {
 
 	// PersistNote records an already-applied note append: one paragraph added
 	// to the body with Updated stamped, `furrow note`'s contract. The local
-	// half is Board.AppendNote, which already refused an empty text.
+	// half is Board.AppendNote, which already refused an empty text — or
+	// Board.AppendEpicNote: id may name a box (PersistBody says why).
 	PersistNote(id, text string) error
 
 	// PersistCheckAdd records an already-appended checklist item.
@@ -99,7 +103,8 @@ type Provider interface {
 
 	// PersistReview records id's already-applied review stamp — `furrow
 	// review <id>`, which sets `reviewed` and touches nothing else (a review
-	// changes no content, so Updated stays; the local half is Board.Review).
+	// changes no content, so Updated stays; the local half is Board.Review,
+	// or Board.ReviewEpic when id names a box — PersistBody says why).
 	PersistReview(id string) error
 
 	// Revisit is `furrow revisit -q <q>`: the open tasks worth a fresh

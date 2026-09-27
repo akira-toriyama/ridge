@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/akira-toriyama/ridge/internal/board"
 )
@@ -520,5 +521,60 @@ func TestContractEpicDoneDisclosesTheMembersLeftOpen(t *testing.T) {
 	}
 	if res.LeftOpen == nil || len(res.LeftOpen) != 0 {
 		t.Errorf("an empty box must answer [] (none), got %#v — nil is reserved for an unreadable board", res.LeftOpen)
+	}
+}
+
+// The box's record against the real CLI: `epic ls --json` carries the body
+// path (every box has the file — measured on the real board's 200 boxes)
+// and the clocks; note / edit --body / review take the box id as they take a
+// task's, and the re-read shows the paragraph, the replacement, and a review
+// that moved the review clock alone.
+//
+// bite-exempt: execs a real furrow binary and always skips where furrow is not
+// on PATH — which is CI's bite job, so the gate can never judge it there
+func TestContractEpicBodyNoteAndReviewRoundTrip(t *testing.T) {
+	p, dir := newLabProvider(t)
+	box := labEpic(t, dir, "記録を持つ箱", "lab/lab")
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	e := p.Board().Epic(box)
+	if e == nil || e.Updated.IsZero() || !e.Reviewed.IsZero() {
+		t.Fatalf("a fresh box carries updated and no review: %+v", e)
+	}
+	if err := p.PersistNote(box, "進捗を一段落"); err != nil {
+		t.Fatalf("note on a box: %v", err)
+	}
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	e = p.Board().Epic(box)
+	if !strings.Contains(e.Body, "進捗を一段落") {
+		t.Errorf("the re-read must carry the appended paragraph: %q", e.Body)
+	}
+	if err := p.PersistBody(box, "# 箱\n\n置き換えた本文\n"); err != nil {
+		t.Fatalf("edit --body on a box: %v", err)
+	}
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	e = p.Board().Epic(box)
+	if e.Body != "# 箱\n\n置き換えた本文\n" {
+		t.Errorf("the re-read must carry the replacement: %q", e.Body)
+	}
+	updated := e.Updated
+	// updated has second precision and the edit above landed ~100ms ago: a
+	// review that DID bump it would stamp the same second and pass the
+	// equality below (found by review), so the check waits the second out.
+	time.Sleep(1100 * time.Millisecond)
+	if err := p.PersistReview(box); err != nil {
+		t.Fatalf("review on a box: %v", err)
+	}
+	if err := p.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	e = p.Board().Epic(box)
+	if e.Reviewed.IsZero() || !e.Updated.Equal(updated) {
+		t.Errorf("review must stamp Reviewed alone: reviewed=%v updated %v → %v", e.Reviewed, updated, e.Updated)
 	}
 }

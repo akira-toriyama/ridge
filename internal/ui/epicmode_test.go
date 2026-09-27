@@ -1102,6 +1102,13 @@ func TestEpicDemoFramesCarryWhatTheyExistFor(t *testing.T) {
 		// The derived line on the waiting box (furrow #321), which the `epic`
 		// demo's rich box cannot carry: stuck and waiting are exclusive.
 		{"epicwaiting", []string{"box e-m8kd", "1/2 done · waiting until 2027-03-31 (t-w7ne)"}},
+		// The record half: the body stage carries the activation log
+		// furrow appends, the note input its typed paragraph, the gate the
+		// review clock it would stamp.
+		{"epicbody", []string{"box e-fw2m", "body — the box's own record", "activated", "a append a paragraph · e $EDITOR · g/G ^u/^d page · esc back"}},
+		{"epicbodybusy", []string{"box e-fw2m", "edit body e-fw2m — the last store-first write landed", "esc out, then r"}},
+		{"epicnote", []string{"box e-fw2m", "append note — one paragraph onto the box's record", "予約 3 件確定"}},
+		{"epicreview", []string{"box e-fw2m", "stamp reviewed", "review clock", "⏎ confirms"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.demo, func(t *testing.T) {

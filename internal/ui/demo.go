@@ -673,6 +673,49 @@ func (m *Model) demoState(kind string) error {
 			return fmt.Errorf("demo epicrm: the fixture's preview did not land: %s", m.epic.rm.err)
 		}
 
+	case "epicbody", "epicnote", "epicreview", "epicbodybusy":
+		// The overlay's record half: the body stage on the box that carries
+		// a record (`epicbody`), the note input over it holding a typed
+		// paragraph (`epicnote`), the reviewed row's gate (`epicreview`,
+		// on the same box so the gate states a real clock), and `e` refused
+		// inside a store-first write's unread window (`epicbodybusy`, the
+		// flag canned onto the fixture the way rmrefused cans its read).
+		// None is reachable from a bare flag: each sits between two
+		// keystrokes of a live overlay.
+		box, err := m.demoRecordBox(kind)
+		if err != nil {
+			return err
+		}
+		if err := m.demoEpicPanel(kind, box.ID); err != nil {
+			return err
+		}
+		if kind == "epicreview" {
+			m.epic.menuIdx = int(epicFieldReviewed)
+			if c := m.openEpicField(epicFieldReviewed, m.b.Epic(box.ID)); c != nil {
+				_ = c
+			}
+			break
+		}
+		m.epic.menuIdx = int(epicFieldBody)
+		if c := m.openEpicField(epicFieldBody, m.b.Epic(box.ID)); c != nil {
+			_ = c
+		}
+		switch kind {
+		case "epicnote":
+			if c := m.onEpicBodyKey(tea.KeyPressMsg{Code: 'a', Text: "a"}, m.b.Epic(box.ID)); c != nil {
+				_ = c
+			}
+			if m.epic.stage != stageInput {
+				return fmt.Errorf("demo epicnote: a did not open the note input")
+			}
+			m.epic.input.SetValue("予約 3 件確定。次は装備の積載図から。")
+		case "epicbodybusy":
+			m.storeFirstUnread = true
+			if c := m.onEpicBodyKey(tea.KeyPressMsg{Code: 'e', Text: "e"}, m.b.Epic(box.ID)); c != nil {
+				return fmt.Errorf("demo epicbodybusy: e was not refused inside the unread window")
+			}
+		}
+
 	case "synced":
 		// The sync's landing note. The fixture has no store to sync, so the
 		// report is canned — every branch of syncNote in one line, both id
@@ -1468,6 +1511,14 @@ func (m *Model) demoRmBox(demo string) (board.EpicInfo, error) {
 		return *first, nil
 	}
 	return board.EpicInfo{}, fmt.Errorf("demo %s: no open box on this board that something references (a member, a box dep or a [[link]])", demo)
+}
+
+// demoRecordBox is the open box that carries a record (a body) — the body
+// stage's subject; a box without one shows only the "no record yet" line.
+func (m *Model) demoRecordBox(demo string) (board.EpicInfo, error) {
+	return m.demoBox(demo, "is an open box that carries a record (a body)", func(e board.EpicInfo) bool {
+		return e.Closed.IsZero() && strings.TrimSpace(e.Body) != ""
+	})
 }
 
 // demoClosedBox is the closed box the overlay has the most to show on — the

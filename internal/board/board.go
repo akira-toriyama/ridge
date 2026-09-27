@@ -191,6 +191,10 @@ var boardLanes = []Lane{
 //
 //   - Stored — Title, Goal, Labels, Repos, Meta, and the two PERMANENT-channel
 //     declarations Standing/Pinned. `furrow epic set` writes exactly these.
+//     Body and Reviewed are stored too, by `edit --body` / `note` and by
+//     `review`, which take a box id as they take a task's; SetEpicBody,
+//     AppendEpicNote and ReviewEpic are their optimistic halves, and Updated
+//     is the stamp the first two advance.
 //   - Active — at most ONE box per repo, and a box spanning several repos
 //     consumes a slot in each. furrow's to enforce, and it REFUSES a second
 //     box for a repo rather than stealing the slot, so ridge must never
@@ -236,6 +240,14 @@ type EpicInfo struct {
 	Meta   map[string]string // free-form; furrow stores it and never interprets it
 
 	Closed time.Time // zero = open
+
+	// The box's two clocks as furrow serves them: edit --body and note
+	// stamp Updated, review stamps Reviewed alone (zero = never).
+	Updated  time.Time
+	Reviewed time.Time
+	// Body is the box's prose — the goal context and the activation log
+	// `epic activate --reason` appends — read from the store like a task's.
+	Body string
 
 	Done     int
 	Total    int
@@ -332,9 +344,11 @@ func (b *Board) indexEpics() {
 // id after it. Surfaces that must see a closed box — resolving a dep, reopening
 // one — ask for EpicsAll.
 //
-// It is a precomputed COPY, so it does not alias Epic(id). Nothing in the app
-// writes through that pointer (the store swaps a fresh board in for every epic
-// write), but a test that does will not see its edit here.
+// It is a precomputed COPY, so it does not alias Epic(id). The store swaps a
+// fresh board in for every store-first epic write; the three optimistic box
+// writes (SetEpicBody, AppendEpicNote, ReviewEpic) DO write through that
+// pointer, and each re-indexes so this copy follows — a test that writes
+// through it without re-indexing will not see its edit here.
 func (b *Board) Epics() []EpicInfo { return b.epicsOpen }
 
 // EpicsAll is every box the read served, open and closed, in furrow's order
@@ -919,31 +933,97 @@ func (b *Board) AppendNote(id, text string) error {
 	if err != nil {
 		return err
 	}
+	body, err := appendParagraph(t.Body, text)
+	if err != nil {
+		return err
+	}
+	t.Body = body
+	t.Updated = nowFn().UTC().Truncate(time.Second)
+	return nil
+}
+
+// appendParagraph is `furrow note`'s composition over any body — a task's or
+// a box's — with its two refusals.
+func appendParagraph(body, text string) (string, error) {
 	text = strings.TrimRight(text, "\n")
 	if strings.TrimSpace(text) == "" {
-		return fmt.Errorf("note text is empty")
+		return "", fmt.Errorf("note text is empty")
 	}
 	if text == "-" {
 		// furrow's readTextArg reads `-` as "take the note from stdin" — a
 		// convention `--` does not stop, and ridge execs furrow with stdin on
 		// /dev/null, so the write would land as exit 2 AFTER the optimistic
 		// apply showed the paragraph (measured on v4.0.0 cmd_mutate.go).
-		return fmt.Errorf("a note of just %q is furrow's read-from-stdin marker", text)
+		return "", fmt.Errorf("a note of just %q is furrow's read-from-stdin marker", text)
 	}
 	var s strings.Builder
-	s.WriteString(t.Body)
-	if t.Body != "" {
-		if !strings.HasSuffix(t.Body, "\n") {
+	s.WriteString(body)
+	if body != "" {
+		if !strings.HasSuffix(body, "\n") {
 			s.WriteString("\n")
 		}
-		if !strings.HasSuffix(t.Body, "\n\n") {
+		if !strings.HasSuffix(body, "\n\n") {
 			s.WriteString("\n")
 		}
 	}
 	s.WriteString(text)
 	s.WriteString("\n")
-	t.Body = s.String()
-	t.Updated = nowFn().UTC().Truncate(time.Second)
+	return s.String(), nil
+}
+
+// mustEpic resolves a box or names the miss, for the three writes below.
+func (b *Board) mustEpic(id string) (*EpicInfo, error) {
+	e := b.Epic(id)
+	if e == nil {
+		return nil, fmt.Errorf("unknown epic %q", id)
+	}
+	return e, nil
+}
+
+// SetEpicBody is SetBody on a box — the optimistic half of Provider.PersistBody
+// with a box id (furrow's edit takes either entity), the same refusal of an
+// empty replacement. It writes the indexed entity and re-indexes, because
+// Epics() is a COPY (indexEpics) that would otherwise keep the old prose.
+func (b *Board) SetEpicBody(id, body string) error {
+	e, err := b.mustEpic(id)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(body) == "" {
+		return fmt.Errorf("%s: replacement body is empty — a body is never cleared", id)
+	}
+	e.Body = body
+	e.Updated = nowFn().UTC().Truncate(time.Second)
+	b.indexEpics()
+	return nil
+}
+
+// AppendEpicNote is AppendNote on a box (Provider.PersistNote's optimistic half
+// with a box id).
+func (b *Board) AppendEpicNote(id, text string) error {
+	e, err := b.mustEpic(id)
+	if err != nil {
+		return err
+	}
+	body, err := appendParagraph(e.Body, text)
+	if err != nil {
+		return err
+	}
+	e.Body = body
+	e.Updated = nowFn().UTC().Truncate(time.Second)
+	b.indexEpics()
+	return nil
+}
+
+// ReviewEpic is Review on a box: Reviewed alone, Updated untouched (furrow's
+// review stamps the review clock and nothing else on either entity).
+func (b *Board) ReviewEpic(id string) error {
+	e, err := b.mustEpic(id)
+	if err != nil {
+		return err
+	}
+	e.Reviewed = nowFn().UTC().Truncate(time.Second)
+	b.indexEpics()
 	return nil
 }
 

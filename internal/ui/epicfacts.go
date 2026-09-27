@@ -163,6 +163,14 @@ func (m *Model) boxMeta(e *board.EpicInfo, full bool) []string {
 		if keys := e.MetaKeys(); len(keys) > 0 {
 			meta = append(meta, "meta "+strings.Join(keys, ","))
 		}
+		// The record and the review clock, the two facts the overlay's
+		// body and reviewed rows edit; the readout has no room for them.
+		if strings.TrimSpace(e.Body) != "" {
+			meta = append(meta, "body "+epicBodyCell(e))
+		}
+		if !e.Reviewed.IsZero() {
+			meta = append(meta, "reviewed "+ago(e.Reviewed))
+		}
 	}
 	return meta
 }
