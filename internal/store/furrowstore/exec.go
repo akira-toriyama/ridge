@@ -12,7 +12,8 @@ import (
 
 // furrowError is furrow's machine-readable error envelope, decoded from
 // stderr. No production caller branches on it: Error() folds Kind and Subject
-// into the one line the ui shows. Retryable is kept because
+// — and a sync-conflict's paths, ahead of the prose, since the status line
+// truncates its right end — into the one line the ui shows. Retryable is kept because
 // TestContractErrorsCarryTheEnvelope holds furrow to its promise that an
 // unknown id is not retryable; a caller that ever needs to branch branches on
 // Kind (a closed kebab-case vocabulary — `furrow vocab error-kinds`), never on
@@ -22,13 +23,37 @@ type furrowError struct {
 	Subject   string `json:"subject"`
 	Message   string `json:"message"`
 	Retryable bool   `json:"retryable"`
+	// Details.Paths: the conflicted paths beside a sync-conflict's message
+	// (furrow internal/app/sync.go; t-36k0). Read for that kind alone —
+	// sync-unmerged carries them too, and its message already lists them.
+	Details struct {
+		Paths []string `json:"paths"`
+	} `json:"details"`
 }
 
 func (e *furrowError) Error() string {
+	var s string
 	if e.Subject != "" {
-		return fmt.Sprintf("%s (%s: %s)", e.Message, e.Kind, e.Subject)
+		s = fmt.Sprintf("%s (%s: %s)", e.Message, e.Kind, e.Subject)
+	} else {
+		s = fmt.Sprintf("%s (%s)", e.Message, e.Kind)
 	}
-	return fmt.Sprintf("%s (%s)", e.Message, e.Kind)
+	if n := len(e.Details.Paths); n > 0 && e.Kind == "sync-conflict" {
+		// The paths LEAD: `synced: ` plus furrow's 181-cell message plus
+		// the kind already fills 200 of the status row's 240 cells, so a
+		// clause at the end was cut at the floor (measured 2026-09-28: one
+		// path lost its `.json`, a second was invisible). Three are named,
+		// the rest counted — with three of furrow's 27-cell shard paths the
+		// clause is under 100 cells and the message's head still reads.
+		const shown = 3
+		paths := e.Details.Paths
+		more := ""
+		if n > shown {
+			paths, more = paths[:shown], fmt.Sprintf(" +%d more", n-shown)
+		}
+		s = "conflicted paths: " + strings.Join(paths, ", ") + more + " — " + s
+	}
+	return s
 }
 
 // errorEnvelope is the stderr wrapper around furrowError.

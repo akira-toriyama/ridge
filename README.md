@@ -336,6 +336,7 @@ go run ./cmd/ridge -dump -demo editduetime   # the edit menu's due input on a ti
 go run ./cmd/ridge -dump -demo editrepeat    # the edit menu's repeat input, seeded with the stored rule (-demo addrepeat: quick add's repeat: token echoed as a chip beside its due)
 go run ./cmd/ridge -dump -demo editclosed    # the edit menu on a closed task: the repeat row states its precondition before the press (-demo editnodue: the same row on a task with no due)
 go run ./cmd/ridge -dump -demo synced        # R's landing note: what the sync published, what it left modified on this checkout, a stash left behind
+go run ./cmd/ridge -dump -demo syncfail      # R refused with a conflict: the conflicted paths lead the line, furrow's prose follows (cut at the floor)
 go run ./cmd/ridge -dump -live -plain -cols 320   # the REAL board (cwd, or FURROW_DIR) at rest — invariants and eyes, not golden: the frame carries the load time and today's dates
 go run ./cmd/ridge -dump -live -sweep        # any view on the real board: -table / -roadmap / -graph / -map / -boxes / -swim / -sweep (-demo is the fixture's; refused with -live)
 TZ=Pacific/Auckland go run ./cmd/ridge -dump -live -plain -table   # dates follow the board's calendar ([due].timezone), not TZ: for a board that declares one, identical to the same frame under TZ=Asia/Tokyo
