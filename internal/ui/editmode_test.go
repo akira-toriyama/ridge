@@ -250,6 +250,36 @@ func TestEditDueRefusesGarbageAndAcceptsForms(t *testing.T) {
 	drainPersists(m, t)
 }
 
+// The menu's due row and the input it opens spell a timed due with its
+// time — the row reads what the input will open on — and ⏎ on the seed
+// keeps the due (t-4ag4; the roadmap's direct input is asserted in
+// roadmapview_test).
+func TestEditDueRowShowsAndReseedsATimedDue(t *testing.T) {
+	m := editModel(t, "t-9sa6")
+	m.edit.menuIdx = int(fieldDue)
+	press(m, "enter")
+	m.edit.input.SetValue("2026-09-01T10:30")
+	press(m, "enter")
+	drainPersists(m, t)
+	want, _ := board.ParseDue("2026-09-01T10:30")
+	if got := m.b.Task("t-9sa6").Due; !got.Equal(want) {
+		t.Fatalf("due = %s, want %s", got, want)
+	}
+	if out := frame(m); !strings.Contains(out, "2026-09-01T10:30") {
+		t.Errorf("the due row must show the time the promise carries:\n%s", out)
+	}
+	m.edit.menuIdx = int(fieldDue)
+	press(m, "enter")
+	if got := m.edit.input.Value(); got != "2026-09-01T10:30" {
+		t.Errorf("the input must open on the stored spelling, got %q", got)
+	}
+	press(m, "enter")
+	if got := m.b.Task("t-9sa6").Due; !got.Equal(want) {
+		t.Errorf("⏎ on the seed moved the due to %s", got)
+	}
+	drainPersists(m, t)
+}
+
 func TestEditChecklistCursorTogglesTheSelectedItem(t *testing.T) {
 	m := editModel(t, "t-9sa6") // 6 unchecked items
 	m.edit.menuIdx = int(fieldChecklist)

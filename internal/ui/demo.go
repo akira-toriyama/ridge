@@ -187,6 +187,31 @@ func (m *Model) demoState(kind string) error {
 			_ = c
 		}
 
+	case "editduetime":
+		// The due input seeded with a TIMED due (t-4ag4). The fixture's dues
+		// are all whole-day, so no other frame shows the seed carrying its
+		// time — the reading the fix exists for: ⏎ on it keeps the promise.
+		subj, err := m.demoEditTask("editduetime")
+		if err != nil {
+			return err
+		}
+		if !m.selectID(subj.ID, false) {
+			return fmt.Errorf("demo editduetime: %s is on the board but not in view", subj.ID)
+		}
+		due, err := board.ParseDue("2026-09-30T21:30")
+		if err != nil {
+			return err
+		}
+		subj.Due = due
+		m.enterEdit()
+		if m.edit == nil {
+			return fmt.Errorf("demo editduetime: the edit menu did not open")
+		}
+		m.edit.menuIdx = int(fieldDue)
+		if c := m.openField(fieldDue, subj); c != nil {
+			_ = c
+		}
+
 	case "editrepeat":
 		// The repeat rule's input (t-zbmv), seeded with the task's stored
 		// rule: the one edit-menu seed that is furrow's spelling (the

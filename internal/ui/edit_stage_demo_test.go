@@ -36,6 +36,11 @@ func TestEditPickDemoProvesThePicker(t *testing.T) {
 // title wider than the window.
 func TestEditInputDemoSeedsTheFocusedInput(t *testing.T) {
 	m := New(memstore.New(), Options{})
+	// The due input on a timed due: the seed carries the wall clock the
+	// fixture's whole-day dues never show (t-4ag4).
+	if out, err := New(memstore.New(), Options{}).Dump(240, 60, "editduetime", true); err != nil || !strings.Contains(out, "2026-09-30T21:30") {
+		t.Errorf("-demo editduetime must show the seed with its time (%v):\n%s", err, out)
+	}
 	frame, err := m.Dump(240, 60, "editinput", true)
 	if err != nil {
 		t.Fatal(err)

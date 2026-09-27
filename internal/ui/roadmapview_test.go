@@ -538,6 +538,39 @@ func TestRoadmapClearingADueLandsTheCursorOnTheNeighbour(t *testing.T) {
 	}
 }
 
+// A timed due opens seeded with its time, and ⏎ on that seed leaves the
+// due where it was. The day-only seed rebound every timed due to its day's
+// last second on an unchanged ⏎ — invisible on the fixture, whose dues are
+// all whole-day, and found on a copy of the 100-task ridge-test store,
+// where 39 of 95 dated tasks carry a time (2026-09-27; the real board: 8
+// of its 26 live dated tasks, 2 with seconds, 2026-09-28) (t-4ag4).
+func TestRoadmapDueSeedKeepsTheTimeOfDay(t *testing.T) {
+	m := roadModel(t, 240, 40)
+	m.road.sel = "t-9sa6"
+	for _, form := range []string{"2026-09-30T21:30", "2026-09-30T21:30:05"} {
+		press(m, "enter")
+		m.edit.input.SetValue(form)
+		press(m, "enter")
+		drainPersists(m, t)
+		want, _ := board.ParseDue(form)
+		if got := m.b.Task("t-9sa6").Due; !got.Equal(want) {
+			t.Fatalf("%s: due = %s, want %s", form, got, want)
+		}
+		press(m, "enter")
+		if got := m.edit.input.Value(); got != form {
+			t.Errorf("the input must open on the stored due's spelling, got %q want %q", got, form)
+		}
+		press(m, "enter")
+		if m.edit != nil {
+			t.Fatal("⏎ on the seed must apply and close the overlay")
+		}
+		if got := m.b.Task("t-9sa6").Due; !got.Equal(want) {
+			t.Errorf("%s: ⏎ on the seed moved the due to %s", form, got)
+		}
+		drainPersists(m, t)
+	}
+}
+
 // `m` is the other spelling; esc closes the overlay with the due kept; a
 // refused form stays in the input beside its refusal (the note input's
 // rule) — a garbage form, and the empty form on a task that repeats, which

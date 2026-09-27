@@ -794,6 +794,43 @@ func ParseDue(s string) (time.Time, error) {
 		"YYYY-MM-DDTHH:MM[:SS] (a space works too), an RFC3339 instant, or a signed offset like +1d/+2h", s)
 }
 
+// DueSpelling is ParseDue's inverse: the spelling that reads back to the
+// same instant, for an input that opens on a stored due. A whole-day due
+// (the last second of its day in the board's calendar) is its day, since
+// that is what a bare day binds; any other instant carries its wall clock,
+// the seconds only when they are not zero. A wall clock that does not read
+// back (the repeated hour of a DST fall-back) is spelled as an RFC3339
+// instant in the zone instead, and one that still does not (a zone offset
+// carrying seconds, which RFC3339 cannot spell) as the UTC instant, which
+// always does. Zero is "": no promise, an empty input.
+func DueSpelling(due time.Time) string {
+	if due.IsZero() {
+		return ""
+	}
+	wall := due.In(Zone())
+	var s string
+	switch {
+	case wall.Hour() == 23 && wall.Minute() == 59 && wall.Second() == 59:
+		s = wall.Format("2006-01-02")
+	case wall.Second() == 0:
+		s = wall.Format("2006-01-02T15:04")
+	default:
+		s = wall.Format("2006-01-02T15:04:05")
+	}
+	if readsBack(s, due) {
+		return s
+	}
+	if s = wall.Format(time.RFC3339Nano); readsBack(s, due) {
+		return s
+	}
+	return due.UTC().Format(time.RFC3339Nano)
+}
+
+func readsBack(s string, due time.Time) bool {
+	back, err := ParseDue(s)
+	return err == nil && back.Equal(due)
+}
+
 // validateRef mirrors the one refusal furrow's ref flag still has: an empty
 // --add is furrow's own exit 2. Everything else is free text that reaches the
 // store verbatim — `,` and `"` included — since furrow #317 made --add/--rm

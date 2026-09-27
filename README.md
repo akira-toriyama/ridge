@@ -189,9 +189,11 @@ in due order, with `◆` placed on a time axis.** The view that answers "what
 expires when" — the timeline form of `furrow brief`'s due head and
 `-q is:overdue` (glossary: "Roadmap", "zoom").
 `z` cycles day / week / month, `h`/`l` pan the window. `⏎`/`m` on a row opens
-the field edit menu's due input directly, seeded with the row's date, and
-closes it on apply or `esc`. The forms are the menu's (`+1d` counts from now,
-not from the row's date); empty clears, unless the task repeats — furrow
+the field edit menu's due input directly, seeded with the row's due in the
+spelling the grammar reads back (its day for a whole-day due, day and time
+otherwise; headless: `-demo editduetime`), and closes it on apply or `esc`.
+The forms are the menu's (`+1d` counts from now, not from the row's date);
+empty clears, unless the task repeats — furrow
 keeps a due under a rule, and the refusal stays beside the typed form in the
 input, as does a form the grammar rejects. After the apply the timeline
 re-lays with the row on its new date, the window panning to its `◆` when the
@@ -330,6 +332,7 @@ go run ./cmd/ridge -dump -roadmap            # the due timeline (week/month axes
 go run ./cmd/ridge -dump -demo sweepconfirm  # the sweep with the archive gate open (sweep / sweeprestore / sweepwait are the others)
 go run ./cmd/ridge -dump -demo done          # a task just closed with d: "closed <id> — unblocked N task(s)" counts what the close freed, not what depends on it
 go run ./cmd/ridge -dump -demo repeatdone    # a recurring task just closed: its successor's card and the "repeat: next due <day> (<id>)" line (-demo repeat: the rule in the peek)
+go run ./cmd/ridge -dump -demo editduetime   # the edit menu's due input on a timed due: the seed carries the wall clock (⏎ on it keeps the promise)
 go run ./cmd/ridge -dump -demo editrepeat    # the edit menu's repeat input, seeded with the stored rule (-demo addrepeat: quick add's repeat: token echoed as a chip beside its due)
 go run ./cmd/ridge -dump -demo editclosed    # the edit menu on a closed task: the repeat row states its precondition before the press (-demo editnodue: the same row on a task with no due)
 go run ./cmd/ridge -dump -demo synced        # R's landing note: what the sync published, what it left modified on this checkout, a stash left behind
