@@ -47,7 +47,11 @@ func TestContractSweepRoundTrip(t *testing.T) {
 	p, dir := newLabProvider(t)
 	old := labAdd(t, dir, "aged done")
 	fresh := labAdd(t, dir, "fresh done")
-	open := labAdd(t, dir, "open, waits on the aged one", "--dep", old)
+	// The satisfied edge points at the FRESH one: a done task a staying task
+	// still depends on is held back from the archive (furrow #440,
+	// 2026-10-04 — `held` in the dry run, exit 2 `referenced` by id), so an
+	// edge onto the aged task would leave nothing archivable.
+	open := labAdd(t, dir, "open, waits on the fresh one", "--dep", fresh)
 	labClose(t, dir, old, 60)
 	lab(t, dir, "furrow", "set", fresh, "-s", "done")
 
@@ -61,8 +65,8 @@ func TestContractSweepRoundTrip(t *testing.T) {
 	if len(s.Archivable) != 1 || s.Archivable[0].ID != old || s.Archivable[0].Closed.IsZero() {
 		t.Fatalf("archivable = %+v, want the aged task alone", s.Archivable)
 	}
-	if len(s.DoneDeps) != 1 || s.DoneDeps[0].ID != open || strings.Join(s.DoneDeps[0].Deps, ",") != old {
-		t.Errorf("done_deps = %+v, want %s → %s", s.DoneDeps, open, old)
+	if len(s.DoneDeps) != 1 || s.DoneDeps[0].ID != open || strings.Join(s.DoneDeps[0].Deps, ",") != fresh {
+		t.Errorf("done_deps = %+v, want %s → %s", s.DoneDeps, open, fresh)
 	}
 	if len(s.UnknownKeys) != 0 || len(s.Archived) != 0 {
 		t.Errorf("unknown/archived = %d/%d, want empty on a fresh store", len(s.UnknownKeys), len(s.Archived))
@@ -103,10 +107,6 @@ func TestContractSweepRoundTrip(t *testing.T) {
 	if len(s.Archived) != 1 || s.Archived[0].ID != old || s.Archived[0].Title != "aged done" {
 		t.Errorf("archived = %+v, want the retired task", s.Archived)
 	}
-	// The satisfied edge now points at an ARCHIVED task; whatever tidy says
-	// about it is furrow's call — pinned as observed so a change is visible.
-	t.Logf("done_deps with the dep archived: %+v", s.DoneDeps)
-
 	// Unarchive: a hot id is exit 2, a miss is exit 1 with nothing restored,
 	// the real one comes back in the done lane with its stamp.
 	if err := p.Unarchive([]string{fresh}); err == nil || !strings.Contains(err.Error(), "already on the hot board") {
