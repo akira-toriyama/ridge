@@ -604,7 +604,9 @@ func (m *Model) onEpicInputCommit(k epicInputKind, v string) tea.Cmd {
 	id := e.id
 	if v == e.seed && (k == epicInputTitle || k == epicInputGoal) {
 		m.onEpicInputCancel(k)
-		m.note("box %s · %s unchanged — ⏎ pick a field · esc closes", id, epicFieldName(e.field))
+		if !m.statusErr {
+			m.note("box %s · %s unchanged — ⏎ pick a field · esc closes", id, epicFieldName(e.field))
+		}
 		return nil
 	}
 	switch k {

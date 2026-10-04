@@ -469,6 +469,16 @@ func (m *Model) editListSelect(t *board.Task, rows []string) tea.Cmd {
 		if picks := m.epicPickList(t.Epic); e.listIdx > 0 && e.listIdx <= len(picks) {
 			id = picks[e.listIdx-1].ID
 		}
+		if id == t.Epic {
+			// The list opens on the loaded copy's box, so ⏎ there is the
+			// inputs' ⏎-on-seed: writing it back re-filed a task another
+			// session had moved since (t-vamc, review).
+			e.stage = stageMenu
+			if !m.statusErr {
+				m.note("edit %s · epic unchanged — ⏎ pick a field · esc closes", e.id)
+			}
+			return nil
+		}
 		e.stage = stageMenu
 		return m.applyPatch("epic", board.FieldPatch{Epic: &id})
 	case fieldDeps:
@@ -580,12 +590,16 @@ func (m *Model) onEditInputCommit(k inputKind, v string, t *board.Task) tea.Cmd 
 			// only the menu's note needs the word.
 			direct := e.direct
 			m.onEditInputCancel(k)
-			if !direct {
+			if !direct && !m.statusErr {
 				m.note("edit %s · %s unchanged — ⏎ pick a field · esc closes", e.id, editFieldName(e.field))
 			}
 			return nil
 		case inputCheckReword:
+			// Back in the list, where ⏎ toggles: the keys stay on the row.
 			m.onEditInputCancel(k)
+			if !m.statusErr {
+				m.note("edit %s · checklist item unchanged — ⏎/x toggle · esc back", e.id)
+			}
 			return nil
 		}
 		// inputRepeat is not here: ⏎ on its seed is the re-anchor (openField).

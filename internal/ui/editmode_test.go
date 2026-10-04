@@ -313,8 +313,61 @@ func TestEditInputOnItsSeedWritesNothing(t *testing.T) {
 		t.Fatalf("r must open the reword input (stage %d)", m.edit.stage)
 	}
 	press(m, "enter")
-	// The list stage re-notes its own keys: there ⏎ toggles.
-	assertUnchangedInput(t, m, "edit t-9sa6 · checklist — ⏎/x toggle")
+	// Back in the list stage, whose keys stay on the row: there ⏎ toggles.
+	assertUnchangedInput(t, m, "edit t-9sa6 · checklist item unchanged — ⏎/x toggle")
+
+	// The seed is what the INPUT holds, not the stored text: the input
+	// flattens a tab or a newline and the commit trims, so a seed taken from
+	// the raw value never matched and the flattened text was written back.
+	if err := m.b.CheckReword("t-9sa6", 0, "  tab\there\nnext  "); err != nil {
+		t.Fatal(err)
+	}
+	m.edit.listIdx = 0
+	press(m, "r", "enter")
+	assertUnchangedInput(t, m, "checklist item unchanged")
+	if got := m.b.Task("t-9sa6").Checklist[0].Text; got != "  tab\there\nnext  " {
+		t.Errorf("the item was rewritten to %q", got)
+	}
+
+	// The epic list opens on the loaded copy's box: ⏎ there is the same
+	// write-back, and re-filed a task another session had moved.
+	press(m, "esc")
+	m.edit.menuIdx = int(fieldEpic)
+	press(m, "enter", "enter")
+	if m.edit.stage != stageMenu {
+		t.Errorf("⏎ on the current box must land back on the menu (stage %d)", m.edit.stage)
+	}
+	assertUnchangedInput(t, m, "edit t-9sa6 · epic unchanged")
+
+	// An unread refusal outranks the word.
+	m.fail("nope")
+	m.edit.menuIdx = int(fieldTitle)
+	press(m, "enter", "enter")
+	if !m.statusErr || !strings.Contains(m.status, "nope") {
+		t.Errorf("the unchanged note took an unread refusal off the row: %q", m.status)
+	}
+}
+
+// The repeat input is the exception: ⏎ on its seed is furrow's re-anchor
+// (`--repeat <rule>` alone restarts the series at the current due), a write
+// the user asks for by pressing it — so it is sent, loaded copy or not.
+func TestRepeatInputOnItsSeedStillWrites(t *testing.T) {
+	m := editModel(t, "t-9sa6")
+	m.edit.menuIdx = int(fieldDue)
+	press(m, "enter")
+	m.edit.input.SetValue("2026-09-01")
+	press(m, "enter")
+	m.edit.menuIdx = int(fieldRepeat)
+	press(m, "enter")
+	m.edit.input.SetValue("FREQ=WEEKLY")
+	press(m, "enter")
+	drainPersists(m, t)
+	press(m, "enter")
+	if got := m.edit.input.Value(); got != "FREQ=WEEKLY" {
+		t.Fatalf("the input must open on the stored rule, got %q", got)
+	}
+	press(m, "enter")
+	drainPersists(m, t) // fails the test when nothing was queued
 }
 
 func TestEditChecklistCursorTogglesTheSelectedItem(t *testing.T) {
