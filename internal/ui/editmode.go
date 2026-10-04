@@ -320,6 +320,9 @@ func (m *Model) onEditKey(msg tea.KeyPressMsg) tea.Cmd {
 	if t == nil {
 		return nil
 	}
+	if c, ok := m.overlayStoreKey(m.edit.stage, msg); ok {
+		return c
+	}
 	return m.edit.onKey(m, msg, editHooks{m, t})
 }
 

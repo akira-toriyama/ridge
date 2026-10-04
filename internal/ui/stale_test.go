@@ -569,6 +569,46 @@ func TestAFailedReReadKeepsTheRefusalThatFiredIt(t *testing.T) {
 	}
 }
 
+// The overlay menus answer the store keys: the menu draws the loaded copy's
+// values and its inputs open on them, and `r` / `R` did nothing there — a
+// box another session had retitled could not be brought in without closing
+// the overlay (t-anxt). The checklist's list keeps `r` for its reword.
+func TestOverlayMenusAnswerTheStoreKeys(t *testing.T) {
+	d := newDriftStore()
+	m := driftOverlay(t, d, "e-fw2m")
+	d.onReload = func(b *board.Board) { b.Epic("e-fw2m").Title = "外で付け直した題" }
+	_, c := m.Update(keyMsg("r"))
+	if c == nil || m.status != "reloading…" {
+		t.Fatalf("r on the box menu must re-read: cmd=%v status=%q", c != nil, m.status)
+	}
+	runCmd(m, c)
+	if m.epic == nil || !strings.Contains(frame(m), "外で付け直した題") || !strings.HasPrefix(m.status, "reloaded") {
+		t.Errorf("the menu must show the re-read title with the overlay kept: status=%q", m.status)
+	}
+	if _, c := m.Update(keyMsg("R")); c == nil || m.status != "syncing…" {
+		t.Errorf("R on the box menu must sync: cmd=%v status=%q", c != nil, m.status)
+	}
+
+	e := New(d, Options{})
+	e.w, e.h = 240, 50
+	e.recompute()
+	e.relayout()
+	if !e.selectID("t-9sa6", false) {
+		t.Fatal("setup: select")
+	}
+	e.enterEdit()
+	if _, c := e.Update(keyMsg("r")); c == nil || e.status != "reloading…" {
+		t.Errorf("r on the task menu must re-read: cmd=%v status=%q", c != nil, e.status)
+	}
+	e.edit.menuIdx = int(fieldChecklist)
+	press(e, "enter")
+	reloads := d.reloads
+	press(e, "r")
+	if e.edit.stage != stageInput || d.reloads != reloads {
+		t.Errorf("r in the checklist stage is the reword, not the re-read: stage %d", e.edit.stage)
+	}
+}
+
 // A refused store-first epic write re-reads the board: the refusal (a box
 // withdrawn elsewhere) says the overlay's board is not the store's, and
 // without the re-read ridge kept a box furrow no longer listed (t-2wa3).

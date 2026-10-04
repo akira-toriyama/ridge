@@ -181,6 +181,26 @@ func (s *overlayShell[F, K]) startInput(h overlayHooks[F, K], kind K, value, pla
 	return s.input.Focus()
 }
 
+// overlayStoreKey answers the store keys `r` and `R` on an overlay's MENU,
+// before the shell's walk — the shell issues no write and no note of this
+// kind (its head comment). The menu draws the loaded copy's values and its
+// inputs open on them, so without these a value another session moved
+// could not be brought in without closing the overlay (t-anxt). The menu
+// only: the checklist's list binds `r` (reword) and an input types it; the
+// other stages leave both keys unbound.
+func (m *Model) overlayStoreKey(stage overlayStage, msg tea.KeyPressMsg) (tea.Cmd, bool) {
+	if stage != stageMenu {
+		return nil, false
+	}
+	switch {
+	case key.Matches(msg, m.keys.Reload):
+		return m.reloadKey(), true
+	case key.Matches(msg, m.keys.Sync):
+		return m.syncKey(), true
+	}
+	return nil, false
+}
+
 // wrapIdx is i modulo n for a cursor that wraps at both ends; an empty list
 // parks it on 0.
 func wrapIdx(i, n int) int {
@@ -251,7 +271,7 @@ func (m *Model) renderOverlayMenu(rows []menuRow, idx, inner int) string {
 		b.WriteString(cursor + style.Render(pad(r.name, 10)) +
 			th.muted.Render(pad(ansi.Truncate(cur, room, "…"), room)) + "\n")
 	}
-	b.WriteString("\n" + th.dim.Render(pad("↑↓ field · ⏎ edit · esc close · ^c quit", inner)))
+	b.WriteString("\n" + th.dim.Render(pad("↑↓ field · ⏎ edit · r reload · R sync · esc close · ^c quit", inner)))
 	return b.String()
 }
 

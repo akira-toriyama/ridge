@@ -488,8 +488,9 @@ func (m *Model) refuseWhileWriting(label, what string) bool {
 		// still the pre-write ones, so a toggle here recomputes from a stale
 		// value and a dep removal addresses an edge furrow has already dropped
 		// ("X is not a dependency of Y").
-		// Names the way out: `r` is not routed inside the overlay, and after
-		// a failed rollback re-read nothing else will fire one.
+		// Names the way out: `r` answers on the board and on the overlay's
+		// menu, not in the stage this refusal lands in, and after a failed
+		// rollback re-read nothing else will fire one.
 		m.fail("%s — the last store-first write landed; waiting for the board to re-read it (esc out, then r)", label)
 	default:
 		return false
@@ -742,8 +743,8 @@ func (m *Model) onReloadDone(msg reloadDoneMsg) tea.Cmd {
 			//
 			// The unread window is NOT cleared: a write that LANDED is still
 			// unread, so store-first gestures stay refused (they gate nothing
-			// else) until a re-read applies — `r` from the board, which the
-			// refusal names, since the overlay does not route it.
+			// else) until a re-read applies — `r` from the board (or the
+			// overlay's menu), which the refusal names.
 			m.rollingBack = false
 			// The held $EDITOR body still applies: its payload is complete
 			// (id + full text, no indices), and dropping it here would lose
