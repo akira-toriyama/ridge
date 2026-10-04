@@ -155,16 +155,13 @@ func (m *Model) boxHeader(l *boxLayout, clipped bool) string {
 	if closed > 0 {
 		bits = append(bits, th.dim.Render(fmt.Sprintf("%d closed", closed)))
 	}
-	if on := m.lensNames(); len(on) > 0 {
+	if bit := m.lensUnappliedBit("counts"); bit != "" {
 		// The overview has no task rows to mute, so no lens applies here —
 		// and it says so, before the paging hint as its siblings order
-		// their filter bit: a frame drawn other than what the flags asked
-		// for, silently, is the no-op the CLI's refusals exist to prevent
-		// (api.go); the roadmap, map and swimlane count what they hide
-		// instead (filterCountBit). Said whether or not the store refused
-		// the query: the claim carries no count from a stale verdict, and a
-		// refusal reaches this view's status line only on the -filter path.
-		bits = append(bits, th.warn.Render(strings.Join(on, " and ")+" not applied here — the counts are unfiltered"))
+		// their filter bit. A refusal reaches this view's status line only
+		// on the -filter path, so the claim does not wait for a clean
+		// verdict.
+		bits = append(bits, bit)
 	}
 	if clipped {
 		bits = append(bits, th.dim.Render("^u/^d page"))
@@ -420,23 +417,6 @@ func (m *Model) startBoxes() {
 			}
 		}
 	}
-}
-
-// lensNames names what narrows the board right now, in the board's own
-// words — the typed filter, the panel's slice, the revisit lens — for a
-// claim about them; empty when nothing does (lensOn).
-func (m *Model) lensNames() []string {
-	var on []string
-	if m.qRaw != "" {
-		on = append(on, "filter")
-	}
-	if m.sliceTerm() != "" {
-		on = append(on, "slice")
-	}
-	if m.revisitOn {
-		on = append(on, "revisit lens")
-	}
-	return on
 }
 
 // closeBoxes returns to the board WITHOUT touching the card cursor. The dep

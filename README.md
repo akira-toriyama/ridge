@@ -249,6 +249,11 @@ re-reads the previews. Every write is store-first (glossary): the frame keeps
 the pre-write preview until the write lands and both the board and the
 previews are re-read.
 
+A filter, a slice or the revisit lens is not applied in this view — the
+previews are furrow's whole-board reads, and a write acts on what they list
+— and the header names which is on, until a gate's line takes the header.
+Headless: `-dump -sweep -filter 'label:bbq'` / `-dump -sweep -revisit`.
+
 `ridge -sweep` opens the real board in this view. Headless: `-dump -sweep`
 (with `-live`, the real previews — the three reads run before the frame).
 The fixture's states are `-dump -demo sweep` (at rest) / `sweepconfirm` (the

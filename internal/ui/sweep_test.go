@@ -2,12 +2,14 @@ package ui
 
 import (
 	"errors"
+	"fmt"
 
 	tea "charm.land/bubbletea/v2"
 	"strings"
 	"testing"
 
 	"github.com/akira-toriyama/ridge/internal/board"
+	"github.com/akira-toriyama/ridge/internal/store/memstore"
 )
 
 // The row model: every section has a header, an empty section carries one
@@ -65,6 +67,97 @@ func TestSweepOpensWithTheFixturePreviews(t *testing.T) {
 	press(m, "esc")
 	if m.view != viewBoard {
 		t.Error("esc did not return to the board")
+	}
+}
+
+// No lens is applied to the sweep — its rows are furrow's whole-board
+// previews, and a write acts on what they list — and the header line says
+// which one is on, in the box overview's words (lensUnappliedBit) and before
+// the paging hint: the frame was once byte-identical with and without -filter
+// (t-cxm3). What the claim claims is pinned beside it: the counts are the
+// unfiltered frame's, and the archive gate names every candidate. An open
+// gate's line replaces the claim, as it replaces the counts.
+func TestTheSweepSaysWhichLensIsNotApplied(t *testing.T) {
+	// The header is the frame's second line, under the title bar
+	// (composeFullScreen).
+	header := func(frame string) string {
+		lines := strings.Split(frame, "\n")
+		if len(lines) < 2 {
+			t.Fatalf("frame has no header line:\n%s", frame)
+		}
+		return lines[1]
+	}
+	bare := New(memstore.New(), Options{Sweep: true})
+	s := bare.sweep.preview
+	if s == nil || len(s.Archivable) == 0 || len(s.DoneDeps) == 0 {
+		t.Fatalf("fixture previews missing: %+v", s)
+	}
+	counts := fmt.Sprintf("%d archivable (closed >%dd) · %d with satisfied deps", len(s.Archivable), s.OlderThanDays, len(s.DoneDeps))
+	for _, tc := range []struct {
+		name, filter string
+		revisit      bool
+		want         string // "" = no claim
+		wantRefusal  bool
+	}{
+		{"no lens", "", false, "", false},
+		{"a filter", "label:bbq", false, "filter not applied here — the previews are unfiltered", false},
+		{"a refused filter", "bogus:zzz", false, "filter not applied here", true},
+		{"the revisit lens", "", true, "revisit lens not applied here", false},
+		{"both", "label:bbq", true, "filter and revisit lens not applied here", false},
+	} {
+		m := New(memstore.New(), Options{Sweep: true, Filter: tc.filter, Revisit: tc.revisit})
+		out, err := m.Dump(240, 40, "", true)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		if tc.want == "" {
+			if strings.Contains(out, "not applied here") {
+				t.Errorf("%s: no lens, no claim:\n%s", tc.name, out)
+			}
+		} else if !strings.Contains(header(out), tc.want) {
+			t.Errorf("%s: the header must claim %q:\n%s", tc.name, tc.want, out)
+		}
+		if tc.wantRefusal && !strings.Contains(out, "-filter refused") {
+			t.Errorf("%s: the refusal must stay on the status line:\n%s", tc.name, out)
+		}
+		if !strings.Contains(header(out), counts) {
+			t.Errorf("%s: the counts must be the unfiltered %q:\n%s", tc.name, counts, out)
+		}
+		if !strings.Contains(header(out), "sweep  ·  furrow archive / tidy / unarchive") {
+			t.Errorf("%s: the header's left end must survive the claim at the floor:\n%s", tc.name, out)
+		}
+	}
+	// A window too short for the rows: the claim sits before the paging hint,
+	// where the sibling views put their filter bit.
+	short, err := New(memstore.New(), Options{Sweep: true, Filter: "label:bbq"}).Dump(240, 14, "", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := header(short)
+	if claim, hint := strings.Index(h, "not applied here"), strings.Index(h, "^u/^d page"); claim < 0 || hint < claim {
+		t.Errorf("the claim must precede the paging hint:\n%s", short)
+	}
+	// The panel's slice is a lens too, and is named as the board names it.
+	m := boardModel(t, 240, 50)
+	press(m, "E")
+	if c := m.drillIntoBox(m.boxes.lay); c != nil {
+		m.Update(c())
+	}
+	press(m, "X")
+	if out := frame(m); !strings.Contains(header(out), "slice not applied here") {
+		t.Errorf("a slice must be named as the slice, not a filter:\n%s", out)
+	}
+	// Under it the gate still names every candidate, and its line takes the
+	// header whole.
+	press(m, "enter")
+	if m.sweep.gate == nil {
+		t.Fatal("⏎ did not arm the gate")
+	}
+	if want := fmt.Sprintf("archive %d task(s)", len(m.sweep.preview.Archivable)); m.sweep.gate.label != want {
+		t.Errorf("the gate under a lens = %q, want %q", m.sweep.gate.label, want)
+	}
+	if out := frame(m); !strings.Contains(out, "⏎ confirms: furrow archive") || strings.Contains(out, "not applied here") {
+		t.Errorf("an open gate's line must replace the claim with the counts:\n%s", out)
 	}
 }
 

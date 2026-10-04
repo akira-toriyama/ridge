@@ -370,9 +370,6 @@ func TestLeavingTheOverlayInTheOverviewDoesNotWakeTheHiddenPanel(t *testing.T) {
 	}
 }
 
-// The header's counts are per BOX, not per placement: a box in two repos is
-// drawn twice and must be counted once, or every aggregate on a fleet board
-// reads high.
 // No lens is applied to the overview — it has no task rows to mute — and
 // the header says which one is on, in the board's own words (filter, slice,
 // revisit lens); the frame was once byte-identical with and without -filter,
@@ -468,6 +465,9 @@ func TestLeavingTheOverlayRestoresTheOverviewNote(t *testing.T) {
 	}
 }
 
+// The header's counts are per BOX, not per placement: a box in two repos is
+// drawn twice and must be counted once, or every aggregate on a fleet board
+// reads high.
 func TestHeaderCountsABoxOnceHoweverManyReposItNames(t *testing.T) {
 	b := board.NewBoard(nil,
 		board.EpicInfo{ID: "e-both", Title: "二重", Repos: []string{"a/a", "b/b"},
