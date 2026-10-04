@@ -257,7 +257,7 @@ func TestCtrlCQuitsFromEveryModal(t *testing.T) {
 // `r` used to fire a reload concurrently with in-flight writes; the snapshot
 // then lost to the guard in onReloadDone and "reloading…" stayed on screen
 // forever.
-func TestReloadKeyRefusesWhileWritesAreInFlight(t *testing.T) {
+func TestReloadKeyWaitsWhileWritesAreInFlight(t *testing.T) {
 	m, _ := scriptedModel(t)
 	if _, c, err := m.commitMove("a", "ready", "ready", 3); err != nil || c == nil {
 		t.Fatal(err)
@@ -267,6 +267,200 @@ func TestReloadKeyRefusesWhileWritesAreInFlight(t *testing.T) {
 	}
 	if !strings.Contains(m.status, "writes in flight") {
 		t.Errorf("status = %q — the refusal must be visible", m.status)
+	}
+}
+
+// `r` and `R` pressed while a write is in flight are promised for "once they
+// land", and the drain keeps the promise: no sync ever ran, and both lines
+// stayed on the row after the queue had emptied (t-nqek, on a copy of the
+// ridge-test store). R outranks r — a sync re-reads too.
+func TestTheDrainPaysAStoreKeyPressedWhileWritesWereInFlight(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		keys []string
+		want string
+	}{
+		{"r", []string{"r"}, "reloaded"},
+		{"R", []string{"R"}, "synced"},
+		{"r then R", []string{"r", "R"}, "synced"},
+		{"R then r", []string{"R", "r"}, "synced"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m, _ := scriptedModel(t)
+			_, write, err := m.commitMove("a", "ready", "ready", 3)
+			if err != nil || write == nil {
+				t.Fatal(err)
+			}
+			for _, k := range tc.keys {
+				if c := m.onNormalKey(keyMsg(k)); c != nil {
+					t.Fatalf("%s must wait for the write", k)
+				}
+				if !strings.Contains(m.status, "writes in flight") || !strings.Contains(m.status, "once they land") {
+					t.Fatalf("status = %q", m.status)
+				}
+			}
+			_, paid := m.Update(write())
+			if paid == nil {
+				t.Fatal("the drain must hand back the owed read")
+			}
+			// The promise line is not a landing note: between the drain and
+			// the read's landing the row says what is running.
+			if m.status != map[string]string{"reloaded": "reloading…", "synced": "syncing…"}[tc.want] {
+				t.Errorf("after the drain: status = %q", m.status)
+			}
+			if tc.want == "synced" && m.onNormalKey(keyMsg("R")) != nil {
+				t.Error("a sync the drain started must guard a second R")
+			}
+			m.Update(paid())
+			if m.statusErr || !strings.HasPrefix(m.status, tc.want+" · ") {
+				t.Errorf("status = %q (err=%v), want the landing of %q", m.status, m.statusErr, tc.want)
+			}
+			if m.owed != owedNone || m.syncing {
+				t.Errorf("nothing may stay owed or running: owed=%d syncing=%v", m.owed, m.syncing)
+			}
+		})
+	}
+}
+
+// The owed read lands BEHIND the write's own landing note — a close's
+// repeat line, a box close's disclosure — which is said nowhere else and
+// which a labelled landing replaced.
+func TestTheOwedReadKeepsTheWritesLandingNote(t *testing.T) {
+	m, _ := scriptedModel(t)
+	_, write, err := m.commitMove("a", "ready", "ready", 3)
+	if err != nil || write == nil {
+		t.Fatal(err)
+	}
+	m.onNormalKey(keyMsg("R"))
+	note := "next due 2026-10-08 (t-succ)"
+	m.pending[0].note = &note
+	_, paid := m.Update(write())
+	lead := m.status
+	if !strings.Contains(lead, note) {
+		t.Fatalf("setup: the write's note must be on the row, got %q", lead)
+	}
+	m.Update(paid())
+	if !strings.HasPrefix(m.status, lead+" · synced · ") {
+		t.Errorf("status = %q, want the sync behind %q", m.status, lead)
+	}
+}
+
+// `R` then `q` while a write is in flight: the quit waits for the owed sync
+// and leaves behind it. It once exited with "the sync runs once they land"
+// on the last frame and no sync run. A failed sync cancels the quit.
+func TestAQuitWaitsForAnOwedSync(t *testing.T) {
+	for _, fail := range []bool{false, true} {
+		m, p := scriptedModel(t)
+		if fail {
+			p.syncErr = errors.New("no upstream configured")
+		}
+		_, write, err := m.commitMove("a", "ready", "ready", 3)
+		if err != nil || write == nil {
+			t.Fatal(err)
+		}
+		m.onNormalKey(keyMsg("R"))
+		m.quitOrFlush()
+		_, paid := m.Update(write())
+		if paid == nil || !m.syncing {
+			t.Fatalf("fail=%v: the drain must run the owed sync before the quit", fail)
+		}
+		if _, isQuit := paid().(tea.QuitMsg); isQuit {
+			t.Fatalf("fail=%v: the quit must wait for the sync", fail)
+		}
+		_, after := m.Update(paid())
+		quit := false
+		if after != nil {
+			_, quit = after().(tea.QuitMsg)
+		}
+		if quit == fail {
+			t.Errorf("fail=%v: quit=%v — a landed sync quits, a failed one cancels the quit (status %q)", fail, quit, m.status)
+		}
+	}
+}
+
+// A refused write drops an owed sync and says so; an owed re-read is fired
+// even on the branch that otherwise re-reads nothing.
+func TestARefusedWriteAccountsForTheOwedKey(t *testing.T) {
+	for _, key := range []string{"R", "r"} {
+		m, p := storeFirstModel(t)
+		p.epicErr, p.epicFailAt = errors.New("epic-active-clash"), 1
+		write := storeFirst(m, "epic activate e-two", func() error { return p.EpicActivate("e-two", "") })
+		m.onNormalKey(keyMsg(key))
+		_, next := m.Update(write())
+		if m.owed != owedNone || !m.statusErr {
+			t.Fatalf("%s: owed=%d status=%q", key, m.owed, m.status)
+		}
+		switch key {
+		case "R":
+			if !strings.Contains(m.status, "the sync did not run — R again") {
+				t.Errorf("R: the dropped sync must be named: %q", m.status)
+			}
+		case "r":
+			reloaded := false
+			var run func(c tea.Cmd)
+			run = func(c tea.Cmd) {
+				if c == nil {
+					return
+				}
+				switch msg := c().(type) {
+				case tea.BatchMsg:
+					for _, s := range msg {
+						run(s)
+					}
+				case reloadDoneMsg:
+					reloaded = true
+				}
+			}
+			run(next)
+			if !reloaded {
+				t.Error("r: the promised re-read must still be fired")
+			}
+		}
+	}
+}
+
+// A bare "synced" landing behind a queued write is appended to the row.
+func TestASyncLandingBehindAQueuedWriteIsStillSaid(t *testing.T) {
+	m, p := scriptedModel(t)
+	p.syncReport = board.SyncReport{Complete: true} // nothing to report: no note
+	sync := m.onNormalKey(keyMsg("R"))
+	if _, c, err := m.commitMove("a", "ready", "ready", 3); err != nil || c == nil {
+		t.Fatal(err)
+	}
+	m.Update(sync())
+	if !strings.HasSuffix(m.status, " · synced") {
+		t.Errorf("status = %q", m.status)
+	}
+}
+
+// A second R while a sync runs starts nothing: two `furrow sync` processes
+// side by side reported git-failed over a sync that had succeeded.
+func TestASecondSyncKeyWaitsForTheFirst(t *testing.T) {
+	m, _ := scriptedModel(t)
+	first := m.onNormalKey(keyMsg("R"))
+	if first == nil || !m.syncing {
+		t.Fatal("R must start the sync")
+	}
+	if c := m.onNormalKey(keyMsg("R")); c != nil || m.status != "a sync is already running" {
+		t.Errorf("a second R must start nothing: cmd=%v status=%q", c != nil, m.status)
+	}
+	m.Update(first())
+	if m.syncing || !strings.HasPrefix(m.status, "synced · ") {
+		t.Errorf("the landing clears the guard: syncing=%v status=%q", m.syncing, m.status)
+	}
+	if c := m.onNormalKey(keyMsg("R")); c == nil {
+		t.Error("R must sync again once the first has landed")
+	}
+}
+
+// A failed sync clears the guard too.
+func TestAFailedSyncClearsTheGuard(t *testing.T) {
+	m, p := scriptedModel(t)
+	p.syncErr = errors.New("no upstream configured")
+	c := m.onNormalKey(keyMsg("R"))
+	m.Update(c())
+	if m.syncing || !m.statusErr {
+		t.Errorf("syncing=%v status=%q", m.syncing, m.status)
 	}
 }
 
