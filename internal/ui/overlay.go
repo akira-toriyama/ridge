@@ -49,6 +49,13 @@ type overlayShell[F ~int, K ~int] struct {
 	listIdx  int
 	input    textinput.Model
 	inputFor K
+	// seed is the text the open input holds before any key, trimmed as a
+	// commit trims — read back from the input, which flattens a newline or
+	// a tab the stored value carries. Where the input edits a stored value,
+	// ⏎ on the seed is answered without a write (onEditInputCommit,
+	// onEpicInputCommit): the seed is the loaded copy's value, and writing
+	// it back replaced what another session had stored since (t-vamc).
+	seed string
 }
 
 // overlayHooks is the overlay's half of the machine: every point where the
@@ -168,6 +175,7 @@ func (s *overlayShell[F, K]) onInputKey(m *Model, msg tea.KeyPressMsg, h overlay
 func (s *overlayShell[F, K]) startInput(h overlayHooks[F, K], kind K, value, placeholder string) tea.Cmd {
 	s.stage, s.inputFor = stageInput, kind
 	s.input.SetValue(value)
+	s.seed = strings.TrimSpace(s.input.Value())
 	s.input.Placeholder = placeholder
 	h.note()
 	return s.input.Focus()
