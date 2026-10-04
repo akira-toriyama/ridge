@@ -28,8 +28,10 @@ import (
 // appeared in between, or a target another writer dropped (a miss, exit 1)
 // — is furrow's own message on the status line, which names a body by its
 // file path where the gate named it by id; the preview is re-read by
-// reopening the row, and a dropped target closes the overlay at the next
-// re-read (editTask).
+// reopening the row. On a live store furrow's refusal of either the
+// preview or the write fires the board's re-read (onRmPreview,
+// reloadOnFail): a dropped target is then off the board, and its overlay
+// closes at the next key (editTask, epicBox).
 //
 // The gate's states and their headless frames (-demo): nothing points at it
 // (rm), referenced and disarmed (rmreferenced), armed (rmforce), a series
@@ -109,8 +111,7 @@ func (m *Model) openRmGate(st *rmState, target rmTarget) tea.Cmd {
 	}
 	if !prov.Live() {
 		rep, err := read()
-		m.onRmPreview(rmPreviewMsg{target: target, seq: seq, report: rep, err: err})
-		return nil
+		return m.onRmPreview(rmPreviewMsg{target: target, seq: seq, report: rep, err: err})
 	}
 	m.noteRmGate(st)
 	return func() tea.Msg {
@@ -135,10 +136,17 @@ func (m *Model) rmGateOf(target rmTarget) *rmState {
 	return nil
 }
 
-func (m *Model) onRmPreview(msg rmPreviewMsg) {
+// onRmPreview lands a preview read. A refused one on a live store hands back
+// the board's re-read, the write's own rule (reloadOnFail). The refusal that
+// matters is not-found — the board still shows a target the store dropped,
+// and a box removed elsewhere stayed on the board with its members filed
+// under it until an `r` nobody was told to press (t-dbvy) — but every
+// refusal re-reads: the error's kind is not read here, and a re-read after
+// a timeout costs one read.
+func (m *Model) onRmPreview(msg rmPreviewMsg) tea.Cmd {
 	st := m.rmGateOf(msg.target)
 	if st == nil || msg.seq != st.seq {
-		return
+		return nil
 	}
 	st.loading = false
 	if msg.err != nil {
@@ -148,6 +156,10 @@ func (m *Model) onRmPreview(msg rmPreviewMsg) {
 		st.report = &rep
 	}
 	m.noteRmGate(st)
+	if msg.err != nil && m.prov.Live() {
+		return m.reloadCmd("")
+	}
+	return nil
 }
 
 // noteRmGate keeps the status row true for the gate's state. Same contract
