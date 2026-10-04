@@ -27,13 +27,18 @@ type driftStore struct {
 	// epicRemove is EpicRemove's scripted refusal on the APPLY (the preview
 	// still answers), the shape of a box withdrawn under the gate.
 	epicRemove error
+	// rmPreview is the scripted refusal of the delete PREVIEW, a task's or a
+	// box's: the shape of a target another writer already removed.
+	rmPreview error
+	// fixture makes the store answer Live() false, as memstore does.
+	fixture bool
 }
 
 func newDriftStore() *driftStore {
 	return &driftStore{Provider: memstore.New(), records: map[string]string{}}
 }
 
-func (d *driftStore) Live() bool { return true }
+func (d *driftStore) Live() bool { return !d.fixture }
 func (d *driftStore) ReadBody(id string) (string, error) {
 	if r, ok := d.records[id]; ok {
 		return r, nil
@@ -53,7 +58,17 @@ func (d *driftStore) EpicRemove(id string, o board.RemoveOptions) (board.RemoveR
 	if o.Apply && d.epicRemove != nil {
 		return board.RemoveReport{}, d.epicRemove
 	}
+	if !o.Apply && d.rmPreview != nil {
+		return board.RemoveReport{}, d.rmPreview
+	}
 	return d.Provider.EpicRemove(id, o)
+}
+
+func (d *driftStore) Remove(ids []string, o board.RemoveOptions) (board.RemoveReport, error) {
+	if !o.Apply && d.rmPreview != nil {
+		return board.RemoveReport{}, d.rmPreview
+	}
+	return d.Provider.Remove(ids, o)
 }
 
 func (d *driftStore) EpicReopen(id string) error {
@@ -355,6 +370,77 @@ func TestARefusedDeleteReReadsTheBoard(t *testing.T) {
 	if d.reloads != 1 {
 		t.Errorf("the board must be re-read after the refusal, reloads=%d", d.reloads)
 	}
+}
+
+// A refused delete PREVIEW re-reads the board too, for a box and for a task:
+// furrow refusing to preview a target the board still shows is the same
+// news as a refused apply, and the gate's ⏎ never reaches the apply's
+// reloadOnFail from there (t-dbvy: a box removed elsewhere stayed on the
+// board with its members filed under it).
+func TestARefusedDeletePreviewReReadsTheBoard(t *testing.T) {
+	t.Run("box", func(t *testing.T) {
+		d := newDriftStore()
+		d.rmPreview = fmt.Errorf(`unknown epic "e-fw2m" (epic-not-found)`)
+		m := driftOverlay(t, d, "e-fw2m")
+		m.epic.menuIdx = int(epicFieldDelete)
+		_, c := m.Update(keyMsg("enter"))
+		if c == nil {
+			t.Fatal("a live store's preview is read off the UI thread")
+		}
+		_, after := m.Update(c())
+		if !m.statusErr || !strings.Contains(m.status, "epic-not-found") {
+			t.Fatalf("the refusal must be reported: status=%q", m.status)
+		}
+		if after == nil {
+			t.Fatal("the refused preview must hand back the re-read")
+		}
+		runCmd(m, after)
+		if d.reloads != 1 {
+			t.Errorf("reloads = %d, want 1", d.reloads)
+		}
+		if !m.statusErr || !strings.Contains(m.status, "epic-not-found") {
+			t.Errorf("the re-read must not take the refusal off the status row: %q", m.status)
+		}
+	})
+	// The fixture's Reload is the discard of the session's edits: a refused
+	// preview there must not fire it.
+	t.Run("fixture", func(t *testing.T) {
+		d := newDriftStore()
+		d.fixture = true
+		d.rmPreview = fmt.Errorf(`unknown epic "e-fw2m" (epic-not-found)`)
+		m := driftOverlay(t, d, "e-fw2m")
+		m.epic.menuIdx = int(epicFieldDelete)
+		_, c := m.Update(keyMsg("enter"))
+		runCmd(m, c)
+		if d.reloads != 0 || !m.statusErr {
+			t.Errorf("reloads = %d status = %q", d.reloads, m.status)
+		}
+	})
+	t.Run("task", func(t *testing.T) {
+		d := newDriftStore()
+		d.rmPreview = fmt.Errorf("1 of 1 ids not found (not-found)")
+		m := New(d, Options{})
+		m.w, m.h = 240, 50
+		m.recompute()
+		m.relayout()
+		if !m.selectID("t-9sa6", false) {
+			t.Fatal("setup: select")
+		}
+		m.enterEdit()
+		m.edit.menuIdx = int(fieldDelete)
+		_, c := m.Update(keyMsg("enter"))
+		if c == nil {
+			t.Fatal("a live store's preview is read off the UI thread")
+		}
+		_, after := m.Update(c())
+		if after == nil {
+			t.Fatal("the refused preview must hand back the re-read")
+		}
+		runCmd(m, after)
+		if d.reloads != 1 || !m.statusErr || !strings.Contains(m.status, "not-found") {
+			t.Errorf("reloads = %d status = %q", d.reloads, m.status)
+		}
+	})
 }
 
 // A refused store-first epic write re-reads the board: the refusal (a box

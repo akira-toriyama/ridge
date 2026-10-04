@@ -525,7 +525,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.onSweepResult(msg)
 
 	case rmPreviewMsg:
-		m.onRmPreview(msg)
+		if c := m.onRmPreview(msg); c != nil {
+			cmds = append(cmds, c)
+		}
 
 	case filterResultMsg:
 		m.onFilterResult(msg)
