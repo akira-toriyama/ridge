@@ -878,6 +878,37 @@ func TestSliceReadoutNamesTheCursorRowInFull(t *testing.T) {
 	}
 }
 
+// Under a note that leaves the readout less than its meta needs the title
+// goes and the counts stay. The whole line once went to joinEnds, which cuts
+// the right end: the title stayed and every count, the wait and the closed
+// date went (t-66r0, measured on a copy of the ridge-test store under
+// furrow's 184-cell refusal). On the fixture's first box only the 205-cell
+// note reaches that path; the two shorter ones pin the title-cut path
+// beside it.
+func TestSliceReadoutKeepsTheCountsUnderALongNote(t *testing.T) {
+	m := boardModel(t, 240, 50)
+	press(m, "s")
+	m.sliceField = sliceEpic
+	m.sliceIdx = 0
+	full := m.b.Epics()[0].Title
+	for _, cells := range []int{150, 184, 205} {
+		m.fail("%s", strings.Repeat("x", cells-2)) // the row adds "⚠ "
+		line := ansiStrip(m.statusLine())
+		if lg.Width(line) > 240 {
+			t.Errorf("%d: the row is %d cells wide", cells, lg.Width(line))
+		}
+		if !strings.Contains(line, "6/18 done") {
+			t.Errorf("%d: the counts must lead what the note leaves: %q", cells, line)
+		}
+		if cells >= 184 && strings.Contains(line, full) {
+			t.Errorf("%d: the title must yield before the counts: %q", cells, line)
+		}
+		if !strings.HasSuffix(strings.TrimRight(line, " "), "x") {
+			t.Errorf("%d: the note keeps the right end whole: %q", cells, line)
+		}
+	}
+}
+
 // The three rules a wrapped row is drawn by, asserted on the frame: the cursor
 // bar spans BOTH lines (it is one row, and a bar on the head alone reads as a
 // one-line row above a stray), the selection dot marks the value ONCE, and the

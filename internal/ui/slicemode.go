@@ -652,8 +652,12 @@ func (m *Model) sliceScope(rowCount int) string {
 // leaves — the id chip and a closed box's `closed <day>` stay whole, the
 // readout being the panel's one place for the date too (a cut through the
 // head once left `closed 2026-…`), and the title goes entirely before the
-// date yields; a line whose meta alone exceeds the budget goes to joinEnds
-// whole. Measured 2026-09-28 on the real board (201 boxes, 52 closed): at
+// date yields; a line whose meta alone exceeds the budget still drops the
+// title before joinEnds cuts its right end, so what is left starts at the
+// chip, a closed box's date and the counts (it once went whole, and under
+// furrow's 184-cell refusal on the status row the title stayed and every
+// count went — t-66r0; a budget under ~25 cells still cuts into the date,
+// as it always has). Measured 2026-09-28 on the real board (201 boxes, 52 closed): at
 // 240 columns 7 of the 149 open boxes have their title cut, 16 of 201 with
 // the closed ones in scope, every closed date whole, no line over budget;
 // at 400 none is cut.
@@ -706,7 +710,7 @@ func (m *Model) sliceReadout(budget int) string {
 	case room >= -1:
 		return line("", meta)
 	}
-	return line(title, meta)
+	return line("", meta)
 }
 
 // sliceRowBody styles one row's segments. The row's TEXT is composed once, in
