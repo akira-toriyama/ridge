@@ -50,16 +50,21 @@ func newLabProvider(t *testing.T) (*Store, string) {
 }
 
 // lab runs one command inside the throwaway store, failing the test on any
-// non-zero exit — a broken seed makes every later assertion a lie.
+// non-zero exit — a broken seed makes every later assertion a lie. It
+// returns STDOUT alone, as the adapter reads furrow (exec.go): furrow says
+// its advisories on stderr with exit 0, and a write that leaves a lint
+// error behind now names it there (furrow #437, 2026-10-04) — folded in,
+// that prose made every seeded `add --json` with a past due undecodable.
 func lab(t *testing.T, dir string, name string, args ...string) []byte {
 	t.Helper()
 	cmd := exec.Command(name, args...) //nolint:gosec // seeding the throwaway store IS the test
 	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("%s %s: %v\n%s", name, strings.Join(args, " "), err, out)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("%s %s: %v\n%s%s", name, strings.Join(args, " "), err, stdout.Bytes(), stderr.Bytes())
 	}
-	return out
+	return stdout.Bytes()
 }
 
 // labAdd creates one task. A single `add --json` answers with ONE object
