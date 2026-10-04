@@ -539,7 +539,7 @@ func TestRoadmapClearingADueLandsTheCursorOnTheNeighbour(t *testing.T) {
 }
 
 // A timed due opens seeded with its time, and ⏎ on that seed leaves the
-// due where it was. The day-only seed rebound every timed due to its day's
+// due where it was — by writing nothing (t-vamc). The day-only seed rebound every timed due to its day's
 // last second on an unchanged ⏎ — invisible on the fixture, whose dues are
 // all whole-day, and found on a copy of the 100-task ridge-test store,
 // where 39 of 95 dated tasks carry a time (2026-09-27; the real board: 8
@@ -561,13 +561,13 @@ func TestRoadmapDueSeedKeepsTheTimeOfDay(t *testing.T) {
 			t.Errorf("the input must open on the stored due's spelling, got %q want %q", got, form)
 		}
 		press(m, "enter")
-		if m.edit != nil {
-			t.Fatal("⏎ on the seed must apply and close the overlay")
+		if m.edit != nil || m.view != viewRoadmap {
+			t.Fatal("⏎ on the seed must close the overlay on the roadmap")
 		}
 		if got := m.b.Task("t-9sa6").Due; !got.Equal(want) {
 			t.Errorf("%s: ⏎ on the seed moved the due to %s", form, got)
 		}
-		drainPersists(m, t)
+		assertUnchangedInput(t, m, "edit t-9sa6 · due date unchanged")
 	}
 }
 

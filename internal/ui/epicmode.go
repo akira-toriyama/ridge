@@ -602,6 +602,11 @@ func (m *Model) onEpicInputCancel(k epicInputKind) {
 func (m *Model) onEpicInputCommit(k epicInputKind, v string) tea.Cmd {
 	e := m.epic
 	id := e.id
+	if v == e.seed && (k == epicInputTitle || k == epicInputGoal) {
+		m.onEpicInputCancel(k)
+		m.note("box %s · %s unchanged — ⏎ pick a field · esc closes", id, epicFieldName(e.field))
+		return nil
+	}
 	switch k {
 	case epicInputTitle:
 		e.stage = stageMenu

@@ -752,6 +752,30 @@ func TestEpicTitleRefusesEmptyWhileGoalClears(t *testing.T) {
 	}
 }
 
+// ⏎ on a box input's seed writes nothing — the task overlay's rule, for the
+// same reason (t-vamc: an unchanged ⏎ reverted another session's retitle of
+// a box).
+func TestEpicInputOnItsSeedWritesNothing(t *testing.T) {
+	m := boardModel(t, 240, 50)
+	sliceOnEpicAxis(t, m, "e-c4mt")
+	press(m, "m")
+	box := *m.b.Epic("e-c4mt")
+	for _, f := range []epicField{epicFieldTitle, epicFieldGoal} {
+		m.status, m.statusErr = "", false
+		m.epic.menuIdx = int(f)
+		m.openEpicField(f, m.b.Epic("e-c4mt"))
+		if cmd := m.onEpicKey(keyMsg("enter")); cmd != nil {
+			t.Errorf("%s: ⏎ on the seed queued a write", epicFieldName(f))
+		}
+		if m.epic.stage != stageMenu || m.statusErr || !strings.Contains(m.status, "unchanged") {
+			t.Errorf("%s: stage %d status %q (err %v)", epicFieldName(f), m.epic.stage, m.status, m.statusErr)
+		}
+	}
+	if got := *m.b.Epic("e-c4mt"); got.Title != box.Title || got.Goal != box.Goal {
+		t.Errorf("the box changed: %q / %q", got.Title, got.Goal)
+	}
+}
+
 // The new-box modal inherits the FILTER's repo — it matters more here than in
 // quick add, because a box naming no repo cannot be activated at all. Driven
 // through onSliceKey, not enterEpicNew directly: `A` only answers on the epic

@@ -185,9 +185,10 @@ const dueHint = "2026-08-04 · 2026-08-04T21:30 · +1d · +2h · empty clears"
 
 // dueSeed is the due input's opening value and the menu's due cell: the
 // stored due in the spelling ParseDue reads back to the same instant, ""
-// when it carries none — so ⏎ on the seed re-commits the promise as it
-// stands, and the row reads what its input opens on. A day-only seed once
-// bound a timed due to its day's last second on that ⏎ (t-4ag4).
+// when it carries none — so the row reads what its input opens on, and an
+// edit of one part keeps the other. ⏎ on the seed itself writes nothing
+// (onEditInputCommit). A day-only seed once bound a timed due to its day's
+// last second on that ⏎ (t-4ag4).
 func dueSeed(t *board.Task) string { return board.DueSpelling(t.Due) }
 
 // applyDueDirect is the direct input's apply (enterDueDirect): the same
@@ -572,6 +573,23 @@ func (m *Model) onEditInputCancel(k inputKind) {
 // "retitle <id>") need no re-note.
 func (m *Model) onEditInputCommit(k inputKind, v string, t *board.Task) tea.Cmd {
 	e := m.edit
+	if v == e.seed {
+		switch k {
+		case inputTitle, inputDue:
+			// The esc path, which is also where the direct input closes;
+			// only the menu's note needs the word.
+			direct := e.direct
+			m.onEditInputCancel(k)
+			if !direct {
+				m.note("edit %s · %s unchanged — ⏎ pick a field · esc closes", e.id, editFieldName(e.field))
+			}
+			return nil
+		case inputCheckReword:
+			m.onEditInputCancel(k)
+			return nil
+		}
+		// inputRepeat is not here: ⏎ on its seed is the re-anchor (openField).
+	}
 	switch k {
 	case inputTitle:
 		e.stage = stageMenu
