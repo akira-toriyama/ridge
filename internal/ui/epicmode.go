@@ -827,8 +827,12 @@ func stillOpen(open, parked int) string {
 // for the open list and 16 for the recurring one, six and two of furrow's
 // default 7-cell ids — so a box closed over a long tail stays legible AND
 // the line stays inside the 240-column floor behind its `epic done <id> · `
-// lead whatever the board's ids.width (pinned by test, as syncNote's is,
-// with 10-cell ids and a four-digit count); no recurring list at all when
+// lead: an id wider than its list's budget is counted, not named
+// (namedWithin), so the named ids never outgrow their budgets — the
+// `+N more` count rides on top — and only the lead's own id widens the
+// line (pinned by test for ids.width 5 through 100 with a four-digit
+// count; furrow puts no ceiling on the key, and a 42-cell id, once always
+// named, made the line 248 cells — t-zm88); no recurring list at all when
 // every member left open recurs (it would repeat the open list). A six-id
 // cap on both lists once let eight recurring members push the line to 241
 // cells, and the floor cut its tail (t-y4m3). The chip a close of the
@@ -848,24 +852,34 @@ func leftOpenLine(left []board.EpicOpenMember) string {
 			recur = append(recur, mbr.ID)
 		}
 	}
-	s := fmt.Sprintf("left open %d: %s", len(left), namedWithin(ids, cells))
+	s := fmt.Sprintf("left open %d", len(left))
+	if names := namedWithin(ids, cells); names != "" {
+		s += ": " + names
+	}
+	const mints = ": each close mints the successor under this closed box until it is re-filed"
 	switch {
 	case len(recur) == len(left):
-		s += fmt.Sprintf(" — all %d recur: each close mints the successor under this closed box until it is re-filed", len(recur))
+		s += fmt.Sprintf(" — all %d recur", len(recur)) + mints
 	case len(recur) > 0:
-		s += fmt.Sprintf(" — %d recur (%s): each close mints the successor under this closed box until it is re-filed",
-			len(recur), namedWithin(recur, cellsRecur))
+		s += fmt.Sprintf(" — %d recur", len(recur))
+		if names := namedWithin(recur, cellsRecur); names != "" {
+			s += " (" + names + ")"
+		}
+		s += mints
 	}
 	return s
 }
 
-// namedWithin names the ids whose `, `-joined width stays inside cells —
-// the first one always — and counts the rest, so a line built from it has
-// a width bound that does not depend on the board's ids.width.
+// namedWithin names the ids whose `, `-joined width stays inside cells and
+// counts the rest; "" when not even the first fits, the count being the
+// caller's to say.
 func namedWithin(ids []string, cells int) string {
-	shown := 1
+	shown := 0
 	for shown < len(ids) && lg.Width(strings.Join(ids[:shown+1], ", ")) <= cells {
 		shown++
+	}
+	if shown == 0 {
+		return ""
 	}
 	return firstIDs(ids, shown)
 }

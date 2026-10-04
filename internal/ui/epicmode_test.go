@@ -1178,34 +1178,40 @@ func TestLeftOpenLineKeepsUnknownNoneAndSomeApart(t *testing.T) {
 		}
 	}
 	// The floor. furrow's ids are `t-` + ids.width, 5 by default (7 cells)
-	// and the board's to raise, and the member count has no cap: the pin
-	// takes ids of 10 cells (width 8) and a four-digit count, wider than
-	// any board seen (projects: width 4; ridge-test: 5), so the line stays
-	// inside 240 columns behind its lead with room for the next word. The
-	// widest shape is every member recurring but one (both lists named);
-	// all recurring folds the second list.
-	for _, shape := range []struct {
-		name string
-		mk   func(i int) board.EpicOpenMember
-	}{
-		{"all but one recur", func(i int) board.EpicOpenMember {
-			r := "FREQ=WEEKLY"
-			if i == 0 {
-				r = ""
+	// and the board's to raise without a ceiling, and the member count has
+	// no cap: the pin takes every width from 5 to 100 with a four-digit
+	// count (projects: width 4; ridge-test: 5), behind a lead whose id is
+	// as wide. The widest shape is every member recurring but one (both
+	// lists named); all recurring folds the second list.
+	for width := 5; width <= 100; width++ {
+		for _, shape := range []struct {
+			name string
+			mk   func(i int) board.EpicOpenMember
+		}{
+			{"all but one recur", func(i int) board.EpicOpenMember {
+				r := "FREQ=WEEKLY"
+				if i == 0 {
+					r = ""
+				}
+				return board.EpicOpenMember{ID: fmt.Sprintf("t-%0*d", width, i), Status: "inbox", Repeat: r}
+			}},
+			{"all recur", func(i int) board.EpicOpenMember {
+				return board.EpicOpenMember{ID: fmt.Sprintf("t-%0*d", width, i), Status: "inbox", Repeat: "FREQ=WEEKLY"}
+			}},
+		} {
+			wide := make([]board.EpicOpenMember, 9999)
+			for i := range wide {
+				wide[i] = shape.mk(i)
 			}
-			return board.EpicOpenMember{ID: fmt.Sprintf("t-%08d", i), Status: "inbox", Repeat: r}
-		}},
-		{"all recur", func(i int) board.EpicOpenMember {
-			return board.EpicOpenMember{ID: fmt.Sprintf("t-%08d", i), Status: "inbox", Repeat: "FREQ=WEEKLY"}
-		}},
-	} {
-		wide := make([]board.EpicOpenMember, 9999)
-		for i := range wide {
-			wide[i] = shape.mk(i)
+			if line := fmt.Sprintf("epic done e-%0*d · ", width, 0) + leftOpenLine(wide); lg.Width(line) > 240 {
+				t.Errorf("%s, ids.width %d: the landing note overflows the floor: %d cells: %q", shape.name, width, lg.Width(line), line)
+			}
 		}
-		if line := "epic done e-00000000 · " + leftOpenLine(wide); lg.Width(line) > 240 {
-			t.Errorf("%s: the landing note overflows the floor: %d cells: %q", shape.name, lg.Width(line), line)
-		}
+	}
+	// An id wider than a list's budget is counted, not named.
+	wideID := []board.EpicOpenMember{{ID: "t-" + strings.Repeat("9", 60), Status: "inbox"}, {ID: "t-" + strings.Repeat("8", 60), Status: "inbox", Repeat: "FREQ=WEEKLY"}}
+	if got, want := leftOpenLine(wideID), "left open 2 — 1 recur: each close mints the successor under this closed box until it is re-filed"; got != want {
+		t.Errorf("got %q\nwant %q", got, want)
 	}
 }
 
