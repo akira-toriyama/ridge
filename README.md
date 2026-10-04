@@ -200,8 +200,10 @@ the fixture's states are `-demo boxes` / `boxesall` / `boxeswaiting`.
 `C`. **Every task not done that carries a due date (a parked one included),
 in due order, with `◆` placed on a time axis.** The view that answers "what
 expires when" — the timeline form of `furrow brief`'s due head, with the
-parked kept (glossary: "Roadmap", "zoom"; `-q is:overdue` keeps the closed
-too, and its header's `N overdue` can exceed brief's count by the parked).
+lanes brief ignores kept (the board's `[due].ignore_lanes`, icebox by
+default — brief keeps `waiting`; glossary: "Roadmap", "zoom"; `-q
+is:overdue` keeps the closed too, and its header's `N overdue` can exceed
+brief's count by those ignored lanes).
 `z` cycles day / week / month, `h`/`l` pan the window. `⏎`/`m` on a row opens
 the field edit menu's due input directly, seeded with the row's due in the
 spelling the grammar reads back (its day for a whole-day due, day and time
