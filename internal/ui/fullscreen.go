@@ -11,8 +11,9 @@ import (
 
 // What every full-screen view shares: the frame skeleton and title line
 // above, and below it the cursor-pinned scroll, the half-page key, the
-// filter's status-line claim, the six keys every view answers alike, and the
-// cursor carried back to the board on close. Each view keeps its own layout,
+// header's two claims about a lens (what it hides, or that it is not
+// applied), the six keys every view answers alike, and the cursor carried
+// back to the board on close. Each view keeps its own layout,
 // keys and words; these hold the invariants once, so the copies cannot drift
 // apart (a roster of the views used to sit here, and it was one view short
 // within a month). There is no fullScreenView interface on purpose: the
@@ -301,7 +302,7 @@ func (m *Model) halfPage(msg tea.KeyPressMsg, canvasH int, move func(dir int) bo
 	}
 }
 
-// filterCountBit is the status line's claim about the filter. An aggregate
+// filterCountBit is the header's claim about the filter. An aggregate
 // count must not be made from a verdict the store refused — qErr's only other
 // render site is the board's chrome, which these views replace, and "3 hidden"
 // from a stale verdict is worse than saying nothing — so a refusal shows
@@ -314,6 +315,20 @@ func (m *Model) filterCountBit(hidden int) string {
 		return m.th.warn.Render(fmt.Sprintf("%d hidden by the filter", hidden))
 	}
 	return ""
+}
+
+// lensUnappliedBit is the other claim, for a view that applies no lens: it
+// names every lens that is on (lensNames) rather than draw, in silence, a
+// frame other than what the flags asked for — the no-op the CLI's refusals
+// exist to prevent (api.go). what is the view's word for what the lens left
+// alone. Said whether or not the store refused the query: the claim carries
+// no count from a stale verdict. Empty when no lens is on.
+func (m *Model) lensUnappliedBit(what string) string {
+	on := m.lensNames()
+	if len(on) == 0 {
+		return ""
+	}
+	return m.th.warn.Render(strings.Join(on, " and ") + " not applied here — the " + what + " are unfiltered")
 }
 
 // carryCursorBack lands the board cursor on id when a full-screen walk ended

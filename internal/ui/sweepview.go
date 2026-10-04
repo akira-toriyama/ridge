@@ -219,6 +219,16 @@ func (m *Model) sweepHeader(clipped bool) string {
 	if m.sweep.loading && m.sweep.preview != nil {
 		bits = append(bits, th.dim.Render("re-reading…"))
 	}
+	if bit := m.lensUnappliedBit("previews"); bit != "" {
+		// The rows are furrow's whole-board previews and a write acts on
+		// what they list — tidy prunes a whole class whatever a lens shows —
+		// so none is applied, and the header says so as the box overview's
+		// does (t-cxm3: the frame was byte-identical with and without
+		// -filter, and the archive gate named every candidate under one).
+		// An open gate replaces this bit along with the counts: its line
+		// names the write itself.
+		bits = append(bits, bit)
+	}
 	if clipped {
 		bits = append(bits, th.dim.Render("^u/^d page"))
 	}

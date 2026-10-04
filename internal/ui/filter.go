@@ -53,6 +53,23 @@ func (m *Model) lensOn() bool {
 	return m.effectiveQuery() != "" || m.revisitOn
 }
 
+// lensNames names what narrows the board right now, in the board's own
+// words — the typed filter, the panel's slice, the revisit lens — for a
+// claim about them; empty when nothing does (lensOn).
+func (m *Model) lensNames() []string {
+	var on []string
+	if m.qRaw != "" {
+		on = append(on, "filter")
+	}
+	if m.sliceTerm() != "" {
+		on = append(on, "slice")
+	}
+	if m.revisitOn {
+		on = append(on, "revisit lens")
+	}
+	return on
+}
+
 // taskVisible is THE visibility predicate: every view (board columns, table
 // rows, graph nodes) must agree with it or the same query shows different
 // boards.
