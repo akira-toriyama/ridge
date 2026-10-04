@@ -172,7 +172,8 @@ and `e` opens it in `$EDITOR` (`furrow edit` — refused while a store-first
 write of the overlay is in flight or unread, since `activate --reason` appends
 to this very record furrow-side; the buffer is the store's record as of the
 keypress, not the loaded snapshot, and a save is refused — the typed text
-kept in a named file — when the record moved while the editor was open); its
+kept in a named file — when the record moved while the editor was open; a
+buffer left untouched writes nothing and re-reads the board); its
 **reviewed** row stamps furrow's review
 clock (`furrow review`, the one revisit's `epic_review_due` reads on a
 standing box). All three apply optimistically, like a task's. Headless:

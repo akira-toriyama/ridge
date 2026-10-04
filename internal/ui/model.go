@@ -492,7 +492,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case msg.err != nil:
 			m.fail("editor: %v", msg.err)
-		case m.rollingBack:
+		case m.rollingBack && !msg.same:
 			// The one write whose payload is hand-typed and already gone
 			// from disk (the temp file is removed on editor exit): refusing
 			// it would destroy the text, so it waits for the window to

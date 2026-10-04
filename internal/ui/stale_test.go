@@ -138,6 +138,53 @@ func TestEditorResultIsStaleWhenTheRecordMoved(t *testing.T) {
 	}
 }
 
+// A buffer the editor left as it was handed is not a save: no apply, no
+// queued write, the temp file removed — and that holds when the record
+// moved meanwhile, since nothing was typed that the move could lose. `furrow
+// edit --body` stamps `updated` for an identical body too, so the write
+// ridge sent took a stale task off `furrow revisit` (t-zq7m, measured on a
+// copy of the ridge-test store). The board is re-read all the same: the
+// editor showed the store's record, which the board may be behind.
+func TestAnUntouchedEditorBufferWritesNothing(t *testing.T) {
+	d := newDriftStore()
+	base := d.Board().Epic("e-fw2m").Body
+	path := filepath.Join(t.TempDir(), "buf.md")
+	for _, record := range []string{base, base + "\nmoved\n"} {
+		if err := os.WriteFile(path, []byte(base), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		d.records["e-fw2m"] = record
+		msg := editorResult(d, "e-fw2m", base, path, nil)
+		if !msg.same || msg.stale || msg.err != nil {
+			t.Errorf("an untouched buffer must come back same: %+v", msg)
+		}
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Error("an untouched buffer's temp file is removed")
+		}
+	}
+
+	d.records["e-fw2m"] = base
+	m := driftOverlay(t, d, "e-fw2m")
+	for _, rollingBack := range []bool{false, true} {
+		m.rollingBack = rollingBack
+		reloads := d.reloads
+		_, c := m.Update(editorDoneMsg{id: "e-fw2m", same: true})
+		if len(m.pending) != 0 || m.inflight || m.heldBody != nil {
+			t.Errorf("rollingBack=%v: an untouched buffer must neither queue nor be held", rollingBack)
+		}
+		runCmd(m, c)
+		if d.reloads != reloads+1 {
+			t.Errorf("rollingBack=%v: the board must be re-read, reloads %d → %d", rollingBack, reloads, d.reloads)
+		}
+		if m.statusErr || !strings.Contains(m.status, "e-fw2m body unchanged — nothing written") {
+			t.Errorf("rollingBack=%v: status = %q (err=%v)", rollingBack, m.status, m.statusErr)
+		}
+	}
+	if m.b.Epic("e-fw2m").Body != base {
+		t.Error("the body moved")
+	}
+}
+
 // A stale result is refused on the status line, names the kept file, writes
 // nothing, queues nothing, and re-reads the board so the moved record is
 // what the stage shows.
