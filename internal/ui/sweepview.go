@@ -425,11 +425,12 @@ func (m *Model) onSweepKey(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 
+	// No `r` of its own: the shared closer's re-reads the BOARD, and every
+	// applied re-read re-reads the previews (sweepAfterWrite). A previews-only
+	// `r` drew the done-deps rows' titles from the board loaded before it —
+	// another session's retitle never showed, and a task added since had an
+	// empty title (t-m8bw).
 	switch {
-	case key.Matches(msg, m.keys.Reload):
-		m.note("re-reading the sweep previews")
-		return m.loadSweep()
-
 	case key.Matches(msg, m.keys.Commit):
 		m.armSweepGate(rows)
 		return nil
@@ -561,7 +562,8 @@ func (m *Model) sweepWrite(g *sweepGate) tea.Cmd {
 // drain end (which reloads nothing) and from the refusal branch that
 // re-reads nothing. The one end that reads nothing is a re-read that itself
 // FAILED (onReloadDone's error paths): sweepReadStalled drops the "reading…"
-// claim there and names `r`, which re-reads the previews from inside the view.
+// claim there and names `r`, which retries the board re-read the previews
+// ride behind — they are not read while the board cannot be.
 func (m *Model) sweepAfterWrite() tea.Cmd {
 	if m.view != viewSweep || m.queueBusy() {
 		return nil
@@ -579,6 +581,6 @@ func (m *Model) sweepReadStalled() {
 	}
 	m.sweep.loading = false
 	if m.sweep.preview == nil {
-		m.sweep.err = "previews not read — r reads them"
+		m.sweep.err = "previews not read: the board re-read failed — r retries both"
 	}
 }

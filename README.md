@@ -190,8 +190,8 @@ are no task rows to mute — and the header names which is on. Headless:
 `-dump -boxes -filter 'label:bbq'` / `-dump -boxes -revisit`.
 
 `r` (reload) and `R` (sync) work here, and in every full-screen view, as on
-the board — except where a view binds the key itself: the sweep's `r`
-re-reads its previews.
+the board; in the sweep the board's re-read is followed by a re-read of its
+previews.
 
 `ridge -boxes` opens the real board in this view. Headless: `-dump -boxes`;
 the fixture's states are `-demo boxes` / `boxesall` / `boxeswaiting`.
@@ -248,7 +248,7 @@ restore brings back — and a second `⏎` applies it; any other key cancels
 (`ctrl+c` still quits).
 `x` skips / includes an archive row: the write sends the **explicit ids on
 screen**, never the id-less sweep, so what moves is what was previewed. `r`
-re-reads the previews. Every write is store-first (glossary): the frame keeps
+re-reads the board and then the previews. Every write is store-first (glossary): the frame keeps
 the pre-write preview until the write lands and both the board and the
 previews are re-read.
 

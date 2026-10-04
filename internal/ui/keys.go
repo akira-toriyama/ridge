@@ -369,9 +369,8 @@ func (k keyMap) HelpSections(enterEdits bool) []helpSection {
 		}},
 		// The sweep's surface. Same rule: every key onSweepKey acts on. The
 		// gate's "any other key cancels" is not a binding, so it is not listed
-		// — the header line says it while a gate is open.
-		// `r` is the sweep's own: it re-reads the previews, not the board
-		// (its case sits above the shared closer); `R` is the closer's.
+		// — the header line says it while a gate is open. `r` and `R` are
+		// the shared closer's.
 		{"sweep", [][]key.Binding{
 			{k.Up, k.Down, k.Top, k.Bottom, k.PeekScroll},
 			{k.Commit, k.SweepSkip, k.Reload, k.Sync},

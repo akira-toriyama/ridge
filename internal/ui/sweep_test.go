@@ -380,7 +380,7 @@ func TestSweepStalledReadNamesTheWayOut(t *testing.T) {
 	if m.sweep.loading {
 		t.Error("the failed re-read left the loading claim up")
 	}
-	if out := frame(m); !strings.Contains(out, "previews not read — r reads them") || strings.Contains(out, "reading the previews") {
+	if out := frame(m); !strings.Contains(out, "previews not read: the board re-read failed — r retries both") || strings.Contains(out, "reading the previews") {
 		t.Errorf("frame after a failed re-read must name r, got a stale claim")
 	}
 }
