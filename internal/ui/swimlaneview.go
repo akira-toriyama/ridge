@@ -273,7 +273,7 @@ func (m *Model) swimHeader(l *swimLayout, clipped bool) string {
 		bits = append(bits, th.warn.Render(fmt.Sprintf("lanes 1-%d of %d — the rest need a wider terminal",
 			len(l.Lanes), l.NLane)))
 	}
-	if bit := m.filterCountBit(m.swimHiddenCount(l)); bit != "" {
+	if bit := m.lensCountBit(m.swimHiddenCount(l)); bit != "" {
 		bits = append(bits, bit)
 	}
 	if clipped {

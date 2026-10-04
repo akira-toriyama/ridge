@@ -459,6 +459,18 @@ func (m *Model) graphHeader(l *egoLayout, f graphFrame, clipped bool) string {
 		bits = append(bits, th.warn.Render(
 			fmt.Sprintf("+%d layer(s) beyond the width — z narrows the radius", f.hidden)))
 	}
+	// Over every node of the layout (the title bar's count), on screen or
+	// not: the per-node tag is below the fold for most of them. Nodes past
+	// the layer cap are in neither count.
+	lensHidden := 0
+	for _, n := range l.Nodes {
+		if n.Hidden {
+			lensHidden++
+		}
+	}
+	if bit := m.lensCountBit(lensHidden); bit != "" {
+		bits = append(bits, bit)
+	}
 	if clipped {
 		bits = append(bits, th.dim.Render("^u/^d scroll"))
 	}

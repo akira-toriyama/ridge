@@ -299,7 +299,7 @@ func (m *Model) mapHeader(l *mapLayout, clipped bool) string {
 	if unresolved > 0 {
 		bits = append(bits, th.warn.Render(fmt.Sprintf("%d dep(s) not on this board", unresolved)))
 	}
-	if bit := m.filterCountBit(m.mapHiddenCount(l)); bit != "" {
+	if bit := m.lensCountBit(m.mapHiddenCount(l)); bit != "" {
 		bits = append(bits, bit)
 	}
 	if clipped {

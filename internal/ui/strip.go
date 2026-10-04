@@ -78,7 +78,7 @@ func (m *Model) taskStrip(t *board.Task, hidden bool, h int) string {
 		head += " " + th.danger.Render(fmt.Sprintf("%s blocked by %d", glyphBlocked, nb))
 	}
 	if hidden {
-		head += " " + th.warn.Render("· hidden by the current filter")
+		head += " " + th.warn.Render("· hidden by the "+strings.Join(m.lensNames(), " and "))
 	}
 	left = append(left, head)
 	// The FULL title, wrapped, never truncated — that is the strip's whole job.

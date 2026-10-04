@@ -302,17 +302,32 @@ func (m *Model) halfPage(msg tea.KeyPressMsg, canvasH int, move func(dir int) bo
 	}
 }
 
-// filterCountBit is the header's claim about the filter. An aggregate
-// count must not be made from a verdict the store refused — qErr's only other
-// render site is the board's chrome, which these views replace, and "3 hidden"
-// from a stale verdict is worse than saying nothing — so a refusal shows
-// instead of the number. Empty when there is nothing to say.
-func (m *Model) filterCountBit(hidden int) string {
-	if m.qErr != "" {
-		return m.th.warn.Render("filter refused — this count is from the last good verdict")
+// lensCountBit is the header's claim about a lens the view applies: how many
+// of its rows the lens hides, named by the lens that is on (lensNames) — a
+// slice or the revisit lens alone once read "hidden by the filter" (t-hrwx).
+// An aggregate count must not be made from a verdict the store refused —
+// the board's chrome, which shows qErr, is replaced by these views, and "3
+// hidden" from a stale verdict is worse than saying nothing — so a refusal
+// shows instead of the number, and says whose marks the rows still carry:
+// the last good verdict's, or nobody's while no verdict is held. The
+// refusal names the typed filter when there is one — it is the one text
+// furrow can refuse, and api.go's startup line names it the same way — and
+// otherwise the lenses that are on. Empty when there is nothing to say.
+func (m *Model) lensCountBit(hidden int) string {
+	on := strings.Join(m.lensNames(), " and ")
+	refused := on
+	if m.qRaw != "" {
+		refused = "filter"
 	}
-	if hidden > 0 {
-		return m.th.warn.Render(fmt.Sprintf("%d hidden by the filter", hidden))
+	switch {
+	case on == "":
+		return ""
+	case m.qErr != "" && m.qMatched == nil:
+		return m.th.warn.Render(refused + " refused — nothing is hidden")
+	case m.qErr != "":
+		return m.th.warn.Render(refused + " refused — the rows are marked by the last good verdict")
+	case hidden > 0:
+		return m.th.warn.Render(fmt.Sprintf("%d hidden by the %s", hidden, on))
 	}
 	return ""
 }
