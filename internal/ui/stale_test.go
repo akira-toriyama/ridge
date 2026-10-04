@@ -487,6 +487,88 @@ func TestCloseGateBacksOutWhenTheBoxWasClosedElsewhere(t *testing.T) {
 	}
 }
 
+// A re-read that takes the overlay's target off the board closes the
+// overlay and says so, for a box and for a task. Left to the next key the
+// overlay stayed in charge undrawn — the mode badge over a bare board, one
+// key of any kind swallowed (t-kehv). An unread refusal leads the line: a
+// stale $EDITOR save names its kept file nowhere else.
+func TestAReReadThatDropsTheOverlaysTargetClosesIt(t *testing.T) {
+	t.Run("box", func(t *testing.T) {
+		d := newDriftStore()
+		m := driftOverlay(t, d, "e-fw2m")
+		if _, err := d.EpicRemove("e-fw2m", board.RemoveOptions{Force: true, Apply: true}); err != nil {
+			t.Fatal(err)
+		}
+		m.fail("e-fw2m: kept at /tmp/kept.md")
+		m.Update(reloadDoneMsg{})
+		if m.epic != nil || m.mode == modeEpic {
+			t.Fatalf("the overlay must close with the re-read: epic=%v mode=%v", m.epic != nil, m.mode)
+		}
+		if !m.statusErr || !strings.HasPrefix(m.status, "e-fw2m: kept at /tmp/kept.md · ") || !strings.HasSuffix(m.status, "e-fw2m left the board — the overlay closed") {
+			t.Errorf("status = %q", m.status)
+		}
+	})
+	t.Run("task", func(t *testing.T) {
+		d := newDriftStore()
+		m := New(d, Options{})
+		m.w, m.h = 240, 50
+		m.recompute()
+		m.relayout()
+		if !m.selectID("t-9sa6", false) {
+			t.Fatal("setup: select")
+		}
+		m.enterEdit()
+		if _, err := d.Remove([]string{"t-9sa6"}, board.RemoveOptions{Force: true, Apply: true}); err != nil {
+			t.Fatal(err)
+		}
+		m.Update(reloadDoneMsg{label: "reloaded", ms: 3})
+		if m.edit != nil || m.mode != modeNormal {
+			t.Fatalf("the overlay must close with the re-read: edit=%v mode=%v", m.edit != nil, m.mode)
+		}
+		if !m.statusErr || m.status != "t-9sa6 left the board — the overlay closed" {
+			t.Errorf("status = %q", m.status)
+		}
+	})
+}
+
+// A sync's verdict on the row is said nowhere else: the orphan line joins it.
+// The new-box modal has no target to lose and stays open through a re-read.
+func TestTheOrphanLineKeepsASyncVerdictAndSparesTheNewBoxModal(t *testing.T) {
+	d := newDriftStore()
+	m := driftOverlay(t, d, "e-fw2m")
+	if _, err := d.EpicRemove("e-fw2m", board.RemoveOptions{Force: true, Apply: true}); err != nil {
+		t.Fatal(err)
+	}
+	m.Update(reloadDoneMsg{label: "synced", ms: 3, note: "NOT published 1: t-abcd"})
+	if want := "synced · 3ms · NOT published 1: t-abcd · e-fw2m left the board — the overlay closed"; m.status != want {
+		t.Errorf("status = %q, want %q", m.status, want)
+	}
+
+	m = boardModel(t, 240, 50)
+	press(m, "s")
+	m.sliceField = sliceEpic
+	press(m, "A")
+	if m.epic == nil || !m.epic.creating {
+		t.Fatal("setup: A must open the new-box modal")
+	}
+	m.Update(reloadDoneMsg{})
+	if m.epic == nil || !m.epic.creating {
+		t.Error("a re-read closed the new-box modal")
+	}
+}
+
+// A re-read that a refusal fired and that then fails keeps the refusal at
+// the head of the line.
+func TestAFailedReReadKeepsTheRefusalThatFiredIt(t *testing.T) {
+	d := newDriftStore()
+	m := driftOverlay(t, d, "e-fw2m")
+	m.fail("e-fw2m: kept at /tmp/kept.md")
+	m.Update(reloadDoneMsg{err: fmt.Errorf("reading a box body")})
+	if !m.statusErr || !strings.HasPrefix(m.status, "e-fw2m: kept at /tmp/kept.md · reload: reading a box body") {
+		t.Errorf("status = %q", m.status)
+	}
+}
+
 // A refused store-first epic write re-reads the board: the refusal (a box
 // withdrawn elsewhere) says the overlay's board is not the store's, and
 // without the re-read ridge kept a box furrow no longer listed (t-2wa3).

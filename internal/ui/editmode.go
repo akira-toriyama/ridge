@@ -272,8 +272,29 @@ func (m *Model) noteEditStage() {
 	}
 }
 
+// closeOrphanedOverlay closes the task or box overlay whose target a re-read
+// took off the board and returns the lost id, "" when nothing was orphaned.
+// Left to the next key (editTask, epicBox) the overlay stayed in charge
+// undrawn: the mode badge over a bare board, and one key of any kind
+// swallowed to close it (t-kehv).
+func (m *Model) closeOrphanedOverlay() string {
+	switch {
+	case m.edit != nil && m.b.Task(m.edit.id) == nil:
+		id := m.edit.id
+		m.exitEdit()
+		return id
+	case m.epic != nil && !m.epic.creating && m.b.Epic(m.epic.id) == nil:
+		id := m.epic.id
+		m.exitEpic()
+		return id
+	}
+	return ""
+}
+
 // editTask resolves the task under edit; losing it (a reload dropped the id)
-// closes the overlay rather than editing a ghost.
+// closes the overlay rather than editing a ghost. A re-read closes it first
+// (closeOrphanedOverlay); this is the guard for a board swapped any other
+// way.
 func (m *Model) editTask() *board.Task {
 	if m.edit == nil {
 		return nil

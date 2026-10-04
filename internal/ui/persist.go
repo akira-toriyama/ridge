@@ -757,12 +757,18 @@ func (m *Model) onReloadDone(msg reloadDoneMsg) tea.Cmd {
 		}
 		m.sweepReadStalled()
 		m.closeGateReadFailed()
-		if msg.note != "" {
+		switch {
+		case msg.note != "":
 			// The re-read failed, not the sync: its verdict still stands, is
 			// said nowhere else, and leads — the line is truncated at the
 			// right, and a long git error would take the verdict with it.
 			m.fail("%s · %s · re-read failed: %v", label, msg.note, msg.err)
-		} else {
+		case m.statusErr && msg.label == "" && !strings.Contains(m.status, " · reload: "):
+			// An unlabelled re-read failing under an unread refusal: the
+			// refusal leads — a stale $EDITOR save names its kept file only
+			// there. Once: a second failure replaces the first.
+			m.fail("%s · %s: %v", m.status, label, msg.err)
+		default:
 			m.fail("%s: %v", label, msg.err)
 		}
 		return nil
@@ -804,6 +810,7 @@ func (m *Model) onReloadDone(msg reloadDoneMsg) tea.Cmd {
 	}
 	seat := m.takeSeat()
 	m.reload()
+	orphaned := m.closeOrphanedOverlay()
 	moved := m.reseat(seat)
 	m.dbg.event("persist", "reload", map[string]any{"label": label, "ms": msg.ms, "rollback": msg.rollback})
 	// The board now shows the store's own truth, whichever reload delivered
@@ -833,6 +840,16 @@ func (m *Model) onReloadDone(msg reloadDoneMsg) tea.Cmd {
 		m.note("%s · %s", m.status, moved)
 	}
 	m.closeGateRead()
+	if orphaned != "" {
+		// Last, so the label's line does not take it. What is on the row
+		// and said nowhere else leads: an unread refusal — it may name the
+		// file a refused $EDITOR save was kept in — or a sync's verdict.
+		gone := orphaned + " left the board — the overlay closed"
+		if m.statusErr || msg.note != "" {
+			gone = m.status + " · " + gone
+		}
+		m.fail("%s", gone)
+	}
 	if id := m.selectAfterReload; id != "" {
 		// Pin past any active filter: a card you just created must be under
 		// the cursor even when the filter would hide it. Cleared only once

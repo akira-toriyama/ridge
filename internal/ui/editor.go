@@ -48,7 +48,7 @@ func (m *Model) applyEditorBody(msg editorDoneMsg) tea.Cmd {
 		// store's: the record moved, and the stage under the user shows the
 		// text the editor was handed.
 		m.quitting = false
-		m.fail("%s: the record changed while the editor was open — nothing written; your text is kept at %s (the board re-reads; e again to edit the moved record)", msg.id, msg.kept)
+		m.fail("%s: the record changed while the editor was open — nothing written; your text is kept at %s (the board re-reads; e again if the record is still there)", msg.id, msg.kept)
 		return m.reloadCmd("")
 	}
 	set := m.b.SetBody
