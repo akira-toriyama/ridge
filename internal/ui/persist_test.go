@@ -510,8 +510,8 @@ func TestSyncLandingNoteCarriesTheReport(t *testing.T) {
 	m, p = storeFirstModel(t)
 	p.syncErr = errors.New("git-failed")
 	msg = m.syncCmd()().(reloadDoneMsg)
-	if msg.note != "" || msg.err == nil {
-		t.Errorf("a failed sync must carry its error and no note, got note %q err %v", msg.note, msg.err)
+	if msg.note != "" || msg.syncErr == nil || msg.err != nil || msg.label != "sync failed" {
+		t.Errorf("a failed sync must carry its error over an applied re-read and no note, got %+v", msg)
 	}
 }
 
@@ -545,7 +545,7 @@ func TestSyncConflictPathsSurviveTheStatusRowsFloor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "⚠ synced: conflicted paths: .furrow/tasks/t-3fq4e.json, .furrow/epics/e-fmzj4.json, .furrow/bodies/t-3fq4e.md +1 more —") {
+	if !strings.Contains(out, "⚠ sync failed: conflicted paths: .furrow/tasks/t-3fq4e.json, .furrow/epics/e-fmzj4.json, .furrow/bodies/t-3fq4e.md +1 more —") {
 		t.Errorf("-demo syncfail must show every named path at 240 cells:\n%s", out)
 	}
 }

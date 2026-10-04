@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 // furrowError is furrow's machine-readable error envelope, decoded from
@@ -39,19 +41,36 @@ func (e *furrowError) Error() string {
 		s = fmt.Sprintf("%s (%s)", e.Message, e.Kind)
 	}
 	if n := len(e.Details.Paths); n > 0 && e.Kind == "sync-conflict" {
-		// The paths LEAD: `synced: ` plus furrow's 181-cell message plus
+		// The paths LEAD: `sync failed: ` plus furrow's 181-cell message plus
 		// the kind already fills 200 of the status row's 240 cells, so a
 		// clause at the end was cut at the floor (measured 2026-09-28: one
-		// path lost its `.json`, a second was invisible). Three are named,
-		// the rest counted — with three of furrow's 27-cell shard paths the
-		// clause is under 100 cells and the message's head still reads.
-		const shown = 3
-		paths := e.Details.Paths
-		more := ""
-		if n > shown {
-			paths, more = paths[:shown], fmt.Sprintf(" +%d more", n-shown)
+		// path lost its `.json`, a second was invisible). Up to three are
+		// named, the rest counted, and the named list is budgeted in CELLS
+		// (85 holds three of a root board's shard paths, 25-27 cells each),
+		// so the clause — the list, its `+N more` and its label — stays
+		// near 115 and the message's head, what furrow did about the
+		// conflict, still reads. A count alone bounded nothing: a board
+		// nested under a long directory spent the whole row on its third
+		// path (t-yzta). A path wider than the budget keeps its tail, where
+		// the shard is; a wide grapheme on the cut is kept whole, one cell
+		// over.
+		const shown, cells = 3, 85
+		first := e.Details.Paths[0]
+		if w := ansi.StringWidth(first); w > cells {
+			first = ansi.TruncateLeft(first, w-cells+1, "…")
 		}
-		s = "conflicted paths: " + strings.Join(paths, ", ") + more + " — " + s
+		list, named := first, 1
+		for named < n && named < shown {
+			next := list + ", " + e.Details.Paths[named]
+			if ansi.StringWidth(next) > cells {
+				break
+			}
+			list, named = next, named+1
+		}
+		if n > named {
+			list += fmt.Sprintf(" +%d more", n-named)
+		}
+		s = "conflicted paths: " + list + " — " + s
 	}
 	return s
 }

@@ -99,6 +99,8 @@ type reloadDoneMsg struct {
 	// lead is the line a drain-paid read lands BEHIND: the write's own
 	// landing note, said nowhere else (payOwed).
 	lead string
+	// syncErr is a sync that failed while the re-read behind it applied.
+	syncErr error
 }
 
 // inFlightNote opens both promise lines; payOwed tells them from a landing
@@ -649,8 +651,12 @@ func (m *Model) reloadCmdOpts(label string, rollback bool) tea.Cmd {
 	}
 }
 
-// syncCmd runs the store's git sync and re-reads on success, as one background
-// step — the pull may have brought other machines' writes in.
+// syncCmd runs the store's git sync and re-reads, as one background step —
+// the pull may have brought other machines' writes in, and that holds for a
+// sync that then FAILED: a lost push race leaves the co-writer's commits in
+// the working tree, and the board kept the old record under furrow's "the
+// board is unchanged" until an `r` (t-yzta). The failure's label is its own:
+// "synced: <error>" opened every failed sync with the word for success.
 func (m *Model) syncCmd() tea.Cmd {
 	prov := m.prov
 	return func() tea.Msg {
@@ -661,10 +667,16 @@ func (m *Model) syncCmd() tea.Cmd {
 			// Only a sync that answered has a report; the zero value would
 			// read as "incomplete".
 			note = syncNote(rep)
-			err = prov.Reload()
+			return reloadDoneMsg{label: "synced", note: note, sync: true,
+				ms: int(time.Since(start).Milliseconds()), err: prov.Reload()}
 		}
-		return reloadDoneMsg{label: "synced", note: note, sync: true,
-			ms: int(time.Since(start).Milliseconds()), err: err}
+		msg := reloadDoneMsg{label: "sync failed", sync: true, syncErr: err}
+		if prov.Reload() != nil {
+			// Both failed: the sync's error is the one to read.
+			msg.syncErr, msg.err = nil, err
+		}
+		msg.ms = int(time.Since(start).Milliseconds())
+		return msg
 	}
 }
 
@@ -704,7 +716,7 @@ func (m *Model) onReloadDone(msg reloadDoneMsg) tea.Cmd {
 			// The quit waited on an owed sync (payOwed). Only a failed one
 			// cancels it, as a failed write does: leaving on top of it
 			// would make the failure silent.
-			if msg.err == nil {
+			if msg.err == nil && msg.syncErr == nil {
 				return tea.Quit
 			}
 			m.quitting = false
@@ -766,6 +778,10 @@ func (m *Model) onReloadDone(msg reloadDoneMsg) tea.Cmd {
 		// "the board didn't update" report hinges on — nothing on screen
 		// distinguishes it from a reload that never ran.
 		m.dbg.event("persist", "reloadskip", map[string]any{"label": label, "ms": msg.ms})
+		if msg.syncErr != nil {
+			m.fail("%s: %v", label, msg.syncErr)
+			return nil
+		}
 		if msg.note != "" || msg.sync {
 			// The snapshot waits for the drain; the sync's verdict does not —
 			// it is the only place the user learns a body stayed home, or
@@ -794,12 +810,13 @@ func (m *Model) onReloadDone(msg reloadDoneMsg) tea.Cmd {
 	// in-flight guard above, or an error) still owes the board a re-read.
 	m.rollingBack = false
 	m.clearUnread()
-	if msg.label != "" {
-		if msg.note != "" {
-			m.note("%s · %dms · %s", label, msg.ms, msg.note)
-		} else {
-			m.note("%s · %dms", label, msg.ms)
-		}
+	switch {
+	case msg.syncErr != nil:
+		m.fail("%s: %v", label, msg.syncErr)
+	case msg.label != "" && msg.note != "":
+		m.note("%s · %dms · %s", label, msg.ms, msg.note)
+	case msg.label != "":
+		m.note("%s · %dms", label, msg.ms)
 	}
 	m.closeGateRead()
 	if id := m.selectAfterReload; id != "" {

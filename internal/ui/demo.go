@@ -1331,13 +1331,13 @@ func (m *Model) demoState(kind string) error {
 
 	case "syncfail":
 		// A sync that furrow refused with a conflict: the status row as
-		// onReloadDone lands it (`synced: ` + the adapter's error). The
+		// onReloadDone lands it (`sync failed: ` + the adapter's error). The
 		// fixture has no store, so the text is canned in the adapter's own
 		// shape (furrowstore.furrowError.Error, whose test pins the width):
 		// the conflicted paths lead — three of furrow's shard paths, one
 		// counted — and furrow's 181-cell prose follows, cut at the floor.
 		m.lastPersist = "sync 1204ms"
-		m.fail("synced: conflicted paths: .furrow/tasks/t-3fq4e.json, .furrow/epics/e-fmzj4.json, .furrow/bodies/t-3fq4e.md +1 more — " +
+		m.fail("sync failed: conflicted paths: .furrow/tasks/t-3fq4e.json, .furrow/epics/e-fmzj4.json, .furrow/bodies/t-3fq4e.md +1 more — " +
 			"pull --rebase hit conflicts; the rebase was aborted and the board restored (your local sync commit is intact). " +
 			"Resolve the paths by hand (pull, fix, commit), then re-run furrow sync (sync-conflict)")
 

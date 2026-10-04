@@ -14,7 +14,7 @@ const syncConflictMessage = "pull --rebase hit conflicts; the rebase was aborted
 
 // A sync-conflict envelope names its paths in the error the ui shows — AHEAD
 // of the message, since the status row is one 240-cell line truncated at the
-// right and `synced: ` plus the message plus the kind already fills 200 of
+// right and `sync failed: ` plus the message plus the kind already fills 200 of
 // them; the adapter once dropped details.paths entirely, and then appended
 // them where the floor cut them (t-36k0).
 func TestFurrowErrorLeadsWithTheConflictedPaths(t *testing.T) {
@@ -30,7 +30,7 @@ func TestFurrowErrorLeadsWithTheConflictedPaths(t *testing.T) {
 	}
 
 	// Five shard paths through the JSON: three named, the rest counted, and
-	// the clause inside the status row's floor behind the ui's `⚠ synced: `
+	// the clause inside the status row's floor behind the ui's `⚠ sync failed: `
 	// lead, however long furrow's prose after it.
 	raw = `{"error":{"kind":"sync-conflict","message":` + jsonString(syncConflictMessage) +
 		`,"details":{"paths":[".furrow/tasks/t-3fq4e.json",".furrow/epics/e-fmzj4.json",".furrow/bodies/t-3fq4e.md",".furrow/tasks/t-a2cwy.json",".furrow/meta.json"]}}}`
@@ -43,8 +43,33 @@ func TestFurrowErrorLeadsWithTheConflictedPaths(t *testing.T) {
 	if !ok || clause != "conflicted paths: .furrow/tasks/t-3fq4e.json, .furrow/epics/e-fmzj4.json, .furrow/bodies/t-3fq4e.md +2 more" {
 		t.Errorf("a long list is capped and counted at the head: %q", got)
 	}
-	if w := ansi.StringWidth("⚠ synced: " + clause); w > 240 {
+	if w := ansi.StringWidth("⚠ sync failed: " + clause); w > 240 {
 		t.Errorf("the clause must sit inside the 240-cell status row, is %d cells", w)
+	}
+
+	// The list is budgeted in cells, not only counted: a board nested under
+	// a long directory names what fits and counts the rest, and one path
+	// wider than the budget keeps its tail, where the shard's name is.
+	nested := "boards/2026-autumn-dinner-party-planning-board/.furrow/tasks/"
+	raw = `{"error":{"kind":"sync-conflict","message":` + jsonString(syncConflictMessage) +
+		`,"details":{"paths":["` + nested + `t-3fq4e.json","` + nested + `t-a2cwy.json","` + nested + `t-zzzzz.json"]}}}`
+	env = errorEnvelope{}
+	if err := json.Unmarshal([]byte(raw), &env); err != nil {
+		t.Fatal(err)
+	}
+	clause, _, _ = strings.Cut(env.Error.Error(), " — ")
+	if clause != "conflicted paths: "+nested+"t-3fq4e.json +2 more" {
+		t.Errorf("a nested board's paths must yield to the budget: %q", clause)
+	}
+	long := strings.Repeat("深い階層/", 12) + ".furrow/tasks/t-3fq4e.json"
+	raw = `{"error":{"kind":"sync-conflict","message":"m","details":{"paths":[` + jsonString(long) + `]}}}`
+	env = errorEnvelope{}
+	if err := json.Unmarshal([]byte(raw), &env); err != nil {
+		t.Fatal(err)
+	}
+	clause, _, _ = strings.Cut(env.Error.Error(), " — ")
+	if w := ansi.StringWidth(clause); w > 110 || !strings.HasSuffix(clause, ".furrow/tasks/t-3fq4e.json") || !strings.Contains(clause, "…") {
+		t.Errorf("an over-wide path must keep its tail inside the budget: %d cells %q", w, clause)
 	}
 
 	// sync-unmerged carries paths too, but its message names them already:
