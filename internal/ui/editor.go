@@ -11,13 +11,15 @@ import (
 
 // editorDoneMsg is a $EDITOR exit, the buffer read back. A stale result is
 // one the record moved under (editorResult): body is not applied, and kept
-// names the file the typed text was left in.
+// names the file the typed text was left in. same is a buffer the editor
+// left as it was handed: nothing is applied or written.
 type editorDoneMsg struct {
 	id    string
 	body  string
 	err   error
 	stale bool
 	kept  string
+	same  bool
 }
 
 // applyEditorBody lands a $EDITOR result: the optimistic local apply plus
@@ -25,6 +27,21 @@ type editorDoneMsg struct {
 // window (model.go: heldBody) replays through the same path. The id names a
 // task or a box (furrow's edit takes either); the box's half is SetEpicBody.
 func (m *Model) applyEditorBody(msg editorDoneMsg) tea.Cmd {
+	if msg.same {
+		// `furrow edit --body` stamps `updated` even for an identical body
+		// (measured 2026-10-04), so the write this skips took a stale task
+		// off `furrow revisit` for an editor that was only opened (t-zq7m).
+		// The re-read is still owed on a live store: the editor showed the
+		// store's record, which may be newer than the board's or gone, and
+		// the stale fence that would have re-read was never reached.
+		if !m.statusErr {
+			m.note("%s body unchanged — nothing written", msg.id)
+		}
+		if m.prov.Live() {
+			return m.reloadCmd("")
+		}
+		return nil
+	}
 	if msg.stale {
 		// Terminal for a flush the way the refusal below is. The re-read is
 		// owed now, as after any refusal that says the board is not the
@@ -111,8 +128,10 @@ func (m *Model) editBodyCmd(id string) tea.Cmd {
 // editorResult is the $EDITOR exit: the buffer read back, fenced against a
 // record that moved while the editor held it — the store's record no longer
 // reads as base, or is gone. The temp file is removed except on that
-// refusal, where it is the only copy of the typed text. Runs on the process
-// callback, off the UI thread: prov is the Provider, never the model.
+// refusal, where it is the only copy of the typed text. An untouched buffer
+// is answered before the fence: with nothing typed there is nothing a moved
+// record could lose. Runs on the process callback, off the UI thread: prov
+// is the Provider, never the model.
 func editorResult(prov board.Provider, id, base, path string, runErr error) editorDoneMsg {
 	if runErr != nil {
 		_ = os.Remove(path)
@@ -122,6 +141,10 @@ func editorResult(prov board.Provider, id, base, path string, runErr error) edit
 	if err != nil {
 		_ = os.Remove(path)
 		return editorDoneMsg{id: id, err: err}
+	}
+	if string(b) == base {
+		_ = os.Remove(path)
+		return editorDoneMsg{id: id, same: true}
 	}
 	if cur, err := prov.ReadBody(id); err != nil || cur != base {
 		return editorDoneMsg{id: id, body: string(b), stale: true, kept: path}
