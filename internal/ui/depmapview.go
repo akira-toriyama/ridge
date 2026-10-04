@@ -399,8 +399,7 @@ func (m *Model) startMap(seed string) string {
 // walk ended on — the same contract as closing the graph.
 func (m *Model) closeMap() {
 	m.view = viewBoard
-	m.carryCursorBack(m.depmap.moved, m.depmap.sel)
-	m.note("board view — the cursor followed the dep map")
+	m.noteClosedTo("board view", m.carryCursorBack(m.depmap.moved, m.depmap.sel), "dep map")
 }
 
 // cycleMapScope flips between the live clusters and every cluster.

@@ -563,10 +563,11 @@ func (m *Model) noteSwim() {
 func (m *Model) closeSwim() {
 	m.view = viewBoard
 	// A band header names no row the board could select: IDOf is "" there.
+	followed := false
 	if m.swim.lay != nil {
-		m.carryCursorBack(m.swim.moved, m.swim.lay.IDOf(m.swim.sel))
+		followed = m.carryCursorBack(m.swim.moved, m.swim.lay.IDOf(m.swim.sel))
 	}
-	m.note("board view — the cursor followed the swimlane")
+	m.noteClosedTo("board view", followed, "swimlane")
 }
 
 // toggleSwimFold folds or unfolds the band the cursor is in. Folding parks the

@@ -353,11 +353,23 @@ func (m *Model) lensUnappliedBit(what string) string {
 // a silent re-selection. The pin is applied only when the filter would
 // otherwise hide the row, so a walk over an unfiltered board leaves no
 // permanent exemption behind.
-func (m *Model) carryCursorBack(moved bool, id string) {
+//
+// It reports whether the board cursor is on id now, which is what a close
+// note may claim: "the cursor followed" was said unconditionally, over a
+// board cursor that had stayed where it was (t-v8j6).
+func (m *Model) carryCursorBack(moved bool, id string) bool {
 	if !moved || id == "" {
+		return false
+	}
+	return m.selectID(id, false) || m.selectID(id, true)
+}
+
+// noteClosedTo is a full-screen view's closing note: where the user is now
+// and, only when it happened, that the cursor came along.
+func (m *Model) noteClosedTo(where string, followed bool, walk string) {
+	if followed {
+		m.note("%s — the cursor followed the %s", where, walk)
 		return
 	}
-	if !m.selectID(id, false) {
-		m.selectID(id, true)
-	}
+	m.note("%s", where)
 }

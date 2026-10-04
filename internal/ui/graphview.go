@@ -888,16 +888,18 @@ func (m *Model) closeGraph() {
 	if m.graph.from == viewMap {
 		m.graph.from = viewBoard
 		m.view = viewMap
+		followed := false
 		if l := m.graph.lay; l != nil {
 			if n := l.Node(m.graph.sel); n != nil && n.Kind == egoReal {
 				// Walking a graph and stopping on a node IS a choice, so the
 				// map cursor that comes back from it is one the board may
 				// follow — unlike the fallback row openMap had to invent.
 				m.depmap.sel, m.depmap.moved = n.ID, true
+				followed = true
 			}
 		}
 		m.depmap.scroll = 0
-		m.note("dep map — the cursor followed the graph walk")
+		m.noteClosedTo("dep map", followed, "graph walk")
 		return
 	}
 	m.view = viewBoard
@@ -905,17 +907,16 @@ func (m *Model) closeGraph() {
 	// without View — every headless harness in this package — reaches here with
 	// it still nil, and Node dereferences its receiver. The two other readers
 	// (graphMove, rerootGraph) already guard; this one did not.
+	followed := false
 	if l := m.graph.lay; l != nil {
 		if n := l.Node(m.graph.sel); n != nil && n.Kind == egoReal {
 			// Same rule as jumpToBlocker/jumpBack: pin only what the filter
 			// would otherwise hide, so an unfiltered walk leaves no permanent
 			// exemption behind.
-			if !m.selectID(n.ID, false) {
-				m.selectID(n.ID, true)
-			}
+			followed = m.selectID(n.ID, false) || m.selectID(n.ID, true)
 		}
 	}
-	m.note("board view — the cursor followed the graph walk")
+	m.noteClosedTo("board view", followed, "graph walk")
 }
 
 // onGraphKey is the graph view's whole keyboard surface. Everything the board
