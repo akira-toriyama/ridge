@@ -238,6 +238,11 @@ type Model struct {
 	// storeFirstUnread; a failed ROLLBACK re-read leaves both standing (see
 	// onReloadDone).
 	unreadLanded bool
+	// owed is the store key pressed while the queue was busy, paid by the
+	// drain's own re-read (onPersistDone); syncing is a sync between its
+	// keypress and its landing, during which a second R starts nothing.
+	owed    owedStoreKey
+	syncing bool
 	// The same window, narrowed to the STORE-FIRST writes: the overlay that
 	// issued one is still showing pre-write values until the re-read lands, so it
 	// refuses another gesture. Separate from unreadLanded because that one is set

@@ -94,7 +94,30 @@ type reloadDoneMsg struct {
 	// note is prose the trigger computed — a sync's publish report
 	// (syncNote) — appended to the label's line when the reload applies.
 	note string
+	// sync marks the landing of syncCmd, whatever its outcome.
+	sync bool
+	// lead is the line a drain-paid read lands BEHIND: the write's own
+	// landing note, said nowhere else (payOwed).
+	lead string
 }
+
+// inFlightNote opens both promise lines; payOwed tells them from a landing
+// note by it.
+const inFlightNote = "writes in flight — "
+
+// owedStoreKey is `r` or `R` pressed while writes were in flight. Neither
+// may run beside the queue's furrow process, so the note promised it for
+// "once they land". The sync was never run, and both lines stayed on the
+// row after the queue had drained (t-nqek; the drain did re-read, in
+// silence). The drain pays the key instead, in place of that silent
+// re-read; R outranks r, a sync being a re-read too.
+type owedStoreKey int
+
+const (
+	owedNone owedStoreKey = iota
+	owedReload
+	owedSync
+)
 
 // markUnread records that a write LANDED in a live store and the board has not
 // re-read it (Model.unreadLanded; storeFirst narrows it to Model.storeFirstUnread).
@@ -210,6 +233,11 @@ func (m *Model) onPersistDone(msg persistDoneMsg) tea.Cmd {
 		flushed := m.pending
 		m.pending = nil
 		m.quitting = false
+		// The refusal's line replaces the promise, so it says what became
+		// of it: an owed sync does not run behind a refused write, and an
+		// owed re-read is the one each branch below fires (or adds).
+		owed := m.owed
+		m.owed = owedNone
 
 		// The flushed tail is named, not just counted: a queued quick add
 		// has NO optimistic effect, so nothing on the board even hints that
@@ -221,6 +249,9 @@ func (m *Model) onPersistDone(msg persistDoneMsg) tea.Cmd {
 		loss := ""
 		if len(labels) > 0 {
 			loss = fmt.Sprintf(" · dropped %d queued: %s", len(labels), strings.Join(labels, ", "))
+		}
+		if owed == owedSync {
+			loss += " · the sync did not run — R again"
 		}
 		m.dbg.event("persist", "fail", map[string]any{
 			"label": msg.label, "ms": msg.ms, "err": msg.err.Error(), "dropped": labels,
@@ -263,6 +294,10 @@ func (m *Model) onPersistDone(msg persistDoneMsg) tea.Cmd {
 			// successful add would fire at some unrelated future reload.
 			m.selectAfterReload = ""
 			m.fail("%s: %v%s", msg.label, msg.err, loss)
+			if owed == owedReload {
+				// Nothing else re-reads on this branch, and `r` was promised.
+				return tea.Batch(reopen, m.reloadCmd(""))
+			}
 			// The sweep's previews may still be waiting on this drain.
 			return tea.Batch(reopen, m.sweepAfterWrite())
 		}
@@ -326,10 +361,13 @@ func (m *Model) onPersistDone(msg persistDoneMsg) tea.Cmd {
 	if len(m.pending) > 0 {
 		return m.firePersist()
 	}
-	if m.quitting {
+	if m.quitting && m.owed != owedSync {
 		return tea.Quit
 	}
 	if m.prov.Live() {
+		if c := m.payOwed(); c != nil {
+			return c
+		}
 		return m.reloadCmd("")
 	}
 	// The fixture drain reloads nothing, so the sweep's deferred read is owed
@@ -519,7 +557,12 @@ func (m *Model) reloadKey() tea.Cmd {
 		// The reload would race the queue's own furrow process, land
 		// behind the guard in onReloadDone and be dropped — leaving
 		// "reloading…" on screen forever. The drain reconciles anyway.
-		m.note("writes in flight — the board re-reads itself once they land")
+		// A live drain pays it; the fixture's drain re-reads nothing (its
+		// Reload is the discard), so nothing is owed there.
+		if m.prov.Live() && m.owed == owedNone {
+			m.owed = owedReload
+		}
+		m.note(inFlightNote + "the board re-reads itself once they land")
 		return nil
 	}
 	label := "reloaded"
@@ -536,12 +579,55 @@ func (m *Model) syncKey() tea.Cmd {
 		m.note("the fixture has no store to sync")
 		return nil
 	}
-	if m.queueBusy() {
-		m.note("writes in flight — sync once they land")
+	if m.syncing {
+		// A second `furrow sync` beside the first found the first one's
+		// commit already made and reported git-failed over a sync that
+		// had succeeded (measured with the two presses 30ms apart).
+		m.note("a sync is already running")
 		return nil
 	}
+	if m.queueBusy() {
+		m.owed = owedSync
+		m.note(inFlightNote + "the sync runs once they land")
+		return nil
+	}
+	m.syncing = true
 	m.note("syncing…")
 	return m.syncCmd()
+}
+
+// payOwed is the drain paying the store key pressed while it was busy; nil
+// when none is owed. The read lands behind the line the drain leaves — the
+// last write's landing note ("closed t-x · repeat: next due …", a box
+// close's disclosure), which a labelled landing would otherwise replace —
+// unless that line is still the promise, which becomes the read's own
+// progress word. A quit waiting on the drain waits for an owed sync too
+// (onReloadDone quits behind it): `R` then `q` once exited with the sync
+// promised on the last frame and never run.
+func (m *Model) payOwed() tea.Cmd {
+	owed := m.owed
+	m.owed = owedNone
+	var read tea.Cmd
+	word := ""
+	switch owed {
+	case owedSync:
+		m.syncing = true
+		read, word = m.syncCmd(), "syncing…"
+	case owedReload:
+		read, word = m.reloadCmd("reloaded"), "reloading…"
+	default:
+		return nil
+	}
+	lead := m.status
+	if strings.HasPrefix(lead, inFlightNote) || lead == "" {
+		lead = ""
+		m.note("%s", word)
+	}
+	return func() tea.Msg {
+		msg, _ := read().(reloadDoneMsg)
+		msg.lead = lead
+		return msg
+	}
 }
 
 func (m *Model) reloadCmd(label string) tea.Cmd {
@@ -577,7 +663,7 @@ func (m *Model) syncCmd() tea.Cmd {
 			note = syncNote(rep)
 			err = prov.Reload()
 		}
-		return reloadDoneMsg{label: "synced", note: note,
+		return reloadDoneMsg{label: "synced", note: note, sync: true,
 			ms: int(time.Since(start).Milliseconds()), err: err}
 	}
 }
@@ -612,9 +698,24 @@ func syncNote(r board.SyncReport) string {
 }
 
 func (m *Model) onReloadDone(msg reloadDoneMsg) tea.Cmd {
+	if msg.sync {
+		m.syncing = false
+		if m.quitting {
+			// The quit waited on an owed sync (payOwed). Only a failed one
+			// cancels it, as a failed write does: leaving on top of it
+			// would make the failure silent.
+			if msg.err == nil {
+				return tea.Quit
+			}
+			m.quitting = false
+		}
+	}
 	label := msg.label
 	if label == "" {
 		label = "reload"
+	}
+	if msg.lead != "" {
+		label = msg.lead + " · " + label
 	}
 	if msg.err != nil {
 		m.dbg.event("persist", "reloadfail", map[string]any{
@@ -665,18 +766,22 @@ func (m *Model) onReloadDone(msg reloadDoneMsg) tea.Cmd {
 		// "the board didn't update" report hinges on — nothing on screen
 		// distinguishes it from a reload that never ran.
 		m.dbg.event("persist", "reloadskip", map[string]any{"label": label, "ms": msg.ms})
-		if msg.note != "" {
+		if msg.note != "" || msg.sync {
 			// The snapshot waits for the drain; the sync's verdict does not —
-			// it is the only place the user learns a body stayed home. APPENDED
-			// to the in-flight gesture's own line, not replacing it: "closed
-			// t-x — unblocked N" is said nowhere else either, and the drain's
-			// reload carries no label to re-say it (found by review).
-			lead := label
+			// it is the only place the user learns a body stayed home, or
+			// that the sync ran at all (a bare "synced" was dropped here).
+			// APPENDED to the in-flight gesture's own line, not replacing it:
+			// "closed t-x — unblocked N" is said nowhere else either, and the
+			// drain's reload carries no label to re-say it (found by review).
+			said := label
 			if m.status != "" {
-				lead = m.status + " · " + label
+				said = m.status + " · " + label
+			}
+			if msg.note != "" {
+				said += " · " + msg.note
 			}
 			wasErr := m.statusErr
-			m.note("%s · %s", lead, msg.note)
+			m.note("%s", said)
 			m.statusErr = wasErr
 		}
 		return nil
@@ -691,9 +796,9 @@ func (m *Model) onReloadDone(msg reloadDoneMsg) tea.Cmd {
 	m.clearUnread()
 	if msg.label != "" {
 		if msg.note != "" {
-			m.note("%s · %dms · %s", msg.label, msg.ms, msg.note)
+			m.note("%s · %dms · %s", label, msg.ms, msg.note)
 		} else {
-			m.note("%s · %dms", msg.label, msg.ms)
+			m.note("%s · %dms", label, msg.ms)
 		}
 	}
 	m.closeGateRead()
