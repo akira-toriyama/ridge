@@ -138,6 +138,9 @@ type epicState struct {
 	// it is not — the read under way, or why none was fired.
 	closeFresh bool
 	closeNote  string
+	// closeWasClosed is the box's state when the lifecycle gate opened: which
+	// of the row's two writes the user chose (closeGateRead).
+	closeWasClosed bool
 }
 
 // epicHooks is the epic overlay's half of the stage machine: the shell walks
@@ -781,6 +784,7 @@ const (
 func (m *Model) openCloseGate(e *epicState) tea.Cmd {
 	e.closeFresh, e.closeNote = true, ""
 	box := m.b.Epic(e.id)
+	e.closeWasClosed = box != nil && !box.Closed.IsZero()
 	if box == nil || !box.Closed.IsZero() || !m.prov.Live() {
 		m.noteEpicStage()
 		return nil
@@ -798,8 +802,37 @@ func (m *Model) openCloseGate(e *epicState) tea.Cmd {
 
 // closeGateRead marks the close gate fresh once a re-read applied — any
 // re-read, an `r` included: the count it draws is the store's now.
+//
+// The row is one gate over two writes, chosen by the box's state, so a
+// re-read that finds the state flipped would swap the write under an open
+// gate: a box closed by another session turned "close this box" into
+// "reopen", and the ⏎ meant for the close reopened it (t-r4at). The gate
+// backs out to the menu instead and says what the box is now. Who flipped
+// it is not known here — another session, or this one's own write landing
+// under a gate reopened behind it — so the note names neither, and it is
+// appended: the line it joins may be that write's landing, or a refusal
+// nobody has read.
 func (m *Model) closeGateRead() {
-	if e := m.epic; e != nil && e.stage == stageGate && e.field == epicFieldClosed && !e.closeFresh {
+	e := m.epic
+	if e == nil || e.stage != stageGate || e.field != epicFieldClosed {
+		return
+	}
+	if box := m.b.Epic(e.id); box != nil && !box.Closed.IsZero() != e.closeWasClosed {
+		e.stage = stageMenu
+		now, next := "closed", "reopens"
+		if e.closeWasClosed {
+			now, next = "open", "closes"
+		}
+		said := fmt.Sprintf("box %s is %s now — this gate wrote nothing; ⏎ on the row %s it", e.id, now, next)
+		if m.status != "" {
+			said = m.status + " · " + said
+		}
+		wasErr := m.statusErr
+		m.note("%s", said)
+		m.statusErr = wasErr
+		return
+	}
+	if !e.closeFresh {
 		e.closeFresh, e.closeNote = true, ""
 		m.noteEpicStage()
 	}

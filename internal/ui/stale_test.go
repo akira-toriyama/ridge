@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -441,6 +442,49 @@ func TestARefusedDeletePreviewReReadsTheBoard(t *testing.T) {
 			t.Errorf("reloads = %d status = %q", d.reloads, m.status)
 		}
 	})
+}
+
+// The lifecycle row is one gate over two writes. A re-read that finds the
+// box closed by another session must not turn an open "close" gate into a
+// "reopen" gate under the user's hands: the ⏎ meant for the close reopened
+// the box (t-r4at). The gate backs out and says what moved.
+func TestCloseGateBacksOutWhenTheBoxWasClosedElsewhere(t *testing.T) {
+	d := newDriftStore()
+	m := driftOverlay(t, d, "e-fw2m")
+	d.onReload = func(b *board.Board) { b.Epic("e-fw2m").Closed = board.Now() }
+	m.epic.menuIdx = int(epicFieldClosed)
+	_, read := m.Update(keyMsg("enter"))
+	if read == nil || m.epic.stage != stageGate {
+		t.Fatal("setup: the gate must open reading")
+	}
+	m.Update(read())
+	if m.epic == nil || m.epic.stage != stageMenu {
+		t.Fatalf("the gate must back out to the menu: %+v", m.epic)
+	}
+	if m.statusErr || !strings.HasSuffix(m.status, "box e-fw2m is closed now — this gate wrote nothing; ⏎ on the row reopens it") {
+		t.Errorf("status = %q (err=%v)", m.status, m.statusErr)
+	}
+	if strings.Contains(frame(m), "reopen this box") {
+		t.Error("no reopen gate may be open")
+	}
+	if len(m.pending) != 0 || m.inflight {
+		t.Error("nothing may be queued")
+	}
+
+	// The other direction: a reopen gate over a box that a re-read finds
+	// open. An unread refusal stays at the head of the line.
+	m.epic.menuIdx = int(epicFieldClosed)
+	press(m, "enter")
+	if m.epic.stage != stageGate || !strings.Contains(frame(m), "reopen this box") {
+		t.Fatalf("setup: the reopen gate must open (stage %d)", m.epic.stage)
+	}
+	d.onReload = func(b *board.Board) { b.Epic("e-fw2m").Closed = time.Time{} }
+	m.fail("an unread refusal")
+	runCmd(m, m.reloadCmd(""))
+	if m.epic.stage != stageMenu || !m.statusErr ||
+		m.status != "an unread refusal · box e-fw2m is open now — this gate wrote nothing; ⏎ on the row closes it" {
+		t.Errorf("stage %d status = %q (err=%v)", m.epic.stage, m.status, m.statusErr)
+	}
 }
 
 // A refused store-first epic write re-reads the board: the refusal (a box
