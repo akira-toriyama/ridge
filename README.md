@@ -217,7 +217,10 @@ re-lays with the row on its new date, the window panning to its `◆` when the
 date lies outside it (a write furrow then refuses rolls the date back and
 leaves the window where the apply put it, the edge arrow pointing the way);
 a cleared due takes the row off the timeline and the cursor lands on the
-row that followed it. Headless: `-demo roaddue`.
+row that followed it. Headless: `-demo roaddue`. A re-read that takes the
+row under the cursor (another session closed or un-dated it) lands on the
+nearest surviving row and says so — in every full-screen view; headless:
+`-demo roadgone`.
 
 `ridge -roadmap` opens the real board in this view. Headless: `-dump -roadmap`
 (day) and `-demo roadmapweek` / `-demo roadmapmonth`.

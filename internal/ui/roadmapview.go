@@ -501,8 +501,7 @@ func (m *Model) openRoadmap() {
 // all.
 func (m *Model) closeRoadmap() {
 	m.view = viewBoard
-	m.carryCursorBack(m.road.moved, m.road.sel)
-	m.note("board view — the cursor followed the roadmap")
+	m.noteClosedTo("board view", m.carryCursorBack(m.road.moved, m.road.sel), "roadmap")
 }
 
 // enterRoadDue is ⏎/m on a row: the edit overlay opened straight onto the

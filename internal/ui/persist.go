@@ -802,7 +802,9 @@ func (m *Model) onReloadDone(msg reloadDoneMsg) tea.Cmd {
 		}
 		return nil
 	}
+	seat := m.takeSeat()
 	m.reload()
+	moved := m.reseat(seat)
 	m.dbg.event("persist", "reload", map[string]any{"label": label, "ms": msg.ms, "rollback": msg.rollback})
 	// The board now shows the store's own truth, whichever reload delivered
 	// it — the rollback window closes and nothing is left unread. Cleared HERE
@@ -812,11 +814,23 @@ func (m *Model) onReloadDone(msg reloadDoneMsg) tea.Cmd {
 	m.clearUnread()
 	switch {
 	case msg.syncErr != nil:
-		m.fail("%s: %v", label, msg.syncErr)
-	case msg.label != "" && msg.note != "":
-		m.note("%s · %dms · %s", label, msg.ms, msg.note)
+		if moved != "" {
+			m.fail("%s: %v · %s", label, msg.syncErr, moved)
+		} else {
+			m.fail("%s: %v", label, msg.syncErr)
+		}
 	case msg.label != "":
-		m.note("%s · %dms", label, msg.ms)
+		line := fmt.Sprintf("%s · %dms", label, msg.ms)
+		for _, part := range []string{msg.note, moved} {
+			if part != "" {
+				line += " · " + part
+			}
+		}
+		m.note("%s", line)
+	case moved != "" && !m.statusErr:
+		// An unlabelled re-read (a write's reconcile) keeps the gesture's
+		// own line; only a refusal nobody has read outranks the landing.
+		m.note("%s · %s", m.status, moved)
 	}
 	m.closeGateRead()
 	if id := m.selectAfterReload; id != "" {

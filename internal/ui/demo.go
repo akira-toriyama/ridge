@@ -1038,6 +1038,25 @@ func (m *Model) demoState(kind string) error {
 			return fmt.Errorf("demo swimall: z did not widen the scope")
 		}
 
+	case "roadgone":
+		// A re-read that took the row under the roadmap's cursor: the
+		// landing on the nearest surviving row and the note that says so
+		// (reseat.go). The fixture has no second writer, so the board is
+		// moved between the seat and the re-seat the way onReloadDone
+		// swaps it.
+		m.openRoadmap()
+		m.road.lay = m.buildRoad()
+		if len(m.road.lay.Rows) < 3 {
+			return fmt.Errorf("demo roadgone: the roadmap needs three dated tasks")
+		}
+		m.road.sel = m.road.lay.Rows[1].ID
+		seat := m.takeSeat()
+		if _, err := m.b.MoveTo(m.road.sel, m.b.DoneLane(), 0); err != nil {
+			return fmt.Errorf("demo roadgone: %w", err)
+		}
+		m.recompute()
+		m.note("reloaded · 3ms · %s", m.reseat(seat))
+
 	case "roaddue":
 		// The edit overlay's due input opened from a roadmap row (⏎): the
 		// one write the timeline has, drawn over the timeline. Driven
