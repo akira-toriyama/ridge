@@ -453,13 +453,47 @@ func TestASecondSyncKeyWaitsForTheFirst(t *testing.T) {
 	}
 }
 
-// A failed sync clears the guard too.
-func TestAFailedSyncClearsTheGuard(t *testing.T) {
+// A failed sync clears the guard too, says it FAILED — "synced: <error>"
+// opened every failure with the word for success — and still re-reads: a
+// lost push race leaves the co-writer's pulled commits in the working tree,
+// and the board kept the old record until an `r` (t-yzta).
+func TestAFailedSyncSaysSoAndStillReReads(t *testing.T) {
 	m, p := scriptedModel(t)
-	p.syncErr = errors.New("no upstream configured")
+	p.syncErr = errors.New("a co-writer kept winning the push race")
+	const id = "a"
+	truth := p.truth
+	p.truth = func() *board.Board {
+		b := truth()
+		b.Task(id).Title = "pulled in by the failed sync"
+		return b
+	}
 	c := m.onNormalKey(keyMsg("R"))
 	m.Update(c())
-	if m.syncing || !m.statusErr {
+	if m.syncing || !m.statusErr || m.status != "sync failed: a co-writer kept winning the push race" {
+		t.Errorf("syncing=%v status=%q", m.syncing, m.status)
+	}
+	if got := m.b.Task(id).Title; got != "pulled in by the failed sync" {
+		t.Errorf("the board must be re-read behind a failed sync, title = %q", got)
+	}
+
+	// Landing behind a queued write, the failure is still an error with
+	// its text — not a bare label noted as if it were a verdict.
+	p.reloadErr = nil
+	c = m.onNormalKey(keyMsg("R"))
+	if _, w, err := m.commitMove("a", "ready", "ready", 3); err != nil || w == nil {
+		t.Fatal(err)
+	}
+	m.Update(c())
+	if !m.statusErr || !strings.Contains(m.status, "sync failed: a co-writer kept winning the push race") {
+		t.Errorf("behind a queued write: status=%q err=%v", m.status, m.statusErr)
+	}
+	m.pending, m.inflight = nil, false
+
+	// The re-read failing too leaves the sync's own error on the row.
+	p.reloadErr = errors.New("reading the board")
+	c = m.onNormalKey(keyMsg("R"))
+	m.Update(c())
+	if m.syncing || m.status != "sync failed: a co-writer kept winning the push race" {
 		t.Errorf("syncing=%v status=%q", m.syncing, m.status)
 	}
 }
