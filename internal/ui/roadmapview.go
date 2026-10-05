@@ -334,7 +334,7 @@ func (m *Model) roadHeader(l *roadLayout, clippedY, clippedX bool) string {
 	if over > 0 {
 		bits = append(bits, th.danger.Render(fmt.Sprintf("%d overdue", over)))
 	}
-	if bit := m.filterCountBit(m.roadHiddenCount(l)); bit != "" {
+	if bit := m.lensCountBit(m.roadHiddenCount(l)); bit != "" {
 		bits = append(bits, bit)
 	}
 	if clippedX {

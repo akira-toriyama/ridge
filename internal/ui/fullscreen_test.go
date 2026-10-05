@@ -1,11 +1,14 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 	lg "charm.land/lipgloss/v2"
+
+	"github.com/akira-toriyama/ridge/internal/store/memstore"
 )
 
 // The keys every full-screen view answers alike — quit, help, esc, and the
@@ -349,5 +352,104 @@ func TestEveryFullScreenViewAnswersTheStoreKeys(t *testing.T) {
 				t.Error("the board's re-read must re-read the sweep previews behind it")
 			}
 		})
+	}
+}
+
+// A view that applies the lens names the lens its count is about — the
+// filter, the slice, the revisit lens, as the board names them (lensNames).
+// The count once read "hidden by the filter" under a slice or the revisit
+// lens alone, and the graph's header said nothing while 20 of its 23 nodes
+// were hidden, most of their tags below the fold (t-hrwx, on a copy of the
+// ridge-test store). A refused opening flag has no verdict behind it, so the
+// header says nothing is hidden rather than point at a count it never drew.
+func TestApplyingViewsNameTheLensTheirCountIsAbout(t *testing.T) {
+	views := []struct {
+		name string
+		o    Options
+	}{
+		{"map", Options{Map: true}},
+		{"roadmap", Options{Roadmap: true}},
+		{"swim", Options{Swim: true}},
+		{"graph", Options{Graph: true}},
+	}
+	for _, v := range views {
+		for _, tc := range []struct {
+			name, filter string
+			revisit      bool
+			want         string
+		}{
+			{"a filter", "label:bbq", false, " hidden by the filter  "},
+			{"both", "label:bbq", true, " hidden by the filter and revisit lens  "},
+			{"a refused filter", "bogus:zzz", false, "filter refused — nothing is hidden"},
+		} {
+			o := v.o
+			o.Filter, o.Revisit = tc.filter, tc.revisit
+			out, err := New(memstore.New(), o).Dump(240, 40, "", true)
+			if err != nil {
+				t.Fatalf("%s, %s: %v", v.name, tc.name, err)
+			}
+			// The header is the frame's second line; the bit is followed by
+			// the line's padding or the next bit's separator.
+			header := strings.Split(out, "\n")[1] + "  "
+			if !strings.Contains(strings.ReplaceAll(header, " · ", "  "), tc.want) {
+				t.Errorf("%s, %s: the header must say %q:\n%s", v.name, tc.name, tc.want, header)
+			}
+			if v.name == "graph" && tc.name == "a filter" {
+				m := New(memstore.New(), o)
+				if _, err := m.Dump(240, 40, "", true); err != nil {
+					t.Fatal(err)
+				}
+				n := 0
+				for _, node := range m.graph.lay.Nodes {
+					if node.Hidden {
+						n++
+					}
+				}
+				if want := fmt.Sprintf(" %d hidden by the filter", n); n == 0 || n == len(m.graph.lay.Real()) || !strings.Contains(header, want) {
+					t.Errorf("graph: the count is the hidden nodes' (%d of %d):\n%s", n, len(m.graph.lay.Real()), header)
+				}
+			}
+		}
+	}
+	// The lens alone, on the two views where the fixture's lens hides a row.
+	for _, v := range views[1:3] {
+		o := v.o
+		o.Revisit = true
+		out, err := New(memstore.New(), o).Dump(240, 40, "", true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if header := strings.Split(out, "\n")[1]; !strings.Contains(header, " hidden by the revisit lens") || strings.Contains(header, "filter") {
+			t.Errorf("%s: the revisit lens alone must be named alone:\n%s", v.name, header)
+		}
+	}
+	// The slice is named as the slice.
+	m := boardModel(t, 240, 50)
+	press(m, "E")
+	if c := m.drillIntoBox(m.boxes.lay); c != nil {
+		m.Update(c())
+	}
+	press(m, "W")
+	if out := frame(m); !strings.Contains(out, " hidden by the slice") {
+		t.Errorf("a slice must be named as the slice, not a filter:\n%s", out)
+	}
+}
+
+// A refusal that follows a good verdict leaves that verdict's marks on the
+// rows, and the header says whose they are.
+func TestARefusedLensAfterAVerdictSaysWhoseMarksRemain(t *testing.T) {
+	m := boardModel(t, 240, 50)
+	m.applyFilter("label:bbq")
+	m.applyFilter("bogus:zzz")
+	if m.qErr == "" || m.qMatched == nil {
+		t.Fatalf("setup: a refusal over a kept verdict: err %q matched %v", m.qErr, m.qMatched != nil)
+	}
+	if got := ansiStrip(m.lensCountBit(3)); got != "filter refused — the rows are marked by the last good verdict" {
+		t.Errorf("got %q", got)
+	}
+	// The typed filter is what furrow refused, whatever else is on.
+	m.revisitOn = true
+	if got := ansiStrip(m.lensCountBit(3)); !strings.HasPrefix(got, "filter refused — ") {
+		t.Errorf("got %q", got)
 	}
 }
