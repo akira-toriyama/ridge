@@ -31,7 +31,7 @@ import (
 // reopening the row. On a live store furrow's refusal of either the
 // preview or the write fires the board's re-read (onRmPreview,
 // reloadOnFail): a dropped target is then off the board, and its overlay
-// closes at the next key (editTask, epicBox).
+// closes with that re-read (closeOrphanedOverlay).
 //
 // The gate's states and their headless frames (-demo): nothing points at it
 // (rm), referenced and disarmed (rmreferenced), armed (rmforce), a series
@@ -190,7 +190,7 @@ func (m *Model) noteRmGate(st *rmState) {
 // shell already answered esc. On a referenced target the first ⏎ arms
 // --force and re-notes; the ⏎ that writes closes the overlay, because its
 // target is about to stop resolving and an overlay over a vanishing row would
-// only close itself at the re-read anyway (editTask).
+// only close itself at the re-read anyway (closeOrphanedOverlay).
 func (m *Model) onRmGateKey(msg tea.KeyPressMsg, st *rmState) tea.Cmd {
 	if !key.Matches(msg, m.keys.Commit) {
 		return nil
