@@ -360,6 +360,9 @@ func (m *Model) onEpicKey(msg tea.KeyPressMsg) tea.Cmd {
 	if box == nil {
 		return nil
 	}
+	if c, ok := m.overlayStoreKey(e.stage, msg); ok {
+		return c
+	}
 	return e.onKey(m, msg, epicHooks{m, box})
 }
 

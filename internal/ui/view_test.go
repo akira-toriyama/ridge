@@ -92,7 +92,7 @@ func TestEveryModalRendersInBothViews(t *testing.T) {
 		want  string
 		setup func(*Model)
 	}{
-		{"edit", "⏎ edit · esc close", func(m *Model) {
+		{"edit", "⏎ edit · r reload", func(m *Model) {
 			m.selectID("t-9sa6", false)
 			m.enterEdit()
 		}},
