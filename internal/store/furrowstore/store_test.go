@@ -926,8 +926,14 @@ func TestContractRepeatRidesTheLoadAndBothCloses(t *testing.T) {
 	// A spent series: the report says so instead of naming a successor.
 	// COUNT=2, not 1 — furrow refuses a rule with no occurrence after the
 	// first ("it would end the series on the very next close", exit 2), so
-	// the shortest series that can be spent is two closes long.
-	two := labAdd(t, dir, "二回きり", "--due", "2026-10-01", "--repeat", "FREQ=WEEKLY;COUNT=2")
+	// the shortest series that can be spent is two closes long. The due is
+	// tomorrow, never a literal: a late close jumps every lapsed occurrence,
+	// so once a fixed date's second occurrence is in the past the FIRST close
+	// already spends the series ({Skipped:1 Completed:true}) — the literal
+	// 2026-10-01 did exactly that from 2026-10-09 on, and main was red from
+	// the next push (2026-10-20) with every furrow release, v6.0.0 to v9.0.1.
+	tomorrow := time.Now().AddDate(0, 0, 1).Format("2006-01-02")
+	two := labAdd(t, dir, "二回きり", "--due", tomorrow, "--repeat", "FREQ=WEEKLY;COUNT=2")
 	rep, err = p.PersistDone(two)
 	if err != nil {
 		t.Fatal(err)
