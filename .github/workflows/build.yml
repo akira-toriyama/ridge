@@ -62,9 +62,19 @@ jobs:
         # refuses source installs of every v2+ tag ("module path must match
         # major version"). The release tarball is how the fleet's own
         # sync-task-status gate installs it — checksum-pinned here.
+        env:
+          # The one furrow pin in this file, spelled `akira-toriyama/furrow@vX.Y.Z`
+          # so the hub's furrow-pin-audit (scripts/furrow-pin-scan.sh) reads it
+          # and goes red when it lags the fleet: a version inside a bare URL was
+          # invisible to it, and this pin sat at v6.0.0 against a v9.0.1 fleet.
+          # The shell parses the version out of it; the digest is the release's
+          # own checksums.txt line — move both together.
+          FURROW_RELEASE: akira-toriyama/furrow@v9.0.1
+          FURROW_SHA256: 879c41177f1d70aca8428b9a8d260b4c73a8bb9bf26141844fdefc6327d921ac
         run: |
-          curl -fsSL -o /tmp/furrow.tgz             https://github.com/akira-toriyama/furrow/releases/download/v6.0.0/furrow_6.0.0_linux_amd64.tar.gz
-          echo "9b59d86194bfa9d2de24270908fbf2e8ff782ef0adea4ee9b3be82af456609b4  /tmp/furrow.tgz" | sha256sum -c -
+          ver="${FURROW_RELEASE#*@}"
+          curl -fsSL -o /tmp/furrow.tgz "https://github.com/${FURROW_RELEASE%@*}/releases/download/${ver}/furrow_${ver#v}_linux_amd64.tar.gz"
+          echo "${FURROW_SHA256}  /tmp/furrow.tgz" | sha256sum -c -
           tar -C /tmp -xzf /tmp/furrow.tgz furrow
           sudo install -m 0755 /tmp/furrow /usr/local/bin/furrow
       - name: Contract tests against the real CLI
