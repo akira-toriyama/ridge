@@ -69,8 +69,8 @@ jobs:
           # invisible to it, and this pin sat at v6.0.0 against a v9.0.1 fleet.
           # The shell parses the version out of it; the digest is the release's
           # own checksums.txt line — move both together.
-          FURROW_RELEASE: akira-toriyama/furrow@v9.0.1
-          FURROW_SHA256: 879c41177f1d70aca8428b9a8d260b4c73a8bb9bf26141844fdefc6327d921ac
+          FURROW_RELEASE: akira-toriyama/furrow@v10.1.0
+          FURROW_SHA256: 48cd7800a15e6026f0496791ddb05f8d64e3bb4af261bdac6b6e8d20718c271b
         run: |
           ver="${FURROW_RELEASE#*@}"
           curl -fsSL -o /tmp/furrow.tgz "https://github.com/${FURROW_RELEASE%@*}/releases/download/${ver}/furrow_${ver#v}_linux_amd64.tar.gz"
