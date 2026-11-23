@@ -16,7 +16,7 @@ cd "$(dirname "$0")/.."
 export GOTOOLCHAIN=local
 
 # Keep in sync with the hub go-ci.yml `golangci-lint-version` default (@v2).
-want="2.12.2"
+want="2.14.0"
 have="$(golangci-lint version --short 2>/dev/null || true)"
 if [ "$have" != "$want" ]; then
 	echo "golangci-lint ${have:-missing} != CI's $want — fix with:" >&2
