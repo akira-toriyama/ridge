@@ -82,4 +82,9 @@ jobs:
           GOTOOLCHAIN: local
         run: |
           furrow --help >/dev/null
-          go test ./internal/store/furrowstore/ -run TestContract -v
+          # -count=1 is load-bearing: go test's result cache keys on files
+          # inside the module, so the furrow binary on PATH is not part of it.
+          # Without it a new FURROW_RELEASE replays the pass recorded against
+          # the old one — the move to v10.1.0 went green on a v9.0.1 result
+          # printed as "(cached)" (runs 45146328879, 45196696455).
+          go test -count=1 ./internal/store/furrowstore/ -run TestContract -v
